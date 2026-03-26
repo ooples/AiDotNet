@@ -17,10 +17,33 @@ namespace AiDotNet.VisionLanguage.RemoteSensing;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// RSGPT (2024) is a remote sensing vision-language model built on the InstructBLIP architecture.
+/// It adapts the Q-Former cross-modal bridge for remote sensing imagery, providing satellite
+/// image captioning, visual question answering, and scene understanding capabilities with
+/// domain-specific visual encoders fine-tuned on remote sensing datasets.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "RSGPT: A Remote Sensing Vision Language Model and Benchmark (Various, 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> RSGPT is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> RSGPT is a vision-language model for remote sensing image
+/// captioning and question answering. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an RSGPT model for remote sensing vision-language understanding
+/// // based on InstructBLIP architecture for satellite image captioning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new RSGPT&lt;double&gt;(architecture, "rsgpt.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new RSGPT&lt;double&gt;(architecture, new RSGPTOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Science)]
@@ -97,7 +120,7 @@ public class RSGPT<T> : VisionLanguageModelBase<T>, IRemoteSensingVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "RSGPT-Native" : "RSGPT-ONNX", Description = "RSGPT: remote sensing GPT based on InstructBLIP architecture.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "RSGPT-Native" : "RSGPT-ONNX", Description = "RSGPT: remote sensing GPT based on InstructBLIP architecture.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "RSGPT";
         m.AdditionalInfo["SupportedBands"] = _options.SupportedBands;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

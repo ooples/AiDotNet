@@ -17,7 +17,7 @@ namespace AiDotNet.Document.Interfaces;
 /// Example usage:
 /// <code>
 /// var result = documentQA.AnswerQuestion(invoiceImage, "What is the invoice number?");
-/// Console.WriteLine($"Answer: {result.Answer} (confidence: {result.Confidence:P0})");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

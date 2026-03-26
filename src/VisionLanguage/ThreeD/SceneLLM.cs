@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Scene-LLM (2024) extends language models for 3D visual understanding and reasoning using
+/// voxel-based scene representations. It discretizes 3D environments into voxel grids with
+/// semantic features, enabling language-guided spatial reasoning about object locations,
+/// room layouts, and navigation instructions in indoor environments.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Scene-LLM: Extending Language Model for 3D Visual Understanding and Reasoning (Various, 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> SceneLLM is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Scene-LLM is a vision-language model for voxel-based 3D scene
+/// understanding with language-guided spatial reasoning. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Scene-LLM model for voxel-based 3D scene understanding
+/// // with language-guided spatial reasoning over indoor environments
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SceneLLM&lt;double&gt;(architecture, "scenellm.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SceneLLM&lt;double&gt;(architecture, new SceneLLMOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.ThreeD)]
@@ -242,7 +266,7 @@ public class SceneLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageMode
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Scene-LLM-Native" : "Scene-LLM-ONNX", Description = "Scene-LLM: voxel-based 3D scene understanding with language models.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Scene-LLM-Native" : "Scene-LLM-ONNX", Description = "Scene-LLM: voxel-based 3D scene understanding with language models.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Scene-LLM";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

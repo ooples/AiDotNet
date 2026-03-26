@@ -17,10 +17,39 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Molmo (AI2, 2024) from the Allen Institute for AI is a fully open multimodal model with both
+/// open weights and open training data (PixMo). It features pointing and grounding capabilities —
+/// the model can point to specific objects in images by generating (x, y) coordinates and can
+/// localize objects described in natural language. Molmo achieves state-of-the-art performance
+/// among open models while providing complete transparency in its training data and methodology.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Molmo and PixMo: Open Weights and Open Data for State-of-the-Art Multimodal Models" (AI2, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Molmo is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Molmo from AI2 is notable for being fully open — not just
+/// the model weights, but also the training data (called PixMo) is publicly available,
+/// which is rare for high-performing multimodal models. Beyond standard visual QA, Molmo
+/// can "point" to objects in images by outputting coordinate positions, making it useful
+/// for tasks like "where is the cat in this image?" where it can indicate the exact location.
+/// It achieves state-of-the-art performance among open models while being completely
+/// transparent in how it was trained. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Molmo model for visual QA with pointing and grounding
+/// // using fully open weights and training data
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Molmo&lt;double&gt;(architecture, "molmo.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Molmo&lt;double&gt;(architecture, new MolmoOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -91,7 +120,7 @@ public class Molmo<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Molmo-Native" : "Molmo-ONNX", Description = "Molmo: open VLM with pointing and grounding capabilities.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Molmo-Native" : "Molmo-ONNX", Description = "Molmo: open VLM with pointing and grounding capabilities.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Molmo";
         m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

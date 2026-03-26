@@ -48,8 +48,8 @@ namespace AiDotNet.Reasoning.Strategies;
 ///     new ReasoningConfig()
 /// );
 ///
-/// Console.WriteLine(result.FinalAnswer); // "150 miles"
-/// Console.WriteLine(result.ReasoningChain); // Shows all steps
+/// // Result is available in the returned value // "150 miles"
+/// // Result is available in the returned value // Shows all steps
 /// </code>
 /// </para>
 /// </remarks>

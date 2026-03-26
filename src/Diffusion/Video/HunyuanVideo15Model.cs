@@ -35,6 +35,14 @@ namespace AiDotNet.Diffusion.Video;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 720, Width = 1280, NumInferenceSteps = 30 };
+/// var model = new HunyuanVideo15Model&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 49, 90, 160 });
+/// var video = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -181,7 +189,6 @@ public class HunyuanVideo15Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "HunyuanVideo15",
             Version = "1.5",
-            ModelType = ModelType.NeuralNetwork,
             Description = "HunyuanVideo 1.5 efficient video generation model for consumer GPUs.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

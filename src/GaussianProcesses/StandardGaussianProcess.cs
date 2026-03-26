@@ -66,27 +66,21 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
     private readonly MatrixDecompositionType _decompositionType;
 
     /// <summary>
+    /// Observation noise variance σ²_n. Added to the diagonal of the kernel matrix
+    /// to model noisy observations: K_noisy = K(X,X) + σ²_n I.
+    /// </summary>
+    private readonly double _noiseVariance;
+
+    /// <summary>
     /// Initializes a new instance of the StandardGaussianProcess class.
     /// </summary>
     /// <param name="kernel">The kernel function to use for measuring similarity between data points.</param>
+    /// <param name="noiseVariance">Observation noise variance σ²_n. Default 0.01. Set to 0 for noise-free interpolation.</param>
     /// <param name="decompositionType">The matrix decomposition method to use for calculations.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The constructor sets up your Gaussian Process model with the essential components it needs.
-    /// 
-    /// The kernel function is particularly important - it defines how the model measures similarity between data points.
-    /// Different kernels capture different types of patterns:
-    /// - RBF (Radial Basis Function) kernel: Good for smooth patterns
-    /// - Linear kernel: Good for linear relationships
-    /// - Periodic kernel: Good for repeating patterns
-    /// 
-    /// The decomposition type is a technical detail about how the model solves certain mathematical equations.
-    /// For most users, the default (Cholesky) works well and is efficient.
-    /// </para>
-    /// </remarks>
-    public StandardGaussianProcess(IKernelFunction<T> kernel, MatrixDecompositionType decompositionType = MatrixDecompositionType.Cholesky)
+    public StandardGaussianProcess(IKernelFunction<T> kernel, MatrixDecompositionType decompositionType = MatrixDecompositionType.Cholesky, double noiseVariance = 0.01)
     {
         _kernel = kernel;
+        _noiseVariance = noiseVariance;
         _X = Matrix<T>.Empty();
         _y = Vector<T>.Empty();
         _K = Matrix<T>.Empty();
@@ -121,11 +115,18 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
         _y = y;
         _K = CalculateKernelMatrix(X, X);
 
-        // Add jitter term to diagonal for numerical stability.
-        // This prevents the kernel matrix from being singular or nearly singular
-        // when data points are close together, which would cause Cholesky decomposition to fail.
-        // Exponential-family kernels (Exponential, Laplacian, Matern) can produce
-        // ill-conditioned matrices that require larger jitter than RBF kernels.
+        // Add observation noise variance σ²_n to diagonal: K_noisy = K(X,X) + σ²_n I
+        // This is the standard GP noise model. Without noise, the GP exactly interpolates
+        // training points (zero variance). With noise, the GP smooths through data and
+        // the predictive variance at training points ≈ σ²_n.
+        if (_noiseVariance > 0)
+        {
+            T noiseT = _numOps.FromDouble(_noiseVariance);
+            for (int i = 0; i < _K.Rows; i++)
+                _K[i, i] = _numOps.Add(_K[i, i], noiseT);
+        }
+
+        // Add jitter term for numerical stability (much smaller than noise).
         AddJitter(_K);
     }
 
@@ -168,6 +169,11 @@ public class StandardGaussianProcess<T> : IGaussianProcess<T>
         // Solve _K * v = k
         var v = SolveWithFallback(_K, k);
         var variance = _numOps.Subtract(_kernel.Calculate(x, x), k.DotProduct(v));
+
+        // Add observation noise variance to predictive variance
+        // The full predictive variance is: σ²(x) = k(x,x) - k'K⁻¹k + σ²_n
+        if (_noiseVariance > 0)
+            variance = _numOps.Add(variance, _numOps.FromDouble(_noiseVariance));
 
         return (mean, variance);
     }

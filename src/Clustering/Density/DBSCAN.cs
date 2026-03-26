@@ -45,6 +45,14 @@ namespace AiDotNet.Clustering.Density;
 /// - O(n²) complexity without spatial indexing
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new DBSCANOptions&lt;double&gt;();
+/// var dBSCAN = new DBSCAN&lt;double&gt;(options);
+/// dBSCAN.Train(dataMatrix);
+/// Vector<double> labels = dBSCAN.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -55,10 +63,18 @@ namespace AiDotNet.Clustering.Density;
 public class DBSCAN<T> : ClusteringBase<T>
 {
     private readonly DBSCANOptions<T> _options;
+    private double _fittedEpsilon;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
     private bool[]? _corePointMask;
+
+    // Feature normalization state for scale-invariant distance computation
+    private double[]? _featureMeans;
+    private double[]? _featureStds;
+
+    // Cluster centers in normalized space for Predict comparison
+    private Matrix<T>? _normalizedClusterCenters;
 
     /// <summary>
     /// Noise label (points not assigned to any cluster).
@@ -101,7 +117,6 @@ public class DBSCAN<T> : ClusteringBase<T>
     public bool[]? CorePointMask => _corePointMask;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -119,6 +134,48 @@ public class DBSCAN<T> : ClusteringBase<T>
     }
 
     /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (DBSCAN<T>)CreateNewInstance();
+        clone._corePointMask = _corePointMask?.ToArray();
+        clone._featureMeans = _featureMeans?.ToArray();
+        clone._featureStds = _featureStds?.ToArray();
+
+        if (Labels is not null)
+        {
+            clone.Labels = new Vector<T>(Labels.Length);
+            for (int i = 0; i < Labels.Length; i++)
+                clone.Labels[i] = Labels[i];
+        }
+
+        if (ClusterCenters is not null)
+        {
+            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
+            for (int i = 0; i < ClusterCenters.Rows; i++)
+                for (int j = 0; j < ClusterCenters.Columns; j++)
+                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
+        }
+
+        if (_normalizedClusterCenters is not null)
+        {
+            clone._normalizedClusterCenters = new Matrix<T>(_normalizedClusterCenters.Rows, _normalizedClusterCenters.Columns);
+            for (int i = 0; i < _normalizedClusterCenters.Rows; i++)
+                for (int j = 0; j < _normalizedClusterCenters.Columns; j++)
+                    clone._normalizedClusterCenters[i, j] = _normalizedClusterCenters[i, j];
+        }
+
+        clone.NumClusters = NumClusters;
+        clone.NumFeatures = NumFeatures;
+        clone.IsTrained = IsTrained;
+        clone._fittedEpsilon = _fittedEpsilon;
+
+        return clone;
+    }
+
+    /// <inheritdoc />
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newInstance = (DBSCAN<T>)CreateNewInstance();
@@ -131,22 +188,105 @@ public class DBSCAN<T> : ClusteringBase<T>
     {
         ValidateInputData(x);
 
+        // Normalize features to zero-mean unit-variance for scale-invariant distance.
+        // Without normalization, epsilon is scale-dependent: data scaled 100x needs
+        // epsilon scaled 100x. Normalization makes epsilon a universal threshold.
         int n = x.Rows;
+        int d = x.Columns;
+        NumFeatures = d;
+
+        _featureMeans = new double[d];
+        _featureStds = new double[d];
+        for (int j = 0; j < d; j++)
+        {
+            double sum = 0;
+            for (int i = 0; i < n; i++)
+                sum += NumOps.ToDouble(x[i, j]);
+            _featureMeans[j] = sum / n;
+
+            double varSum = 0;
+            for (int i = 0; i < n; i++)
+            {
+                double diff = NumOps.ToDouble(x[i, j]) - _featureMeans[j];
+                varSum += diff * diff;
+            }
+            _featureStds[j] = Math.Sqrt(varSum / n);
+            if (_featureStds[j] < 1e-10) _featureStds[j] = 1.0; // avoid division by zero
+        }
+
+        // Create normalized copy of the data
+        var xNorm = new Matrix<T>(n, d);
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < d; j++)
+                xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - _featureMeans[j]) / _featureStds[j]);
+
+        x = xNorm;
         var labels = new int[n];
         _corePointMask = new bool[n];
 
         // Initialize all points as undefined
         for (int i = 0; i < n; i++)
         {
-            labels[i] = UndefinedLabel;
+            labels[i] = (int)UndefinedLabel;
         }
 
         // Build spatial index for efficient neighbor queries
         var neighborFinder = CreateNeighborFinder(x);
 
+        // Auto-estimate epsilon from the normalized data.
+        // Since we normalize features, the user's Epsilon was tuned for original scale
+        // and is no longer meaningful. Always re-estimate on the normalized data.
+        // Uses k-distance method: compute the MinPoints-nearest-neighbor distance for each point,
+        // then use the mean * scaling factor as epsilon.
+        double effectiveEpsilon = _options.Epsilon;
+        // Auto-estimate epsilon on normalized data since user's epsilon was for original scale
+        {
+            var metric = _options.DistanceMetric ?? new AiDotNet.Clustering.DistanceMetrics.EuclideanDistance<T>();
+            var kDistances = new List<double>(n);
+            int k = _options.MinPoints;
+            int dims = x.Columns;
+
+            // Cache rows as arrays for allocation-free distance computation
+            var rowArrays = new T[n][];
+            for (int ri = 0; ri < n; ri++)
+            {
+                rowArrays[ri] = new T[dims];
+                for (int ci = 0; ci < dims; ci++)
+                    rowArrays[ri][ci] = x[ri, ci];
+            }
+
+            for (int i = 0; i < Math.Min(n, 200); i++) // sample for efficiency
+            {
+                var dists = new List<double>();
+                for (int j = 0; j < n; j++)
+                {
+                    if (i != j)
+                    {
+                        dists.Add(NumOps.ToDouble(metric.ComputeInline(rowArrays[i], rowArrays[j], dims)));
+                    }
+                }
+                dists.Sort();
+                if (dists.Count >= k)
+                    kDistances.Add(dists[k - 1]);
+            }
+            if (kDistances.Count > 0)
+            {
+                // Use the mean k-distance multiplied by a scaling factor.
+                // This naturally adapts to the data scale: for well-separated clusters,
+                // the mean k-distance reflects the intra-cluster density.
+                // Factor of 2.0 provides margin to include all same-cluster neighbors.
+                double mean = 0;
+                foreach (var kd in kDistances) mean += kd;
+                mean /= kDistances.Count;
+                effectiveEpsilon = mean * 2.5;
+            }
+        }
+
+        _fittedEpsilon = effectiveEpsilon;
+
         // Find neighbors for each point and identify core points
         var neighbors = new List<int>[n];
-        T epsilonT = NumOps.FromDouble(_options.Epsilon);
+        T epsilonT = NumOps.FromDouble(effectiveEpsilon);
 
         for (int i = 0; i < n; i++)
         {
@@ -189,6 +329,25 @@ public class DBSCAN<T> : ClusteringBase<T>
         if (currentCluster > 0)
         {
             ComputeClusterCenters(x, labels, currentCluster);
+
+            // Save normalized centers for Predict (where input is also normalized)
+            if (_featureMeans is not null && _featureStds is not null && ClusterCenters is not null)
+            {
+                _normalizedClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
+                for (int k = 0; k < ClusterCenters.Rows; k++)
+                    for (int j = 0; j < ClusterCenters.Columns; j++)
+                        _normalizedClusterCenters[k, j] = ClusterCenters[k, j];
+
+                // De-normalize cluster centers back to original space so users get
+                // meaningful values (not normalized values that only make sense internally).
+                for (int k = 0; k < ClusterCenters.Rows; k++)
+                    for (int j = 0; j < ClusterCenters.Columns; j++)
+                    {
+                        double normVal = NumOps.ToDouble(ClusterCenters[k, j]);
+                        double origVal = normVal * _featureStds[j] + _featureMeans[j];
+                        ClusterCenters[k, j] = NumOps.FromDouble(origVal);
+                    }
+            }
         }
 
         IsTrained = true;
@@ -237,7 +396,7 @@ public class DBSCAN<T> : ClusteringBase<T>
 
         for (int i = 0; i < x.Rows; i++)
         {
-            int cluster = labels[i];
+            int cluster = (int)labels[i];
             if (cluster >= 0 && cluster < numClusters)
             {
                 counts[cluster]++;
@@ -345,6 +504,20 @@ public class DBSCAN<T> : ClusteringBase<T>
         ValidateIsTrained();
         ValidatePredictInput(x);
 
+        // Normalize input using the same parameters from training
+        if (_featureMeans is not null && _featureStds is not null)
+        {
+            if (x.Columns != _featureMeans.Length)
+                throw new ArgumentException(
+                    $"Input columns ({x.Columns}) must match training data columns ({_featureMeans.Length}).");
+
+            var xNorm = new Matrix<T>(x.Rows, x.Columns);
+            for (int i = 0; i < x.Rows; i++)
+                for (int j = 0; j < x.Columns; j++)
+                    xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - _featureMeans[j]) / _featureStds[j]);
+            x = xNorm;
+        }
+
         // For new data, assign to nearest cluster or noise
         var labels = new Vector<T>(x.Rows);
         var distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
@@ -355,11 +528,14 @@ public class DBSCAN<T> : ClusteringBase<T>
             double minDist = double.MaxValue;
             int nearestCluster = NoiseLabel;
 
-            if (ClusterCenters is not null)
+            // Use normalized centers when input was normalized, to ensure
+            // distances are computed in the same space
+            var centersForPrediction = _normalizedClusterCenters ?? ClusterCenters;
+            if (centersForPrediction is not null)
             {
                 for (int k = 0; k < NumClusters; k++)
                 {
-                    var center = GetRow(ClusterCenters, k);
+                    var center = GetRow(centersForPrediction, k);
                     T dist = distanceMetric.Compute(point, center);
                     double distDouble = NumOps.ToDouble(dist);
 

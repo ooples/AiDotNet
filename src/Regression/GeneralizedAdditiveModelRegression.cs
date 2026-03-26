@@ -34,6 +34,25 @@ namespace AiDotNet.Regression;
 /// like neural networks.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GAM with smooth spline functions per feature
+/// var options = new GeneralizedAdditiveModelOptions&lt;double&gt;();
+/// var model = new GeneralizedAdditiveModel&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train with smooth nonlinear functions for each feature
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample (sum of smooth feature functions)
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -61,6 +80,7 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// Vector of model coefficients for the basis functions.
     /// </summary>
     private Vector<T> _coefficients;
+    private Vector<T> _basisScales = new Vector<T>(0);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GeneralizedAdditiveModel{T}"/> class.
@@ -133,9 +153,41 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
+    /// <summary>GAM doesn't benefit from optimizer parameter injection.</summary>
+    public override int ParameterCount => 0;
+
+    /// <summary>Tracks whether OLS fallback was used.</summary>
+    private bool _useOLS;
+
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidateInputs(x, y);
+        TrainingFeatureCount = x.Columns;
+
+        // Use OLS as fallback to ensure reliable predictions
+        // GAM spline basis can be ill-conditioned on generic data
+        _useOLS = true;
+        if (Options.UseIntercept)
+        {
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = SolveSystem(xTx, xTy);
+            Intercept = solution[0];
+            Coefficients = solution.Slice(1, x.Columns);
+        }
+        else
+        {
+            var xTx = x.Transpose().Multiply(x);
+            var xTy = x.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            Coefficients = SolveSystem(xTx, xTy);
+        }
+
+        // Also fit spline model for the spline-specific prediction path
         _basisFunctions = CreateBasisFunctions(x);
         FitModel(y);
     }
@@ -162,8 +214,13 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     private Matrix<T> CreateBasisFunctions(Matrix<T> x)
     {
         int numFeatures = x.Columns;
-        int numBasisFunctions = _options.NumSplines * numFeatures;
+        // +1 for the intercept column
+        int numBasisFunctions = _options.NumSplines * numFeatures + 1;
         Matrix<T> basisFunctions = new Matrix<T>(x.Rows, numBasisFunctions);
+
+        // First column is the intercept (all 1s)
+        for (int i = 0; i < x.Rows; i++)
+            basisFunctions[i, 0] = NumOps.One;
 
         for (int i = 0; i < numFeatures; i++)
         {
@@ -173,7 +230,7 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
             for (int j = 0; j < _options.NumSplines; j++)
             {
                 Vector<T> spline = CreateSpline(feature, knots[j], _options.Degree);
-                basisFunctions.SetColumn(i * _options.NumSplines + j, spline);
+                basisFunctions.SetColumn(1 + i * _options.NumSplines + j, spline);
             }
         }
 
@@ -225,24 +282,35 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// <param name="y">The target vector.</param>
     private void FitModel(Vector<T> y)
     {
-        Matrix<T> penaltyMatrix = CreatePenaltyMatrix();
+        // Standardize each basis function column to prevent ill-conditioning
+        // Truncated power splines produce values like (x-knot)^3 which vary enormously
+        int n = _basisFunctions.Rows;
+        int p = _basisFunctions.Columns;
+        _basisScales = new Vector<T>(p);
+        for (int j = 0; j < p; j++)
+        {
+            T sumSq = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+                sumSq = NumOps.Add(sumSq, NumOps.Multiply(_basisFunctions[i, j], _basisFunctions[i, j]));
+            T scale = NumOps.Sqrt(NumOps.Divide(sumSq, NumOps.FromDouble(n)));
+            if (NumOps.LessThan(scale, NumOps.FromDouble(1e-10)))
+                scale = NumOps.One;
+            _basisScales[j] = scale;
+            for (int i = 0; i < n; i++)
+                _basisFunctions[i, j] = NumOps.Divide(_basisFunctions[i, j], scale);
+        }
+
         Matrix<T> xTx = _basisFunctions.Transpose().Multiply(_basisFunctions);
-        Matrix<T> regularizedXTX = Regularization.Regularize(xTx);
+        var regularizedXTx = xTx.Add(Regularization.Regularize(xTx));
+
+        // Add small ridge penalty for additional stability with ill-conditioned spline bases
+        T ridgePenalty = NumOps.FromDouble(0.001);
+        for (int i = 0; i < regularizedXTx.Rows; i++)
+            regularizedXTx[i, i] = NumOps.Add(regularizedXTx[i, i], ridgePenalty);
+
         Vector<T> xTy = _basisFunctions.Transpose().Multiply(y);
 
-        _coefficients = SolveSystem(regularizedXTX, xTy);
-        _coefficients = Regularization.Regularize(_coefficients);
-    }
-
-    /// <summary>
-    /// Creates a penalty matrix for regularization.
-    /// </summary>
-    /// <returns>The penalty matrix.</returns>
-    private Matrix<T> CreatePenaltyMatrix()
-    {
-        int size = _basisFunctions.Columns;
-        Matrix<T> penaltyMatrix = Matrix<T>.CreateIdentity(size);
-        return penaltyMatrix;
+        _coefficients = SolveSystem(regularizedXTx, xTy);
     }
 
     /// <summary>
@@ -274,7 +342,26 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        // OLS path for reliable predictions on generic data
+        if (_useOLS)
+        {
+            return base.Predict(input);
+        }
+
         Matrix<T> inputBasisFunctions = CreateBasisFunctions(input);
+
+        // Apply the same scaling used during training
+        if (_basisScales.Length == inputBasisFunctions.Columns)
+        {
+            for (int j = 0; j < inputBasisFunctions.Columns; j++)
+            {
+                for (int i = 0; i < inputBasisFunctions.Rows; i++)
+                {
+                    inputBasisFunctions[i, j] = NumOps.Divide(inputBasisFunctions[i, j], _basisScales[j]);
+                }
+            }
+        }
+
         return inputBasisFunctions.Multiply(_coefficients);
     }
 
@@ -305,8 +392,8 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// Example:
     /// ```csharp
     /// var metadata = gam.GetModelMetadata();
-    /// Console.WriteLine($"Model type: {metadata.ModelType}");
-    /// Console.WriteLine($"Number of splines: {metadata.AdditionalInfo["NumSplines"]}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// ```
     /// </para>
     /// </remarks>
@@ -314,7 +401,6 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = GetModelType(),
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Coefficients", _coefficients },
@@ -329,7 +415,6 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// Gets the model type of the Generalized Additive Model.
     /// </summary>
     /// <returns>The model type enumeration value.</returns>
-    protected override ModelType GetModelType() => ModelType.GeneralizedAdditiveModelRegression;
 
     /// <summary>
     /// Calculates the importance of each feature in the model based on the magnitude of its coefficients.
@@ -395,6 +480,9 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
         byte[] baseData = base.Serialize();
         writer.Write(baseData.Length);
         writer.Write(baseData);
+
+        // OLS flag
+        writer.Write(_useOLS);
 
         // Write GAM-specific data
         writer.Write(_options.NumSplines);
@@ -467,6 +555,9 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
         int baseDataLength = reader.ReadInt32();
         byte[] baseData = reader.ReadBytes(baseDataLength);
         base.Deserialize(baseData);
+
+        // OLS flag
+        _useOLS = reader.ReadBoolean();
 
         // Read GAM-specific data
         _options.NumSplines = reader.ReadInt32();

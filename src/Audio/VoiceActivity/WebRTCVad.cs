@@ -266,7 +266,6 @@ public class WebRTCVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         {
             Name = _useNativeMode ? "WebRTCVad-Native" : "WebRTCVad-ONNX",
             Description = "Neural WebRTC VAD for low-latency speech detection",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = FrameSize,
             Complexity = _options.NumLayers
         };
         m.AdditionalInfo["FrameDurationMs"] = _options.FrameDurationMs.ToString();

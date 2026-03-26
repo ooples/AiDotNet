@@ -336,7 +336,7 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
         var output = Predict(input);
 
         // Simple MSE gradient (avoids _lossFunction.CalculateLoss which expects Vector<T>)
-        var gradient = new Tensor<T>(output.Shape);
+        var gradient = new Tensor<T>(output.Shape.ToArray());
         for (int i = 0; i < output.Length && i < expectedOutput.Length; i++)
         {
             gradient[i] = NumOps.FromDouble(
@@ -839,7 +839,7 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
         if (norm <= maxNorm) return grad;
 
         double scale = maxNorm / norm;
-        var clipped = new Tensor<T>(grad.Shape);
+        var clipped = new Tensor<T>(grad.Shape.ToArray());
         for (int i = 0; i < grad.Length; i++)
         {
             clipped[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * scale);
@@ -856,7 +856,6 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "SearchTrials", _options.SearchTrials },

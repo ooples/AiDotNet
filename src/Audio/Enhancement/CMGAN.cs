@@ -275,7 +275,6 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         {
             Name = _useNativeMode ? "CMGAN-Native" : "CMGAN-ONNX",
             Description = "CMGAN Conformer-based Metric GAN (Cao et al., INTERSPEECH 2022)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.NumFreqBins,
             Complexity = _options.NumConformerLayers
         };
@@ -329,7 +328,7 @@ public class CMGAN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     private Tensor<T> ApplyMask(Tensor<T> stft, Tensor<T> mask)
     {
-        var result = new Tensor<T>(stft.Shape);
+        var result = new Tensor<T>(stft.Shape.ToArray());
         for (int i = 0; i < Math.Min(stft.Length, mask.Length); i++)
             result[i] = NumOps.Multiply(stft[i], mask[i]);
         return result;

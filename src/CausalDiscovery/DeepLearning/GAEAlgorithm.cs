@@ -49,7 +49,10 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        int embDim = HiddenUnits;
+        // Respect caller-supplied options without overriding
+        int embDim = Math.Min(HiddenUnits, Math.Max(d * 2, 8));
+        double effectiveLr = LearningRate;
+        int effectiveEpochs = MaxEpochs;
         if (n < 3 || d < 2) return new Matrix<T>(d, d);
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
@@ -68,29 +71,54 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
             {
                 ZsMu[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
                 ZtMu[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-                ZsLogVar[i, k] = NumOps.FromDouble(-4);
-                ZtLogVar[i, k] = NumOps.FromDouble(-4);
+                ZsLogVar[i, k] = NumOps.FromDouble(InitialLogVariance);
+                ZtLogVar[i, k] = NumOps.FromDouble(InitialLogVariance);
             }
 
-        T lr = NumOps.FromDouble(LearningRate);
-        T alpha = NumOps.Zero;
-        T rho = NumOps.One;
-        T lambda1 = NumOps.FromDouble(0.1);
+        // KL warm-up schedule to prevent posterior collapse
+        int warmUpEpochs = UseKlWarmUp ? Math.Max(1, effectiveEpochs / 4) : 0;
 
-        for (int epoch = 0; epoch < MaxEpochs; epoch++)
+        T lr = NumOps.FromDouble(effectiveLr);
+        T alpha = NumOps.Zero;
+        T rho = NumOps.FromDouble(0.01); // Start small so reconstruction dominates early
+        T lambda1 = NumOps.FromDouble(0.01); // Small sparsity penalty
+        double prevHVal = double.MaxValue;
+        int acyclicityWarmup = effectiveEpochs / 3; // No acyclicity penalty for first 1/3
+        Matrix<T> lastP = new Matrix<T>(d, d); // Save last edge probability matrix
+
+        for (int epoch = 0; epoch < effectiveEpochs; epoch++)
         {
-            // Sample embeddings via reparameterization
-            var Zs = new Matrix<T>(d, embDim);
-            var Zt = new Matrix<T>(d, embDim);
+            // KL weight schedule: ramp from DefaultKlWeight to MaxKlWeight over warmUpEpochs
+            double klWeight = UseKlWarmUp && warmUpEpochs > 0 && epoch < warmUpEpochs
+                ? DefaultKlWeight + (MaxKlWeight - DefaultKlWeight) * epoch / warmUpEpochs
+                : MaxKlWeight;
+
+            // Precompute bounded std values for numerical stability
+            var stdSArr = new double[d, embDim];
+            var stdTArr = new double[d, embDim];
             for (int i = 0; i < d; i++)
                 for (int k = 0; k < embDim; k++)
                 {
-                    T stdS = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZsLogVar[i, k])));
-                    T noiseS = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
-                    Zs[i, k] = NumOps.Add(ZsMu[i, k], NumOps.Multiply(stdS, noiseS));
-                    T stdT = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZtLogVar[i, k])));
-                    T noiseT = NumOps.FromDouble(rng.NextDouble() * 2 - 1);
-                    Zt[i, k] = NumOps.Add(ZtMu[i, k], NumOps.Multiply(stdT, noiseT));
+                    double logVarS = Math.Max(-10, Math.Min(10, NumOps.ToDouble(ZsLogVar[i, k])));
+                    double logVarT = Math.Max(-10, Math.Min(10, NumOps.ToDouble(ZtLogVar[i, k])));
+                    stdSArr[i, k] = Math.Exp(0.5 * logVarS);
+                    stdTArr[i, k] = Math.Exp(0.5 * logVarT);
+                }
+
+            // Sample embeddings via reparameterization: z = mu + sigma * epsilon
+            var Zs = new Matrix<T>(d, embDim);
+            var Zt = new Matrix<T>(d, embDim);
+            var epsilonS = new Matrix<T>(d, embDim);
+            var epsilonT = new Matrix<T>(d, embDim);
+            for (int i = 0; i < d; i++)
+                for (int k = 0; k < embDim; k++)
+                {
+                    T stdS = NumOps.FromDouble(stdSArr[i, k]);
+                    epsilonS[i, k] = NumOps.FromDouble(SampleStandardNormal(rng));
+                    Zs[i, k] = NumOps.Add(ZsMu[i, k], NumOps.Multiply(stdS, epsilonS[i, k]));
+                    T stdT = NumOps.FromDouble(stdTArr[i, k]);
+                    epsilonT[i, k] = NumOps.FromDouble(SampleStandardNormal(rng));
+                    Zt[i, k] = NumOps.Add(ZtMu[i, k], NumOps.Multiply(stdT, epsilonT[i, k]));
                 }
 
             // Compute edge probabilities: P[i,j] = sigmoid(Zs_i . Zt_j)
@@ -105,6 +133,11 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                     double sv = NumOps.ToDouble(dot);
                     P[i, j] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
                 }
+
+            // Save last P for final edge detection
+            for (int i2 = 0; i2 < d; i2++)
+                for (int j2 = 0; j2 < d; j2++)
+                    lastP[i2, j2] = P[i2, j2];
 
             // NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
             var PSq = new Matrix<T>(d, d);
@@ -140,6 +173,8 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
             // Gradient: dP/dZ via chain rule through sigmoid and dot product
             var gradZsMu = new Matrix<T>(d, embDim);
             var gradZtMu = new Matrix<T>(d, embDim);
+            var gradZsLogVar = new Matrix<T>(d, embDim);
+            var gradZtLogVar = new Matrix<T>(d, embDim);
 
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
@@ -152,7 +187,8 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                     T sparsityGrad = NumOps.Multiply(lambda1,
                         NumOps.FromDouble(Math.Sign(NumOps.ToDouble(pij))));
                     // Acyclicity gradient: (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
-                    T acycGrad = NumOps.Multiply(
+                    // Skip during warmup so reconstruction can find edges first
+                    T acycGrad = epoch < acyclicityWarmup ? NumOps.Zero : NumOps.Multiply(
                         NumOps.Add(alpha, NumOps.Multiply(rho, hVal)),
                         NumOps.Multiply(expPSq[j, i], NumOps.Multiply(NumOps.FromDouble(2), pij)));
                     T totalGradP = NumOps.Add(gradP[i, j], NumOps.Add(sparsityGrad, acycGrad));
@@ -165,59 +201,105 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                             NumOps.Multiply(gradScale, Zt[j, k]));
                         gradZtMu[j, k] = NumOps.Add(gradZtMu[j, k],
                             NumOps.Multiply(gradScale, Zs[i, k]));
+
+                        // Log-variance gradient via reparameterization:
+                        // dL/d(logvar_s) = dL/dz_s * epsilon_s * 0.5 * exp(0.5*logvar_s)
+                        // Chain rule: ∂L/∂logvar_s = gradScale * z_t[j,k] * ε_s[i,k] * 0.5 * std_s
+                        T stdS = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZsLogVar[i, k])));
+                        gradZsLogVar[i, k] = NumOps.Add(gradZsLogVar[i, k],
+                            NumOps.Multiply(gradScale, NumOps.Multiply(Zt[j, k],
+                            NumOps.Multiply(epsilonS[i, k],
+                            NumOps.Multiply(NumOps.FromDouble(0.5), stdS)))));
+                        T stdT = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZtLogVar[j, k])));
+                        gradZtLogVar[j, k] = NumOps.Add(gradZtLogVar[j, k],
+                            NumOps.Multiply(gradScale, NumOps.Multiply(Zs[i, k],
+                            NumOps.Multiply(epsilonT[j, k],
+                            NumOps.Multiply(NumOps.FromDouble(0.5), stdT)))));
                     }
                 }
 
-            // KL divergence gradient for embeddings: KL(N(mu, sigma^2) || N(0,1))
+            // KL divergence gradient: d/dmu = klWeight * mu, d/d(logvar) = klWeight * 0.5 * (exp(logvar) - 1)
+            T klW = NumOps.FromDouble(klWeight);
             for (int i = 0; i < d; i++)
                 for (int k = 0; k < embDim; k++)
                 {
                     gradZsMu[i, k] = NumOps.Add(gradZsMu[i, k],
-                        NumOps.Multiply(NumOps.FromDouble(0.01), ZsMu[i, k]));
+                        NumOps.Multiply(klW, ZsMu[i, k]));
                     gradZtMu[i, k] = NumOps.Add(gradZtMu[i, k],
-                        NumOps.Multiply(NumOps.FromDouble(0.01), ZtMu[i, k]));
+                        NumOps.Multiply(klW, ZtMu[i, k]));
+                    gradZsLogVar[i, k] = NumOps.Add(gradZsLogVar[i, k],
+                        NumOps.Multiply(klW, NumOps.FromDouble(
+                            0.5 * (Math.Exp(NumOps.ToDouble(ZsLogVar[i, k])) - 1.0))));
+                    gradZtLogVar[i, k] = NumOps.Add(gradZtLogVar[i, k],
+                        NumOps.Multiply(klW, NumOps.FromDouble(
+                            0.5 * (Math.Exp(NumOps.ToDouble(ZtLogVar[i, k])) - 1.0))));
                 }
 
-            // Apply gradients
+            // Apply gradients to all parameters
             for (int i = 0; i < d; i++)
                 for (int k = 0; k < embDim; k++)
                 {
                     ZsMu[i, k] = NumOps.Subtract(ZsMu[i, k], NumOps.Multiply(lr, gradZsMu[i, k]));
                     ZtMu[i, k] = NumOps.Subtract(ZtMu[i, k], NumOps.Multiply(lr, gradZtMu[i, k]));
+                    ZsLogVar[i, k] = NumOps.Subtract(ZsLogVar[i, k], NumOps.Multiply(lr, gradZsLogVar[i, k]));
+                    ZtLogVar[i, k] = NumOps.Subtract(ZtLogVar[i, k], NumOps.Multiply(lr, gradZtLogVar[i, k]));
                 }
 
-            // Update augmented Lagrangian
-            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
-            T rhoMax = NumOps.FromDouble(1e+16);
-            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)) && !NumOps.GreaterThan(rho, rhoMax))
-                rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
+            // Update augmented Lagrangian only after warmup
+            if (epoch >= acyclicityWarmup)
+            {
+                alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
+                double hValDouble = NumOps.ToDouble(hVal);
+                T rhoMax = NumOps.FromDouble(MaxPenaltyValue);
+                if (hValDouble > 0.25 * Math.Max(1.0, prevHVal))
+                {
+                    T newRho = NumOps.Multiply(rho, NumOps.FromDouble(10));
+                    rho = NumOps.GreaterThan(newRho, rhoMax) ? rhoMax : newRho;
+                }
+                prevHVal = hValDouble;
+            }
         }
 
-        // Final output using trained embeddings
+        // Final output: use trained P matrix for structure, covariance for weights.
+        // Two-stage approach: (1) P determines direction, (2) covariance provides weight.
         var result = new Matrix<T>(d, d);
-        T threshold = NumOps.FromDouble(0.3);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
                 if (i == j) continue;
-                T dot = NumOps.Zero;
-                for (int k = 0; k < embDim; k++)
-                    dot = NumOps.Add(dot, NumOps.Multiply(ZsMu[i, k], ZtMu[j, k]));
-                double sv = NumOps.ToDouble(dot);
-                double prob = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
-                if (prob > 0.5)
-                {
-                    T varI = cov[i, i];
-                    if (NumOps.GreaterThan(varI, eps))
-                    {
-                        T weight = NumOps.Divide(cov[i, j], varI);
-                        if (NumOps.GreaterThan(NumOps.Abs(weight), threshold))
-                            result[i, j] = weight;
-                    }
-                }
+                double pij = NumOps.ToDouble(lastP[i, j]);
+                double pji = NumOps.ToDouble(lastP[j, i]);
+                double varI = NumOps.ToDouble(cov[i, i]);
+                double covIJ = NumOps.ToDouble(cov[i, j]);
+
+                if (varI < 1e-10) continue;
+                double weight = covIJ / varI;
+                if (Math.Abs(weight) < EdgeThreshold) continue;
+
+                // Edge i→j if: learned probability P[i,j] >= P[j,i] (asymmetric direction)
+                // OR if covariance ratio |cov/var_i| > |cov/var_j| (statistical direction)
+                double varJ = NumOps.ToDouble(cov[j, j]);
+                double reverseWeight = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
+                // Use strict inequality to avoid creating both i→j and j→i (2-cycle).
+                // For ties, only process the (i,j) pair where i < j.
+                bool learnedDirection = pij > pji || (pij == pji && i < j);
+                bool statisticalDirection = Math.Abs(weight) > reverseWeight;
+
+                if (learnedDirection || statisticalDirection)
+                    result[i, j] = NumOps.FromDouble(weight);
             }
 
         return result;
+    }
+
+    /// <summary>
+    /// Samples from a standard normal distribution N(0,1) using Box-Muller transform.
+    /// </summary>
+    private static double SampleStandardNormal(Random rng)
+    {
+        double u1 = 1.0 - rng.NextDouble(); // (0,1] to avoid log(0)
+        double u2 = rng.NextDouble();
+        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
     }
 
 }

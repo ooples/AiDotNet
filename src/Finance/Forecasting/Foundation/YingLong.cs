@@ -28,7 +28,28 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// general-purpose forecasting with a focus on cloud and enterprise workloads.
 /// Pre-trained on large-scale data from Alibaba's data infrastructure.
 /// </para>
+/// <para><b>For Beginners:</b> YingLong is Alibaba's general-purpose time series forecasting
+/// model, pre-trained on massive amounts of data from Alibaba's cloud infrastructure. It is
+/// designed to handle enterprise-scale workloads like demand forecasting, capacity planning,
+/// and resource allocation. Think of it as a forecasting model that has already learned from
+/// one of the largest e-commerce and cloud platforms in the world.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a YingLong model (Alibaba) for enterprise time series forecasting
+/// // Pre-trained on massive data from Alibaba's cloud and e-commerce infrastructure
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with transformer backbone for enterprise workloads
+/// var model = new YingLong&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new YingLong&lt;double&gt;(architecture, "yinglong.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -238,7 +259,7 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -259,7 +280,6 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "YingLong" },
@@ -390,9 +410,9 @@ public class YingLong<T> : TimeSeriesFoundationModelBase<T>
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
         if (input.Length == 0 || seqLen == 0)
-            return new Tensor<T>(input.Shape);
+            return new Tensor<T>(input.Shape.ToArray());
 
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {

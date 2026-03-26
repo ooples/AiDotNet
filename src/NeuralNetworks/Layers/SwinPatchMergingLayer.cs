@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
@@ -20,6 +23,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// Reference: Liu et al., "Swin Transformer: Hierarchical Vision Transformer using Shifted Windows", ICCV 2021
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Transformer)]
+[LayerTask(LayerTask.DownSampling)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 16, 8", TestConstructorArgs = "8")]
 public class SwinPatchMergingLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
@@ -132,7 +139,7 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
         var normalized = _norm.Forward(merged);
 
         // Apply linear reduction: [batch, newSeqLen, 4*dim] -> [batch, newSeqLen, 2*dim]
-        var output = new Tensor<T>([batch, newSeqLen, _outputDim]);
+        var output = TensorAllocator.Rent<T>([batch, newSeqLen, _outputDim]);
 
         for (int b = 0; b < batch; b++)
         {
@@ -195,7 +202,7 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
 
         // Reverse the patch merging: distribute gradients back to original positions
         int seqLen = _cachedH * _cachedW;
-        var inputGrad = new Tensor<T>([batch, seqLen, _inputDim]);
+        var inputGrad = TensorAllocator.Rent<T>([batch, seqLen, _inputDim]);
 
         for (int b = 0; b < batch; b++)
         {
@@ -296,6 +303,14 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
         reductionGrads.AsSpan().CopyTo(result.AsSpan(normGrads.Length, reductionGrads.Length));
 
         return new Vector<T>(result);
+    }
+
+    /// <inheritdoc/>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _reduction.ClearGradients();
+        _norm.ClearGradients();
     }
 
     /// <inheritdoc/>

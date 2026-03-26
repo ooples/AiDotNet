@@ -34,6 +34,25 @@ namespace AiDotNet.Regression;
 /// - When you need both good prediction accuracy and the ability to adjust how much the model fits to noise
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Kernel Ridge Regression for nonlinear relationships
+/// var options = new KernelRidgeRegressionOptions&lt;double&gt;();
+/// var model = new KernelRidgeRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.5, 5.3, 8.1, 10.9, 13.7 });
+///
+/// // Train with kernel trick and L2 regularization
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Kernel)]
@@ -60,6 +79,12 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     /// The dual coefficients used for making predictions.
     /// </summary>
     private Vector<T> _dualCoefficients;
+    private T _yMean;
+    private Vector<T>? _linearCoefficients;
+    private T _linearIntercept;
+
+    /// <summary>KRR doesn't benefit from optimizer parameter injection.</summary>
+    public override int ParameterCount => 0;
 
     /// <summary>
     /// Gets the configuration options specific to Kernel Ridge Regression.
@@ -109,6 +134,8 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     {
         _gramMatrix = Matrix<T>.Empty();
         _dualCoefficients = Vector<T>.Empty();
+        _yMean = NumOps.Zero;
+        _linearIntercept = NumOps.Zero;
     }
 
     /// <summary>
@@ -141,6 +168,46 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     protected override void OptimizeModel(Matrix<T> X, Vector<T> y)
     {
         int n = X.Rows;
+
+        // Center y for translation equivariance (predictions get _yMean added back)
+        _yMean = NumOps.Zero;
+        for (int i = 0; i < n; i++)
+            _yMean = NumOps.Add(_yMean, y[i]);
+        _yMean = NumOps.Divide(_yMean, NumOps.FromDouble(n));
+        var yCentered = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+            yCentered[i] = NumOps.Subtract(y[i], _yMean);
+
+        // Auto-tune Gamma if using the default value and RBF/Laplacian kernel.
+        // The default Gamma=1.0 is too large for features with range >> 1, causing
+        // the kernel matrix to collapse to near-identity. Use 1/(n_features * Var(X))
+        // following the scikit-learn "scale" convention.
+        if (Options.KernelType is KernelType.RBF or KernelType.Laplacian && Math.Abs(Options.Gamma - 1.0) < 1e-12)
+        {
+            double totalVariance = 0;
+            for (int j = 0; j < X.Columns; j++)
+            {
+                double mean = 0;
+                for (int i = 0; i < n; i++)
+                    mean += Convert.ToDouble(X[i, j]);
+                mean /= n;
+
+                double variance = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    double diff = Convert.ToDouble(X[i, j]) - mean;
+                    variance += diff * diff;
+                }
+                variance /= n;
+                totalVariance += variance;
+            }
+
+            if (totalVariance > 1e-10)
+            {
+                Options.Gamma = 1.0 / totalVariance;
+            }
+        }
+
         _gramMatrix = new Matrix<T>(n, n);
 
         // Compute the Gram matrix
@@ -171,13 +238,34 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
             }
         }
 
-        // Solve (K + λI)a = y
-        _dualCoefficients = MatrixSolutionHelper.SolveLinearSystem(_gramMatrix, y, Options.DecompositionType);
+        // Solve (K + λI)a = y_centered
+        _dualCoefficients = MatrixSolutionHelper.SolveLinearSystem(_gramMatrix, yCentered, Options.DecompositionType);
 
         // Store X as support vectors for prediction
         SupportVectors = X;
         Alphas = _dualCoefficients;
+
+        // Compute OLS coefficients on original (uncentered) data for extrapolation
+        var xWithBias = new Matrix<T>(n, X.Columns + 1);
+        for (int i = 0; i < n; i++)
+        {
+            xWithBias[i, 0] = NumOps.One; // bias
+            for (int j = 0; j < X.Columns; j++)
+                xWithBias[i, j + 1] = X[i, j];
+        }
+        var xbTxb = xWithBias.Transpose().Multiply(xWithBias);
+        var xbTy = xWithBias.Transpose().Multiply(y); // use original y, not centered
+        for (int i = 0; i < xbTxb.Rows; i++)
+            xbTxb[i, i] = NumOps.Add(xbTxb[i, i], NumOps.FromDouble(1e-10));
+        var olsSolution = MatrixSolutionHelper.SolveLinearSystem(xbTxb, xbTy, Options.DecompositionType);
+        _linearIntercept = olsSolution[0];
+        _linearCoefficients = olsSolution.Slice(1, X.Columns);
     }
+
+    /// <summary>
+    /// KRR uses all training points — skip SVR-style sparsification.
+    /// </summary>
+    protected override void ExtractModelParameters() { }
 
     /// <summary>
     /// Predicts the target value for a single input feature vector.
@@ -206,13 +294,41 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     protected override T PredictSingle(Vector<T> input)
     {
-        T result = NumOps.Zero;
+        // Kernel prediction (centered)
+        T kernelPred = NumOps.Zero;
+        double maxK = 0;
         for (int i = 0; i < SupportVectors.Rows; i++)
         {
             Vector<T> supportVector = SupportVectors.GetRow(i);
-            result = NumOps.Add(result, NumOps.Multiply(Alphas[i], KernelFunction(input, supportVector)));
+            T k = KernelFunction(input, supportVector);
+            double kd = NumOps.ToDouble(k);
+            if (kd > maxK) maxK = kd;
+            kernelPred = NumOps.Add(kernelPred, NumOps.Multiply(Alphas[i], k));
         }
-        return result;
+
+        // OLS linear prediction using Engine.DotProduct
+        T linearPred = _linearIntercept;
+        if (_linearCoefficients is not null)
+        {
+            int len = Math.Min(input.Length, _linearCoefficients.Length);
+            var inputSlice = new Vector<T>(len);
+            var coefSlice = new Vector<T>(len);
+            for (int j = 0; j < len; j++)
+            {
+                inputSlice[j] = input[j];
+                coefSlice[j] = _linearCoefficients[j];
+            }
+            linearPred = NumOps.Add(linearPred, Engine.DotProduct(inputSlice, coefSlice));
+        }
+
+        // Blend: maxK near 1.0 means interpolation (use kernel+yMean), near 0 means extrapolation (use OLS)
+        double kernelWeight = Math.Min(1.0, maxK);
+        T kernelResult = NumOps.Add(_yMean, kernelPred);
+        T blended = NumOps.Add(
+            NumOps.Multiply(NumOps.FromDouble(kernelWeight), kernelResult),
+            NumOps.Multiply(NumOps.FromDouble(1.0 - kernelWeight), linearPred));
+
+        return blended;
     }
 
     /// <summary>
@@ -240,8 +356,8 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     /// Example:
     /// ```csharp
     /// var metadata = krr.GetModelMetadata();
-    /// Console.WriteLine($"Model type: {metadata.ModelType}");
-    /// Console.WriteLine($"Lambda: {metadata.AdditionalInfo["LambdaKRR"]}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// ```
     /// </para>
     /// </remarks>
@@ -252,15 +368,6 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
         metadata.AdditionalInfo["RegularizationType"] = Regularization.GetType().Name;
 
         return metadata;
-    }
-
-    /// <summary>
-    /// Gets the model type of the Kernel Ridge Regression model.
-    /// </summary>
-    /// <returns>The model type enumeration value.</returns>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.KernelRidgeRegression;
     }
 
     /// <summary>
@@ -327,6 +434,9 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
         {
             writer.Write(Convert.ToDouble(_dualCoefficients[i]));
         }
+
+        // Serialize _yMean
+        writer.Write(Convert.ToDouble(_yMean));
 
         return ms.ToArray();
     }
@@ -402,6 +512,10 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
         {
             _dualCoefficients[i] = NumOps.FromDouble(reader.ReadDouble());
         }
+
+        // Deserialize _yMean
+        if (ms.Position < ms.Length)
+            _yMean = NumOps.FromDouble(reader.ReadDouble());
     }
 
     /// <summary>
@@ -426,6 +540,25 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     /// you'd want each test to use a model with identical settings.
     /// </para>
     /// </remarks>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new KernelRidgeRegression<T>((KernelRidgeRegressionOptions)Options, Regularization);
+        if (SupportVectors.Rows > 0)
+            clone.SupportVectors = SupportVectors.Clone();
+        if (Alphas.Length > 0)
+            clone.Alphas = new Vector<T>(Alphas);
+        clone.B = B;
+        clone._gramMatrix = _gramMatrix.Rows > 0 ? _gramMatrix.Clone() : Matrix<T>.Empty();
+        clone._dualCoefficients = _dualCoefficients.Length > 0 ? new Vector<T>(_dualCoefficients) : Vector<T>.Empty();
+        clone._yMean = _yMean;
+        clone._linearIntercept = _linearIntercept;
+        if (_linearCoefficients is not null)
+            clone._linearCoefficients = new Vector<T>(_linearCoefficients);
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new KernelRidgeRegression<T>((KernelRidgeRegressionOptions)Options, Regularization);

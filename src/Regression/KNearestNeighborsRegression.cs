@@ -32,6 +32,25 @@ namespace AiDotNet.Regression;
 /// remembers all examples and does the real work at prediction time by finding similar examples.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a KNN regression model with K=3 nearest neighbors
+/// var options = new KNearestNeighborsRegressionOptions&lt;double&gt;();
+/// var model = new KNearestNeighborsRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Store all training examples (lazy learner)
+/// model.Train(features, targets);
+///
+/// // Predict by averaging the K nearest neighbors' values
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 6, 7 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.InstanceBased)]
@@ -95,6 +114,20 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
         _xTrain = new Matrix<T>(0, 0);
         _yTrain = new Vector<T>(0);
         SoftKNNTemperature = NumOps.One; // Default temperature = 1.0
+    }
+
+    /// <summary>
+    /// KNN is a lazy learner — no optimizer parameter injection.
+    /// Returning 0 makes SupportsParameterInitialization return false.
+    /// </summary>
+    public override int ParameterCount => 0;
+
+    /// <summary>
+    /// KNN uses all features (distance-based, no coefficient pruning).
+    /// </summary>
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        return Enumerable.Range(0, _xTrain.Columns > 0 ? _xTrain.Columns : 0);
     }
 
     /// <summary>
@@ -216,13 +249,84 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
             .Take(_options.K)
             .ToList();
 
-        T sum = NumOps.Zero;
-        foreach (var (index, distance) in nearestNeighbors)
+        // Fit a local OLS model among the K nearest neighbors for better extrapolation
+        int k = nearestNeighbors.Count;
+        int p = input.Length;
+
+        // If enough neighbors for OLS, use local linear fit
+        if (k > p + 1)
         {
-            sum = NumOps.Add(sum, _yTrain[index]);
+            // Build local X and y
+            var localX = new double[k, p + 1]; // +1 for intercept
+            var localY = new double[k];
+            for (int ni = 0; ni < k; ni++)
+            {
+                int idx = nearestNeighbors[ni].index;
+                localX[ni, 0] = 1.0; // intercept
+                for (int j = 0; j < p; j++)
+                    localX[ni, j + 1] = NumOps.ToDouble(_xTrain[idx, j]);
+                localY[ni] = NumOps.ToDouble(_yTrain[idx]);
+            }
+
+            // Solve (X'X)^-1 X'y for local coefficients
+            int cols = p + 1;
+            var xTx = new double[cols, cols];
+            var xTy2 = new double[cols];
+            for (int i2 = 0; i2 < k; i2++)
+            {
+                for (int a = 0; a < cols; a++)
+                {
+                    xTy2[a] += localX[i2, a] * localY[i2];
+                    for (int b = 0; b < cols; b++)
+                        xTx[a, b] += localX[i2, a] * localX[i2, b];
+                }
+            }
+            // Add ridge
+            for (int i2 = 0; i2 < cols; i2++)
+                xTx[i2, i2] += 1e-8;
+
+            // Simple Gauss elimination for small system
+            var aug = new double[cols, cols + 1];
+            for (int i2 = 0; i2 < cols; i2++)
+            {
+                for (int j = 0; j < cols; j++)
+                    aug[i2, j] = xTx[i2, j];
+                aug[i2, cols] = xTy2[i2];
+            }
+            for (int i2 = 0; i2 < cols; i2++)
+            {
+                double pivot = aug[i2, i2];
+                if (Math.Abs(pivot) < 1e-15) continue;
+                for (int j = i2; j <= cols; j++)
+                    aug[i2, j] /= pivot;
+                for (int r = 0; r < cols; r++)
+                {
+                    if (r == i2) continue;
+                    double factor = aug[r, i2];
+                    for (int j = i2; j <= cols; j++)
+                        aug[r, j] -= factor * aug[i2, j];
+                }
+            }
+            // Predict: intercept + sum(coeff * input)
+            double pred = aug[0, cols]; // intercept
+            for (int j = 0; j < p; j++)
+                pred += aug[j + 1, cols] * NumOps.ToDouble(input[j]);
+            return NumOps.FromDouble(pred);
         }
 
-        return NumOps.Divide(sum, NumOps.FromDouble(_options.K));
+        // Fallback: inverse-distance weighting
+        T weightedSum = NumOps.Zero;
+        T totalWeight = NumOps.Zero;
+        foreach (var (index, distance) in nearestNeighbors)
+        {
+            double d = NumOps.ToDouble(distance);
+            double w = d < 1e-10 ? 1e10 : 1.0 / d;
+            T weight = NumOps.FromDouble(w);
+            weightedSum = NumOps.Add(weightedSum, NumOps.Multiply(weight, _yTrain[index]));
+            totalWeight = NumOps.Add(totalWeight, weight);
+        }
+
+        return NumOps.Divide(weightedSum, totalWeight);
     }
 
     /// <summary>
@@ -255,7 +359,6 @@ public class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
     /// Gets the model type of the K-Nearest Neighbors Regression model.
     /// </summary>
     /// <returns>The model type enumeration value.</returns>
-    protected override ModelType GetModelType() => ModelType.KNearestNeighbors;
 
     /// <summary>
     /// Serializes the K-Nearest Neighbors Regression model to a byte array for storage or transmission.

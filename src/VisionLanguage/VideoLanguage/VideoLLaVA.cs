@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Video-LLaVA (PKU, 2024) learns united visual representations for video understanding by
+/// aligning image and video features before projection into the language model. It processes
+/// both images and videos through separate encoders that are aligned into a shared feature
+/// space, enabling the model to leverage image-text knowledge for video understanding.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Video-LLaVA: Learning United Visual Representation by Alignment Before Projection" (PKU, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> VideoLLaVA is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Video-LLaVA is a video-language model that aligns image and
+/// video features for unified visual understanding. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Video-LLaVA model for unified video understanding
+/// // with aligned visual representations before projection
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new VideoLLaVA&lt;double&gt;(architecture, "videollava.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new VideoLLaVA&lt;double&gt;(architecture, new VideoLLaVAOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Video)]
@@ -150,7 +174,7 @@ public class VideoLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Video-LLaVA-Native" : "Video-LLaVA-ONNX", Description = "Video-LLaVA: united visual representation for video understanding.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Video-LLaVA-Native" : "Video-LLaVA-ONNX", Description = "Video-LLaVA: united visual representation for video understanding.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Video-LLaVA";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

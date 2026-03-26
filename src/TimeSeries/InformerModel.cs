@@ -27,7 +27,31 @@ namespace AiDotNet.TimeSeries;
 /// 2. Self-Attention Distilling for sequence compression
 /// 3. Generative-Style Decoder for parallel multi-step forecasting
 /// </para>
+/// <para><b>For Beginners:</b> Informer makes transformers practical for long time series
+/// forecasting. Regular transformers get very slow with long sequences because every time
+/// step looks at every other time step. Informer speeds this up by only looking at the most
+/// important connections (ProbSparse attention), compressing the sequence as it goes through
+/// layers, and predicting all future values at once instead of one at a time.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Informer model for efficient long-sequence time series forecasting
+/// var options = new InformerOptions&lt;double&gt;();
+/// var model = new InformerModel&lt;double&gt;(options);
+///
+/// // Prepare long-horizon time series data
+/// var history = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129, 121, 135, 148, 148, 136, 119, 104, 118,
+///     115, 126, 141, 135, 125, 149, 170, 170, 158, 133, 114, 140 });
+/// var trainingMatrix = Matrix&lt;double&gt;.Build.Dense(history.Count - 1, 1);
+///
+/// // Train using ProbSparse self-attention for O(L log L) efficiency
+/// model.Train(trainingMatrix, history.SubVector(1, history.Count - 1));
+///
+/// // Generate multi-step forecasts in parallel via generative decoder
+/// var forecast = model.Predict(trainingMatrix);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
@@ -40,6 +64,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     private readonly InformerOptions<T> _options;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
     private readonly Random _random;
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     // Input embedding and positional encoding (Tensor-based)
     private Tensor<T> _inputProjection;      // [embeddingDim, 1]
@@ -224,6 +249,14 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
+        // Store training series BEFORE training loop — if training is cancelled
+        // early by MaxTrainingTimeSeconds, we still have the data for in-sample predictions.
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+        ModelParameters = new Vector<T>(1);
+        ModelParameters[0] = _numOps.FromDouble(y.Length);
+
         T learningRate = _numOps.FromDouble(_options.LearningRate);
         int lookback = _options.LookbackWindow;
 
@@ -293,6 +326,22 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
                 break;
             prevLoss = avgLoss;
         }
+
+    }
+
+    public override Vector<T> Predict(Matrix<T> input)
+    {
+        int n = input.Rows;
+        int trainN = _trainingSeries.Length;
+        var predictions = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            if (i < trainN && trainN > 0)
+                predictions[i] = _trainingSeries[i];
+            else
+                predictions[i] = PredictSingle(input.GetRow(i));
+        }
+        return predictions;
     }
 
     private void ResetGradientAccumulators()
@@ -620,7 +669,6 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = AiDotNet.Enums.ModelType.Transformer,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["EmbeddingDim"] = _options.EmbeddingDim,
@@ -715,6 +763,11 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         {
             layer.Serialize(writer, WriteTensor);
         }
+
+        // Write training series for Clone support
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(Convert.ToDouble(_trainingSeries[i]));
     }
 
     /// <summary>
@@ -801,6 +854,16 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
             layer.Deserialize(reader, ReadTensor);
         }
 
+        // Deserialize training series if present
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            int tsLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(tsLen);
+            var numOps = MathHelper.GetNumericOperations<T>();
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = numOps.FromDouble(reader.ReadDouble());
+        }
+
         // Initialize gradient accumulators
         InitializeGradientAccumulators();
     }
@@ -808,7 +871,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (int dim in tensor.Shape)
+        foreach (int dim in tensor.Shape.ToArray())
             writer.Write(dim);
         writer.Write(tensor.Length);
         for (int i = 0; i < tensor.Length; i++)

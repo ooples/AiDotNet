@@ -38,6 +38,25 @@ namespace AiDotNet.Regression;
 /// - Variance components showing how much groups vary
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a mixed-effects model for hierarchical/clustered data
+/// var options = new MixedEffectsModelOptions&lt;double&gt;();
+/// var model = new MixedEffectsModel&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 fixed-effect features
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train with fixed and random effects estimation
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -222,7 +241,10 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// <inheritdoc/>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        return Predict(input, null);
+        // Use the same default group assignment as Train so random effects are included
+        var groupIndices = Enumerable.Range(0, input.Rows)
+            .Select(i => i % Math.Max(1, input.Rows / 10)).ToArray();
+        return Predict(input, groupIndices);
     }
 
     /// <summary>
@@ -248,11 +270,13 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
 
         for (int i = 0; i < input.Rows; i++)
         {
-            // Fixed effects prediction
+            // Fixed effects prediction using Engine.DotProduct
             T pred = _fixedEffects[0];  // Intercept
-            for (int j = 0; j < _numFeatures; j++)
             {
-                pred = NumOps.Add(pred, NumOps.Multiply(input[i, j], _fixedEffects[j + 1]));
+                var row = new Vector<T>(_numFeatures);
+                var fe = new Vector<T>(_numFeatures);
+                for (int j = 0; j < _numFeatures; j++) { row[j] = input[i, j]; fe[j] = _fixedEffects[j + 1]; }
+                pred = NumOps.Add(pred, Engine.DotProduct(row, fe));
             }
 
             // Add random effects if group is known
@@ -941,7 +965,6 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.MixedEffectsModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumFeatures", _numFeatures },
@@ -952,6 +975,19 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
                 { "ICC", (object)NumOps.ToDouble(ComputeICC()) }
             }
         };
+    }
+
+    /// <summary>
+    /// MixedEffects doesn't support optimizer parameter injection.
+    /// </summary>
+    public override int ParameterCount => 0;
+
+    /// <summary>
+    /// Returns all features used by the model.
+    /// </summary>
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        return Enumerable.Range(0, _numFeatures > 0 ? _numFeatures : 0);
     }
 
     /// <inheritdoc/>
@@ -1042,16 +1078,42 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     }
 
     /// <inheritdoc/>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.MixedEffectsModel;
-    }
-
-    /// <inheritdoc/>
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         // Use default grouping when explicit groups aren't provided
         var groupIndices = Enumerable.Range(0, x.Rows).Select(i => i % Math.Max(1, x.Rows / 10)).ToArray();
         Train(x, y, groupIndices);
     }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new MixedEffectsModel<T>(_options, Regularization);
+        if (SupportVectors.Rows > 0)
+            clone.SupportVectors = SupportVectors.Clone();
+        if (Alphas.Length > 0)
+            clone.Alphas = new Vector<T>(Alphas);
+        clone.B = B;
+        if (_fixedEffects is not null)
+            clone._fixedEffects = new Vector<T>(_fixedEffects);
+        if (_featureMeans is not null)
+            clone._featureMeans = new Vector<T>(_featureMeans);
+        clone._numFeatures = _numFeatures;
+        clone._numRandomEffects = _numRandomEffects;
+        clone._residualVariance = _residualVariance;
+        if (_randomEffectVariance is not null)
+            clone._randomEffectVariance = _randomEffectVariance.Clone();
+        if (_fixedEffectStdErrors is not null)
+            clone._fixedEffectStdErrors = new Vector<T>(_fixedEffectStdErrors);
+        if (_groupIndices is not null)
+            clone._groupIndices = (int[])_groupIndices.Clone();
+        if (_randomEffects is not null)
+        {
+            clone._randomEffects = new Dictionary<int, Vector<T>>();
+            foreach (var kvp in _randomEffects)
+                clone._randomEffects[kvp.Key] = new Vector<T>(kvp.Value);
+        }
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 }

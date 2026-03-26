@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Document;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// LayoutLMv3 (Microsoft, 2022) unifies text, image, and layout pre-training for document AI.
+/// It uses unified text and image masking objectives to learn cross-modal representations
+/// where text tokens, visual patches, and 2D layout positions are jointly encoded in a single
+/// transformer, enabling document classification, information extraction, and layout analysis.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking" (Microsoft, 2022)</item></list></para>
-/// <para><b>For Beginners:</b> LayoutLMv3 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> LayoutLMv3 is a document AI model from Microsoft that jointly
+/// understands text, images, and layout positions. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a LayoutLMv3 model for document AI
+/// // with unified text, image, and layout pre-training
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LayoutLMv3&lt;double&gt;(architecture, "layoutlmv3.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LayoutLMv3&lt;double&gt;(architecture, new LayoutLMv3Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -91,7 +115,7 @@ public class LayoutLMv3<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingM
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LayoutLMv3-Native" : "LayoutLMv3-ONNX", Description = "LayoutLMv3: unified text, image, and layout pre-training for document AI.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LayoutLMv3-Native" : "LayoutLMv3-ONNX", Description = "LayoutLMv3: unified text, image, and layout pre-training for document AI.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "LayoutLMv3";
         m.AdditionalInfo["OcrFree"] = _options.IsOcrFree.ToString();
         m.AdditionalInfo["MaxLayoutTokens"] = _options.MaxLayoutTokens.ToString();

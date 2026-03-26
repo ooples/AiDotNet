@@ -68,7 +68,7 @@ public class TensorExtensionsIntegrationTests
 
         var result = tensor.Unflatten(flattened);
 
-        Assert.Equal(shape, result.Shape);
+        Assert.Equal(shape, result.Shape.ToArray());
         Assert.Equal(1, result[[0, 0]]);
         Assert.Equal(2, result[[0, 1]]);
         Assert.Equal(3, result[[0, 2]]);
@@ -178,7 +178,7 @@ public class TensorExtensionsIntegrationTests
 
         var result = a.ConcatenateTensors(b);
 
-        Assert.Equal(new[] { 2, 5 }, result.Shape);
+        Assert.Equal(new[] { 2, 5 }, result.Shape.ToArray());
         Assert.Equal(1, result[[0, 0]]);
         Assert.Equal(2, result[[0, 1]]);
         Assert.Equal(5, result[[0, 2]]);
@@ -208,7 +208,7 @@ public class TensorExtensionsIntegrationTests
 
         var tensor = TensorExtensions.CreateXavierInitializedTensor<double>(shape, stddev, random);
 
-        Assert.Equal(shape, tensor.Shape);
+        Assert.Equal(shape, tensor.Shape.ToArray());
         Assert.Equal(12, tensor.Length);
     }
 
@@ -237,7 +237,7 @@ public class TensorExtensionsIntegrationTests
     {
         var tensor = TensorExtensions.CreateOnesTensor<double>(5);
 
-        Assert.Equal(new[] { 5 }, tensor.Shape);
+        Assert.Equal(new[] { 5 }, tensor.Shape.ToArray());
         for (int i = 0; i < 5; i++)
         {
             Assert.Equal(1, tensor[i]);

@@ -14,7 +14,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Transformers;
 
@@ -46,6 +46,22 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// in Time Series Forecasting", NeurIPS 2022. https://arxiv.org/abs/2205.14415
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Non-stationary Transformer for data with changing statistical properties
+/// // Preserves non-stationary characteristics while using attention for pattern recognition
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 96, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with de-stationary attention mechanism
+/// var model = new NonStationaryTransformer&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new NonStationaryTransformer&lt;double&gt;(architecture, "ns_transformer.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -605,7 +621,7 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
         var predictions = Forward(input);
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape));
+        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
         _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
@@ -639,7 +655,6 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["SequenceLength"] = _sequenceLength,
@@ -1075,7 +1090,7 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ApplySeriesStationarization(Tensor<T> input, bool normalize)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         var eps = NumOps.FromDouble(1e-5);
 
         if (normalize)
@@ -1150,7 +1165,7 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ShiftAndAppend(Tensor<T> input, Tensor<T> prediction)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         int seqLen = _sequenceLength;
         int predLen = Math.Min(_predictionHorizon, seqLen);
 

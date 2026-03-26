@@ -24,8 +24,30 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LLaVA-OneVision 1.5: Improved and Fully Open" (Li et al., 2025)</item></list></para>
-/// <para><b>For Beginners:</b> LLaVAOneVision15 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> LLaVA-OneVision 1.5 is the fully open successor that upgrades
+/// the language backbone to Qwen2.5 and uses improved training data and strategies. It
+/// supports single images, multi-image comparisons, and long video understanding with up
+/// to 64 frames. Notably, it outperforms the much larger Qwen2.5-VL on 18 out of 27
+/// benchmarks while being fully open-source with all training data, code, and model weights
+/// publicly available. This makes it one of the most capable and accessible open multimodal
+/// models. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a LLaVA-OneVision 1.5 model for fully open multimodal AI
+/// // supporting images, multi-image, and video with Qwen2.5 backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LLaVAOneVision15&lt;double&gt;(architecture, "llavaonevision15.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LLaVAOneVision15&lt;double&gt;(architecture, new LLaVAOneVision15Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -114,7 +136,7 @@ public class LLaVAOneVision15<T> : VisionLanguageModelBase<T>, IInstructionTuned
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "LLaVA-OV-1.5-Native" : "LLaVA-OV-1.5-ONNX", Description = "LLaVA-OneVision 1.5: Improved and Fully Open (Li et al., 2025)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "LLaVA-OneVision-1.5"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["VideoEnabled"] = _options.EnableVideo.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "LLaVA-OV-1.5-Native" : "LLaVA-OV-1.5-ONNX", Description = "LLaVA-OneVision 1.5: Improved and Fully Open (Li et al., 2025)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "LLaVA-OneVision-1.5"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["VideoEnabled"] = _options.EnableVideo.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.DecoderDim); writer.Write(_options.ProjectionDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.EnableVideo); writer.Write(_options.MaxVideoFrames); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.ProjectionDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.EnableVideo = reader.ReadBoolean(); _options.MaxVideoFrames = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new LLaVAOneVision15<T>(Architecture, mp, _options); return new LLaVAOneVision15<T>(Architecture, _options); }

@@ -78,7 +78,7 @@ public class GatedDeltaNetLayerTests
 
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -93,7 +93,7 @@ public class GatedDeltaNetLayerTests
 
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -107,10 +107,10 @@ public class GatedDeltaNetLayerTests
         var input = CreateRandomTensor(new[] { 1, seqLen, modelDim });
 
         var output = layer.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         var inputGrad = layer.Backward(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         Assert.False(ContainsNaN(inputGrad));
     }
 
@@ -124,10 +124,10 @@ public class GatedDeltaNetLayerTests
         var input = CreateRandomTensor(new[] { seqLen, modelDim });
 
         var output = layer.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         var inputGrad = layer.Backward(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         for (int i = 0; i < inputGrad.Length; i++)
             Assert.False(float.IsNaN(inputGrad[i]), $"NaN detected in backward output at index {i}");
     }
@@ -247,7 +247,7 @@ public class GatedDeltaNetLayerTests
         var outputWeights = layer.GetOutputProjectionWeights();
 
         Assert.NotNull(outputWeights);
-        Assert.Equal(new[] { modelDim, modelDim }, outputWeights.Shape);
+        Assert.Equal(new[] { modelDim, modelDim }, outputWeights.Shape.ToArray());
     }
 
     [Fact]
@@ -261,7 +261,7 @@ public class GatedDeltaNetLayerTests
 
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaNDouble(output));
     }
 
@@ -275,10 +275,10 @@ public class GatedDeltaNetLayerTests
         var input = CreateRandomDoubleTensor(new[] { 1, seqLen, modelDim });
 
         var output = layer.Forward(input);
-        var grad = CreateRandomDoubleTensor(output.Shape);
+        var grad = CreateRandomDoubleTensor(output.Shape.ToArray());
         var inputGrad = layer.Backward(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         Assert.False(ContainsNaNDouble(inputGrad));
     }
 

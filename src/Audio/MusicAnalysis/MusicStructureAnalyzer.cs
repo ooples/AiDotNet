@@ -225,7 +225,6 @@ public class MusicStructureAnalyzer<T> : AudioNeuralNetworkBase<T>
         {
             Name = _useNativeMode ? "MusicStructureAnalyzer-Native" : "MusicStructureAnalyzer-ONNX",
             Description = "Neural music structure segmentation (intro/verse/chorus/bridge/outro)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumLayers
         };
         m.AdditionalInfo["NumSections"] = _options.NumSections.ToString();

@@ -55,6 +55,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
 
         public ILossFunction<double> DefaultLossFunction => null;
         public int ParameterCount => _weights.Length;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
         public bool SupportsJitCompilation => false;
 
         public Vector<double> Predict(Vector<double> input)
@@ -84,7 +85,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
 
         public void Train(Vector<double> input, Vector<double> expectedOutput) { }
-        public ModelMetadata<double> GetModelMetadata() => new() { ModelType = ModelType.None };
+        public ModelMetadata<double> GetModelMetadata() => new();
         public byte[] Serialize() => Array.Empty<byte>();
         public void Deserialize(byte[] data) { }
         public void SaveModel(string filePath) { }
@@ -127,6 +128,8 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         public AiDotNet.Autodiff.ComputationNode<double> ExportComputationGraph(
             List<AiDotNet.Autodiff.ComputationNode<double>> inputNodes)
             => throw new NotImplementedException();
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     #endregion

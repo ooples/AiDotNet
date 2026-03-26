@@ -17,10 +17,35 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// LLaVA-Med (Microsoft, 2023) adapts the LLaVA architecture for biomedical visual question
+/// answering through curriculum learning on PubMed Central figure-caption pairs. It achieves
+/// GPT-4-level visual understanding on biomedical images by first aligning visual and text
+/// features on biomedical figure-caption data, then fine-tuning on biomedical VQA instruction
+/// datasets for clinical and research applications.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LLaVA-Med: Training a Large Language-and-Vision Assistant for Biomedicine (Microsoft, 2023)"</item></list></para>
-/// <para><b>For Beginners:</b> LLaVAMed is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> LLaVA-Med is a vision-language model for biomedical image
+/// understanding and visual question answering. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a LLaVA-Med model for biomedical visual question answering
+/// // with curriculum learning on PubMed Central figure-caption pairs
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LLaVAMed&lt;double&gt;(architecture, "llavamed.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LLaVAMed&lt;double&gt;(architecture, new LLaVAMedOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Healthcare)]
@@ -94,7 +119,7 @@ public class LLaVAMed<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LLaVA-Med-Native" : "LLaVA-Med-ONNX", Description = "LLaVA-Med: biomedical VLM with GPT-4-level visual understanding.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LLaVA-Med-Native" : "LLaVA-Med-ONNX", Description = "LLaVA-Med: biomedical VLM with GPT-4-level visual understanding.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "LLaVA-Med";
         m.AdditionalInfo["MedicalDomain"] = _options.MedicalDomain;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

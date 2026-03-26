@@ -47,6 +47,35 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 /// </list>
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
+/// <example>
+/// <code>
+/// // Create balanced random forest for imbalanced fraud detection
+/// var options = new BalancedRandomForestOptions&lt;double&gt;();
+/// var classifier = new BalancedRandomForestClassifier&lt;double&gt;(options);
+///
+/// // Prepare imbalanced training data: 8 samples, 6 majority (class 0), 2 minority (class 1)
+/// var features = new Matrix&lt;double&gt;(8, 2);
+/// features[0, 0] = 1.0; features[0, 1] = 1.1;
+/// features[1, 0] = 1.2; features[1, 1] = 0.9;
+/// features[2, 0] = 0.8; features[2, 1] = 1.0;
+/// features[3, 0] = 1.3; features[3, 1] = 0.7;
+/// features[4, 0] = 1.1; features[4, 1] = 0.8;
+/// features[5, 0] = 0.9; features[5, 1] = 1.2;
+/// features[6, 0] = 5.0; features[6, 1] = 5.1;
+/// features[7, 0] = 5.2; features[7, 1] = 4.9;
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 0, 0, 0, 1, 1 });
+///
+/// // Train trees on balanced bootstrap samples with random feature subsets
+/// classifier.Train(features, labels);
+///
+/// // Predict using ensemble vote
+/// var newSample = new Matrix&lt;double&gt;(1, 2);
+/// newSample[0, 0] = 5.1; newSample[0, 1] = 5.0;
+/// var prediction = classifier.Predict(newSample);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
@@ -189,7 +218,6 @@ public class BalancedRandomForestClassifier<T> : ClassifierBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> This identifier helps the system track what type of model this is.</para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.BalancedRandomForestClassifier;
 
     /// <summary>
     /// Trains the balanced random forest classifier.

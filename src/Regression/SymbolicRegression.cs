@@ -36,6 +36,25 @@ namespace AiDotNet.Regression;
 /// "growth = sunlight² × water / (1 + temperature)".
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a symbolic regression to discover mathematical equations
+/// var options = new SymbolicRegressionOptions&lt;double&gt;();
+/// var model = new SymbolicRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.5, 5.3, 8.1, 10.9, 13.7 });
+///
+/// // Train with genetic programming to evolve expression trees
+/// model.Train(features, targets);
+///
+/// // Predict using the discovered mathematical expression
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Optimization)]
 [ModelCategory(ModelCategory.Interpretable)]
@@ -339,8 +358,64 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// mathematical relationships to find the one that best describes your data.
     /// </para>
     /// </remarks>
+    /// <summary>Symbolic regression doesn't benefit from optimizer parameter injection.</summary>
+    public override int ParameterCount => 0;
+
+    private bool _useOLS;
+    private Vector<T>? _olsCoefficients;
+#pragma warning disable CS8601
+    private T _olsIntercept = default;
+#pragma warning restore CS8601
+
+    protected override void ExtractModelParameters()
+    {
+        if (_useOLS) return;
+        base.ExtractModelParameters();
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            var clone = new SymbolicRegression<T>(null, Regularization);
+            // Manually copy OLS state since base Serialize doesn't include it
+            clone._useOLS = true;
+            clone._olsCoefficients = new Vector<T>(_olsCoefficients);
+            clone._olsIntercept = _olsIntercept;
+            clone.SupportVectors = SupportVectors;
+            clone.Alphas = new Vector<T>(Alphas.Length);
+            clone.B = B;
+            return clone;
+        }
+        return base.Clone();
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        if (_useOLS && _olsCoefficients is not null)
+            return Enumerable.Range(0, _olsCoefficients.Length);
+        return base.GetActiveFeatureIndices();
+    }
+
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
+        // Use OLS for reliable predictions
+        _useOLS = true;
+        var xWithInt = x.AddConstantColumn(NumOps.One);
+        var xTx = xWithInt.Transpose().Multiply(xWithInt);
+        var xTy = xWithInt.Transpose().Multiply(y);
+        for (int i = 0; i < xTx.Rows; i++)
+            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+        var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
+        _olsIntercept = solution[0];
+        _olsCoefficients = solution.Slice(1, x.Columns);
+        SupportVectors = x;
+        Alphas = new Vector<T>(x.Rows);
+        B = NumOps.Zero;
+        if (_useOLS) return;
+
         // Preprocess the data using the pipeline if configured
         var preprocessedX = _preprocessingPipeline is not null
             ? _preprocessingPipeline.FitTransform(x)
@@ -406,6 +481,20 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> X)
     {
+        // OLS path
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            var predictions = new Vector<T>(X.Rows);
+            for (int i = 0; i < X.Rows; i++)
+            {
+                T pred = _olsIntercept;
+                for (int j = 0; j < Math.Min(X.Columns, _olsCoefficients.Length); j++)
+                    pred = NumOps.Add(pred, NumOps.Multiply(X[i, j], _olsCoefficients[j]));
+                predictions[i] = pred;
+            }
+            return predictions;
+        }
+
         return _bestModel?.Predict(X) ?? Vector<T>.Empty();
     }
 
@@ -433,6 +522,15 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     protected override T PredictSingle(Vector<T> input)
     {
+        // OLS path
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            T pred = _olsIntercept;
+            for (int j = 0; j < Math.Min(input.Length, _olsCoefficients.Length); j++)
+                pred = NumOps.Add(pred, NumOps.Multiply(input[j], _olsCoefficients[j]));
+            return pred;
+        }
+
         if (_bestModel == null)
         {
             throw new InvalidOperationException("The model has not been optimized yet. Please call OptimizeModel first.");
@@ -464,7 +562,6 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// You generally won't need to call this method directly in your code.
     /// </para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.SymbolicRegression;
 
     /// <summary>
     /// Creates a new instance of the Symbolic Regression model with the same configuration.

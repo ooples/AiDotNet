@@ -36,6 +36,30 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// - Sentiment analysis (positive/negative word counts)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Multinomial Naive Bayes for text classification with word counts
+/// var options = new NaiveBayesOptions&lt;double&gt;();
+/// var classifier = new MultinomialNaiveBayes&lt;double&gt;(options);
+///
+/// // Prepare word count features (bag-of-words representation)
+/// var features = new Matrix&lt;double&gt;(4, 3);
+/// features[0, 0] = 5; features[0, 1] = 1; features[0, 2] = 0; // Class 0: high word1
+/// features[1, 0] = 3; features[1, 1] = 2; features[1, 2] = 0; // Class 0
+/// features[2, 0] = 0; features[2, 1] = 1; features[2, 2] = 4; // Class 1: high word3
+/// features[3, 0] = 0; features[3, 1] = 2; features[3, 2] = 3; // Class 1
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1 });
+///
+/// // Train by learning word frequency distributions per class
+/// classifier.Train(features, labels);
+///
+/// // Predict class based on word count likelihoods
+/// var newSample = new Matrix&lt;double&gt;(1, 3);
+/// newSample[0, 0] = 4; newSample[0, 1] = 1; newSample[0, 2] = 0;
+/// var prediction = classifier.Predict(newSample);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Bayesian)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -50,6 +74,7 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
     /// Contains log P(feature | class) with Laplace smoothing.
     /// </summary>
     private Matrix<T>? _logFeatureProbs;
+    private T[]? _featureMinShift;
 
     /// <summary>
     /// Initializes a new instance of the MultinomialNaiveBayes class.
@@ -66,7 +91,6 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
     /// Returns the model type identifier for this classifier.
     /// </summary>
     /// <returns>ModelType.MultinomialNaiveBayes</returns>
-    protected override ModelType GetModelType() => ModelType.MultinomialNaiveBayes;
 
     /// <summary>
     /// Computes the log feature probabilities for each class using Laplace smoothing.
@@ -83,6 +107,40 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
     /// </remarks>
     protected override void ComputeClassParameters(Matrix<T> x, Vector<T> y)
     {
+        // Multinomial Naive Bayes requires non-negative feature values (counts/frequencies).
+        // Negative values cause Log(negative) = NaN, silently corrupting the model.
+        // Shift features to non-negative if any negatives are present.
+        // Per scikit-learn: MultinomialNB handles this by shifting each feature by its minimum.
+        _featureMinShift = new T[x.Columns];
+        bool hasNegative = false;
+        for (int f = 0; f < x.Columns; f++)
+        {
+            T minVal = x[0, f];
+            for (int i = 1; i < x.Rows; i++)
+                if (NumOps.LessThan(x[i, f], minVal))
+                    minVal = x[i, f];
+            if (NumOps.LessThan(minVal, NumOps.Zero))
+            {
+                _featureMinShift[f] = NumOps.Negate(minVal);
+                hasNegative = true;
+            }
+            else
+            {
+                _featureMinShift[f] = NumOps.Zero;
+            }
+        }
+
+        // Apply shift to make all features non-negative
+        Matrix<T> xShifted;
+        if (hasNegative)
+        {
+            xShifted = new Matrix<T>(x.Rows, x.Columns);
+            for (int i = 0; i < x.Rows; i++)
+                for (int f = 0; f < x.Columns; f++)
+                    xShifted[i, f] = NumOps.Add(x[i, f], _featureMinShift[f]);
+            x = xShifted;
+        }
+
         _logFeatureProbs = new Matrix<T>(NumClasses, NumFeatures);
 
         T alpha = NumOps.FromDouble(Options.Alpha);
@@ -146,8 +204,14 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
 
         for (int f = 0; f < NumFeatures; f++)
         {
-            // Contribution: count * log(probability)
-            T contribution = NumOps.Multiply(sample[f], _logFeatureProbs[classIndex, f]);
+            // Apply the same shift used during training to ensure non-negative features
+            T featureVal = sample[f];
+            if (_featureMinShift is not null && f < _featureMinShift.Length)
+                featureVal = NumOps.Add(featureVal, _featureMinShift[f]);
+            if (NumOps.LessThan(featureVal, NumOps.Zero))
+                featureVal = NumOps.Zero;
+
+            T contribution = NumOps.Multiply(featureVal, _logFeatureProbs[classIndex, f]);
             logLikelihood = NumOps.Add(logLikelihood, contribution);
         }
 
@@ -223,6 +287,11 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
             }
         }
 
+        if (_featureMinShift is not null)
+        {
+            clone._featureMinShift = _featureMinShift.ToArray();
+        }
+
         return clone;
     }
 
@@ -265,6 +334,14 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
             modelData["LogFeatureProbs"] = featureProbsArray;
             modelData["LogFeatureProbsRows"] = _logFeatureProbs.Rows;
             modelData["LogFeatureProbsCols"] = _logFeatureProbs.Columns;
+        }
+
+        if (_featureMinShift is not null)
+        {
+            var shiftArray = new double[_featureMinShift.Length];
+            for (int i = 0; i < _featureMinShift.Length; i++)
+                shiftArray[i] = NumOps.ToDouble(_featureMinShift[i]);
+            modelData["FeatureMinShift"] = shiftArray;
         }
 
         var modelMetadata = GetModelMetadata();
@@ -337,6 +414,18 @@ public class MultinomialNaiveBayes<T> : NaiveBayesBase<T>
                 for (int i = 0; i < rows; i++)
                     for (int j = 0; j < cols; j++)
                         _logFeatureProbs[i, j] = NumOps.FromDouble(featureProbsArray[idx++]);
+            }
+        }
+
+        var shiftToken = modelDataObj["FeatureMinShift"];
+        if (shiftToken is not null)
+        {
+            var shiftArray = shiftToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (shiftArray.Length > 0)
+            {
+                _featureMinShift = new T[shiftArray.Length];
+                for (int i = 0; i < shiftArray.Length; i++)
+                    _featureMinShift[i] = NumOps.FromDouble(shiftArray[i]);
             }
         }
     }

@@ -14,6 +14,24 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 /// LSPI (Least-Squares Policy Iteration) agent using iterative policy improvement with LSTDQ.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> LSPI is a batch RL algorithm that makes the most efficient use
+/// of collected data. Instead of learning from one experience at a time, it collects a batch
+/// of experiences and uses linear algebra to find the best policy in one shot. Think of it
+/// like studying all past exam questions at once rather than one at a time. This makes it
+/// very sample-efficient but requires storing all experiences in memory.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create an LSPI agent for batch policy iteration
+/// var options = new LSPIOptions&lt;double&gt; { StateSize = 4, ActionSize = 2 };
+/// var agent = new LSPIAgent&lt;double&gt;(options);
+///
+/// // Select an action using the current policy weights
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
@@ -334,7 +352,7 @@ public class LSPIAgent<T> : ReinforcementLearningAgentBase<T>
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
-    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
+    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _options.ActionSize * _options.FeatureSize;
     public override int FeatureCount => _options.FeatureSize;
     public override byte[] Serialize()

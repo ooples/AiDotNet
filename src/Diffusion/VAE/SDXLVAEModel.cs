@@ -32,6 +32,13 @@ namespace AiDotNet.Diffusion.VAE;
 /// Image Synthesis", ICLR 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var vae = new SDXLVAEModel&lt;float&gt;(inputChannels: 3, latentChannels: 4, baseChannels: 128);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 1024, 1024 });
+/// var latent = vae.Encode(image);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Generative)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.FeatureExtraction)]

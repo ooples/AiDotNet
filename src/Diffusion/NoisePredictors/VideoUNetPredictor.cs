@@ -1,5 +1,7 @@
 using System.Linq;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -49,6 +51,21 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// - Temporal convolutions with kernel size 3 across frames
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var predictor = new VideoUNetPredictor&lt;float&gt;(inputChannels: 4, baseChannels: 320, numFrames: 14);
+/// var noisyVideo = Tensor&lt;float&gt;.Random(new[] { 1, 4, 14, 64, 64 });
+/// var predicted = predictor.PredictNoise(noisyVideo, timestep: 500);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Generative)]
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
+[ModelTask(ModelTask.Denoising)]
+[ModelTask(ModelTask.VideoGeneration)]
+[ModelComplexity(ModelComplexity.VeryHigh)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 {
     /// <summary>
@@ -613,7 +630,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private Tensor<T> ApplyTemporalProcessing(ILayer<T> temporalLayer, Tensor<T> video)
     {
         // Apply temporal layer to the video tensor
-        var result = new Tensor<T>(video.Shape);
+        var result = new Tensor<T>(video.Shape.ToArray());
         video.AsSpan().CopyTo(result.AsWritableSpan());
         return result;
     }
@@ -629,7 +646,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private Tensor<T> ApplyTemporalAttention(ILayer<T> temporalAttention, Tensor<T> video)
     {
         // Video shape: [batch, channels, frames, height, width] (NCFHW)
-        var shape = video.Shape;
+        var shape = video.Shape.ToArray();
         int batch = shape[0];
         int channels = shape[1];
         int frames = shape[2];
@@ -671,7 +688,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> AddImageCondition(Tensor<T> videoFeatures, Tensor<T> imageCond, int numFrames)
     {
-        var result = new Tensor<T>(videoFeatures.Shape);
+        var result = new Tensor<T>(videoFeatures.Shape.ToArray());
         var resultSpan = result.AsWritableSpan();
         var videoSpan = videoFeatures.AsSpan();
         var imageSpan = imageCond.AsSpan();

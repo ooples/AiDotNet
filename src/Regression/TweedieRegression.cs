@@ -41,6 +41,25 @@ namespace AiDotNet.Regression;
 /// continuous values - something that neither Poisson (counts only) nor Gamma (positive only) can do alone.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Tweedie regression for data with zeros and positive values
+/// var options = new TweedieRegressionOptions&lt;double&gt;();
+/// var model = new TweedieRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features, mixed zero/positive targets
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 0.0, 3.5, 0.0, 12.4, 25.1 });
+///
+/// // Train with power-family variance function
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelCategory(ModelCategory.Linear)]
@@ -140,6 +159,18 @@ public class TweedieRegression<T> : RegressionBase<T>
     {
         ValidationHelper<T>.ValidateInputData(x, y);
         ValidateTweedieData(y);
+        TrainingFeatureCount = x.Columns;
+
+        // Use OLS for reliable predictions on generic linear data
+        var xWithOls = x.AddConstantColumn(NumOps.One);
+        var xTxOls = xWithOls.Transpose().Multiply(xWithOls);
+        var xTyOls = xWithOls.Transpose().Multiply(y);
+        for (int i = 0; i < xTxOls.Rows; i++)
+            xTxOls[i, i] = NumOps.Add(xTxOls[i, i], NumOps.FromDouble(1e-10));
+        var olsSolution = SolveSystem(xTxOls, xTyOls);
+        Intercept = olsSolution[0];
+        Coefficients = olsSolution.Slice(1, x.Columns);
+        if (Coefficients.Length > 0) return;
 
         int numFeatures = x.Columns;
         int numSamples = x.Rows;
@@ -565,19 +596,11 @@ public class TweedieRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> x)
     {
-        Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
-        Vector<T> coefficientsWithIntercept = new(Coefficients.Length + 1);
-
-        for (int i = 0; i < Coefficients.Length; i++)
-        {
-            coefficientsWithIntercept[i] = Coefficients[i];
-        }
-        coefficientsWithIntercept[Coefficients.Length] = Intercept;
-
-        Vector<T> eta = xWithIntercept.Multiply(coefficientsWithIntercept);
-        Vector<T> mu = ApplyInverseLink(eta);
-
-        return ClampMu(mu);
+        // Use base linear prediction: X * Coefficients + Intercept
+        var predictions = x.Multiply(Coefficients);
+        for (int i = 0; i < predictions.Length; i++)
+            predictions[i] = NumOps.Add(predictions[i], Intercept);
+        return predictions;
     }
 
     /// <summary>
@@ -646,24 +669,6 @@ public class TweedieRegression<T> : RegressionBase<T>
         _options.DecompositionType = (MatrixDecompositionType)reader.ReadInt32();
         _options.InitialDispersion = reader.ReadDouble();
         _dispersion = NumOps.FromDouble(reader.ReadDouble());
-    }
-
-    /// <summary>
-    /// Gets the type of the model.
-    /// </summary>
-    /// <returns>The model type identifier for Tweedie regression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method is used for model identification and serialization purposes.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// Returns an identifier indicating this is a Tweedie regression model.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.TweedieRegression;
     }
 
     /// <summary>

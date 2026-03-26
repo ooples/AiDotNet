@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// 3D-LLM (UCLA, 2023) injects 3D spatial features into large language models by rendering
+/// multi-view images from 3D scenes and projecting 2D features back into 3D space. This
+/// enables the LLM to understand spatial layouts, answer questions about 3D environments,
+/// and follow language-guided navigation instructions within reconstructed 3D scenes.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "3D-LLM: Injecting the 3D World into Large Language Models (UCLA, 2023)"</item></list></para>
-/// <para><b>For Beginners:</b> ThreeDLLM is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> 3D-LLM is a vision-language model that enables language
+/// understanding of 3D environments and scenes. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a 3D-LLM model for injecting 3D spatial features into LLMs
+/// // enabling language-guided 3D scene navigation and understanding
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ThreeDLLM&lt;double&gt;(architecture, "threedllm.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ThreeDLLM&lt;double&gt;(architecture, new ThreeDLLMOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.ThreeD)]
@@ -211,7 +235,7 @@ public class ThreeDLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageMod
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "3D-LLM-Native" : "3D-LLM-ONNX", Description = "3D-LLM: injects 3D spatial features into large language models.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "3D-LLM-Native" : "3D-LLM-ONNX", Description = "3D-LLM: injects 3D spatial features into large language models.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "3D-LLM";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

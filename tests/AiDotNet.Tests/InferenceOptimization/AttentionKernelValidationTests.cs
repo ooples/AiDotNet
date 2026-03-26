@@ -20,7 +20,7 @@ public class AttentionKernelValidationTests
         var actual = kernel.Execute(q, k, v);
         var expected = NaiveAttention(q, k, v);
 
-        Assert.Equal(expected.Shape, actual.Shape);
+        Assert.Equal(expected.Shape.ToArray(), actual.Shape.ToArray());
         for (int i = 0; i < expected.Length; i++)
         {
             Assert.Equal(expected[i], actual[i], 5);

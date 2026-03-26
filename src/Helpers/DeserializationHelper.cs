@@ -271,7 +271,69 @@ public static class DeserializationHelper
                 throw new InvalidOperationException("Cannot find GraphAttentionLayer constructor with expected signature.");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+
+            // If the activation is LeakyReLU, restore the alpha parameter
+            double? leakyAlpha = TryGetDouble(additionalParams, "LeakyReLUAlpha");
+            if (leakyAlpha.HasValue && activation != null)
+            {
+                var leakyType = typeof(LeakyReLUActivation<>).MakeGenericType(typeof(T));
+                if (leakyType.IsInstanceOfType(activation))
+                {
+                    activation = Activator.CreateInstance(leakyType, leakyAlpha.Value);
+                }
+            }
+
             instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation });
+        }
+        else if (genericDef == typeof(GraphConvolutionalLayer<>))
+        {
+            // GraphConvolutionalLayer(int inputFeatures, int outputFeatures, IActivationFunction<T>? activationFunction = null)
+            int inputFeatures = inputShape[0];
+            int outputFeatures = outputShape[0];
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType });
+            if (ctor is null)
+            {
+                throw new InvalidOperationException("Cannot find GraphConvolutionalLayer constructor with expected signature.");
+            }
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, activation });
+        }
+        else if (genericDef == typeof(GraphSAGELayer<>))
+        {
+            // GraphSAGELayer(int inputFeatures, int outputFeatures, SAGEAggregatorType, bool normalize, IActivationFunction<T>?)
+            int inputFeatures = inputShape[0];
+            int outputFeatures = outputShape[0];
+            int aggType = TryGetInt(additionalParams, "AggregatorType") ?? 0;
+            bool normalize = TryGetBool(additionalParams, "Normalize") ?? true;
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(SAGEAggregatorType), typeof(bool), activationFuncType });
+            if (ctor is null)
+            {
+                throw new InvalidOperationException("Cannot find GraphSAGELayer constructor with expected signature.");
+            }
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, (SAGEAggregatorType)aggType, normalize, activation });
+        }
+        else if (genericDef == typeof(GraphIsomorphismLayer<>))
+        {
+            // GraphIsomorphismLayer(int inputFeatures, int outputFeatures, int mlpHiddenDim, bool learnEpsilon, double initialEpsilon, IActivationFunction<T>?)
+            int inputFeatures = inputShape[0];
+            int outputFeatures = outputShape[0];
+            int mlpHiddenDim = TryGetInt(additionalParams, "MlpHiddenDim") ?? 64;
+            bool learnEpsilon = TryGetBool(additionalParams, "LearnEpsilon") ?? true;
+            double initialEpsilon = TryGetDouble(additionalParams, "InitialEpsilon") ?? 0.0;
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(bool), typeof(double), activationFuncType });
+            if (ctor is null)
+            {
+                throw new InvalidOperationException("Cannot find GraphIsomorphismLayer constructor with expected signature.");
+            }
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, mlpHiddenDim, learnEpsilon, initialEpsilon, activation });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Attention.FlashAttentionLayer<>))
         {
@@ -433,6 +495,127 @@ public static class DeserializationHelper
         else if (genericDef == typeof(LSTMLayer<>))
         {
             instance = CreateLSTMLayer<T>(type, inputShape, outputShape, additionalParams);
+        }
+        else if (genericDef == typeof(MixtureOfExpertsLayer<>))
+        {
+            // Recreate MoE with default expert count and router
+            int inputSize = inputShape[0];
+            int outputSize = outputShape[0];
+            int numExperts = TryGetInt(additionalParams, "NumExperts") ?? 4;
+            int topK = TryGetInt(additionalParams, "TopK") ?? 0;
+
+            var experts = new List<ILayer<T>>();
+            for (int e = 0; e < numExperts; e++)
+                experts.Add(new DenseLayer<T>(inputSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>));
+
+            var router = new DenseLayer<T>(inputSize, numExperts, new SoftmaxActivation<T>() as IActivationFunction<T>);
+            instance = new MixtureOfExpertsLayer<T>(experts, router, inputShape, outputShape, topK);
+        }
+        else if (genericDef == typeof(ReservoirLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int reservoirSize = outputShape[0];
+            double connProb = TryGetDouble(additionalParams, "ConnectionProbability") ?? 0.1;
+            double specRadius = TryGetDouble(additionalParams, "SpectralRadius") ?? 0.9;
+            double inpScaling = TryGetDouble(additionalParams, "InputScaling") ?? 1.0;
+            double leakRate = TryGetDouble(additionalParams, "LeakingRate") ?? 1.0;
+            instance = new ReservoirLayer<T>(inputSize, reservoirSize, connProb, specRadius, inpScaling, leakRate);
+        }
+        else if (genericDef == typeof(RBFLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int numCenters = TryGetInt(additionalParams, "NumCenters") ?? outputShape[0];
+            instance = new RBFLayer<T>(inputSize, numCenters, new GaussianRBF<T>());
+        }
+        else if (genericDef == typeof(RecurrentLayer<>))
+        {
+            int inputSize = inputShape.Length > 0 ? inputShape[^1] : 128;
+            int hiddenSize = outputShape.Length > 0 ? outputShape[^1] : 64;
+            instance = new RecurrentLayer<T>(inputSize, hiddenSize, (IActivationFunction<T>?)null);
+        }
+        else if (genericDef == typeof(SparseLinearLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int outputSize = outputShape[0];
+            instance = new SparseLinearLayer<T>(inputSize, outputSize);
+        }
+        else if (genericDef == typeof(OctonionLinearLayer<>))
+        {
+            // OctonionLinearLayer stores shapes as features*8 in base class
+            // Divide by 8 to get actual octonion feature counts
+            int inputFeatures = inputShape[0] / 8;
+            int outputFeatures = outputShape[0] / 8;
+            instance = new OctonionLinearLayer<T>(inputFeatures, outputFeatures);
+        }
+        else if (genericDef == typeof(HyperbolicLinearLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int outputSize = outputShape[0];
+            double curvature = TryGetDouble(additionalParams, "Curvature") ?? -1.0;
+            instance = new HyperbolicLinearLayer<T>(inputSize, outputSize, curvature);
+        }
+        else if (genericDef == typeof(SequenceLastLayer<>))
+        {
+            int featureSize = inputShape.Length > 0 ? inputShape[^1] : outputShape[0];
+            instance = new SequenceLastLayer<T>(featureSize);
+        }
+        else if (genericDef == typeof(RBMLayer<>))
+        {
+            int visibleUnits = inputShape[0];
+            int hiddenUnits = outputShape[0];
+            instance = new RBMLayer<T>(visibleUnits, hiddenUnits, (IActivationFunction<T>?)null);
+        }
+        else if (genericDef == typeof(SpikingLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int outputSize = outputShape[0];
+            instance = new SpikingLayer<T>(inputSize, outputSize);
+        }
+        else if (genericDef == typeof(TemporalMemoryLayer<>))
+        {
+            int columnCount = inputShape[0];
+            int totalCells = outputShape[0];
+            int cellsPerColumn = totalCells / Math.Max(1, columnCount);
+            instance = new TemporalMemoryLayer<T>(columnCount, cellsPerColumn);
+        }
+        else if (genericDef == typeof(SpatialPoolerLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int columnCount = outputShape[0];
+            double sparsityThreshold = TryGetDouble(additionalParams, "SparsityThreshold") ?? 0.02;
+            instance = new SpatialPoolerLayer<T>(inputSize, columnCount, sparsityThreshold);
+        }
+        else if (genericDef == typeof(MeasurementLayer<>))
+        {
+            int size = inputShape[0];
+            instance = new MeasurementLayer<T>(size);
+        }
+        else if (genericDef == typeof(QuantumLayer<>))
+        {
+            int inputSize = inputShape[0];
+            int outputSize = outputShape[0];
+            int numQubits = TryGetInt(additionalParams, "NumQubits") ?? Math.Max(4, (int)(Math.Log(Math.Max(inputSize, outputSize)) / Math.Log(2)));
+            instance = new QuantumLayer<T>(inputSize, outputSize, numQubits);
+        }
+        else if (genericDef == typeof(MeanLayer<>) || genericDef == typeof(LogVarianceLayer<>))
+        {
+            // MeanLayer/LogVarianceLayer(int[] inputShape, int axis)
+            int axis = TryGetInt(additionalParams, "Axis") ?? 0;
+            instance = Activator.CreateInstance(type, inputShape, axis);
+        }
+        else if (genericDef == typeof(ResidualLayer<>))
+        {
+            // ResidualLayer wraps an inner DenseLayer. Reconstruct inner layer from metadata.
+            int innerInputSize = TryGetInt(additionalParams, "InnerInputSize") ?? inputShape[0];
+            int innerOutputSize = TryGetInt(additionalParams, "InnerOutputSize") ?? inputShape[0];
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            object? innerActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            var innerLayer = new DenseLayer<T>(innerInputSize, innerOutputSize, innerActivation as IActivationFunction<T>);
+
+            // Create ResidualLayer directly to avoid constructor ambiguity
+            object? residualActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            instance = new ResidualLayer<T>(inputShape, innerLayer, residualActivation as IActivationFunction<T>);
         }
         else if (openGenericType.FullName != null && openGenericType.FullName.Contains("MambaBlock"))
         {
@@ -938,7 +1121,19 @@ public static class DeserializationHelper
 
         try
         {
-            var instance = Activator.CreateInstance(type);
+            object? instance;
+            try
+            {
+                instance = Activator.CreateInstance(type);
+            }
+            catch (MissingMethodException)
+            {
+                // Fall back to constructors with all-optional parameters
+                var ctor = type.GetConstructors()
+                    .FirstOrDefault(c => c.GetParameters().All(p => p.HasDefaultValue));
+                instance = ctor?.Invoke(ctor.GetParameters().Select(p => p.DefaultValue).ToArray());
+            }
+
             if (instance == null)
             {
                 return null;

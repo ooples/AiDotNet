@@ -16,10 +16,33 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// LongVILA (NVIDIA, 2024) scales long-context visual language models for processing videos
+/// exceeding one hour in duration. It uses multi-modal sequence parallelism to distribute
+/// long video frame sequences across multiple GPUs and extends the context window to handle
+/// thousands of frames for long-form video understanding and temporal reasoning.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LongVILA: Scaling Long-Context Visual Language Models for Long Videos" (NVIDIA, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> LongVILA is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> LongVILA is a video-language model from NVIDIA for understanding
+/// long videos of 1 hour or more. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a LongVILA model for long-context video understanding
+/// // capable of processing 1hr+ videos with long-context attention
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LongVILA&lt;double&gt;(architecture, "longvila.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LongVILA&lt;double&gt;(architecture, new LongVILAOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Video)]
@@ -211,7 +234,7 @@ public class LongVILA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LongVILA-Native" : "LongVILA-ONNX", Description = "LongVILA: long-context visual language model for 1hr+ videos.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LongVILA-Native" : "LongVILA-ONNX", Description = "LongVILA: long-context visual language model for 1hr+ videos.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "LongVILA";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         m.AdditionalInfo["MaxVideoMinutes"] = _options.MaxVideoMinutes.ToString();

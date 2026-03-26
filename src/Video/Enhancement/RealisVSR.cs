@@ -175,7 +175,6 @@ public class RealisVSR<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "RealisVSR-Native" : "RealisVSR-ONNX",
             Description = $"RealisVSR {_options.Variant} detail-enhanced 4K VSR (2025)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumResBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

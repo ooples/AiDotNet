@@ -86,6 +86,12 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     /// </summary>
     public virtual int ParameterCount => NumFeatures;
 
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
     /// <summary>
     /// Gets whether JIT compilation is supported.
     /// </summary>
@@ -196,7 +202,6 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     /// <summary>
     /// Gets the model type.
     /// </summary>
-    public virtual ModelType GetModelType() => ModelType.None;
 
     /// <summary>
     /// Gets metadata about the model.
@@ -205,10 +210,9 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     {
         return new ModelMetadata<T>
         {
-            ModelType = GetModelType(),
             FeatureCount = NumFeatures,
             Complexity = NumFeatures,
-            Description = $"{GetModelType()} online learning model",
+            Description = $"{GetType().Name} online learning model",
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "SampleCount", SampleCount },

@@ -28,10 +28,31 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// infrastructure monitoring, and observability. Pre-trained on 1 trillion data points from
 /// the Datadog observability platform, it excels at SRE metrics and anomaly detection.
 /// </para>
+/// <para><b>For Beginners:</b> TOTO is a specialized model from Datadog, trained on 1 trillion
+/// data points from real-world server monitoring. It excels at predicting system metrics
+/// like CPU usage, memory consumption, and request latency. If you monitor infrastructure
+/// and need to forecast capacity or detect anomalies before they cause outages, TOTO is
+/// purpose-built for that domain.</para>
 /// <para>
 /// <b>Reference:</b> Datadog, "Introducing Toto: A state-of-the-art time series foundation model", 2025.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TOTO model (Datadog) for observability time series forecasting
+/// // Pre-trained on 1 trillion data points from real-world infrastructure monitoring
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode optimized for SRE metrics and anomaly detection
+/// var model = new TOTO&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TOTO&lt;double&gt;(architecture, "toto.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -247,7 +268,7 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -268,7 +289,6 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "TOTO" },
@@ -407,7 +427,7 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
         // For rank-1 inputs, treat as single sequence (batch=1, seqLen=input.Length)
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {

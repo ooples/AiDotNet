@@ -298,7 +298,6 @@ public class PhotoMakerModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "PhotoMaker",
             Version = "2.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "PhotoMaker identity-customized photo generation with stacked ID embedding",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

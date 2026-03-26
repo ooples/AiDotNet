@@ -22,8 +22,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LLM2CLIP: Powerful Language Model Unlock Richer Visual Representation" (Huang et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> LLM2CLIP is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> LLM2CLIP supercharges CLIP by replacing its simple text encoder
+/// with a powerful large language model (like LLaMA or Mistral). This gives the model much
+/// richer text understanding — it can handle complex descriptions, long captions, and nuanced
+/// queries that the original CLIP text encoder would struggle with. Default values follow
+/// the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an LLM2CLIP model with LLM-enhanced text encoding
+/// // replacing CLIP's text encoder with a fine-tuned LLM
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LLM2CLIP&lt;double&gt;(architecture, "llm2clip.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LLM2CLIP&lt;double&gt;(architecture, new LLM2CLIPOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -54,7 +74,7 @@ public class LLM2CLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "LLM2CLIP-Native" : "LLM2CLIP-ONNX", Description = "LLM2CLIP: Powerful Language Model Unlock Richer Visual Representation (Huang et al., 2024)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers }; m.AdditionalInfo["Architecture"] = "LLM2CLIP"; m.AdditionalInfo["LLMBackbone"] = _options.LLMBackbone; m.AdditionalInfo["UseLoRA"] = _options.UseLoRA.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "LLM2CLIP-Native" : "LLM2CLIP-ONNX", Description = "LLM2CLIP: Powerful Language Model Unlock Richer Visual Representation (Huang et al., 2024)", FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers }; m.AdditionalInfo["Architecture"] = "LLM2CLIP"; m.AdditionalInfo["LLMBackbone"] = _options.LLMBackbone; m.AdditionalInfo["UseLoRA"] = _options.UseLoRA.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ImageEncoderModelPath ?? string.Empty); writer.Write(_options.TextEncoderModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionEmbeddingDim); writer.Write(_options.TextEmbeddingDim); writer.Write(_options.ProjectionDim); writer.Write(_options.Temperature); writer.Write(_options.LLMBackbone); writer.Write(_options.UseLoRA); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string ip = reader.ReadString(); if (!string.IsNullOrEmpty(ip)) _options.ImageEncoderModelPath = ip; string tp = reader.ReadString(); if (!string.IsNullOrEmpty(tp)) _options.TextEncoderModelPath = tp; _options.ImageSize = reader.ReadInt32(); _options.VisionEmbeddingDim = reader.ReadInt32(); _options.TextEmbeddingDim = reader.ReadInt32(); _options.ProjectionDim = reader.ReadInt32(); _options.Temperature = reader.ReadDouble(); _options.LLMBackbone = reader.ReadString(); _options.UseLoRA = reader.ReadBoolean(); if (!_useNativeMode && _options.ImageEncoderModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxImageEncoder = new OnnxModel<T>(p, _options.OnnxOptions); if (_options.TextEncoderModelPath is { } t2 && !string.IsNullOrEmpty(t2)) OnnxTextEncoder = new OnnxModel<T>(t2, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ImageEncoderModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new LLM2CLIP<T>(Architecture, mp, _options); return new LLM2CLIP<T>(Architecture, _options); }

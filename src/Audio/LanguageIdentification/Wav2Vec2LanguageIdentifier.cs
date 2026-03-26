@@ -44,7 +44,7 @@ namespace AiDotNet.Audio.LanguageIdentification;
 /// <code>
 /// var model = new Wav2Vec2LanguageIdentifier&lt;float&gt;(architecture, "wav2vec2_lid.onnx");
 /// var result = model.IdentifyLanguage(audioTensor);
-/// Console.WriteLine($"Language: {result.LanguageName}");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>
@@ -372,14 +372,14 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
             normalized[i] = _numOps.FromDouble((_numOps.ToDouble(rawAudio[i]) - mean) / std);
         }
 
-        return new Tensor<T>(normalized, rawAudio.Shape);
+        return new Tensor<T>(normalized, rawAudio.Shape.ToArray());
     }
 
     /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
         var probs = Softmax(modelOutput.Data.ToArray());
-        return new Tensor<T>(probs, modelOutput.Shape);
+        return new Tensor<T>(probs, modelOutput.Shape.ToArray());
     }
 
     /// <inheritdoc/>
@@ -413,7 +413,7 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
 
         var loss = _lossFunction.CalculateLoss(predictedVector, expectedVector);
         var gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
-        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape);
+        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape.ToArray());
 
         BackwardNative(gradientTensor);
         _optimizer?.UpdateParameters(Layers);
@@ -444,7 +444,6 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             Version = "1.0.0",
             AdditionalInfo = new Dictionary<string, object>
             {

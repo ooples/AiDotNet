@@ -259,12 +259,12 @@ public abstract class NeckBase<T>
     /// <returns>Element-wise sum.</returns>
     protected Tensor<T> Add(Tensor<T> a, Tensor<T> b)
     {
-        if (!a.Shape.SequenceEqual(b.Shape))
+        if (!a.Shape.ToArray().SequenceEqual(b.Shape.ToArray()))
         {
             throw new ArgumentException("Feature maps must have the same shape for addition");
         }
 
-        var output = new Tensor<T>(a.Shape);
+        var output = new Tensor<T>(a.Shape.ToArray());
         for (int i = 0; i < a.Length; i++)
         {
             output[i] = NumOps.Add(a[i], b[i]);

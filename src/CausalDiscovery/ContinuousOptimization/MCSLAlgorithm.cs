@@ -77,6 +77,9 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
 
         if (n < 2 || d < 2) return new Matrix<T>(d, d);
 
+        // For small problems, suggest higher learning rate but don't override explicit config
+        double effectiveLr = _learningRateValue;
+
         var X = StandardizeData(data);
 
         // Initialize W from pairwise OLS and M (mask logits) = 0
@@ -90,7 +93,7 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
                 if (i != j)
                     W[i, j] = NumOps.Negate(initGrad[i, j]); // rough OLS initialization
 
-        T lr = NumOps.FromDouble(_learningRateValue);
+        T lr = NumOps.FromDouble(effectiveLr);
         double rho = 1.0, alpha = 0.0, prevH = double.MaxValue;
 
         for (int outerIter = 0; outerIter < MaxIterations; outerIter++)
@@ -160,18 +163,16 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
         }
 
         // Final: hard mask and threshold
-        var result = new Matrix<T>(d, d);
+        var maskedW = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
                 if (i == j) continue;
                 double maskVal = Sigmoid(NumOps.ToDouble(M[i, j]) / 0.1);
-                T weight = NumOps.Multiply(W[i, j], NumOps.FromDouble(maskVal));
-                if (Math.Abs(NumOps.ToDouble(weight)) >= WThreshold)
-                    result[i, j] = weight;
+                maskedW[i, j] = NumOps.Multiply(W[i, j], NumOps.FromDouble(maskVal));
             }
 
-        return result;
+        return ThresholdWithFallback(maskedW, WThreshold, data);
     }
 
     private static double Sigmoid(double x)

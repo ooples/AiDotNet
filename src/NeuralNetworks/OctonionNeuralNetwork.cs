@@ -29,6 +29,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Tasks requiring rich rotational representations
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new OctonionNeuralNetworkOptions { InputSize = 8, HiddenSize = 64 };
+/// var model = new OctonionNeuralNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 8 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
@@ -107,7 +115,7 @@ public class OctonionNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             // Create default octonion layers based on architecture
             var inputShape = Architecture.GetInputShape();
-            var outputShape = Architecture.GetOutputShape();
+            var outputShape = new[] { Architecture.OutputSize };
             var hiddenSizes = Architecture.GetHiddenLayerSizes();
 
             // Validate dimensions are divisible by 8 for octonion representation
@@ -282,7 +290,6 @@ public class OctonionNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.FeedForwardNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "OctonionNeuralNetwork" },

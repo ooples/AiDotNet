@@ -239,7 +239,6 @@ public class StyleTTS2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         {
             Name = _useNativeMode ? "StyleTTS2-Native" : "StyleTTS2-ONNX",
             Description = $"StyleTTS 2 {_options.Variant} TTS model (Li et al., 2023)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels, Complexity = _options.NumTextEncoderLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;
         m.AdditionalInfo["SampleRate"] = _options.SampleRate.ToString();

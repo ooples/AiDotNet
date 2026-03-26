@@ -60,6 +60,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// <b>Thread Safety:</b> This class is NOT thread-safe. Create separate instances for concurrent usage.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MOMENT multi-task time series foundation model
+/// // Supports forecasting, anomaly detection, classification, imputation, and embedding
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with T5-based encoder and task-specific heads
+/// var model = new MOMENT&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new MOMENT&lt;double&gt;(architecture, "moment_base.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -413,7 +429,7 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -434,7 +450,6 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "MOMENT" },
@@ -581,7 +596,7 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         // MOMENT uses RevIN (Reversible Instance Normalization)
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -732,7 +747,7 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
                 "Imputation requires native mode. ONNX inference only supports forecasting.");
 
         // Apply mask to input (zero out missing values)
-        var masked = new Tensor<T>(series.Shape);
+        var masked = new Tensor<T>(series.Shape.ToArray());
         for (int i = 0; i < series.Length && i < mask.Length; i++)
         {
             masked.Data.Span[i] = NumOps.Multiply(series[i], mask[i]);
@@ -743,7 +758,7 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
         var reconstructed = ReconstructNative(normalized);
 
         // Blend: use original where mask=1, reconstruction where mask=0
-        var result = new Tensor<T>(series.Shape);
+        var result = new Tensor<T>(series.Shape.ToArray());
         for (int i = 0; i < series.Length; i++)
         {
             if (i < mask.Length && NumOps.GreaterThan(mask[i], NumOps.FromDouble(0.5)))

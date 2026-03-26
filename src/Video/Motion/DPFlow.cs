@@ -25,6 +25,19 @@ namespace AiDotNet.Video.Motion;
 /// DPFlow combines the advantages of image pyramids (capturing large motions) and feature pyramids (rich semantics) in a unified dual-pyramid framework.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DPFlow model for dual-pyramid optical flow estimation
+/// var dpFlow = new DPFlow&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new DPFlow&lt;double&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -133,7 +146,7 @@ public class DPFlow<T> : OpticalFlowBase<T>
             throw new ArgumentException($"frame1 must be at least rank 3 [C,H,W], got rank {frame1.Rank}.", nameof(frame1));
         if (frame0.Shape[0] != frame1.Shape[0] || frame0.Shape[1] != frame1.Shape[1] || frame0.Shape[2] != frame1.Shape[2])
             throw new ArgumentException(
-                $"Frame shapes must match. frame0: [{string.Join(",", frame0.Shape)}], frame1: [{string.Join(",", frame1.Shape)}].",
+                $"Frame shapes must match. frame0: [{string.Join(",", frame0.Shape.ToArray())}], frame1: [{string.Join(",", frame1.Shape.ToArray())}].",
                 nameof(frame1));
         int height = frame0.Shape[1];
         int width = frame0.Shape[2];
@@ -170,7 +183,7 @@ public class DPFlow<T> : OpticalFlowBase<T>
             throw new ArgumentException(
                 $"Expected output length {expectedOutput.Length} does not match model output length {output.Length}.",
                 nameof(expectedOutput));
-        var gradient = new Tensor<T>(output.Shape);
+        var gradient = new Tensor<T>(output.Shape.ToArray());
         for (int i = 0; i < output.Length; i++)
         {
             gradient.Data.Span[i] = NumOps.Subtract(output.Data.Span[i], expectedOutput.Data.Span[i]);
@@ -229,7 +242,6 @@ public class DPFlow<T> : OpticalFlowBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "DPFlow" },

@@ -39,6 +39,19 @@ namespace AiDotNet.Video.Motion;
 /// CVPR 2022.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GMFlow model for global matching optical flow estimation
+/// var gmFlow = new GMFlow&lt;double&gt;();
+///
+/// // Or configure with custom architecture
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new GMFlow&lt;double&gt;(architecture, numFeatures: 128);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -384,7 +397,7 @@ public class GMFlow<T> : OpticalFlowBase<T>
         int height = query.Shape[2];
         int width = query.Shape[3];
 
-        var output = new Tensor<T>(value.Shape);
+        var output = new Tensor<T>(value.Shape.ToArray());
         double scale = 1.0 / Math.Sqrt(channels);
 
         // Use local window attention for efficiency (window size based on feature resolution)
@@ -571,7 +584,7 @@ public class GMFlow<T> : OpticalFlowBase<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var warped = new Tensor<T>(image.Shape);
+        var warped = new Tensor<T>(image.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -666,7 +679,6 @@ public class GMFlow<T> : OpticalFlowBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.OpticalFlow,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "GMFlow" },

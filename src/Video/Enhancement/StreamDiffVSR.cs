@@ -174,7 +174,6 @@ public class StreamDiffVSR<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "StreamDiffVSR-Native" : "StreamDiffVSR-ONNX",
             Description = $"Stream-DiffVSR {_options.Variant} causal diffusion VSR (Li et al., 2025)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumResBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

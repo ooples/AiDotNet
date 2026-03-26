@@ -33,6 +33,14 @@ namespace AiDotNet.NeuralNetworks;
 /// complex patterns in data.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new ResidualNeuralNetworkOptions { InputSize = 784, NumResidualBlocks = 4, HiddenSize = 256 };
+/// var model = new ResidualNeuralNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -159,6 +167,12 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     /// </para>
     /// </remarks>
     private T _learningRate;
+
+    /// <summary>
+    /// Persistent Adam optimizer for Train() calls. Momentum state persists across
+    /// iterations for stable convergence on deep residual networks.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 
     /// <summary>
     /// Gets or sets the number of training epochs.
@@ -661,93 +675,101 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     /// that would otherwise suffer from the vanishing gradient problem.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Performs a single training step: one forward pass, one backward pass, one parameter update.
+    /// For multi-epoch training, call this method repeatedly or use the PredictionModelBuilder facade.
+    /// </summary>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Make sure we're in training mode
         SetTrainingMode(true);
 
-        for (int epoch = 0; epoch < _epochs; epoch++)
+        // Propagate training mode to all layers including ResidualLayer inner layers
+        foreach (var layer in Layers)
         {
-            T totalLoss = NumOps.Zero;
-
-            // Process data in batches
-            for (int batchStart = 0; batchStart < input.Shape[0]; batchStart += _batchSize)
-            {
-                // Get a batch of data
-                int batchEnd = Math.Min(batchStart + _batchSize, input.Shape[0]);
-                int actualBatchSize = batchEnd - batchStart;
-                var batchX = input.Slice(batchStart, 0, batchEnd, input.Shape[1]);
-                var batchY = expectedOutput.Slice(batchStart, 0, batchEnd, expectedOutput.Shape[1]);
-
-                // Reset gradients at the start of each batch
-                var totalGradient = new Tensor<T>([GetParameterCount()], Vector<T>.CreateDefault(GetParameterCount(), NumOps.Zero));
-
-                // Accumulate gradients for each example in the batch
-                for (int i = 0; i < actualBatchSize; i++)
-                {
-                    var x = batchX.GetRow(i);
-                    var y = batchY.GetRow(i);
-
-                    // Convert input vector to tensor once before forward pass
-                    var xTensor = Tensor<T>.FromVector(x);
-
-                    // Forward pass with memory to save intermediate states
-                    var prediction = ForwardWithMemory(xTensor);
-
-                    // Cache prediction vector to avoid repeated conversions
-                    Vector<T> predictionVector = prediction.ToVector();
-
-                    // Calculate main loss
-                    T loss = LossFunction.CalculateLoss(predictionVector, y);
-
-                    // Add auxiliary loss if enabled
-                    if (UseAuxiliaryLoss)
-                    {
-                        // Cache expected output for auxiliary classifiers
-                        _lastExpectedOutput = y;
-                        T auxLoss = ComputeAuxiliaryLoss();
-                        T weightedAuxLoss = NumOps.Multiply(AuxiliaryLossWeight, auxLoss);
-                        loss = NumOps.Add(loss, weightedAuxLoss);
-                    }
-
-                    totalLoss = NumOps.Add(totalLoss, loss);
-
-                    // Calculate output gradients
-                    Vector<T> outputGradients = LossFunction.CalculateDerivative(predictionVector, y);
-
-                    // Convert output gradients to tensor once before backpropagation
-                    var outputGradientsTensor = Tensor<T>.FromVector(outputGradients);
-
-                    // Backpropagate to compute gradients for all parameters
-                    Backpropagate(outputGradientsTensor);
-
-                    // Accumulate gradients - convert once before adding
-                    var gradients = GetParameterGradients();
-                    var gradientsTensor = Tensor<T>.FromVector(gradients);
-                    totalGradient = totalGradient.Add(gradientsTensor);
-                }
-
-                // Average the gradients across the batch
-                totalGradient = new Tensor<T>(totalGradient.Shape, totalGradient.ToVector().Divide(NumOps.FromDouble(actualBatchSize)));
-
-                // Update parameters with averaged gradients
-                var currentParams = GetParameters();
-                var updatedParams = new Vector<T>(currentParams.Length);
-                for (int j = 0; j < currentParams.Length; j++)
-                {
-                    updatedParams[j] = NumOps.Subtract(
-                        currentParams[j],
-                        NumOps.Multiply(_learningRate, totalGradient.ToVector()[j]));
-                }
-
-                UpdateParameters(updatedParams);
-            }
-
-            // Calculate average loss for the epoch
-            T avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(input.Shape[0]));
+            layer.SetTrainingMode(true);
         }
 
-        // Set back to inference mode after training
+        // Forward pass through all layers
+        var output = ForwardWithMemory(input);
+        var outputVector = output.ToVector();
+        var expectedVector = expectedOutput.ToVector();
+
+        // Cache expected output for auxiliary loss computation
+        _lastExpectedOutput = expectedVector;
+
+        // Compute loss
+        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
+
+        // Backward pass using proper loss gradient
+        var lossGradient = LossFunction.CalculateDerivative(outputVector, expectedVector);
+        Backpropagate(Tensor<T>.FromVector(lossGradient));
+
+        // Use persistent Adam optimizer for gradient-scaled parameter updates.
+        // Raw SGD fails on deep ResNets because gradients vanish — Adam's adaptive
+        // learning rate and momentum handle this. Persistent optimizer keeps momentum
+        // state across Train() calls for stable convergence.
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        var paramGradients = GetParameterGradients();
+        var currentParams = GetParameters();
+        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGradients);
+        UpdateParameters(updatedParams);
+    }
+
+    /// <summary>
+    /// Trains for multiple epochs with batching. Used internally by PredictionModelBuilder
+    /// for production training workflows with full epoch/batch control.
+    /// </summary>
+    private void TrainEpochs(Tensor<T> input, Tensor<T> expectedOutput, int epochs, int batchSize)
+    {
+        // Normalize to 2D [batch, features] if needed
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+        if (expectedOutput.Rank == 1)
+            expectedOutput = expectedOutput.Reshape([1, expectedOutput.Shape[0]]);
+
+        SetTrainingMode(true);
+
+        for (int epoch = 0; epoch < epochs; epoch++)
+        {
+            for (int batchStart = 0; batchStart < input.Shape[0]; batchStart += batchSize)
+            {
+                int batchEnd = Math.Min(batchStart + batchSize, input.Shape[0]);
+
+                Tensor<T> batchX;
+                Tensor<T> batchY;
+                if (input.Shape[0] == 1 || batchEnd - batchStart == input.Shape[0])
+                {
+                    batchX = input;
+                    batchY = expectedOutput;
+                }
+                else
+                {
+                    batchX = input.Slice(batchStart, 0, batchEnd, input.Shape[1]);
+                    batchY = expectedOutput.Slice(batchStart, 0, batchEnd, expectedOutput.Shape[1]);
+                }
+
+                // Single forward/backward per batch sample
+                int actualBatchSize = batchEnd - batchStart;
+                for (int i = 0; i < actualBatchSize; i++)
+                {
+                    var x = Tensor<T>.FromVector(batchX.GetRow(i));
+                    var y = batchY.GetRow(i);
+
+                    var prediction = ForwardWithMemory(x);
+                    var predVector = prediction.ToVector();
+
+                    LastLoss = LossFunction.CalculateLoss(predVector, y);
+                    var grad = LossFunction.CalculateDerivative(predVector, y);
+                    Backpropagate(Tensor<T>.FromVector(grad));
+
+                    foreach (var layer in Layers.Where(l => l.SupportsTraining && l.ParameterCount > 0))
+                    {
+                        layer.UpdateParameters(_learningRate);
+                    }
+                }
+            }
+        }
+
         SetTrainingMode(false);
     }
 
@@ -781,7 +803,6 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ResidualNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfLayers", Layers.Count },

@@ -280,7 +280,7 @@ public class RecraftV3Model<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var predictorCount = _predictor.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != predictorCount + vaeCount)
         {
@@ -339,7 +339,6 @@ public class RecraftV3Model<T> : LatentDiffusionModelBase<T>
         {
             Name = "Recraft V3",
             Version = "3.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Professional-grade MMDiT-X with style presets, color palette control, and text rendering",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

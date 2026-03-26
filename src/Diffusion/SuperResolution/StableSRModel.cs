@@ -404,8 +404,8 @@ public class StableSRModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         EnsureInitialized();
-        var unetCount = _unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -481,7 +481,6 @@ public class StableSRModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "StableSR",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "StableSR diffusion-prior-based super-resolution with controllable feature wrapping",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

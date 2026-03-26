@@ -16,7 +16,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Graph;
 
@@ -63,6 +63,21 @@ namespace AiDotNet.Finance.Graph;
 /// https://arxiv.org/abs/1707.01926
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for spatial-temporal traffic forecasting (207 sensors, 12-step horizon)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 12, inputWidth: 207, inputDepth: 2, outputSize: 12);
+///
+/// // Training mode: diffusion convolutional recurrent network with graph structure
+/// var model = new DCRNN&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained DCRNN model
+/// var onnxModel = new DCRNN&lt;double&gt;(architecture, "dcrnn_traffic.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.GraphAnalysis)]
 [ModelCategory(ModelCategory.GraphNetwork)]
@@ -580,7 +595,7 @@ public class DCRNN<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(prediction.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, prediction.Shape));
+        Backward(Tensor<T>.FromVector(gradient, prediction.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -615,7 +630,6 @@ public class DCRNN<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "DCRNN" },
@@ -1093,7 +1107,7 @@ public class DCRNN<T> : ForecastingModelBase<T>
             inputData[i] = NumOps.ToFloat(input.Data.Span[i]);
         }
 
-        var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.Select(d => (int)d).ToArray());
+        var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray().Select(d => (int)d).ToArray());
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, inputTensor) };
 
         using var results = OnnxSession.Run(inputs);
@@ -1129,7 +1143,7 @@ public class DCRNN<T> : ForecastingModelBase<T>
         if (_forwardPowers.Count == 0 || _backwardPowers.Count == 0)
             return input;
 
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         int n = _numNodes;
         int featuresPerNode = input.Data.Length / n;
 
@@ -1170,7 +1184,7 @@ public class DCRNN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ApplyMatrixToTensor(double[,] matrix, Tensor<T> tensor, int n, int featuresPerNode)
     {
-        var result = new Tensor<T>(tensor.Shape);
+        var result = new Tensor<T>(tensor.Shape.ToArray());
 
         for (int i = 0; i < n; i++)
         {
@@ -1333,7 +1347,7 @@ public class DCRNN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> newData)
     {
-        var shifted = new Tensor<T>(input.Shape);
+        var shifted = new Tensor<T>(input.Shape.ToArray());
 
         // Guard against stepSize larger than input length
         int stepSize = Math.Min(_numNodes * _numFeatures, input.Data.Length);

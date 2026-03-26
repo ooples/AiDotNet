@@ -26,6 +26,22 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// (4) An ISTFTNet decoder converts features into audio by predicting STFT magnitude and phase
 /// and applying inverse STFT, which is faster than traditional waveform generation.
 /// It supports 9 languages and runs in real-time on CPU.</para>
+/// <example>
+/// <code>
+/// // Create a Kokoro model for lightweight high-quality TTS
+/// // with StyleTTS2-inspired architecture and ISTFTNet decoder (82M params)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Kokoro&lt;double&gt;(architecture, "kokoro.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Kokoro&lt;double&gt;(architecture, new KokoroOptions());
+/// </code>
+/// </example>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -291,7 +307,6 @@ public class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
         {
             Name = _useNativeMode ? "Kokoro-Native" : "Kokoro-ONNX",
             Description = "Kokoro: Lightweight StyleTTS2-inspired TTS with ISTFTNet (Hexgrad, 2024)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.HiddenDim
         };
     }

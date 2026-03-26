@@ -49,6 +49,26 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// with Feature Fusion and Keyword-to-Caption Augmentation.
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
+/// <example>
+/// <code>
+/// // Create a CLAP model for audio-text alignment
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Embedding,
+///     inputSize: 48000,
+///     outputSize: 512);
+///
+/// var model = new CLAPModel&lt;float&gt;(
+///     architecture: architecture,
+///     audioEncoderPath: "clap_audio.onnx",
+///     textEncoderPath: "clap_text.onnx",
+///     sampleRate: 48000);
+///
+/// // Generate audio embeddings for similarity search
+/// Tensor&lt;float&gt; embedding = model.EncodeAudio(audioTensor);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Multimodal)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -643,7 +663,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             }
         }
 
-        return new Tensor<T>(normalized, embeddings.Shape);
+        return new Tensor<T>(normalized, embeddings.Shape.ToArray());
     }
 
     /// <summary>
@@ -908,7 +928,6 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             Name = "CLAP",
             Description = $"Contrastive Language-Audio Pretraining ({_embeddingDim}D embedding, {_projectionDim}D projection)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = SampleRate,
             Complexity = _audioEncoderLayers
         };
@@ -1059,7 +1078,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                 }
             }
 
-            return new Tensor<T>(normed, input.Shape);
+            return new Tensor<T>(normed, input.Shape.ToArray());
         }
     }
 

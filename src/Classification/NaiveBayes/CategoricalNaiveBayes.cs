@@ -39,6 +39,17 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// - Features are not counts (otherwise use Multinomial)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Use AiModelBuilder facade for categoricalnaivebayes classification
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new CategoricalNaiveBayes&lt;double&gt;(
+///         new CategoricalNaiveBayesOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(features, labels);
+/// var prediction = result.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Bayesian)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -72,7 +83,6 @@ public class CategoricalNaiveBayes<T> : NaiveBayesBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.CategoricalNaiveBayes;
 
     /// <summary>
     /// Computes category probabilities for all classes.

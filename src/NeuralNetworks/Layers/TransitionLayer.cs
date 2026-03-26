@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -44,6 +45,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[LayerCategory(LayerCategory.Convolution)]
+[LayerCategory(LayerCategory.Pooling)]
+[LayerTask(LayerTask.DownSampling)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 2, 8, 8")]
 public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     private readonly BatchNormalizationLayer<T> _bn;
@@ -74,7 +79,19 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
+    public override int ParameterCount => _bn.ParameterCount + _conv.ParameterCount;
     public override bool SupportsTraining => true;
+
+    public override Vector<T> GetParameterGradients()
+    {
+        return Vector<T>.Concatenate(_bn.GetParameterGradients(), _conv.GetParameterGradients());
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _bn.ClearGradients(); _conv.ClearGradients();
+    }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
@@ -129,7 +146,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse leading dims for rank > 4
@@ -215,7 +232,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
 
         // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
         if (shape.Length < 3)
@@ -269,7 +286,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         // Restore original tensor rank
         if (shape.Length > 4)
         {
-            var outShape = poolOutput.Shape;
+            var outShape = poolOutput.Shape.ToArray();
             var restoreShape = new int[shape.Length];
             for (int d = 0; d < shape.Length - 3; d++)
                 restoreShape[d] = shape[d];
@@ -280,7 +297,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         }
         if (added3DBatch)
         {
-            var outShape = poolOutput.Shape;
+            var outShape = poolOutput.Shape.ToArray();
             return gpuEngine.ReshapeGpu(poolOutput, new[] { outShape[1], outShape[2], outShape[3] });
         }
 
@@ -326,7 +343,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         else
         {
             var cpuGrad = grad.ToTensor();
-            var cpuResult = _convOut != null ? AvgPool2DBackward(cpuGrad, _gpuConvOut.Shape) : _pool.Backward(cpuGrad);
+            var cpuResult = _convOut != null ? AvgPool2DBackward(cpuGrad, _gpuConvOut.Shape.ToArray()) : _pool.Backward(cpuGrad);
             grad = gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
         }
 
@@ -401,7 +418,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         // Backward through pool - handle 4D inputs
         // 4D: manual backward, 3D: use pooling layer
         Tensor<T> grad = outputGradient.Shape.Length == 4
-            ? AvgPool2DBackward(outputGradient, _convOut.Shape)
+            ? AvgPool2DBackward(outputGradient, _convOut.Shape.ToArray())
             : _pool.Backward(outputGradient);
 
         // Backward through conv
@@ -430,7 +447,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         int poolSize = 2;
         int stride = 2;
 
-        var inputGrad = new Tensor<T>(inputShape);
+        var inputGrad = TensorAllocator.Rent<T>(inputShape);
         var divisor = NumOps.FromDouble((double)poolSize * (double)poolSize);
 
         for (int n = 0; n < batch; n++)
@@ -477,7 +494,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                 ? grad.Data.Span[i]
                 : NumOps.Zero;
         }
-        return new Tensor<T>(grad.Shape, new Vector<T>(result));
+        return new Tensor<T>(grad.Shape.ToArray(), new Vector<T>(result));
     }
 
     /// <summary>

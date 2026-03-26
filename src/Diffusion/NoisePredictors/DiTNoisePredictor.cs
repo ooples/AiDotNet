@@ -1,10 +1,13 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Diffusion.NoisePredictors;
 
@@ -63,6 +66,13 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// var noisePrediction = dit.PredictNoise(noisyLatent, timestep, textEmbedding);
 /// </code>
 /// </example>
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Denoising)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class DiTNoisePredictor<T> : NoisePredictorBase<T>
 {
     /// <summary>
@@ -163,6 +173,11 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// AdaLN modulation for final layer.
     /// </summary>
     private DenseLayer<T>? _adaln_modulation;
+
+    // Lazy initialization state
+    private int _numClasses;
+    private List<DiTBlock>? _customBlocks;
+    private bool _layersInitialized;
 
     /// <summary>
     /// Position embeddings (learnable).
@@ -270,8 +285,21 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         _latentSpatialSize = latentSpatialSize;
 
         _blocks = new List<DiTBlock>();
+        _numClasses = numClasses;
+        _customBlocks = customBlocks;
+        // Defer heavy layer allocation to first use (lazy initialization)
+    }
 
-        InitializeLayers(architecture, numClasses, customBlocks);
+    /// <summary>
+    /// Ensures layers are initialized (lazy init on first use).
+    /// </summary>
+    private void EnsureLayersInitialized()
+    {
+        if (!_layersInitialized)
+        {
+            InitializeLayers(_architecture, _numClasses, _customBlocks);
+            _layersInitialized = true;
+        }
     }
 
     /// <summary>
@@ -410,6 +438,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
+        EnsureLayersInitialized();
         _lastInput = noisySample;
 
         // Get timestep embedding
@@ -447,7 +476,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         if (_patchEmbed == null || _finalNorm == null || _outputProj == null || _adaln_modulation == null)
             throw new InvalidOperationException("Layers not initialized.");
 
-        var shape = x.Shape;
+        var shape = x.Shape.ToArray();
         var batch = shape[0];
         var height = shape[2];
         var width = shape[3];
@@ -485,7 +514,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> Patchify(Tensor<T> x)
     {
-        var shape = x.Shape;
+        var shape = x.Shape.ToArray();
         var batch = shape[0];
         var channels = shape[1];
         var height = shape[2];
@@ -496,7 +525,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         var numPatches = numPatchesH * numPatchesW;
         var patchDim = channels * _patchSize * _patchSize;
 
-        var patches = new Tensor<T>(new[] { batch, numPatches, patchDim });
+        var patches = TensorAllocator.Rent<T>(new[] { batch, numPatches, patchDim });
         var patchSpan = patches.AsWritableSpan();
         var xSpan = x.AsSpan();
 
@@ -543,20 +572,20 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         if (_patchEmbed == null)
             throw new InvalidOperationException("Patch embed not initialized.");
 
-        var shape = patches.Shape;
+        var shape = patches.Shape.ToArray();
         var batch = shape[0];
         var numPatches = shape[1];
         var patchDim = shape[2];
 
         // Reshape [batch, numPatches, patchDim] -> [batch*numPatches, patchDim] for batched forward
-        var flatPatches = new Tensor<T>(new[] { batch * numPatches, patchDim });
+        var flatPatches = TensorAllocator.Rent<T>(new[] { batch * numPatches, patchDim });
         patches.AsSpan().CopyTo(flatPatches.AsWritableSpan());
 
         // Single batched forward pass through the linear layer
         var projected = _patchEmbed.Forward(flatPatches);
 
         // Reshape back to [batch, numPatches, hiddenSize]
-        var embedded = new Tensor<T>(new[] { batch, numPatches, _hiddenSize });
+        var embedded = TensorAllocator.Rent<T>(new[] { batch, numPatches, _hiddenSize });
         projected.AsSpan().CopyTo(embedded.AsWritableSpan());
 
         return embedded;
@@ -583,7 +612,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> CreatePositionEmbedding(int numPatches)
     {
-        var posEmbed = new Tensor<T>(new[] { 1, numPatches, _hiddenSize });
+        var posEmbed = TensorAllocator.Rent<T>(new[] { 1, numPatches, _hiddenSize });
         var span = posEmbed.AsWritableSpan();
 
         for (int pos = 0; pos < numPatches; pos++)
@@ -676,12 +705,12 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> ApplyAdaLN(Tensor<T> x, T[] scale, T[] shift)
     {
-        var shape = x.Shape;
+        var shape = x.Shape.ToArray();
         var hidden = shape[^1];
 
         // Create broadcastable tensors for scale and shift: [1, 1, hidden]
-        var scaleTensor = new Tensor<T>(new[] { 1, 1, hidden });
-        var shiftTensor = new Tensor<T>(new[] { 1, 1, hidden });
+        var scaleTensor = TensorAllocator.Rent<T>(new[] { 1, 1, hidden });
+        var shiftTensor = TensorAllocator.Rent<T>(new[] { 1, 1, hidden });
         var scaleSpan = scaleTensor.AsWritableSpan();
         var shiftSpan = shiftTensor.AsWritableSpan();
 
@@ -721,12 +750,12 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
             return x;
         }
 
-        var shape = x.Shape;
+        var shape = x.Shape.ToArray();
         var batch = shape[0];
         var seqLen = shape[1];
         var hidden = shape[2];
 
-        var condShape = conditioning.Shape;
+        var condShape = conditioning.Shape.ToArray();
         var condSeqLen = condShape.Length > 1 ? condShape[1] : 1;
 
         // Normalize x
@@ -771,7 +800,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private static Tensor<T> ReshapeForHeads(Tensor<T> tensor, int batch, int seq, int numHeads, int headDim)
     {
-        var result = new Tensor<T>(new[] { batch * numHeads, seq, headDim });
+        var result = TensorAllocator.Rent<T>(new[] { batch * numHeads, seq, headDim });
         var srcSpan = tensor.AsSpan();
         var dstSpan = result.AsWritableSpan();
         var hidden = numHeads * headDim;
@@ -797,7 +826,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private static Tensor<T> ReshapeFromHeads(Tensor<T> tensor, int batch, int seq, int numHeads, int headDim)
     {
-        var result = new Tensor<T>(new[] { batch, seq, numHeads * headDim });
+        var result = TensorAllocator.Rent<T>(new[] { batch, seq, numHeads * headDim });
         var srcSpan = tensor.AsSpan();
         var dstSpan = result.AsWritableSpan();
         var hidden = numHeads * headDim;
@@ -827,7 +856,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         var hidden = x.Shape[^1];
 
         // Create broadcastable gate tensor: [1, 1, hidden]
-        var gateTensor = new Tensor<T>(new[] { 1, 1, hidden });
+        var gateTensor = TensorAllocator.Rent<T>(new[] { 1, 1, hidden });
         var gateSpan = gateTensor.AsWritableSpan();
         for (int h = 0; h < hidden; h++)
         {
@@ -859,20 +888,20 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         normed = ApplyAdaLN(normed, scale, shift);
 
         // Project to output dimension using batched forward pass
-        var shape = normed.Shape;
+        var shape = normed.Shape.ToArray();
         var batch = shape[0];
         var numPatches = shape[1];
         var patchDim = _inputChannels * _patchSize * _patchSize;
 
         // Reshape [batch, numPatches, hiddenSize] -> [batch*numPatches, hiddenSize]
-        var flatNormed = new Tensor<T>(new[] { batch * numPatches, _hiddenSize });
+        var flatNormed = TensorAllocator.Rent<T>(new[] { batch * numPatches, _hiddenSize });
         normed.AsSpan().CopyTo(flatNormed.AsWritableSpan());
 
         // Single batched forward pass
         var projected = _outputProj.Forward(flatNormed);
 
         // Reshape back to [batch, numPatches, patchDim]
-        var output = new Tensor<T>(new[] { batch, numPatches, patchDim });
+        var output = TensorAllocator.Rent<T>(new[] { batch, numPatches, patchDim });
         projected.AsSpan().CopyTo(output.AsWritableSpan());
 
         return output;
@@ -883,14 +912,14 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> Unpatchify(Tensor<T> patches, int height, int width)
     {
-        var shape = patches.Shape;
+        var shape = patches.Shape.ToArray();
         var batch = shape[0];
         var patchDim = shape[2];
 
         var numPatchesH = height / _patchSize;
         var numPatchesW = width / _patchSize;
 
-        var output = new Tensor<T>(new[] { batch, _inputChannels, height, width });
+        var output = TensorAllocator.Rent<T>(new[] { batch, _inputChannels, height, width });
         var outputSpan = output.AsWritableSpan();
         var patchSpan = patches.AsSpan();
 
@@ -932,6 +961,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
+        EnsureLayersInitialized();
         var allParams = new List<T>();
 
         // Collect from patch embed
@@ -984,6 +1014,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        EnsureLayersInitialized();
         int offset = 0;
 
         // Set patch embed
@@ -1039,6 +1070,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     {
         get
         {
+            EnsureLayersInitialized();
             int count = 0;
 
             if (_patchEmbed != null) count += _patchEmbed.ParameterCount;

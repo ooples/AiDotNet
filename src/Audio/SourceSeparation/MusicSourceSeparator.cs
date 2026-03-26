@@ -316,7 +316,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
 
             if (output is null)
             {
-                output = new Tensor<T>(kvp.Value.Shape);
+                output = new Tensor<T>(kvp.Value.Shape.ToArray());
                 for (int i = 0; i < output.Length; i++)
                 {
                     output[i] = kvp.Value[i];
@@ -331,7 +331,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
             }
         }
 
-        return output ?? new Tensor<T>(audio.Shape);
+        return output ?? new Tensor<T>(audio.Shape.ToArray());
     }
 
     /// <summary>
@@ -405,7 +405,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
 
             if (output is null)
             {
-                output = new Tensor<T>(kvp.Value.Shape);
+                output = new Tensor<T>(kvp.Value.Shape.ToArray());
             }
 
             for (int i = 0; i < output.Length && i < kvp.Value.Length; i++)
@@ -415,7 +415,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
             }
         }
 
-        return output ?? new Tensor<T>(separationResult.OriginalMix.Shape);
+        return output ?? new Tensor<T>(separationResult.OriginalMix.Shape.ToArray());
     }
 
     #endregion
@@ -512,7 +512,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
     /// </summary>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        var result = new Tensor<T>(modelOutput.Shape);
+        var result = new Tensor<T>(modelOutput.Shape.ToArray());
         for (int i = 0; i < modelOutput.Length; i++)
         {
             double val = NumOps.ToDouble(modelOutput[i]);
@@ -531,7 +531,6 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
         {
             Name = _useNativeMode ? "MusicSourceSeparator-Native" : "MusicSourceSeparator-ONNX",
             Description = "Music source separation model (Spleeter/Demucs-style)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.FftSize / 2 + 1,
             Complexity = 1
         };
@@ -643,7 +642,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
         else
         {
             vocals = harmonic;
-            other = new Tensor<T>(audio.Shape);
+            other = new Tensor<T>(audio.Shape.ToArray());
         }
 
         var bass = ExtractBassline(harmonicMag, phase);

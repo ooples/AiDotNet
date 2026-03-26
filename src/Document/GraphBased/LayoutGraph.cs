@@ -439,7 +439,7 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
     {
         var image = EnsureBatchDimension(rawImage);
-        var normalized = new Tensor<T>(image.Shape);
+        var normalized = new Tensor<T>(image.Shape.ToArray());
         for (int i = 0; i < image.Data.Length; i++)
         {
             normalized.Data.Span[i] = NumOps.FromDouble(NumOps.ToDouble(image.Data.Span[i]) / 255.0);
@@ -462,7 +462,6 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         return new ModelMetadata<T>
         {
             Name = "LayoutGraph",
-            ModelType = ModelType.NeuralNetwork,
             Description = "LayoutGraph for hierarchical document layout analysis",
             FeatureCount = _nodeDim,
             Complexity = _graphLayers,

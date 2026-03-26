@@ -225,7 +225,6 @@ public class ACEStep<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         {
             Name = _useNativeMode ? "ACEStep-Native" : "ACEStep-ONNX",
             Description = "ACE-Step accelerated consistency music generation (2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.LatentDim,
             Complexity = _options.NumUNetLayers
         };
         m.AdditionalInfo["NumSteps"] = _options.NumSteps.ToString();

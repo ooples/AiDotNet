@@ -30,6 +30,24 @@ namespace AiDotNet.Regression;
 /// estimate someone's weight if you only know their height.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create simple linear regression (y = mx + b)
+/// var model = new SimpleRegression&lt;double&gt;();
+///
+/// // Prepare single-feature data
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 1, new double[] { 1, 2, 3, 4, 5 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.1, 3.9, 6.2, 7.8, 10.1 });
+///
+/// // Train to find best-fit line
+/// model.Train(features, targets);
+///
+/// // Predict for new input
+/// var newFeatures = Matrix&lt;double&gt;.Build.Dense(1, 1, new double[] { 6 });
+/// var prediction = model.Predict(newFeatures);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.Regression)]
@@ -111,25 +129,45 @@ public class SimpleRegression<T> : RegressionBase<T>
     /// </remarks>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
-        RegressionValidator.ValidateFeatureCount(x, 1, "Simple regression");
+        if (x.Columns != 1)
+        {
+            throw new Exceptions.InvalidInputDimensionException(
+                $"SimpleRegression requires exactly 1 feature column, but got {x.Columns}. " +
+                "Use MultipleRegression for multi-feature input.");
+        }
 
-        if (Options.UseIntercept)
-            x = x.AddConstantColumn(NumOps.One);
-
-        var xTx = x.Transpose().Multiply(x);
-        var regularizedXTx = xTx.Add(Regularization.Regularize(xTx));
-        var xTy = x.Transpose().Multiply(y);
-
-        var solution = SolveSystem(regularizedXTx, xTy);
+        TrainingFeatureCount = x.Columns;
 
         if (Options.UseIntercept)
         {
+            // OLS with intercept: augment X with a constant column
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            // Scale-adaptive regularization: use relative epsilon based on diagonal magnitude
+            for (int i = 0; i < xTx.Rows; i++)
+            {
+                double diagVal = Math.Abs(NumOps.ToDouble(xTx[i, i]));
+                double eps = Math.Max(diagVal * 1e-12, 1e-30);
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(eps));
+            }
+            var solution = SolveSystem(xTx, xTy);
             Intercept = solution[0];
-            Coefficients = new Vector<T>([solution[1]]);
+            Coefficients = solution.Slice(1, x.Columns);
         }
         else
         {
-            Coefficients = new Vector<T>([solution[0]]);
+            // OLS without intercept: slope = (X'X)^(-1) X'y
+            var xTx = x.Transpose().Multiply(x);
+            var xTy = x.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+            {
+                double diagVal = Math.Abs(NumOps.ToDouble(xTx[i, i]));
+                double eps = Math.Max(diagVal * 1e-12, 1e-30);
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(eps));
+            }
+            Coefficients = SolveSystem(xTx, xTy);
+            Intercept = NumOps.Zero;
         }
     }
 
@@ -159,32 +197,5 @@ public class SimpleRegression<T> : RegressionBase<T>
     {
         // Create a new instance with the same options and regularization
         return new SimpleRegression<T>(Options, Regularization);
-    }
-
-    /// <summary>
-    /// Returns the type identifier for this regression model.
-    /// </summary>
-    /// <returns>
-    /// The model type identifier for simple regression.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// This method is used internally for model identification and serialization purposes.
-    /// It returns an enum value that identifies this model as a simple regression model.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method simply tells the system what kind of model this is.
-    /// 
-    /// It's like a name tag for the model that says "I am a simple regression model."
-    /// This is useful when:
-    /// - Saving the model to a file
-    /// - Loading a model from a file
-    /// - Logging information about the model
-    /// 
-    /// You generally won't need to call this method directly in your code.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.SimpleRegression;
     }
 }

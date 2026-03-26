@@ -140,10 +140,7 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
 
             // Compute norm of x
             T xNorm = NumOps.Zero;
-            for (int i = 0; i < x.Length; i++)
-            {
-                xNorm = NumOps.Add(xNorm, NumOps.Multiply(x[i], x[i]));
-            }
+            xNorm = NumOps.Add(xNorm, Engine.DotProduct(x, x));
             xNorm = NumOps.Sqrt(xNorm);
 
             // Skip if column is already zero (nothing to eliminate)
@@ -167,10 +164,7 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
 
             // Normalize v
             T vNorm = NumOps.Zero;
-            for (int i = 0; i < v.Length; i++)
-            {
-                vNorm = NumOps.Add(vNorm, NumOps.Multiply(v[i], v[i]));
-            }
+            vNorm = NumOps.Add(vNorm, Engine.DotProduct(v, v));
             vNorm = NumOps.Sqrt(vNorm);
 
             if (NumOps.LessThan(vNorm, NumOps.FromDouble(1e-14)))
@@ -187,12 +181,13 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
             // For rows k+1 to n-1, columns 0 to n-1
             for (int j = 0; j < n; j++)
             {
-                T dot = NumOps.Zero;
+                // Extract column slice H[k+1:k+1+v.Length, j]
+                var colSlice = new Vector<T>(v.Length);
                 for (int i = 0; i < v.Length; i++)
                 {
-                    dot = NumOps.Add(dot, NumOps.Multiply(v[i], H[k + 1 + i, j]));
+                    colSlice[i] = H[k + 1 + i, j];
                 }
-                dot = NumOps.Multiply(NumOps.FromDouble(2), dot);
+                T dot = NumOps.Multiply(NumOps.FromDouble(2), Engine.DotProduct(v, colSlice));
 
                 for (int i = 0; i < v.Length; i++)
                 {
@@ -204,12 +199,13 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
             // For rows 0 to n-1, columns k+1 to n-1
             for (int i = 0; i < n; i++)
             {
-                T dot = NumOps.Zero;
+                // Extract row slice H[i, k+1:k+1+v.Length]
+                var rowSlice = new Vector<T>(v.Length);
                 for (int j = 0; j < v.Length; j++)
                 {
-                    dot = NumOps.Add(dot, NumOps.Multiply(H[i, k + 1 + j], v[j]));
+                    rowSlice[j] = H[i, k + 1 + j];
                 }
-                dot = NumOps.Multiply(NumOps.FromDouble(2), dot);
+                T dot = NumOps.Multiply(NumOps.FromDouble(2), Engine.DotProduct(rowSlice, v));
 
                 for (int j = 0; j < v.Length; j++)
                 {
@@ -221,12 +217,13 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
             // Q = Q * P is equivalent to updating columns k+1 to n-1 of Q
             for (int i = 0; i < n; i++)
             {
-                T dot = NumOps.Zero;
+                // Extract row slice Q[i, k+1:k+1+v.Length]
+                var qRowSlice = new Vector<T>(v.Length);
                 for (int j = 0; j < v.Length; j++)
                 {
-                    dot = NumOps.Add(dot, NumOps.Multiply(Q[i, k + 1 + j], v[j]));
+                    qRowSlice[j] = Q[i, k + 1 + j];
                 }
-                dot = NumOps.Multiply(NumOps.FromDouble(2), dot);
+                T dot = NumOps.Multiply(NumOps.FromDouble(2), Engine.DotProduct(qRowSlice, v));
 
                 for (int j = 0; j < v.Length; j++)
                 {
@@ -572,10 +569,7 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
 
             // Compute alpha = v_j^T * w
             T alpha = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                alpha = NumOps.Add(alpha, NumOps.Multiply(v[i], w[i]));
-            }
+            alpha = NumOps.Add(alpha, Engine.DotProduct(v, w));
             H[j, j] = alpha;
 
             // w = w - alpha * v_j
@@ -588,10 +582,7 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
             for (int k = 0; k <= j; k++)
             {
                 T dot = NumOps.Zero;
-                for (int i = 0; i < n; i++)
-                {
-                    dot = NumOps.Add(dot, NumOps.Multiply(w[i], Q[i, k]));
-                }
+                { var _e28 = new Vector<T>(n); for (int _i = 0; _i < n; _i++) _e28[_i] = Q[_i, k]; dot = NumOps.Add(dot, Engine.DotProduct(w, _e28)); }
                 for (int i = 0; i < n; i++)
                 {
                     w[i] = NumOps.Subtract(w[i], NumOps.Multiply(dot, Q[i, k]));
@@ -602,10 +593,7 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
             {
                 // Compute beta = ||w||
                 T beta = NumOps.Zero;
-                for (int i = 0; i < n; i++)
-                {
-                    beta = NumOps.Add(beta, NumOps.Multiply(w[i], w[i]));
-                }
+                beta = NumOps.Add(beta, Engine.DotProduct(w, w));
                 beta = NumOps.Sqrt(beta);
 
                 H[j, j + 1] = beta;
@@ -622,10 +610,7 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
                     for (int k = 0; k <= j; k++)
                     {
                         T dot = NumOps.Zero;
-                        for (int i = 0; i < n; i++)
-                        {
-                            dot = NumOps.Add(dot, NumOps.Multiply(w[i], Q[i, k]));
-                        }
+                        { var _e30 = new Vector<T>(n); for (int _i = 0; _i < n; _i++) _e30[_i] = Q[_i, k]; dot = NumOps.Add(dot, Engine.DotProduct(w, _e30)); }
                         for (int i = 0; i < n; i++)
                         {
                             w[i] = NumOps.Subtract(w[i], NumOps.Multiply(dot, Q[i, k]));
@@ -634,10 +619,7 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
 
                     // Recompute norm
                     beta = NumOps.Zero;
-                    for (int i = 0; i < n; i++)
-                    {
-                        beta = NumOps.Add(beta, NumOps.Multiply(w[i], w[i]));
-                    }
+                    beta = NumOps.Add(beta, Engine.DotProduct(w, w));
                     beta = NumOps.Sqrt(beta);
 
                     if (NumOps.LessThan(beta, NumOps.FromDouble(1e-14)))

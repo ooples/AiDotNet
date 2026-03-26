@@ -350,7 +350,7 @@ public class StableCascadeModel<T> : LatentDiffusionModelBase<T>
     {
         var priorCount = _priorUnet.ParameterCount;
         var decoderCount = _decoderUnet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != priorCount + decoderCount + vaeCount)
         {
@@ -446,7 +446,6 @@ public class StableCascadeModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Stable Cascade",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Stable Cascade (Würstchen v3) three-stage cascaded latent diffusion model with extreme 42:1 compression",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

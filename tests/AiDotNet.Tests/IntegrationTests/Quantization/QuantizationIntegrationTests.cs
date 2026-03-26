@@ -1640,6 +1640,7 @@ public class QuantizationIntegrationTests
         }
 
         public int ParameterCount => _parameters.Length;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
 
         public IFullModel<T, T[], T[]> WithParameters(Vector<T> parameters)
         {
@@ -1710,6 +1711,8 @@ public class QuantizationIntegrationTests
         }
 
         public bool SupportsJitCompilation => false;
+
+    public Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
     }
 
     #endregion

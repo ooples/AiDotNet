@@ -34,7 +34,7 @@ public sealed class TrialResult
     /// This value is safe to expose in redacted summaries and helps users understand which high-level model family was tried
     /// without exposing proprietary hyperparameter values or internal configuration details.
     /// </remarks>
-    public ModelType? CandidateModelType { get; set; }
+    public Type? CandidateModelType { get; set; }
 
     /// <summary>
     /// Gets or sets the hyperparameters used in this trial.

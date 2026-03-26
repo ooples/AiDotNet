@@ -27,10 +27,32 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// It introduces a bridge mechanism that preserves and restores non-stationary information
 /// (trends, level shifts) that is typically lost during standard normalization.
 /// </para>
+/// <para><b>For Beginners:</b> Most forecasting models normalize data (remove trends and
+/// scale to a standard range) before processing, which can lose important information about
+/// long-term trends and sudden shifts. TimeBridge solves this by "bridging" the gap: it
+/// saves the non-stationary information that normalization removes and adds it back to the
+/// predictions, giving you forecasts that correctly capture upward trends, seasonal shifts,
+/// and level changes.</para>
 /// <para>
 /// <b>Reference:</b> "TimeBridge: Non-Stationarity Matters for Long-term Time Series Forecasting", 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TimeBridge model addressing non-stationarity in foundation models
+/// // Preserves and restores trend/level shift information lost during normalization
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with bridge mechanism for non-stationary information
+/// var model = new TimeBridge&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TimeBridge&lt;double&gt;(architecture, "timebridge.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -243,7 +265,7 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -264,7 +286,6 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "TimeBridge" },
@@ -399,7 +420,7 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {

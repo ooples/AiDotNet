@@ -403,12 +403,9 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
                         var dH = new Vector<T>(_hiddenDim);
                         for (int i = 0; i < _hiddenDim; i++)
                         {
-                            T sum = NumOps.Zero;
-                            for (int j = 0; j < _inputDim; j++)
-                            {
-                                sum = NumOps.Add(sum, NumOps.Multiply(wThetaF[i, j], gradForecast[j]));
-                            }
-                            dH[i] = sum;
+                            var wRow = new Vector<T>(_inputDim);
+                            for (int j = 0; j < _inputDim; j++) wRow[j] = wThetaF[i, j];
+                            dH[i] = Engine.DotProduct(wRow, gradForecast);
                         }
 
                         // Gradient through WTheta_b (backcast theta)
@@ -765,17 +762,11 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
             var backcast = ForwardFCNoOffset(h, wThetaB, inputSize);
             var forecast = ForwardFCNoOffset(h, wThetaF, _inputDim);
 
-            // Update residual (subtract backcast)
-            for (int i = 0; i < inputSize; i++)
-            {
-                residual[i] = NumOps.Subtract(residual[i], backcast[i]);
-            }
+            // Update residual (subtract backcast) using Engine.Subtract
+            residual = Engine.Subtract(residual, backcast);
 
-            // Accumulate forecast
-            for (int i = 0; i < _inputDim; i++)
-            {
-                totalForecast[i] = NumOps.Add(totalForecast[i], forecast[i]);
-            }
+            // Accumulate forecast using Engine.Add
+            totalForecast = Engine.Add(totalForecast, forecast);
         }
 
         return (totalForecast, residuals, hValues);
@@ -850,23 +841,14 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
             var backcast = ForwardFCNoOffset(h, wThetaB, inputSize);
             var forecast = ForwardFCNoOffset(h, wThetaF, _inputDim);
 
-            // Update residual (subtract backcast)
-            for (int i = 0; i < inputSize; i++)
-            {
-                residual[i] = NumOps.Subtract(residual[i], backcast[i]);
-            }
+            // Update residual (subtract backcast) using Engine.Subtract
+            residual = Engine.Subtract(residual, backcast);
 
-            // Accumulate forecast
-            for (int i = 0; i < _inputDim; i++)
-            {
-                totalForecast[i] = NumOps.Add(totalForecast[i], forecast[i]);
-            }
+            // Accumulate forecast using Engine.Add
+            totalForecast = Engine.Add(totalForecast, forecast);
 
-            // Accumulate backcast
-            for (int i = 0; i < inputSize; i++)
-            {
-                totalBackcast[i] = NumOps.Add(totalBackcast[i], backcast[i]);
-            }
+            // Accumulate backcast using Engine.Add
+            totalBackcast = Engine.Add(totalBackcast, backcast);
         }
 
         return (totalForecast, totalBackcast);
@@ -879,12 +861,9 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
 
         for (int j = 0; j < outputSize; j++)
         {
-            T sum = b[j];
-            for (int i = 0; i < input.Length; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(input[i], W[i, j]));
-            }
-            output[j] = sum;
+            var wCol = new Vector<T>(input.Length);
+            for (int i = 0; i < input.Length; i++) wCol[i] = W[i, j];
+            output[j] = NumOps.Add(b[j], Engine.DotProduct(input, wCol));
         }
 
         return output;

@@ -747,7 +747,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         }
 
         // Create ONNX input tensor with shape [batch, channels, height, width]
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
 
         // Get input name from model
         var inputMeta = _onnxSession.InputMetadata;
@@ -816,7 +816,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         var expectedShape = GeneratorRequired.GetInputShape();
 
         // Check if input matches expected shape exactly (no batch dimension)
-        if (input.Rank == expectedShape.Length && ShapesMatch(input.Shape, expectedShape))
+        if (input.Rank == expectedShape.Length && ShapesMatch(input.Shape.ToArray(), expectedShape))
         {
             return GeneratorRequired.Forward(input);
         }
@@ -833,7 +833,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
             }
 
             // Validate spatial dimensions match
-            var spatialShape = input.Shape.Skip(batchDims).ToArray();
+            var spatialShape = input.Shape.ToArray().Skip(batchDims).ToArray();
             if (!ShapesMatch(spatialShape, expectedShape))
             {
                 throw new TensorShapeMismatchException(
@@ -859,8 +859,8 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
 
             // Combine outputs back into batched tensor
             var outputShape = new int[batchDims + outputs[0].Rank];
-            Array.Copy(input.Shape, 0, outputShape, 0, batchDims);
-            Array.Copy(outputs[0].Shape, 0, outputShape, batchDims, outputs[0].Rank);
+            Array.Copy(input.Shape.ToArray(), 0, outputShape, 0, batchDims);
+            Array.Copy(outputs[0].Shape.ToArray(), 0, outputShape, batchDims, outputs[0].Rank);
 
             var combinedData = new T[batchSize * outputs[0].Length];
             for (int b = 0; b < batchSize; b++)
@@ -883,7 +883,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
                 if (input.Shape[i] != expectedShape[dimsToAdd + i])
                 {
                     throw new TensorShapeMismatchException(
-                        $"Shape mismatch in RealESRGAN: Cannot expand [{string.Join(", ", input.Shape)}] " +
+                        $"Shape mismatch in RealESRGAN: Cannot expand [{string.Join(", ", input.Shape.ToArray())}] " +
                         $"to match [{string.Join(", ", expectedShape)}].");
                 }
             }
@@ -916,7 +916,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         var expectedShape = DiscriminatorRequired.GetInputShape();
 
         // Check if input matches expected shape exactly (no batch dimension)
-        if (input.Rank == expectedShape.Length && ShapesMatch(input.Shape, expectedShape))
+        if (input.Rank == expectedShape.Length && ShapesMatch(input.Shape.ToArray(), expectedShape))
         {
             return DiscriminatorRequired.Forward(input);
         }
@@ -931,7 +931,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
                 batchSize *= input.Shape[i];
             }
 
-            var spatialShape = input.Shape.Skip(batchDims).ToArray();
+            var spatialShape = input.Shape.ToArray().Skip(batchDims).ToArray();
             if (!ShapesMatch(spatialShape, expectedShape))
             {
                 throw new TensorShapeMismatchException(
@@ -952,8 +952,8 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
             }
 
             var outputShape = new int[batchDims + outputs[0].Rank];
-            Array.Copy(input.Shape, 0, outputShape, 0, batchDims);
-            Array.Copy(outputs[0].Shape, 0, outputShape, batchDims, outputs[0].Rank);
+            Array.Copy(input.Shape.ToArray(), 0, outputShape, 0, batchDims);
+            Array.Copy(outputs[0].Shape.ToArray(), 0, outputShape, batchDims, outputs[0].Rank);
 
             var combinedData = new T[batchSize * outputs[0].Length];
             for (int b = 0; b < batchSize; b++)
@@ -996,7 +996,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// </summary>
     private Tensor<T> CalculateBCEGradient(Tensor<T> output, Tensor<T> target)
     {
-        var gradient = new Tensor<T>(output.Shape);
+        var gradient = new Tensor<T>(output.Shape.ToArray());
         double epsilon = 1e-7;
 
         for (int i = 0; i < output.Length; i++)
@@ -1019,7 +1019,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// </summary>
     private Tensor<T> CalculateReconstructionGradient(Tensor<T> generated, Tensor<T> target)
     {
-        var gradient = new Tensor<T>(generated.Shape);
+        var gradient = new Tensor<T>(generated.Shape.ToArray());
 
         for (int i = 0; i < generated.Length; i++)
         {
@@ -1041,7 +1041,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// </summary>
     private Tensor<T> CombineGradients(Tensor<T> grad1, Tensor<T> grad2)
     {
-        var combined = new Tensor<T>(grad1.Shape);
+        var combined = new Tensor<T>(grad1.Shape.ToArray());
 
         for (int i = 0; i < grad1.Length; i++)
         {
@@ -1106,7 +1106,6 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GenerativeAdversarialNetwork,
             AdditionalInfo = additionalInfo,
             ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
         };

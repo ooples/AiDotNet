@@ -61,6 +61,14 @@ public enum VisionScanPattern
 /// </list>
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new VisionMambaOptions { ImageSize = 224, PatchSize = 16, ModelDim = 384, NumLayers = 24 };
+/// var model = new VisionMambaModel&lt;float&gt;(options);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 224, 224 });
+/// var output = model.Predict(image);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -350,7 +358,6 @@ public class VisionMambaModel<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Architecture", "VisionMamba" },
@@ -445,7 +452,7 @@ public class VisionMambaModel<T> : NeuralNetworkBase<T>
 
     private Tensor<T> ApplyRMSNorm1D(Tensor<T> input, Tensor<T> gamma, int batchSize, int dim)
     {
-        var output = new Tensor<T>(input.Shape);
+        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
         T eps = NumOps.FromDouble(1e-6);
 
         for (int b = 0; b < batchSize; b++)

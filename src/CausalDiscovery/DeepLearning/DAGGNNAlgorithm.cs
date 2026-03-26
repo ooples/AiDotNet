@@ -143,9 +143,10 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
                 rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
         }
 
-        // Final output using trained embeddings
+        // Final output: use trained P for directionality, covariance for weights
         var result = new Matrix<T>(d, d);
-        T threshold = NumOps.FromDouble(0.3);
+        // Compute final P matrix from trained embeddings
+        var finalP = new double[d, d];
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
@@ -154,17 +155,27 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
                 for (int k = 0; k < embDim; k++)
                     dot = NumOps.Add(dot, NumOps.Multiply(Zs[i, k], Zt[j, k]));
                 double sv = NumOps.ToDouble(dot);
-                double prob = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
-                if (prob > 0.5)
-                {
-                    T varI = cov[i, i];
-                    if (NumOps.GreaterThan(varI, eps))
-                    {
-                        T weight = NumOps.Divide(cov[i, j], varI);
-                        if (NumOps.GreaterThan(NumOps.Abs(weight), threshold))
-                            result[i, j] = weight;
-                    }
-                }
+                finalP[i, j] = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
+            }
+
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+            {
+                if (i == j) continue;
+                double varI = NumOps.ToDouble(cov[i, i]);
+                if (varI < 1e-10) continue;
+                double covIJ = NumOps.ToDouble(cov[i, j]);
+                double weight = covIJ / varI;
+                if (Math.Abs(weight) < EdgeThreshold) continue;
+
+                // Edge i→j if learned P favors it or covariance ratio does
+                double varJ = NumOps.ToDouble(cov[j, j]);
+                double reverseWeight = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
+                bool learnedDirection = finalP[i, j] >= finalP[j, i];
+                bool statisticalDirection = Math.Abs(weight) >= reverseWeight;
+
+                if (learnedDirection || statisticalDirection)
+                    result[i, j] = NumOps.FromDouble(weight);
             }
 
         return result;

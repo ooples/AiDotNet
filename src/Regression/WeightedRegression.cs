@@ -31,6 +31,24 @@ namespace AiDotNet.Regression;
 /// This helps you build models that focus more on the data points you trust or care about most.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a weighted regression with per-sample importance weights
+/// var model = new WeightedRegression&lt;double&gt;();
+///
+/// // Prepare training data: 5 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.5, 5.3, 8.1, 10.9, 13.7 });
+///
+/// // Train with sample weights (higher weight = more influence)
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.Regression)]
@@ -113,12 +131,11 @@ public class WeightedRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     public WeightedRegression(WeightedRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization)
+        : base(options ?? new WeightedRegressionOptions<T>(), regularization)
     {
-        Guard.NotNull(options);
-        Guard.NotNull(options.Weights);
-        _weights = options.Weights;
-        _order = options.Order;
+        var opts = options ?? new WeightedRegressionOptions<T>();
+        _weights = opts.Weights;
+        _order = opts.Order;
     }
 
     /// <summary>
@@ -155,7 +172,11 @@ public class WeightedRegression<T> : RegressionBase<T>
         if (Options.UseIntercept)
             expandedX = expandedX.AddConstantColumn(NumOps.One);
 
-        var weightMatrix = Matrix<T>.CreateDiagonal(_weights);
+        // Use uniform weights if none were provided or length doesn't match
+        var weights = _weights.Length == x.Rows
+            ? _weights
+            : Vector<T>.CreateDefault(x.Rows, NumOps.One);
+        var weightMatrix = Matrix<T>.CreateDiagonal(weights);
         var xTWx = expandedX.Transpose().Multiply(weightMatrix).Multiply(expandedX);
         var regularizedXTWx = xTWx.Add(Regularization.Regularize(xTWx));
         var xTWy = expandedX.Transpose().Multiply(weightMatrix).Multiply(y);
@@ -251,26 +272,6 @@ public class WeightedRegression<T> : RegressionBase<T>
         }
 
         return expandedX;
-    }
-
-    /// <summary>
-    /// Gets the type of regression model.
-    /// </summary>
-    /// <returns>The model type identifier for weighted regression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method identifies the type of this regression model as weighted regression, which
-    /// helps with model type checking and serialization.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method simply identifies what kind of model this is.
-    /// 
-    /// It returns a label that identifies this as a weighted regression model, which helps the system
-    /// recognize and handle it correctly when saving, loading, or processing models.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.WeightedRegression;
     }
 
     /// <summary>

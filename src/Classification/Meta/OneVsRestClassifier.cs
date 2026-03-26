@@ -47,6 +47,17 @@ namespace AiDotNet.Classification.Meta;
 /// <see cref="Train(Matrix{T}, Vector{T})"/>.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Use AiModelBuilder facade for onevsrestclassifier classification
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new OneVsRestClassifier&lt;double&gt;(
+///         new OneVsRestClassifierOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(features, labels);
+/// var prediction = result.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Classification)]
@@ -94,7 +105,6 @@ public class OneVsRestClassifier<T> : MetaClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.OneVsRestClassifier;
 
     /// <summary>
     /// Trains the One-vs-Rest classifier on multi-label data.

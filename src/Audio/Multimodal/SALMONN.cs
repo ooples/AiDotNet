@@ -224,7 +224,6 @@ public class SALMONN<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
         {
             Name = _useNativeMode ? "SALMONN-Native" : "SALMONN-ONNX",
             Description = "SALMONN dual-encoder audio-language model (Tang et al., 2024, Tsinghua/ByteDance)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.SpeechEncoderDim,
             Complexity = _options.NumSpeechEncoderLayers + _options.NumAudioEncoderLayers + _options.NumLMLayers
         };
         m.AdditionalInfo["LMHiddenDim"] = _options.LMHiddenDim.ToString();

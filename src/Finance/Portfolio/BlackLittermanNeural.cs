@@ -24,6 +24,19 @@ namespace AiDotNet.Finance.Portfolio;
 /// market baseline to produce robust portfolios.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Neural Black-Litterman model for view-based portfolio optimization
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 60, inputWidth: 10, inputDepth: 1, outputSize: 10);
+/// var model = new BlackLittermanNeural&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for Bayesian portfolio optimization
+/// var onnxModel = new BlackLittermanNeural&lt;double&gt;(architecture, "blacklitterman.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

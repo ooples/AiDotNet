@@ -27,6 +27,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Capsule Networks particularly good at recognizing objects from different angles or when parts are arranged differently.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new CapsuleNetworkOptions { InputSize = 784, NumCapsules = 10 };
+/// var model = new CapsuleNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 1, 28, 28 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -102,9 +110,9 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     public CapsuleNetwork()
         : this(new NeuralNetworkArchitecture<T>(
-            inputType: Enums.InputType.OneDimensional,
+            inputType: Enums.InputType.TwoDimensional,
             taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
-            inputSize: 128,
+            inputHeight: 28, inputWidth: 28, inputDepth: 1,
             outputSize: 10))
     {
     }
@@ -456,7 +464,6 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.CapsuleNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputDimension", Layers[0].GetInputShape()[0] },
@@ -610,7 +617,7 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Flatten original input for comparison
         // Validate the input can be flattened before attempting reshape
         int expectedLength = 1;
-        foreach (int dim in input.Shape)
+        foreach (int dim in input.Shape.ToArray())
         {
             expectedLength *= dim;
         }

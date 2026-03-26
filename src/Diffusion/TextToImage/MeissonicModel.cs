@@ -284,7 +284,7 @@ public class MeissonicModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var predictorCount = _predictor.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != predictorCount + vaeCount)
         {
@@ -345,7 +345,6 @@ public class MeissonicModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Meissonic",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Non-autoregressive masked image modeling with E-MMDiT (304M) for efficient high-resolution T2I",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

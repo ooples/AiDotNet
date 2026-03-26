@@ -71,6 +71,17 @@ namespace AiDotNet.PhysicsInformed.PINNs
     ///
     /// The variational formulation often provides better training dynamics and accuracy.
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+    ///     inputType: InputType.OneDimensional,
+    ///     taskType: NeuralNetworkTaskType.Regression,
+    ///     inputSize: 2, outputSize: 1);
+    /// Func&lt;float[], float[], float[,], float[], float[,], float&gt; weakForm =
+    ///     (u, x, grad_u, v, grad_v) =&gt; 0.0f;
+    /// var vpinn = new VariationalPINN&lt;float&gt;(architecture, weakForm);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Science)]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -514,7 +525,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                             throw new InvalidOperationException(
                                 $"Expected {outputDim} outputs from the network, got {outputs.Shape[1]}.");
                         }
-                        var outputGradients = new Tensor<T>(outputs.Shape);
+                        var outputGradients = new Tensor<T>(outputs.Shape.ToArray());
 
                         T invTwoStep = NumOps.Divide(NumOps.One, NumOps.Multiply(NumOps.FromDouble(2.0), step));
                         T batchWeightSum = NumOps.Zero;
@@ -735,7 +746,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
             LastLoss = lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
             var outputGradient = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction.Shape);
+            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction.Shape.ToArray());
 
             Backpropagate(outputGradientTensor);
             _optimizer.UpdateParameters(Layers);
@@ -751,7 +762,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
         {
             return new ModelMetadata<T>
             {
-                ModelType = ModelType.NeuralNetwork,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "InputSize", Architecture.InputSize },

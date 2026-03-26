@@ -29,16 +29,27 @@ namespace AiDotNet.ReinforcementLearning.Agents.NStepSARSA;
 /// - **Flexible**: Choose n to balance bias and variance
 ///
 /// Common values: n=3 to n=10
-/// Famous for: Sutton & Barto's RL textbook, Chapter 7
+/// Famous for: Sutton &amp; Barto's RL textbook, Chapter 7
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an n-step SARSA agent that looks 5 steps ahead
+/// var options = new NStepSARSAOptions&lt;double&gt; { NSteps = 5, StateSize = 4, ActionSize = 2 };
+/// var agent = new NStepSARSAAgent&lt;double&gt;(options);
+///
+/// // Select an action for the current state
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Reinforcement Learning: An Introduction",
-    "http://incompleteideas.net/book/the-book-2nd.html",
+    "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>
@@ -217,7 +228,6 @@ public class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ReinforcementLearning,
         };
     }
 

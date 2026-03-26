@@ -129,9 +129,9 @@ public class CitationNetworkLoader<T> : GraphDataLoaderBase<T>
     /// var graph = loader.GetNextBatch();
     ///
     /// // Access data
-    /// Console.WriteLine($"Nodes: {loader.NumNodes}");
-    /// Console.WriteLine($"Edges: {loader.NumEdges}");
-    /// Console.WriteLine($"Features per node: {loader.NumNodeFeatures}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     ///
     /// // Create node classification task
     /// var task = loader.CreateNodeClassificationTask();

@@ -14,7 +14,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Transformers;
 
@@ -48,6 +48,22 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// Time-series Forecasting", 2022. https://arxiv.org/abs/2202.01381
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an ETSformer for interpretable time series forecasting
+/// // Combines exponential smoothing with transformer attention for level/trend/seasonal decomposition
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 96, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with exponential smoothing attention
+/// var model = new ETSformer&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new ETSformer&lt;double&gt;(architecture, "etsformer_electricity.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -427,7 +443,7 @@ public class ETSformer<T> : ForecastingModelBase<T>
 
         // Backward pass - convert gradient back to tensor
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape));
+        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         // Update weights via optimizer
         _optimizer.UpdateParameters(Layers);
@@ -464,7 +480,6 @@ public class ETSformer<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "ETSformer" },
@@ -657,7 +672,7 @@ public class ETSformer<T> : ForecastingModelBase<T>
 
         _instanceMean = new Tensor<T>(new[] { batchSize, 1, features });
         _instanceStd = new Tensor<T>(new[] { batchSize, 1, features });
-        var normalized = new Tensor<T>(input.Shape);
+        var normalized = new Tensor<T>(input.Shape.ToArray());
 
         var epsilon = NumOps.FromDouble(1e-5);
 
@@ -791,7 +806,7 @@ public class ETSformer<T> : ForecastingModelBase<T>
             throw new InvalidOperationException("ONNX session not initialized.");
 
         var inputData = ConvertToFloatArray(input);
-        var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
 
         var inputs = new List<NamedOnnxValue>
         {
@@ -827,7 +842,7 @@ public class ETSformer<T> : ForecastingModelBase<T>
         int seqLen = output.Shape[1];
         int features = output.Shape[2];
 
-        var denormalized = new Tensor<T>(output.Shape);
+        var denormalized = new Tensor<T>(output.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -903,7 +918,7 @@ public class ETSformer<T> : ForecastingModelBase<T>
         int seqLen = input.Shape[1];
         int features = input.Shape[2];
 
-        var newInput = new Tensor<T>(input.Shape);
+        var newInput = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {

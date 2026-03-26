@@ -658,7 +658,7 @@ public class TabFlowGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     {
         if (_transformer is null) return output;
 
-        var result = new Tensor<T>(output.Shape);
+        var result = new Tensor<T>(output.Shape.ToArray());
         int idx = 0;
 
         for (int col = 0; col < _columns.Count && idx < output.Length; col++)
@@ -716,7 +716,6 @@ public class TabFlowGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Architecture", "TabFlow" },

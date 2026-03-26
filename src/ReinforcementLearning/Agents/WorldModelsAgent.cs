@@ -38,6 +38,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.WorldModels;
 /// Famous for: Car racing from pixels with limited environment samples
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a World Models agent that learns in its own dreams
+/// var options = new WorldModelsOptions&lt;double&gt; { StateSize = 64, ActionSize = 3, LatentSize = 32 };
+/// var agent = new WorldModelsAgent&lt;double&gt;(options);
+///
+/// // Select an action from the compressed latent representation
+/// var state = new Vector&lt;double&gt;(new double[64]);
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -200,16 +211,17 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Concatenate latent and RNN hidden state
         var controllerInput = ConcatenateVectors(latentMean, _rnnHiddenState);
 
-        // Compute action from controller
+        // Compute action from controller using Engine.DotProduct
         var action = new Vector<T>(_options.ActionSize);
         for (int i = 0; i < _options.ActionSize; i++)
         {
-            T sum = NumOps.Zero;
+            // Extract weight column
+            var weightCol = new Vector<T>(controllerInput.Length);
             for (int j = 0; j < controllerInput.Length; j++)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(controllerInput[j], _controllerWeights[j, i]));
+                weightCol[j] = _controllerWeights[j, i];
             }
-            action[i] = MathHelper.Tanh<T>(sum);
+            action[i] = MathHelper.Tanh<T>(Engine.DotProduct(controllerInput, weightCol));
         }
 
         // Update RNN hidden state for next step
@@ -285,12 +297,12 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             var reconstruction = _vaeDecoder.Predict(Tensor<T>.FromVector(latentSample)).ToVector();
 
             // Reconstruction loss (MSE)
-            T reconLoss = NumOps.Zero;
+            var reconDiff = new Vector<T>(reconstruction.Length);
             for (int i = 0; i < reconstruction.Length; i++)
             {
-                var diff = NumOps.Subtract(stateVector[i], reconstruction[i]);
-                reconLoss = NumOps.Add(reconLoss, NumOps.Multiply(diff, diff));
+                reconDiff[i] = NumOps.Subtract(stateVector[i], reconstruction[i]);
             }
+            T reconLoss = Engine.DotProduct(reconDiff, reconDiff);
 
             // KL divergence loss: KL(N(mean, var) || N(0, 1)) = 0.5 * sum(1 + logVar - mean² - exp(logVar))
             T klLoss = NumOps.Zero;
@@ -376,12 +388,12 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             // Prediction loss
-            T loss = NumOps.Zero;
+            var rnnDiff = new Vector<T>(_options.LatentSize);
             for (int i = 0; i < _options.LatentSize; i++)
             {
-                var diff = NumOps.Subtract(nextLatent[i], predictedNextLatent[i]);
-                loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
+                rnnDiff[i] = NumOps.Subtract(nextLatent[i], predictedNextLatent[i]);
             }
+            T loss = Engine.DotProduct(rnnDiff, rnnDiff);
 
             totalLoss = NumOps.Add(totalLoss, loss);
 
@@ -539,7 +551,6 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ReinforcementLearning,
         };
     }
 

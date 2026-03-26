@@ -182,7 +182,6 @@ public class MoG<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "MoG-Native" : "MoG-ONNX",
             Description = $"MoG {_options.Variant} flow-conditioned diffusion interpolation (2025)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumDiffusionSteps * _options.NumResBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

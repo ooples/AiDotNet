@@ -29,11 +29,32 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// a pretrained ViT encoder, and reconstructs/forecasts using the decoder. This cross-modal
 /// transfer demonstrates that vision foundation models generalize to time series.
 /// </para>
+/// <para><b>For Beginners:</b> VisionTS takes a surprising approach: it converts time series
+/// data into images and uses a vision model (originally trained on photos) to forecast future
+/// values. The data is arranged in a 2D grid like pixels, and the vision model fills in the
+/// missing parts, effectively predicting future values. This works because patterns in time
+/// series grids resemble visual textures that vision models already understand.</para>
 /// <para>
 /// <b>Reference:</b> "VisionTS: Visual Masked Autoencoders as Zero-Shot Time Series Forecasters",
 /// ICML 2025.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VisionTS model that repurposes visual MAE for time series forecasting
+/// // Converts time series into 2D image-like patch grids for cross-modal transfer
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with ViT encoder and MAE decoder
+/// var model = new VisionTS&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained vision model
+/// var onnxModel = new VisionTS&lt;double&gt;(architecture, "visionts.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelDomain(ModelDomain.Vision)]
@@ -237,7 +258,7 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
             var output = ForwardNative(input);
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
             _optimizer.UpdateParameters(Layers);
         }
         finally { SetTrainingMode(false); }
@@ -254,7 +275,6 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "VisionTS" },
@@ -377,7 +397,7 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         for (int b = 0; b < batchSize; b++)
         {
             T mean = NumOps.Zero;

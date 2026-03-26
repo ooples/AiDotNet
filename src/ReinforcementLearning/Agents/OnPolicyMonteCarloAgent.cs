@@ -13,16 +13,32 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// On-Policy MC Control uses epsilon-greedy policy for both behavior and target,
-/// ensuring exploration while learning the optimal policy.
+/// <para>On-Policy MC Control uses epsilon-greedy policy for both behavior and target,
+/// ensuring exploration while learning the optimal policy.</para>
+/// <para><b>For Beginners:</b> On-policy MC learns by evaluating the same policy it uses
+/// to collect data. The agent follows an epsilon-greedy strategy (mostly best action,
+/// sometimes random) and improves that exact strategy over time. Think of learning to cook
+/// by actually cooking with your current recipe, then adjusting based on results. Simpler
+/// than off-policy methods but cannot reuse data from previous policies.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an on-policy Monte Carlo agent with epsilon-greedy exploration
+/// var options = new OnPolicyMonteCarloOptions&lt;double&gt; { StateSize = 4, ActionSize = 2 };
+/// var agent = new OnPolicyMonteCarloAgent&lt;double&gt;(options);
+///
+/// // Select an action following the epsilon-greedy policy
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Reinforcement Learning: An Introduction",
-    "http://incompleteideas.net/book/the-book-2nd.html",
+    "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
@@ -237,7 +253,6 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ReinforcementLearning,
         };
     }
 

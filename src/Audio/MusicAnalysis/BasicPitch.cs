@@ -250,7 +250,6 @@ public class BasicPitch<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T>
         {
             Name = _useNativeMode ? "BasicPitch-Native" : "BasicPitch-ONNX",
             Description = "Basic Pitch polyphonic music transcription (Bittner et al., 2022, Spotify)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumHarmonicBins,
             Complexity = _options.NumEncoderLayers
         };
         m.AdditionalInfo["NumMidiNotes"] = _options.NumMidiNotes.ToString();

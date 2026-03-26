@@ -445,7 +445,7 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape);
+        var normalized = new Tensor<T>(image.Shape.ToArray());
         double[] means = [0.485, 0.456, 0.406];
         double[] stds = [0.229, 0.224, 0.225];
 
@@ -483,7 +483,6 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         return new ModelMetadata<T>
         {
             Name = "InfographicVQA",
-            ModelType = ModelType.NeuralNetwork,
             Description = "InfographicVQA for visual QA on infographics (WACV 2022)",
             FeatureCount = _fusionDim,
             Complexity = _visionLayers + _fusionLayers,

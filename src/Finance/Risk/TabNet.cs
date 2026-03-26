@@ -23,6 +23,21 @@ namespace AiDotNet.Finance.Risk;
 /// and the end-to-end learning of neural networks.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for tabular risk prediction (50 features, single risk score)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 50, outputSize: 1);
+///
+/// // Training mode: attentive feature selection with sequential decision steps
+/// var model = new TabNet&lt;double&gt;(architecture);
+///
+/// // Parameterless constructor with default 50-feature regression architecture
+/// var defaultModel = new TabNet&lt;double&gt;();
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Tabular)]

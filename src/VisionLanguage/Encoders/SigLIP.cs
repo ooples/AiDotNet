@@ -59,6 +59,22 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </list>
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SigLIP model for sigmoid-based contrastive learning
+/// // with improved batch scaling and per-pair binary classification
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SigLIP&lt;double&gt;(architecture, "siglip.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SigLIP&lt;double&gt;(architecture, new SigLIPOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -318,7 +334,6 @@ public class SigLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
             Description = _options.UseSigLIP2
                 ? "SigLIP 2: Multilingual Vision-Language Encoders with Improved Semantic Understanding (2025)"
                 : "SigLIP: Sigmoid Loss for Language Image Pre-Training (Zhai et al., ICCV 2023)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.ProjectionDim,
             Complexity = _options.NumVisionLayers + _options.NumTextLayers
         };

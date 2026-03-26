@@ -429,12 +429,7 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
         if (Convert.ToDouble(maxVal) < 1e-10)
             return fisher;
 
-        var normalized = new Vector<T>(fisher.Length);
-        for (int i = 0; i < fisher.Length; i++)
-        {
-            normalized[i] = NumOps.Divide(fisher[i], maxVal);
-        }
-        return normalized;
+        return (Vector<T>)Engine.Divide(fisher, maxVal);
     }
 
     /// <inheritdoc/>

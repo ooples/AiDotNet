@@ -24,6 +24,19 @@ namespace AiDotNet.Finance.Portfolio;
 /// making it robust to noise and stable even when assets are highly correlated.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Hierarchical Risk Parity model for robust portfolio construction
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 252, inputWidth: 10, inputDepth: 1, outputSize: 10);
+/// var model = new HierarchicalRiskParity&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for HRP allocation
+/// var onnxModel = new HierarchicalRiskParity&lt;double&gt;(architecture, "hrp.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

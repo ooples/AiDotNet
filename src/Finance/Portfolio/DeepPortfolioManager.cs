@@ -33,6 +33,19 @@ namespace AiDotNet.Finance.Portfolio;
 /// Reference: Zhang et al., "Deep Learning for Portfolio Management", 2020.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Deep Portfolio Manager for end-to-end weight optimization
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 60, inputWidth: 10, inputDepth: 1, outputSize: 10);
+/// var model = new DeepPortfolioManager&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for portfolio weight prediction
+/// var onnxModel = new DeepPortfolioManager&lt;double&gt;(architecture, "deepportfolio.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
@@ -206,7 +219,7 @@ public class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
         var output = Predict(input);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
         
-        var currentGrad = Tensor<T>.FromVector(grad, output.Shape);
+        var currentGrad = Tensor<T>.FromVector(grad, output.Shape.ToArray());
         for (int i = Layers.Count - 1; i >= 0; i--)
             currentGrad = Layers[i].Backward(currentGrad);
 
@@ -246,7 +259,6 @@ public class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelType", "DeepPortfolioManager" },

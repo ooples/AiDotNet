@@ -40,6 +40,22 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </list>
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an ALIGN model for contrastive image-text alignment
+/// // using EfficientNet vision encoder trained on 1.8B noisy pairs
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ALIGN&lt;double&gt;(architecture, "align.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ALIGN&lt;double&gt;(architecture, new ALIGNOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -237,7 +253,6 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         {
             Name = _useNativeMode ? "ALIGN-Native" : "ALIGN-ONNX",
             Description = "ALIGN: A Large-scale ImaGe and Noisy-text embedding (Jia et al., ICML 2021)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.ProjectionDim,
             Complexity = _options.NumVisionLayers + _options.NumTextLayers
         };

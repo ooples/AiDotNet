@@ -320,7 +320,7 @@ public class TabLLMGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
         var output = Predict(input);
 
         // Compute simple MSE gradient for backprop
-        var gradient = new Tensor<T>(output.Shape);
+        var gradient = new Tensor<T>(output.Shape.ToArray());
         for (int i = 0; i < output.Length && i < expectedOutput.Length; i++)
         {
             gradient[i] = NumOps.FromDouble(
@@ -388,7 +388,6 @@ public class TabLLMGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["GeneratorType"] = "TabLLMGen",

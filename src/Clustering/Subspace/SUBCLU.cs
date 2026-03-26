@@ -39,6 +39,16 @@ namespace AiDotNet.Clustering.Subspace;
 /// This makes SUBCLU much faster than brute-force subspace search.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Use AiModelBuilder facade for subspace clustering
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new SUBCLU&lt;double&gt;(new SUBCLUOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(dataMatrix, labels);
+/// var predictions = result.Predict(newData);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -48,6 +58,8 @@ namespace AiDotNet.Clustering.Subspace;
 public class SUBCLU<T> : ClusteringBase<T>
 {
     private readonly SUBCLUOptions<T> _options;
+    private double[]? _normMeans;
+    private double[]? _normStds;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -77,7 +89,6 @@ public class SUBCLU<T> : ClusteringBase<T>
         }).ToList().AsReadOnly();
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -92,6 +103,61 @@ public class SUBCLU<T> : ClusteringBase<T>
             MaxSubspaceDimensions = _options.MaxSubspaceDimensions,
             MinClusterSize = _options.MinClusterSize
         });
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (SUBCLU<T>)CreateNewInstance();
+
+        if (_trainingData is not null)
+        {
+            clone._trainingData = new Matrix<T>(_trainingData.Rows, _trainingData.Columns);
+            for (int i = 0; i < _trainingData.Rows; i++)
+                for (int j = 0; j < _trainingData.Columns; j++)
+                    clone._trainingData[i, j] = _trainingData[i, j];
+        }
+
+        if (_subspaceClusterInfos is not null)
+        {
+            clone._subspaceClusterInfos = _subspaceClusterInfos.Select(c => new SubspaceClusterInfo
+            {
+                ClusterId = c.ClusterId,
+                Dimensions = c.Dimensions.ToArray(),
+                Points = new HashSet<int>(c.Points),
+                CorePoints = new HashSet<int>(c.CorePoints)
+            }).ToList();
+        }
+
+        clone.NumClusters = NumClusters;
+        clone.NumFeatures = NumFeatures;
+        clone.IsTrained = IsTrained;
+
+        if (Labels is not null)
+        {
+            clone.Labels = new Vector<T>(Labels.Length);
+            for (int i = 0; i < Labels.Length; i++)
+                clone.Labels[i] = Labels[i];
+        }
+
+        if (ClusterCenters is not null)
+        {
+            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
+            for (int i = 0; i < ClusterCenters.Rows; i++)
+                for (int j = 0; j < ClusterCenters.Columns; j++)
+                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
+        }
+
+        // Copy normalization state so Predict works correctly on the clone
+        if (_normMeans is not null)
+            clone._normMeans = (double[])_normMeans.Clone();
+        if (_normStds is not null)
+            clone._normStds = (double[])_normStds.Clone();
+
+        return clone;
     }
 
     /// <inheritdoc />
@@ -111,15 +177,42 @@ public class SUBCLU<T> : ClusteringBase<T>
         int d = x.Columns;
         NumFeatures = d;
 
-        // Store training data for prediction
+        // Store original training data for prediction
         _trainingData = new Matrix<T>(n, d);
         for (int i = 0; i < n; i++)
-        {
             for (int j = 0; j < d; j++)
-            {
                 _trainingData[i, j] = x[i, j];
+
+        // Normalize features to zero-mean unit-variance for scale-invariant epsilon.
+        // Without normalization, epsilon is scale-dependent.
+        var featureMeans = new double[d];
+        var featureStds = new double[d];
+        for (int j = 0; j < d; j++)
+        {
+            double sum = 0;
+            for (int i = 0; i < n; i++)
+                sum += NumOps.ToDouble(x[i, j]);
+            featureMeans[j] = sum / n;
+
+            double varSum = 0;
+            for (int i = 0; i < n; i++)
+            {
+                double diff = NumOps.ToDouble(x[i, j]) - featureMeans[j];
+                varSum += diff * diff;
             }
+            featureStds[j] = Math.Sqrt(varSum / n);
+            if (featureStds[j] < 1e-10) featureStds[j] = 1.0;
         }
+
+        // Store normalization parameters for prediction consistency
+        _normMeans = featureMeans;
+        _normStds = featureStds;
+
+        var xNorm = new Matrix<T>(n, d);
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < d; j++)
+                xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - featureMeans[j]) / featureStds[j]);
+        x = xNorm;
 
         _subspaceClusterInfos = new List<SubspaceClusterInfo>();
 
@@ -246,6 +339,17 @@ public class SUBCLU<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
         ValidatePredictInput(x);
+
+        // Normalize prediction input using the same parameters as training
+        if (_normMeans is not null && _normStds is not null && !ReferenceEquals(x, TrainingDataRef))
+        {
+            int d = x.Columns;
+            var xNorm = new Matrix<T>(x.Rows, d);
+            for (int i = 0; i < x.Rows; i++)
+                for (int j = 0; j < d; j++)
+                    xNorm[i, j] = NumOps.FromDouble((NumOps.ToDouble(x[i, j]) - _normMeans[j]) / _normStds[j]);
+            x = xNorm;
+        }
 
         if (_subspaceClusterInfos is null || _subspaceClusterInfos.Count == 0 || _trainingData is null)
         {

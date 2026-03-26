@@ -15,11 +15,25 @@ namespace AiDotNet.NeuralNetworks;
 /// Finch extends Eagle (RWKV-5) with data-dependent token shifting via a LoRA-based mechanism,
 /// allowing the model to dynamically adjust how much to blend current and previous tokens.
 /// </para>
+/// <para><b>For Beginners:</b> Finch (RWKV-6) builds on Eagle by adding the ability to
+/// dynamically decide how much context from previous tokens to blend into the current one.
+/// Think of it as a reader who can dynamically adjust their focus: sometimes reading word
+/// by word, other times absorbing whole phrases. This adaptive blending helps it better
+/// capture complex language patterns while maintaining the same memory-efficient inference
+/// as its predecessor.</para>
 /// <para>
 /// <b>Reference:</b> Peng et al., "Eagle and Finch: RWKV with Matrix-Valued States and Dynamic Recurrence", 2024.
 /// https://arxiv.org/abs/2404.05892
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new FinchOptions { VocabSize = 65536, ModelDim = 2560, NumLayers = 32, NumHeads = 40 };
+/// var model = new FinchLanguageModel&lt;float&gt;(options);
+/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var logits = model.Predict(tokens);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -140,7 +154,6 @@ public class FinchLanguageModel<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Architecture", "RWKV-6-Finch" },

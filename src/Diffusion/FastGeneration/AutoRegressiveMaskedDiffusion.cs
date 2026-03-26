@@ -31,6 +31,15 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// approach naturally builds images from rough structure to fine detail.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an autoregressive masked diffusion model
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 256, Width = 256, NumInferenceSteps = 20 };
+/// var model = new AutoRegressiveMaskedDiffusion&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 32, 32 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -136,7 +145,7 @@ public class AutoRegressiveMaskedDiffusion<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "Autoregressive Masked Diffusion", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Autoregressive Masked Diffusion", Version = "1.0",
             Description = "Hybrid discrete-continuous generation via interleaved masking and diffusion",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

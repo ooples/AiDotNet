@@ -69,6 +69,17 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// They've revolutionized scientific machine learning by showing that deep learning
     /// can be guided by physics rather than just data.
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+    ///     inputType: InputType.OneDimensional,
+    ///     taskType: NeuralNetworkTaskType.Regression,
+    ///     inputSize: 2, outputSize: 1);
+    /// var pde = new HeatEquation&lt;float&gt;();
+    /// var bc = new IBoundaryCondition&lt;float&gt;[] { dirichletBC };
+    /// var pinn = new PhysicsInformedNeuralNetwork&lt;float&gt;(architecture, pde, bc);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Science)]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -418,7 +429,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                                 $"Expected {outputDim} outputs from the network, got {outputs.Shape[1]}.");
                         }
 
-                        var outputGradients = new Tensor<T>(outputs.Shape);
+                        var outputGradients = new Tensor<T>(outputs.Shape.ToArray());
                         var point = new T[inputDim];
                         var output = new T[outputDim];
                         var targetBuffer = new T[outputDim];
@@ -864,7 +875,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
             LastLoss = lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
             var outputGradient = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction.Shape);
+            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction.Shape.ToArray());
 
             Backpropagate(outputGradientTensor);
             _optimizer.UpdateParameters(Layers);
@@ -880,7 +891,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
         {
             return new ModelMetadata<T>
             {
-                ModelType = ModelType.NeuralNetwork,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "PDE", _pdeSpecification.Name },

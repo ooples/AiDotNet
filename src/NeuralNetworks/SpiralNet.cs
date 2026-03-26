@@ -39,6 +39,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Reference: "SpiralNet++: A Fast and Highly Efficient Mesh Convolution Operator" by Gong et al.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new SpiralNetOptions { InputFeatures = 3, HiddenSize = 64, SpiralLength = 9 };
+/// var model = new SpiralNet&lt;float&gt;(options);
+/// var vertexFeatures = Tensor&lt;float&gt;.Random(new[] { 1, 500, 3 });
+/// var output = model.Predict(vertexFeatures);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.ThreeD)]
 [ModelDomain(ModelDomain.GraphAnalysis)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -413,7 +421,7 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
                 epochLoss += NumOps.ToDouble(loss);
 
                 var lossGrad = _lossFunction.CalculateDerivative(output.ToVector(), target);
-                var lossGradTensor = new Tensor<T>(lossGrad.ToArray(), output.Shape);
+                var lossGradTensor = new Tensor<T>(lossGrad.ToArray(), output.Shape.ToArray());
 
                 Backward(lossGradTensor);
                 UpdateParameters(learningRate);
@@ -498,7 +506,7 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
         LastLoss = loss;
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
 
         var gradients = new List<Tensor<T>>();
         var currentGradient = outputGradientTensor;
@@ -538,7 +546,6 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SpiralNet,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumClasses", _options.NumClasses },

@@ -33,6 +33,25 @@ namespace AiDotNet.Regression;
 /// and I'm pretty confident it's between 40 and 44."
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Gaussian Process regression with uncertainty estimates
+/// var options = new GaussianProcessRegressionOptions&lt;double&gt;();
+/// var model = new GaussianProcessRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.5, 5.3, 8.1, 10.9, 13.7 });
+///
+/// // Train with kernel-based covariance estimation
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample (includes uncertainty bounds)
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Kernel)]
@@ -97,12 +116,18 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     /// </para>
     /// </remarks>
     public GaussianProcessRegression(GaussianProcessRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization)
+        : base(options ?? new GaussianProcessRegressionOptions(), regularization)
     {
         Options = options ?? new GaussianProcessRegressionOptions();
         _kernelMatrix = new Matrix<T>(0, 0);
         _alpha = new Vector<T>(0);
     }
+
+    /// <summary>
+    /// GP solves analytically via kernel matrix inversion — no optimizer parameter injection.
+    /// Returning 0 makes SupportsParameterInitialization return false.
+    /// </summary>
+    public override int ParameterCount => 0;
 
     /// <summary>
     /// Optimizes the Gaussian Process model based on the provided training data.
@@ -131,15 +156,42 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
+        // Auto-scale length scale if using the default value of 1.0
+        // Default is too small for typical data ranges, causing kernel to be nearly diagonal
+        if (Math.Abs(Options.LengthScale - 1.0) < 1e-10)
+        {
+            double totalVar = 0;
+            for (int j = 0; j < x.Columns; j++)
+            {
+                double mean = 0;
+                for (int i = 0; i < x.Rows; i++)
+                    mean += NumOps.ToDouble(x[i, j]);
+                mean /= x.Rows;
+                double variance = 0;
+                for (int i = 0; i < x.Rows; i++)
+                {
+                    double d = NumOps.ToDouble(x[i, j]) - mean;
+                    variance += d * d;
+                }
+                totalVar += variance / x.Rows;
+            }
+            Options.LengthScale = Math.Max(Math.Sqrt(totalVar / x.Columns), 0.1);
+        }
+
+        // Sync Gamma with LengthScale for the RBF kernel: gamma = 1/(2*lengthScale²)
+        Options.Gamma = 1.0 / (2.0 * Options.LengthScale * Options.LengthScale);
+
         int n = x.Rows;
         _kernelMatrix = new Matrix<T>(n, n);
 
-        // Compute the kernel matrix
+        // Compute the kernel matrix using GP-specific RBF kernel with LengthScale
+        double ls = Options.LengthScale;
+        double sv = Options.SignalVariance;
         for (int i = 0; i < n; i++)
         {
             for (int j = i; j < n; j++)
             {
-                T value = KernelFunction(x.GetRow(i), x.GetRow(j));
+                T value = RBFKernel(x.GetRow(i), x.GetRow(j), ls, sv);
                 _kernelMatrix[i, j] = value;
                 _kernelMatrix[j, i] = value;
             }
@@ -296,6 +348,22 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     }
 
     /// <summary>
+    /// Predicts using the GP-specific RBF kernel with LengthScale (not base class Gamma).
+    /// </summary>
+    protected override T PredictSingle(Vector<T> input)
+    {
+        double ls = Options.LengthScale;
+        double sv = Options.SignalVariance;
+        T result = B;
+        for (int i = 0; i < SupportVectors.Rows; i++)
+        {
+            result = NumOps.Add(result, NumOps.Multiply(Alphas[i],
+                RBFKernel(input, SupportVectors.GetRow(i), ls, sv)));
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Computes the log marginal likelihood of the Gaussian Process model.
     /// </summary>
     /// <param name="K">The kernel matrix.</param>
@@ -418,8 +486,8 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
     /// Example:
     /// ```csharp
     /// var metadata = gpr.GetModelMetadata();
-    /// Console.WriteLine($"Model type: {metadata.ModelType}");
-    /// Console.WriteLine($"Length scale: {metadata.AdditionalInfo["LengthScale"]}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// ```
     /// </para>
     /// </remarks>
@@ -434,15 +502,6 @@ public class GaussianProcessRegression<T> : NonLinearRegressionBase<T>
         metadata.AdditionalInfo["SignalVariance"] = Options.SignalVariance;
 
         return metadata;
-    }
-
-    /// <summary>
-    /// Gets the model type of the Gaussian Process Regression model.
-    /// </summary>
-    /// <returns>The model type enumeration value.</returns>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.GaussianProcessRegression;
     }
 
     /// <summary>

@@ -1,10 +1,10 @@
 using System.Globalization;
-using AiDotNet.Enums;
+using AiDotNet.Regression;
 
 namespace AiDotNet.Agents;
 
 /// <summary>
-/// Maps ModelType to lists of HyperparameterDefinition, bridging LLM parameter names to C# property names.
+/// Maps model types to lists of HyperparameterDefinition, bridging LLM parameter names to C# property names.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -20,7 +20,7 @@ namespace AiDotNet.Agents;
 /// </remarks>
 internal class HyperparameterRegistry
 {
-    private readonly Dictionary<ModelType, List<HyperparameterDefinition>> _registry = new();
+    private readonly Dictionary<Type, List<HyperparameterDefinition>> _registry = new();
     private readonly List<HyperparameterDefinition> _sharedDefinitions = new();
 
     /// <summary>
@@ -37,15 +37,19 @@ internal class HyperparameterRegistry
     /// <param name="modelType">The model type to look up.</param>
     /// <param name="llmParamName">The LLM-style parameter name (e.g., "n_estimators").</param>
     /// <returns>The C# property name, or null if no mapping exists.</returns>
-    public string? GetPropertyName(ModelType modelType, string llmParamName)
+    public string? GetPropertyName(Type modelType, string llmParamName)
     {
+        if (modelType == null) throw new ArgumentNullException(nameof(modelType));
+        if (string.IsNullOrWhiteSpace(llmParamName)) throw new ArgumentException("Parameter name cannot be null or empty.", nameof(llmParamName));
+
         var normalized = HyperparameterDefinition.NormalizeName(llmParamName);
 
-        // Check model-specific definitions first
-        if (_registry.TryGetValue(modelType, out var definitions))
+        // Check model-specific definitions first (strip generic type args for matching)
+        var lookupType = modelType.IsGenericType ? modelType.GetGenericTypeDefinition() : modelType;
+        if (_registry.TryGetValue(lookupType, out var definitions))
         {
             var match = definitions.FirstOrDefault(def => def.MatchesAlias(normalized));
-            if (match != null)
+            if (match is not null)
             {
                 return match.PropertyName;
             }
@@ -59,14 +63,18 @@ internal class HyperparameterRegistry
     /// <summary>
     /// Gets the full HyperparameterDefinition for a given LLM parameter name and model type.
     /// </summary>
-    public HyperparameterDefinition? GetDefinition(ModelType modelType, string llmParamName)
+    public HyperparameterDefinition? GetDefinition(Type modelType, string llmParamName)
     {
+        if (modelType == null) throw new ArgumentNullException(nameof(modelType));
+        if (string.IsNullOrWhiteSpace(llmParamName)) throw new ArgumentException("Parameter name cannot be null or empty.", nameof(llmParamName));
+
         var normalized = HyperparameterDefinition.NormalizeName(llmParamName);
 
-        if (_registry.TryGetValue(modelType, out var definitions))
+        var lookupType = modelType.IsGenericType ? modelType.GetGenericTypeDefinition() : modelType;
+        if (_registry.TryGetValue(lookupType, out var definitions))
         {
             var match = definitions.FirstOrDefault(def => def.MatchesAlias(normalized));
-            if (match != null)
+            if (match is not null)
             {
                 return match;
             }
@@ -78,10 +86,10 @@ internal class HyperparameterRegistry
     /// <summary>
     /// Validates a hyperparameter value against its definition's constraints.
     /// </summary>
-    public HyperparameterValidationResult Validate(ModelType modelType, string paramName, object value)
+    public HyperparameterValidationResult Validate(Type modelType, string paramName, object value)
     {
         var definition = GetDefinition(modelType, paramName);
-        if (definition == null)
+        if (definition is null)
         {
             return HyperparameterValidationResult.Valid();
         }
@@ -109,7 +117,7 @@ internal class HyperparameterRegistry
     /// <summary>
     /// Registers a custom hyperparameter definition for a specific model type.
     /// </summary>
-    public void Register(ModelType modelType, HyperparameterDefinition definition)
+    public void Register(Type modelType, HyperparameterDefinition definition)
     {
         definition.BuildNormalizedAliases();
 
@@ -169,9 +177,10 @@ internal class HyperparameterRegistry
 
     private void RegisterTreeModels()
     {
-        var treeModels = new[] { ModelType.RandomForest, ModelType.GradientBoosting, ModelType.DecisionTree,
-            ModelType.ConditionalInferenceTree, ModelType.ExtremelyRandomizedTrees, ModelType.HistGradientBoosting,
-            ModelType.AdaBoostR2 };
+        var treeModels = new Type[] { typeof(RandomForestRegression<>), typeof(GradientBoostingRegression<>),
+            typeof(DecisionTreeRegression<>), typeof(ConditionalInferenceTreeRegression<>),
+            typeof(ExtremelyRandomizedTreesRegression<>), typeof(HistGradientBoostingRegression<>),
+            typeof(AdaBoostR2Regression<>) };
 
         foreach (var modelType in treeModels)
         {
@@ -195,8 +204,9 @@ internal class HyperparameterRegistry
         }
 
         // Ensemble-specific: number of trees
-        var ensembleModels = new[] { ModelType.RandomForest, ModelType.GradientBoosting,
-            ModelType.ExtremelyRandomizedTrees, ModelType.HistGradientBoosting, ModelType.AdaBoostR2 };
+        var ensembleModels = new Type[] { typeof(RandomForestRegression<>), typeof(GradientBoostingRegression<>),
+            typeof(ExtremelyRandomizedTreesRegression<>), typeof(HistGradientBoostingRegression<>),
+            typeof(AdaBoostR2Regression<>) };
 
         foreach (var modelType in ensembleModels)
         {
@@ -211,7 +221,7 @@ internal class HyperparameterRegistry
         }
 
         // GradientBoosting-specific
-        Register(ModelType.GradientBoosting, new HyperparameterDefinition
+        Register(typeof(GradientBoostingRegression<>), new HyperparameterDefinition
         {
             PropertyName = "LearningRate",
             Aliases = new List<string> { "learning_rate", "lr", "eta", "shrinkage" },
@@ -220,7 +230,7 @@ internal class HyperparameterRegistry
             MaxValue = 1.0
         });
 
-        Register(ModelType.GradientBoosting, new HyperparameterDefinition
+        Register(typeof(GradientBoostingRegression<>), new HyperparameterDefinition
         {
             PropertyName = "SubsampleRatio",
             Aliases = new List<string> { "subsample", "subsample_ratio", "sample_rate", "bagging_fraction" },
@@ -232,7 +242,8 @@ internal class HyperparameterRegistry
 
     private void RegisterNeuralNetworkModels()
     {
-        var nnModels = new[] { ModelType.NeuralNetworkRegression, ModelType.MultilayerPerceptronRegression };
+        var nnModels = new Type[] { typeof(NeuralNetworkRegression<>),
+            typeof(MultilayerPerceptronRegression<>) };
 
         foreach (var modelType in nnModels)
         {
@@ -267,7 +278,7 @@ internal class HyperparameterRegistry
 
     private void RegisterLinearModels()
     {
-        Register(ModelType.PolynomialRegression, new HyperparameterDefinition
+        Register(typeof(PolynomialRegression<>), new HyperparameterDefinition
         {
             PropertyName = "Degree",
             Aliases = new List<string> { "degree", "polynomial_degree", "poly_degree" },
@@ -276,7 +287,8 @@ internal class HyperparameterRegistry
             MaxValue = 20
         });
 
-        var regularizedModels = new[] { ModelType.RidgeRegression, ModelType.LassoRegression, ModelType.ElasticNetRegression };
+        var regularizedModels = new Type[] { typeof(RidgeRegression<>),
+            typeof(LassoRegression<>), typeof(ElasticNetRegression<>) };
 
         foreach (var modelType in regularizedModels)
         {
@@ -293,7 +305,7 @@ internal class HyperparameterRegistry
 
     private void RegisterNeighborKernelModels()
     {
-        Register(ModelType.KNearestNeighbors, new HyperparameterDefinition
+        Register(typeof(KNearestNeighborsRegression<>), new HyperparameterDefinition
         {
             PropertyName = "K",
             Aliases = new List<string> { "n_neighbors", "k", "num_neighbors", "k_neighbors" },
@@ -302,7 +314,7 @@ internal class HyperparameterRegistry
             MaxValue = 1000
         });
 
-        Register(ModelType.SupportVectorRegression, new HyperparameterDefinition
+        Register(typeof(SupportVectorRegression<>), new HyperparameterDefinition
         {
             PropertyName = "C",
             Aliases = new List<string> { "C", "c", "cost", "regularization_param" },
@@ -311,7 +323,7 @@ internal class HyperparameterRegistry
             MaxValue = 10000
         });
 
-        Register(ModelType.SupportVectorRegression, new HyperparameterDefinition
+        Register(typeof(SupportVectorRegression<>), new HyperparameterDefinition
         {
             PropertyName = "Epsilon",
             Aliases = new List<string> { "epsilon", "eps", "svr_epsilon" },
@@ -323,7 +335,7 @@ internal class HyperparameterRegistry
 
     private void RegisterTimeSeriesModels()
     {
-        Register(ModelType.TimeSeriesRegression, new HyperparameterDefinition
+        Register(typeof(TimeSeriesRegression<>), new HyperparameterDefinition
         {
             PropertyName = "LagOrder",
             Aliases = new List<string> { "lag_order", "lag", "lags", "p", "ar_order" },
@@ -332,7 +344,7 @@ internal class HyperparameterRegistry
             MaxValue = 100
         });
 
-        Register(ModelType.TimeSeriesRegression, new HyperparameterDefinition
+        Register(typeof(TimeSeriesRegression<>), new HyperparameterDefinition
         {
             PropertyName = "SeasonalPeriod",
             Aliases = new List<string> { "seasonal_period", "seasonality", "period", "s", "season_length" },

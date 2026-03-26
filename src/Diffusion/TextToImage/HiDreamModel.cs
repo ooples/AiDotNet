@@ -300,7 +300,7 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var predictorCount = _predictor.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != predictorCount + vaeCount)
         {
@@ -368,7 +368,6 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
         {
             Name = $"HiDream-I1 [{_variant.ToString().ToLowerInvariant()}]",
             Version = _variant.ToString(),
-            ModelType = ModelType.NeuralNetwork,
             Description = $"HiDream-I1 [{_variant.ToString().ToLowerInvariant()}] MMDiT-X with Llama-3.1 text encoder for imaginative generation",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

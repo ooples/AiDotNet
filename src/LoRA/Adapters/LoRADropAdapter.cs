@@ -295,7 +295,7 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Sum the outputs
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape);
+        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
         for (int i = 0; i < baseOutput.Length; i++)
         {
             result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);
@@ -333,7 +333,7 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
         // Create a gradient for the LoRA layer
-        Tensor<T> loraGradient = new Tensor<T>(outputGradient.Shape);
+        Tensor<T> loraGradient = new Tensor<T>(outputGradient.Shape.ToArray());
 
         if (_isTraining)
         {
@@ -371,7 +371,7 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
 
         // Sum input gradients
-        Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape);
+        Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape.ToArray());
         for (int i = 0; i < loraInputGrad.Length; i++)
         {
             inputGrad[i] = NumOps.Add(loraInputGrad[i], baseInputGrad[i]);

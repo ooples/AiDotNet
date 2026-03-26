@@ -41,6 +41,14 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// Reference: "Revisiting Deep Learning Models for Tabular Data" (Gorishniy et al., NeurIPS 2021)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new FTTransformerOptions { NumFeatures = 20, EmbeddingDim = 192, NumHeads = 8, NumLayers = 3 };
+/// var model = new FTTransformerNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -229,7 +237,6 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Architecture", "FT-Transformer" },

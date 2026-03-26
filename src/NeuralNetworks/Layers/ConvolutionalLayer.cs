@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Engines;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
@@ -35,6 +36,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "1, 8, 8, 2, 3")]
 public class ConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -225,6 +230,17 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T> _biases;
 
     /// <summary>
+    /// Cached reshape of _biases to [1, OutputDepth, 1, 1] for broadcast addition.
+    /// Avoids allocating a new view tensor on every forward pass.
+    /// </summary>
+    private Tensor<T>? _biasReshaped4D;
+
+    /// <summary>
+    /// Pre-allocated output buffer for Conv2DInto. Reused every forward pass.
+    /// </summary>
+    private Tensor<T>? _preAllocatedOutput;
+
+    /// <summary>
     /// The execution engine for GPU-accelerated convolution operations.
     /// </summary>
     /// <remarks>
@@ -393,8 +409,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         }
         else
         {
-            // Eager initialization - allocate and initialize immediately
-            _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+            // Eager initialization — use RentUninitialized for kernels since InitializeWeights
+            // overwrites all elements (skips zero-fill, saving ~117MB write at 1280 channels)
+            _kernels = TensorAllocator.RentUninitialized<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
             _biases = new Tensor<T>([OutputDepth]);
             // Use correct input/output shapes as placeholders (batch=1, replaced in Forward())
             _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
@@ -469,8 +486,9 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         }
         else
         {
-            // Eager initialization - allocate and initialize immediately
-            _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+            // Eager initialization — use RentUninitialized for kernels since InitializeWeights
+            // overwrites all elements (skips zero-fill, saving ~117MB write at 1280 channels)
+            _kernels = TensorAllocator.RentUninitialized<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
             _biases = new Tensor<T>([OutputDepth]);
             // Use correct input/output shapes as placeholders (batch=1, replaced in Forward())
             _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
@@ -699,8 +717,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         Stride = reader.ReadInt32();
         Padding = reader.ReadInt32();
 
-        // Deserialize _kernels
-        _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+        // Deserialize _kernels — RentUninitialized since all elements are immediately overwritten
+        _kernels = TensorAllocator.RentUninitialized<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
         for (int i = 0; i < _kernels.Shape[0]; i++)
         {
             for (int j = 0; j < _kernels.Shape[1]; j++)
@@ -803,8 +821,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         {
             if (_isInitialized) return;
 
-            // Allocate kernels and biases
-            _kernels = new Tensor<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
+            // Allocate kernels — RentUninitialized since InitializeWeights overwrites all elements
+            _kernels = TensorAllocator.RentUninitialized<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
             _biases = new Tensor<T>([OutputDepth]);
             // Use correct input/output shapes as placeholders (batch=1, replaced in Forward())
             _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
@@ -877,7 +895,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             throw new ArgumentException($"Convolutional layer requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
 
         Tensor<T> input4D;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         if (rank == 3)
@@ -912,18 +930,44 @@ public class ConvolutionalLayer<T> : LayerBase<T>
 
         _lastInput = input4D;
 
-        // === GPU-Accelerated Convolution ===
-        // Phase B: US-GPU-016 - Replace 6 nested loops with IEngine.Conv2D
-        // Achieves 50-500x speedup on GPU for large feature maps
-        Tensor<T> output = Engine.Conv2D(_lastInput, _kernels, Stride, Padding, dilation: 1);
+        // === Zero-Allocation Convolution ===
+        // Pre-allocate output buffer on first forward pass, then reuse via Conv2DInto
+        int outputHeight = (_lastInput.Shape[2] + 2 * Padding - KernelSize) / Stride + 1;
+        int outputWidth = (_lastInput.Shape[3] + 2 * Padding - KernelSize) / Stride + 1;
+        int batchSize_conv = _lastInput.Shape[0];
+        int[] expectedShape = [batchSize_conv, OutputDepth, outputHeight, outputWidth];
 
-        // === GPU-Accelerated Bias Addition with Broadcasting ===
-        // Reshape bias from [OutputDepth] to [1, OutputDepth, 1, 1] for broadcasting
-        // Then use TensorBroadcastAdd which has specialized GPU kernel for Conv2D bias pattern
-        var biasReshaped = _biases.Reshape([1, OutputDepth, 1, 1]);
-        output = Engine.TensorBroadcastAdd(output, biasReshaped);
+        if (_preAllocatedOutput is null ||
+            _preAllocatedOutput.Shape[0] != batchSize_conv ||
+            _preAllocatedOutput.Shape[2] != outputHeight ||
+            _preAllocatedOutput.Shape[3] != outputWidth)
+        {
+            _preAllocatedOutput = TensorAllocator.Rent<T>(expectedShape);
+        }
 
-        var result = ApplyActivation(output);
+        // === Try FusedConv2D: Conv + Bias + Activation in single kernel ===
+        // Eliminates 2 intermediate allocations and enables kernel-level optimization
+        var fusedActivation = GetFusedActivationType();
+        Tensor<T> result;
+        if (fusedActivation != FusedActivationType.None)
+        {
+            // Single fused call: output = activation(conv(input, kernel) + bias)
+            // Reshape bias to [1, C, 1, 1] for proper broadcasting with conv output [B, C, H, W]
+            _biasReshaped4D ??= _biases.Reshape([1, OutputDepth, 1, 1]);
+            result = Engine.FusedConv2D(_lastInput, _kernels, _biasReshaped4D,
+                Stride, Stride, Padding, Padding, 1, 1, fusedActivation);
+        }
+        else
+        {
+            // Fallback: separate Conv2DInto + in-place bias + activation
+            Engine.Conv2DInto(_preAllocatedOutput, _lastInput, _kernels, Stride, Padding, dilation: 1);
+            var output = _preAllocatedOutput;
+
+            _biasReshaped4D ??= _biases.Reshape([1, OutputDepth, 1, 1]);
+            Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
+
+            result = ApplyActivation(output);
+        }
 
         // Only store for backward pass during training - skip during inference
         if (IsTrainingMode)
@@ -989,7 +1033,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
                 $"Conv2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
         }
 
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Reshape input to 4D [B, C, H, W] for convolution
@@ -1129,7 +1173,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         int[] dilation = [1, 1];
 
         // Step 1: Compute kernel gradient
-        int[] kernelShape = _kernels.Shape.ToArray();
+        int[] kernelShape = _kernels.Shape.ToArray().ToArray();
         var kernelsGradGpu = gpuEngine.Conv2DBackwardKernelGpu<T>(activationGradient, _lastInputGpu, kernelShape, stride, padding, dilation);
         _kernelsGradient = kernelsGradGpu.ToTensor();
 
@@ -1233,7 +1277,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
 
         // Apply activation derivative to get delta
         // ApplyActivationDerivative already multiplies by outputGradient (chain rule)
-        var delta = ApplyActivationDerivative(_lastOutput, gradForBackward);
+        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, gradForBackward);
 
         // === GPU-Accelerated Backward Pass ===
         // Phase B: US-GPU-016 - Replace 7 nested loops with Engine.Conv2DBackward operations
@@ -1244,10 +1288,10 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         int[] dilationArr = [1, 1];
 
         // Input gradient: dL/dX = ConvTranspose(dL/dY, W)
-        var inputGradient = Engine.Conv2DBackwardInput(delta, _kernels, _lastInput.Shape, strideArr, paddingArr, dilationArr);
+        var inputGradient = Engine.Conv2DBackwardInput(delta, _kernels, _lastInput.Shape.ToArray(), strideArr, paddingArr, dilationArr);
 
         // Kernel gradient: dL/dW = Conv(X, dL/dY) - correlation between input and output gradient
-        var kernelGradients = Engine.Conv2DBackwardKernel(delta, _lastInput, _kernels.Shape, strideArr, paddingArr, dilationArr);
+        var kernelGradients = Engine.Conv2DBackwardKernel(delta, _lastInput, _kernels.Shape.ToArray(), strideArr, paddingArr, dilationArr);
 
         // Bias gradient: dL/db = sum over batch and spatial dimensions
         // delta shape: [batch, outputDepth, outputH, outputW]
@@ -1467,13 +1511,13 @@ public class ConvolutionalLayer<T> : LayerBase<T>
             // Initialize velocity tensors if needed (for SGD momentum, even if 0 here)
             if (_kernelsVelocity == null)
             {
-                _kernelsVelocity = new Tensor<T>(_kernels.Shape);
+                _kernelsVelocity = new Tensor<T>(_kernels.Shape.ToArray());
                 _kernelsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_kernelsVelocity, PersistentTensorRole.OptimizerState);
             }
             if (_biasesVelocity == null)
             {
-                _biasesVelocity = new Tensor<T>(_biases.Shape);
+                _biasesVelocity = new Tensor<T>(_biases.Shape.ToArray());
                 _biasesVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_biasesVelocity, PersistentTensorRole.OptimizerState);
             }
@@ -1561,6 +1605,13 @@ public class ConvolutionalLayer<T> : LayerBase<T>
 
     /// <summary>
     /// Gets all parameter gradients of the layer as a single vector.
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _kernelsGradient = null;
+        _biasesGradient = null;
+    }
+
     /// </summary>
     /// <returns>A vector containing all parameter gradients (kernel gradients followed by bias gradients).</returns>
     public override Vector<T> GetParameterGradients()

@@ -280,7 +280,6 @@ public class VALLE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         {
             Name = _useNativeMode ? "VALL-E-Native" : "VALL-E-ONNX",
             Description = "VALL-E zero-shot TTS via neural codec language modeling (Wang et al., 2023, Microsoft)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.ARHiddenDim,
             Complexity = _options.NumARLayers + _options.NumNARLayers
         };
         m.AdditionalInfo["CodebookSize"] = _options.CodebookSize.ToString();

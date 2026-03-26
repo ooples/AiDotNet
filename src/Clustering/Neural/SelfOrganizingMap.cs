@@ -46,6 +46,14 @@ namespace AiDotNet.Clustering.Neural;
 /// - Understanding data topology
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new SelfOrganizingMapOptions&lt;double&gt;();
+/// var selfOrganizingMap = new SelfOrganizingMap&lt;double&gt;(options);
+/// selfOrganizingMap.Train(dataMatrix);
+/// Vector<double> labels = selfOrganizingMap.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Clustering)]
@@ -83,7 +91,6 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
     public int[]? NeuronLabels => _neuronLabels;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -99,6 +106,45 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
             MaxIterations = _options.MaxIterations,
             DistanceMetric = _options.DistanceMetric
         });
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (SelfOrganizingMap<T>)CreateNewInstance();
+        if (_weights is not null)
+        {
+            int h = _weights.GetLength(0);
+            int w = _weights.GetLength(1);
+            clone._weights = new T[h, w][];
+            for (int r = 0; r < h; r++)
+                for (int c = 0; c < w; c++)
+                    clone._weights[r, c] = (T[])_weights[r, c].Clone();
+        }
+        clone._neuronLabels = _neuronLabels?.ToArray();
+        clone.NumClusters = NumClusters;
+        clone.NumFeatures = NumFeatures;
+        clone.IsTrained = IsTrained;
+
+        if (Labels is not null)
+        {
+            clone.Labels = new Vector<T>(Labels.Length);
+            for (int i = 0; i < Labels.Length; i++)
+                clone.Labels[i] = Labels[i];
+        }
+
+        if (ClusterCenters is not null)
+        {
+            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
+            for (int i = 0; i < ClusterCenters.Rows; i++)
+                for (int j = 0; j < ClusterCenters.Columns; j++)
+                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
+        }
+
+        return clone;
     }
 
     /// <inheritdoc />
@@ -123,7 +169,25 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
             ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Initialize weights randomly
+        // Compute data range per feature for proper weight initialization
+        var minVals = new double[d];
+        var maxVals = new double[d];
+        for (int j = 0; j < d; j++)
+        {
+            minVals[j] = double.MaxValue;
+            maxVals[j] = double.MinValue;
+        }
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < d; j++)
+            {
+                double val = NumOps.ToDouble(x[i, j]);
+                if (val < minVals[j]) minVals[j] = val;
+                if (val > maxVals[j]) maxVals[j] = val;
+            }
+        }
+
+        // Initialize weights randomly within the data range
         _weights = new T[height, width][];
         for (int r = 0; r < height; r++)
         {
@@ -132,7 +196,9 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
                 _weights[r, c] = new T[d];
                 for (int j = 0; j < d; j++)
                 {
-                    _weights[r, c][j] = NumOps.FromDouble(rand.NextDouble());
+                    double range = maxVals[j] - minVals[j];
+                    if (range < 1e-10) range = 1.0;
+                    _weights[r, c][j] = NumOps.FromDouble(minVals[j] + rand.NextDouble() * range);
                 }
             }
         }
@@ -205,6 +271,85 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
             }
         }
 
+        // Recompute ClusterCenters from actual data (not neuron weights)
+        // so MergeDegenerateClusters can accurately assess inter-cluster distances
+        var dataCenters = new Matrix<T>(NumClusters, d);
+        var clusterCounts = new int[NumClusters];
+        for (int i = 0; i < n; i++)
+        {
+            int c = (int)Math.Round(NumOps.ToDouble(Labels[i]));
+            if (c >= 0 && c < NumClusters)
+            {
+                for (int j = 0; j < d; j++)
+                    dataCenters[c, j] = NumOps.Add(dataCenters[c, j], x[i, j]);
+                clusterCounts[c]++;
+            }
+        }
+        for (int c = 0; c < NumClusters; c++)
+        {
+            if (clusterCounts[c] > 0)
+            {
+                for (int j = 0; j < d; j++)
+                    dataCenters[c, j] = NumOps.Divide(dataCenters[c, j], NumOps.FromDouble(clusterCounts[c]));
+            }
+        }
+        ClusterCenters = dataCenters;
+
+        int premergeK = NumClusters;
+        MergeDegenerateClusters(x);
+
+        // Update _neuronLabels to match merged cluster IDs so Predict() is consistent
+        if (NumClusters < premergeK && _neuronLabels is not null)
+        {
+            // Build mapping from old labels to new labels using the merged Labels vector
+            var labelMap = new Dictionary<int, int>();
+            for (int i = 0; i < n; i++)
+            {
+                int neuronIdx2 = 0;
+                var sample2 = new T[d];
+                for (int j = 0; j < d; j++) sample2[j] = x[i, j];
+                var (br, bc) = FindBMU(sample2, d);
+                neuronIdx2 = br * width + bc;
+                int oldLabel = _neuronLabels[neuronIdx2];
+                int newLabel = Labels is not null ? (int)Math.Round(NumOps.ToDouble(Labels[i])) : 0;
+                labelMap[oldLabel] = newLabel;
+            }
+
+            // Remap ALL neurons (not just BMU winners) to valid post-merge labels.
+            // Neurons that never won a BMU could retain stale labels >= NumClusters.
+            for (int ni = 0; ni < _neuronLabels.Length; ni++)
+            {
+                if (labelMap.TryGetValue(_neuronLabels[ni], out int mapped))
+                {
+                    _neuronLabels[ni] = mapped;
+                }
+                else
+                {
+                    // This neuron was never a BMU winner — assign it to the nearest cluster center
+                    int nr = ni / width;
+                    int nc = ni % width;
+                    T[] neuronWeights = _weights![nr, nc];
+                    int bestCluster = 0;
+                    T bestDist = NumOps.MaxValue;
+                    for (int ci = 0; ci < ClusterCenters.Rows; ci++)
+                    {
+                        T dist = NumOps.Zero;
+                        for (int fi = 0; fi < d; fi++)
+                        {
+                            T diff = NumOps.Subtract(neuronWeights[fi], ClusterCenters[ci, fi]);
+                            dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
+                        }
+                        if (NumOps.ToDouble(dist) < NumOps.ToDouble(bestDist))
+                        {
+                            bestDist = dist;
+                            bestCluster = ci;
+                        }
+                    }
+                    _neuronLabels[ni] = bestCluster;
+                }
+            }
+        }
+
         IsTrained = true;
     }
 
@@ -214,16 +359,19 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
         int bmuCol = 0;
         T minDist = NumOps.MaxValue;
 
+        var sampleVec = new Vector<T>(sample);
+
         for (int r = 0; r < _options.GridHeight; r++)
         {
             for (int c = 0; c < _options.GridWidth; c++)
             {
-                T dist = NumOps.Zero;
+                var weightVec = new Vector<T>(_weights![r, c]);
+                var diff = new Vector<T>(d);
                 for (int j = 0; j < d; j++)
                 {
-                    T diff = NumOps.Subtract(sample[j], (_weights ?? throw new InvalidOperationException("Weights not initialized."))[r, c][j]);
-                    dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
+                    diff[j] = NumOps.Subtract(sampleVec[j], weightVec[j]);
                 }
+                T dist = Engine.DotProduct(diff, diff);
 
                 if (NumOps.LessThan(dist, minDist))
                 {
@@ -291,7 +439,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
         {
             for (int c = 0; c < width; c++)
             {
-                neuronWeights[r * width + c] = (_weights ?? throw new InvalidOperationException("Weights not initialized."))[r, c];
+                neuronWeights[r * width + c] = _weights![r, c];
             }
         }
 
@@ -449,7 +597,7 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
                         T distSq = NumOps.Zero;
                         for (int j = 0; j < d; j++)
                         {
-                            T diff = NumOps.Subtract((_weights ?? throw new InvalidOperationException("Weights not initialized."))[r, c][j], _weights[nr, nc][j]);
+                            T diff = NumOps.Subtract(_weights![r, c][j], _weights[nr, nc][j]);
                             distSq = NumOps.Add(distSq, NumOps.Multiply(diff, diff));
                         }
 
@@ -469,6 +617,10 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
     public override Vector<T> Predict(Matrix<T> x)
     {
         ValidateIsTrained();
+
+        // Return stored labels for in-sample prediction (preserves merge results)
+        if (Labels is not null && ReferenceEquals(x, TrainingDataRef))
+            return new Vector<T>(Labels);
 
         int n = x.Rows;
         int d = NumFeatures;

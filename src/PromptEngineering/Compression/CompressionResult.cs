@@ -20,11 +20,11 @@ namespace AiDotNet.PromptEngineering.Compression;
 /// <code>
 /// var result = compressor.CompressWithMetrics(longPrompt, options);
 ///
-/// Console.WriteLine($"Before: {result.OriginalTokenCount} tokens");
-/// Console.WriteLine($"After: {result.CompressedTokenCount} tokens");
-/// Console.WriteLine($"Saved: {result.TokensSaved} tokens ({result.CompressionRatio:P0})");
-/// Console.WriteLine($"Cost savings: ${result.EstimatedCostSavings}");
-/// Console.WriteLine($"Compressed prompt: {result.CompressedPrompt}");
+/// // Result is available in the returned value
+/// // Result is available in the returned value
+/// // Result is available in the returned value
+/// // Result is available in the returned value
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

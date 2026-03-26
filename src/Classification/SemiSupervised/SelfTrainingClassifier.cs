@@ -44,6 +44,18 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// - Triguero et al. (2015). "Self-labeled techniques for semi-supervised learning"
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
+/// <example>
+/// <code>
+/// // Use AiModelBuilder facade for selftrainingclassifier classification
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new SelfTrainingClassifier&lt;double&gt;(
+///         new SelfTrainingClassifierOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(features, labels);
+/// var prediction = result.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Classification)]
@@ -500,14 +512,6 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         _baseClassifier.ApplyGradients(gradients, learningRate);
-    }
-
-    /// <summary>
-    /// Gets the model type.
-    /// </summary>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.SelfTrainingClassifier;
     }
 
     /// <summary>

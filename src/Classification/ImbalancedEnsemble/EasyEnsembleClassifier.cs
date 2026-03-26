@@ -48,6 +48,18 @@ namespace AiDotNet.Classification.ImbalancedEnsemble;
 /// </list>
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
+/// <example>
+/// <code>
+/// // Use AiModelBuilder facade for easy ensemble classification
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new EasyEnsembleClassifier&lt;double&gt;(
+///         new EasyEnsembleOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(features, labels);
+/// var prediction = result.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
@@ -184,7 +196,6 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> This identifier helps the system track what type of model this is.</para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.EasyEnsembleClassifier;
 
     /// <summary>
     /// Trains the Easy Ensemble classifier.

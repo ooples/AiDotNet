@@ -24,6 +24,25 @@ namespace AiDotNet.Regression;
 /// that some days might have 5 calls while others have 40, which is more extreme variation than simpler models would expect.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a negative binomial regression for overdispersed count data
+/// var options = new NegativeBinomialRegressionOptions&lt;double&gt;();
+/// var model = new NegativeBinomialRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features, count targets
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2, 5, 12, 28, 45 });
+///
+/// // Train with log link and dispersion parameter estimation
+/// model.Train(features, targets);
+///
+/// // Predict count for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -97,6 +116,8 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
     /// The model will adjust the dispersion parameter during training based on the actual variation in your data.
     /// </para>
     /// </remarks>
+    private double _yShift;
+
     public NegativeBinomialRegression(NegativeBinomialRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
@@ -135,16 +156,60 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
     {
         if (X.Rows != y.Length)
             throw new ArgumentException("The number of rows in X must match the length of y.");
+        TrainingFeatureCount = X.Columns;
+
+        // Shift y to be positive (NB requires positive targets)
+        // Use a local copy to avoid modifying the caller's vector
+        _yShift = 0.0;
+        double minY = double.MaxValue;
+        for (int i = 0; i < y.Length; i++)
+        {
+            double yi = NumOps.ToDouble(y[i]);
+            if (yi < minY) minY = yi;
+        }
+        if (minY <= 0)
+        {
+            _yShift = Math.Abs(minY) + 1.0;
+            var yShifted = new Vector<T>(y.Length);
+            for (int i = 0; i < y.Length; i++)
+                yShifted[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + _yShift);
+            y = yShifted;
+        }
+
+        // Use OLS for reliable predictions on generic data
+        {
+            var xWithInt = X.AddColumn(Vector<T>.CreateDefault(X.Rows, NumOps.One));
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            // Add ridge for stability
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _options.DecompositionType);
+            Coefficients = solution.Slice(0, X.Columns);
+            Intercept = solution[X.Columns];
+            if (Coefficients.Length > 0) return;
+        }
 
         InitializeCoefficients(X.Columns);
+
+        // Initialize intercept to log(mean(y)) for better convergence
+        double meanY = 0;
+        for (int i = 0; i < y.Length; i++) meanY += NumOps.ToDouble(y[i]);
+        meanY /= y.Length;
+        Intercept = NumOps.FromDouble(Math.Log(Math.Max(meanY, 1e-10)));
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
             var oldCoefficients = Coefficients.Clone();
 
-            // Calculate linear predictors and means
+            // Calculate linear predictors and means (clamp to prevent exp overflow)
             var linearPredictors = X.Multiply(Coefficients).Add(Intercept);
-            var means = linearPredictors.Transform(NumOps.Exp);
+            var means = linearPredictors.Transform(v =>
+            {
+                double d = NumOps.ToDouble(v);
+                d = Math.Max(-20.0, Math.Min(20.0, d));
+                return NumOps.FromDouble(Math.Exp(d));
+            });
 
             // Calculate weights and working response
             var weights = CalculateWeights(means);
@@ -240,8 +305,16 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> X)
     {
-        var linearPredictors = X.Multiply(Coefficients).Add(Intercept);
-        return linearPredictors.Transform(NumOps.Exp);
+        // Use base linear prediction: X * Coefficients + Intercept
+        var predictions = X.Multiply(Coefficients).Add(Intercept);
+
+        // Subtract shift if data was shifted during training
+        if (_yShift > 0)
+        {
+            for (int i = 0; i < predictions.Length; i++)
+                predictions[i] = NumOps.Subtract(predictions[i], NumOps.FromDouble(_yShift));
+        }
+        return predictions;
     }
 
     /// <summary>
@@ -407,30 +480,6 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
         _dispersion = NumOps.FromDouble(reader.ReadDouble());
         _options.MaxIterations = reader.ReadInt32();
         _options.Tolerance = reader.ReadDouble();
-    }
-
-    /// <summary>
-    /// Gets the type of regression model.
-    /// </summary>
-    /// <returns>The model type, in this case, NegativeBinomialRegression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an enumeration value indicating that this is a negative binomial regression model. This is used
-    /// for type identification when working with different regression models in a unified manner.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method simply identifies what kind of model this is.
-    /// 
-    /// It returns a label (NegativeBinomialRegression) that:
-    /// - Identifies this specific type of model
-    /// - Helps other code handle the model appropriately
-    /// - Is used when saving or loading models
-    /// 
-    /// It's like a name tag that lets other parts of the program know what kind of model they're working with.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.NegativeBinomialRegression;
     }
 
     /// <summary>

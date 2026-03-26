@@ -17,6 +17,31 @@ namespace AiDotNet.Finance.Trading.Agents;
 /// Financial Soft Actor-Critic (SAC) agent for high-performance continuous trading.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> The SAC (Soft Actor-Critic) trading agent is designed for
+/// continuous trading decisions, like choosing exact position sizes (e.g., buy 37% of
+/// portfolio capacity). It encourages exploration by maximizing both returns and the
+/// "entropy" (randomness) of its strategy, which prevents it from getting stuck in a
+/// suboptimal trading pattern. SAC is considered state-of-the-art for continuous action
+/// spaces and adapts well to changing market conditions.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Define actor and critic architectures for SAC continuous trading (30 features, 5 position sizes)
+/// var actorArch = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 30, outputSize: 5);
+/// var criticArch = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 30, outputSize: 1);
+///
+/// // Create SAC agent for entropy-regularized continuous portfolio allocation
+/// var options = new TradingAgentOptions&lt;double&gt;();
+/// var model = new FinancialSACAgent&lt;double&gt;(actorArch, criticArch, options);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -339,7 +364,6 @@ public class FinancialSACAgent<T> : TradingAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ReinforcementLearning,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "AgentType", "FinancialSAC" },

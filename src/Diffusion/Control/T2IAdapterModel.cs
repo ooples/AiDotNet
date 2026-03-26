@@ -358,9 +358,9 @@ public class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
         var adapterCount = _adapterNetwork.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != unetCount + adapterCount + vaeCount)
         {
@@ -457,7 +457,6 @@ public class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "T2I-Adapter",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "T2I-Adapter lightweight spatial conditioning adapter for text-to-image diffusion models",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

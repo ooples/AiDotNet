@@ -206,8 +206,8 @@ public class InstructPix2PixModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
+        var vaeCount = _vae.GetParameters().Length;
         if (parameters.Length != unetCount + vaeCount)
             throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         var unetParams = new Vector<T>(unetCount);
@@ -250,7 +250,7 @@ public class InstructPix2PixModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "InstructPix2Pix", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "InstructPix2Pix", Version = "1.0",
             Description = "InstructPix2Pix instruction-based image editing with dual guidance",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

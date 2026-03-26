@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -13,7 +15,30 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <typeparam name="TInput">The input data type.</typeparam>
 /// <typeparam name="TOutput">The output data type.</typeparam>
-internal class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
+/// <remarks>
+/// <para><b>For Beginners:</b> An adapted meta-model is the result of a meta-learning
+/// algorithm (like MAML) adapting to a new task. After seeing a few examples of a new task,
+/// the meta-learner produces this adapted model with task-specific parameters. Think of it
+/// like a student who has learned general problem-solving skills and then quickly adapts
+/// to a specific exam topic after seeing just a few practice questions.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create an adapted model after MAML inner-loop adaptation
+/// var adaptedParams = new Vector&lt;float&gt;(baseModel.GetParameters().Length);
+/// // ... inner-loop gradient updates fill adaptedParams ...
+/// var adapted = new AdaptedMetaModel&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;(
+///     baseModel, adaptedParams);
+/// Tensor&lt;float&gt; prediction = adapted.Predict(queryInput);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.MetaLearning)]
+[ModelTask(ModelTask.Classification)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+public class AdaptedMetaModel<T, TInput, TOutput> : MetaLearningModelBase<T, TInput, TOutput>, IAdaptedMetaModel<T>
 {
     private Vector<T> _adaptedParams;
     private readonly Vector<T>? _supportFeatures;

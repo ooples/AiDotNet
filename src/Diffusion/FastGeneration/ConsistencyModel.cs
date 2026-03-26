@@ -658,7 +658,6 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ConsistencyModel",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Consistency Model for single-step or few-step image generation",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

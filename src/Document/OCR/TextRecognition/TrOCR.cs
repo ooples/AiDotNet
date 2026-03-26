@@ -35,7 +35,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 /// <code>
 /// var trocr = new TrOCR&lt;float&gt;(architecture);
 /// var result = trocr.RecognizeText(croppedTextImage);
-/// Console.WriteLine($"Text: {result.Text}, Confidence: {result.ConfidenceValue}");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// <para>
@@ -667,7 +667,7 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape);
+        var normalized = new Tensor<T>(image.Shape.ToArray());
 
         // TrOCR normalization (same as DeiT/BEiT)
         double[] means = [0.5, 0.5, 0.5];
@@ -713,7 +713,6 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         return new ModelMetadata<T>
         {
             Name = "TrOCR",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Transformer-based OCR with ViT encoder (AAAI 2022)",
             FeatureCount = _decoderHiddenDim,
             Complexity = _numEncoderLayers + _numDecoderLayers,

@@ -13,7 +13,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Neural;
 
@@ -48,6 +48,16 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 /// Forecasting", AAAI 2023. https://arxiv.org/abs/2201.12886
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 60, inputWidth: 1, inputDepth: 1, outputSize: 24);
+/// var model = new NHiTSFinance&lt;double&gt;(architecture);
+/// var onnxModel = new NHiTSFinance&lt;double&gt;(architecture, "nhits.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -135,12 +145,12 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
     /// <summary>
     /// Pooling modes for each stack.
     /// </summary>
-    private string[] _poolingModes;
+    private NHiTSPoolingMode[] _poolingModes;
 
     /// <summary>
     /// Interpolation modes for each stack.
     /// </summary>
-    private string[] _interpolationModes;
+    private NHiTSInterpolationMode[] _interpolationModes;
 
     /// <summary>
     /// Dropout rate for regularization.
@@ -425,7 +435,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape));
+        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -452,7 +462,6 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "N-HiTS" },
@@ -792,7 +801,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -932,7 +941,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         if (a.Length != b.Length)
         {
             int minLen = Math.Min(a.Length, b.Length);
-            var result = new Tensor<T>(a.Shape);
+            var result = new Tensor<T>(a.Shape.ToArray());
             for (int i = 0; i < minLen; i++)
                 result[i] = NumOps.Subtract(a[i], b[i]);
             for (int i = minLen; i < a.Length; i++)
@@ -956,7 +965,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         if (a.Length != b.Length)
         {
             int minLen = Math.Min(a.Length, b.Length);
-            var result = new Tensor<T>(a.Shape);
+            var result = new Tensor<T>(a.Shape.ToArray());
             for (int i = 0; i < minLen; i++)
                 result[i] = NumOps.Add(a[i], b[i]);
             for (int i = minLen; i < a.Length; i++)
@@ -981,7 +990,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length / batchSize;
         int steps = Math.Min(stepsUsed, seqLen);
 
-        var shifted = new Tensor<T>(input.Shape);
+        var shifted = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {

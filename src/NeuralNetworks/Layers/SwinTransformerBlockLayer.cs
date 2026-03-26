@@ -1,4 +1,6 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -25,6 +27,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// Reference: Liu et al., "Swin Transformer: Hierarchical Vision Transformer using Shifted Windows", ICCV 2021
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Transformer)]
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.AttentionComputation)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 16, 16", TestConstructorArgs = "16, 2, 4")]
 public class SwinTransformerBlockLayer<T> : LayerBase<T>
 {
     private readonly int _dim;
@@ -305,7 +312,7 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int w = x.Shape[2];
         int c = x.Shape[3];
 
-        var shifted = new Tensor<T>(x.Shape);
+        var shifted = new Tensor<T>(x.Shape.ToArray());
 
         for (int b = 0; b < batch; b++)
         {
@@ -470,7 +477,7 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         }
 
         // Compute attention per window
-        var output = new Tensor<T>([numWindows, windowArea, c]);
+        var output = TensorAllocator.Rent<T>([numWindows, windowArea, c]);
 
         for (int win = 0; win < numWindows; win++)
         {
@@ -575,7 +582,7 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int batch = x.Shape[0];
         int seqLen = x.Shape[1];
 
-        var result = new Tensor<T>(x.Shape);
+        var result = TensorAllocator.Rent<T>(x.Shape.ToArray());
 
         for (int b = 0; b < batch; b++)
         {
@@ -635,7 +642,7 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int batch = gradient.Shape[0];
         int seqLen = gradient.Shape[1];
 
-        var result = new Tensor<T>(gradient.Shape);
+        var result = TensorAllocator.Rent<T>(gradient.Shape.ToArray());
 
         for (int b = 0; b < batch; b++)
         {
@@ -667,7 +674,7 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int batch = gradient.Shape[0];
         int seqLen = gradient.Shape[1];
 
-        var result = new Tensor<T>(gradient.Shape);
+        var result = TensorAllocator.Rent<T>(gradient.Shape.ToArray());
 
         for (int b = 0; b < batch; b++)
         {
@@ -775,6 +782,15 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         allGrads.AddRange(_mlpFc2.GetParameterGradients().ToArray());
 
         return new Vector<T>([.. allGrads]);
+    }
+
+    /// <inheritdoc/>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _norm1.ClearGradients(); _norm2.ClearGradients();
+        _qkvProj.ClearGradients(); _outProj.ClearGradients();
+        _mlpFc1.ClearGradients(); _mlpFc2.ClearGradients();
     }
 
     /// <inheritdoc/>

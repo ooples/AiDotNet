@@ -173,7 +173,6 @@ public class IQVFI<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "IQVFI-Native" : "IQVFI-ONNX",
             Description = $"IQ-VFI {_options.Variant} quality-aware degradation-adaptive interpolation (2024)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumQualityBlocks * _options.NumPyramidLevels
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

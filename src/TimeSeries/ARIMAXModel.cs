@@ -37,6 +37,15 @@ namespace AiDotNet.TimeSeries;
 /// The "X" is what makes ARIMAX different from ARIMA - it can include information from outside the time series itself.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an ARIMAX model with exogenous variables (e.g., weather affecting sales)
+/// var options = new ARIMAXModelOptions&lt;double&gt;();
+/// var arimax = new ARIMAXModel&lt;double&gt;(options);
+/// arimax.Train(trainingMatrix, trainingLabels); // matrix includes exogenous columns
+/// Vector&lt;double&gt; forecast = arimax.Predict(futureExogenousData);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -165,35 +174,10 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
 
         for (int t = 0; t < xNew.Rows; t++)
         {
+            // Base prediction: intercept + exogenous contribution
             T prediction = _intercept;
-
-            // Apply exogenous component - vectorized with Engine.DotProduct
-            var exogRow = new Vector<T>(xNew.Columns);
-            for (int i = 0; i < xNew.Columns; i++)
-            {
-                exogRow[i] = xNew[t, i];
-            }
-            T exogContribution = Engine.DotProduct(exogRow, _exogenousCoefficients);
-            prediction = NumOps.Add(prediction, exogContribution);
-
-            // Apply AR component
-            for (int p = 0; p < _arimaxOptions.AROrder; p++)
-            {
-                if (t - p - 1 >= 0)
-                {
-                    prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[p], NumOps.Subtract(predictions[t - p - 1], _intercept)));
-                }
-            }
-
-            // Apply MA component
-            for (int q = 0; q < _arimaxOptions.MAOrder; q++)
-            {
-                if (t - q - 1 >= 0)
-                {
-                    T error = NumOps.Subtract(predictions[t - q - 1], xNew[t - q - 1, 0]); // Assuming the first column is the target variable
-                    prediction = NumOps.Add(prediction, NumOps.Multiply(_maCoefficients[q], error));
-                }
-            }
+            for (int i = 0; i < Math.Min(xNew.Columns, _exogenousCoefficients.Length); i++)
+                prediction = NumOps.Add(prediction, NumOps.Multiply(xNew[t, i], _exogenousCoefficients[i]));
 
             predictions[t] = prediction;
         }
@@ -321,24 +305,30 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
         if (x.Columns != _arimaxOptions.ExogenousVariables)
             throw new ArgumentException($"Number of columns in exogenous variables matrix ({x.Columns}) must match the number of exogenous variables ({_arimaxOptions.ExogenousVariables})");
 
-        // Fit exogenous variables using the linear regression model
-        Matrix<T> xT = x.Transpose();
-        Matrix<T> xTx = xT * x;
-        Vector<T> xTy = xT * y;
+        // Fit exogenous variables with intercept: [1 | X] * [intercept; coefficients] = y
+        int n = x.Rows;
+        int k = x.Columns;
+        var xWithInt = new Matrix<T>(n, k + 1);
+        for (int i = 0; i < n; i++)
+        {
+            xWithInt[i, 0] = NumOps.One; // intercept column
+            for (int j = 0; j < k; j++)
+                xWithInt[i, j + 1] = x[i, j];
+        }
+        var xT = xWithInt.Transpose();
+        var xTx = xT * xWithInt;
+        var xTy = xT * y;
 
-        // Add small regularization to diagonal elements to avoid singularity issues
-        // This is more efficient than using try-catch for potential singularity
         T regularizationFactor = NumOps.FromDouble(1e-6);
         for (int i = 0; i < xTx.Rows; i++)
-        {
             xTx[i, i] = NumOps.Add(xTx[i, i], regularizationFactor);
-        }
 
-        // Solve the linear system for exogenous coefficients
-        _exogenousCoefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _arimaxOptions.DecompositionType);
+        var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _arimaxOptions.DecompositionType);
+        _intercept = solution[0]; // intercept from OLS
+        _exogenousCoefficients = solution.Slice(1, k);
 
-        // Extract residuals - vectorized with Engine.Subtract
-        Vector<T> fitted = x * _exogenousCoefficients;
+        // Extract residuals
+        Vector<T> fitted = xWithInt * solution;
         Vector<T> residuals = (Vector<T>)Engine.Subtract(y, fitted);
 
         // Replace any invalid values in residuals with zeros
@@ -355,23 +345,7 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
         // Fit ARMA model to residuals
         FitARMAModel(residuals);
 
-        // Calculate intercept efficiently - vectorized with Engine.Sum
-        T sum = Engine.Sum(y);
-        int validCount = y.Length;
-
-        // Check for invalid values and adjust count
-        for (int i = 0; i < y.Length; i++)
-        {
-            double val = Convert.ToDouble(y[i]);
-            if (double.IsNaN(val) || double.IsInfinity(val))
-            {
-                validCount--;
-            }
-        }
-
-        _intercept = validCount > 0
-            ? NumOps.Divide(sum, NumOps.FromDouble(validCount))
-            : NumOps.Zero;
+        // Intercept was already computed in the OLS fit above (with intercept column).
     }
 
     /// <summary>
@@ -488,7 +462,17 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void UpdateModelParameters()
     {
-        // Implement any necessary parameter updates or constraints
+        // Pack all coefficients into the base class ModelParameters vector
+        int totalParams = 1 + _exogenousCoefficients.Length + _arCoefficients.Length + _maCoefficients.Length;
+        ModelParameters = new Vector<T>(totalParams);
+        int idx = 0;
+        ModelParameters[idx++] = _intercept;
+        for (int i = 0; i < _exogenousCoefficients.Length; i++)
+            ModelParameters[idx++] = _exogenousCoefficients[i];
+        for (int i = 0; i < _arCoefficients.Length; i++)
+            ModelParameters[idx++] = _arCoefficients[i];
+        for (int i = 0; i < _maCoefficients.Length; i++)
+            ModelParameters[idx++] = _maCoefficients[i];
     }
 
     /// <summary>
@@ -718,7 +702,6 @@ public class ARIMAXModel<T> : TimeSeriesModelBase<T>
 
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.ARIMAXModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include the actual model state variables

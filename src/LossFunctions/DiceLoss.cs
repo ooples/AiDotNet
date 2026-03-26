@@ -1,5 +1,8 @@
 
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -28,6 +31,10 @@ namespace AiDotNet.LossFunctions;
 /// relationship between predicted and actual masks, which often leads to better segmentation results.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Segmentation)]
+[LossTask(LossTask.SemanticSegmentation)]
+[LossTask(LossTask.InstanceSegmentation)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, HandlesImbalancedData = true, RequiresProbabilityInputs = true, TestInputFormat = LossTestInputFormat.SegmentationMask, ExpectedOutput = OutputType.Probabilities)]
 public class DiceLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
@@ -47,13 +54,13 @@ public class DiceLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T intersection = NumOps.Zero;
+        T intersection = Engine.DotProduct(predicted, actual);
+
+        // Sum vectors using dot product with ones vector
         T sumPredicted = NumOps.Zero;
         T sumActual = NumOps.Zero;
-
         for (int i = 0; i < predicted.Length; i++)
         {
-            intersection = NumOps.Add(intersection, NumOps.Multiply(predicted[i], actual[i]));
             sumPredicted = NumOps.Add(sumPredicted, predicted[i]);
             sumActual = NumOps.Add(sumActual, actual[i]);
         }
@@ -79,13 +86,12 @@ public class DiceLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T intersection = NumOps.Zero;
+        T intersection = Engine.DotProduct(predicted, actual);
+
         T sumPredicted = NumOps.Zero;
         T sumActual = NumOps.Zero;
-
         for (int i = 0; i < predicted.Length; i++)
         {
-            intersection = NumOps.Add(intersection, NumOps.Multiply(predicted[i], actual[i]));
             sumPredicted = NumOps.Add(sumPredicted, predicted[i]);
             sumActual = NumOps.Add(sumActual, actual[i]);
         }

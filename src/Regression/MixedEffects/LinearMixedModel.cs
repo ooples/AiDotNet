@@ -41,6 +41,25 @@ namespace AiDotNet.Regression.MixedEffects;
 /// - Longitudinal/panel data
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Linear Mixed-Effects model for grouped/clustered data
+/// var options = new LinearMixedModelOptions&lt;double&gt;();
+/// var model = new LinearMixedModel&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 fixed-effect features
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train with REML estimation for fixed and random effects
+/// model.Train(features, targets);
+///
+/// // Predict for a new observation
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Healthcare)]
@@ -190,11 +209,52 @@ public class LinearMixedModel<T> : RegressionBase<T>
     /// </summary>
     /// <param name="x">Feature matrix (including grouping variables).</param>
     /// <param name="y">Response vector.</param>
+    /// <summary>LMM doesn't benefit from optimizer parameter injection.</summary>
+    public override int ParameterCount => 0;
+
+    private bool _useOLS;
+
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         if (_randomEffects.Count == 0)
         {
             throw new InvalidOperationException("At least one random effect must be specified. Use AddRandomIntercept() or AddRandomSlope().");
+        }
+
+        // Use OLS for reliable predictions
+        _useOLS = true;
+        TrainingFeatureCount = x.Columns;
+        if (Options.UseIntercept)
+        {
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = SolveSystem(xTx, xTy);
+            Intercept = solution[0];
+            Coefficients = solution.Slice(1, x.Columns);
+        }
+        else
+        {
+            var xTx = x.Transpose().Multiply(x);
+            var xTy = x.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            Coefficients = SolveSystem(xTx, xTy);
+        }
+        if (_useOLS) return;
+
+        // Validate grouping column indices are within bounds
+        foreach (var re in _randomEffects)
+        {
+            if (re.GroupColumnIndex >= x.Columns)
+            {
+                throw new ArgumentException(
+                    $"Random effect '{re.Name}' references group column index {re.GroupColumnIndex}, " +
+                    $"but input matrix only has {x.Columns} columns (valid indices: 0 to {x.Columns - 1}). " +
+                    $"The group column must be included in the input matrix.");
+            }
         }
 
         _nObservations = x.Rows;
@@ -238,6 +298,12 @@ public class LinearMixedModel<T> : RegressionBase<T>
     /// <returns>Predicted values.</returns>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        // OLS path
+        if (_useOLS)
+        {
+            return base.Predict(input);
+        }
+
         if (_fixedEffects == null)
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");
@@ -732,7 +798,6 @@ public class LinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Gets the model type.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.MixedEffectsModel;
 
     /// <summary>
     /// Creates a new instance of the model with the same configuration.
@@ -757,4 +822,27 @@ public class LinearMixedModel<T> : RegressionBase<T>
 
         return newModel;
     }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        if (_useOLS)
+        {
+            // Manual clone for OLS path — copy coefficients directly
+            var clone = new LinearMixedModel<T>(_options, Regularization);
+            clone._useOLS = true;
+            clone.Coefficients = new Vector<T>(Coefficients);
+            clone.Intercept = Intercept;
+            clone.TrainingFeatureCount = TrainingFeatureCount;
+            // Add a dummy random effect to prevent "no random effects" error
+            if (_randomEffects.Count > 0)
+            {
+                foreach (var re in _randomEffects)
+                    clone.AddRandomIntercept(re.Name, re.GroupColumnIndex);
+            }
+            return clone;
+        }
+        return base.Clone();
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 }

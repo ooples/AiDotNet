@@ -201,7 +201,6 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         {
             Name = _useNativeMode ? "AudioSuperResolution-Native" : "AudioSuperResolution-ONNX",
             Description = $"Audio Super-Resolution {_options.Variant} ({_options.InputSampleRate / 1000}kHz -> {_options.OutputSampleRate / 1000}kHz)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = 1, Complexity = _options.NumResBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant;
         m.AdditionalInfo["UpsampleFactor"] = _options.UpsampleFactor.ToString();
@@ -250,7 +249,7 @@ public class AudioSuperResolution<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer
         // Blend original and enhanced based on strength.
         // For super-resolution, enhanced may be longer than original (upsampled).
         // Blend only the overlapping region; keep enhanced-only samples intact.
-        var result = new Tensor<T>(enhanced.Shape);
+        var result = new Tensor<T>(enhanced.Shape.ToArray());
         int blendLen = Math.Min(original.Length, enhanced.Length);
         for (int i = 0; i < blendLen; i++)
         {

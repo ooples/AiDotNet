@@ -36,7 +36,7 @@ namespace AiDotNet.Reasoning.Models;
 ///
 /// // Get all step scores as a vector
 /// var scoreVector = chain.StepScores;
-/// Console.WriteLine($"Average confidence: {scoreVector.Mean()}");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

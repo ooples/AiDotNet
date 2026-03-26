@@ -41,6 +41,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Cycle-Consistent Adversarial Networks" (2017)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new CycleGANOptions { ImageSize = 256, NumResidualBlocks = 9 };
+/// var model = new CycleGAN&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 3, 256, 256 });
+/// var translated = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type.</typeparam>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Generative)]
@@ -462,7 +470,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
         // Combine all generator gradients before backward to avoid gradient loss
         // GeneratorAtoB receives: adversarial + cycle + identity gradients
-        var combinedGenAtoBGrad = new Tensor<T>(genAtoBGrad.Shape);
+        var combinedGenAtoBGrad = new Tensor<T>(genAtoBGrad.Shape.ToArray());
         for (int i = 0; i < genAtoBGrad.Length; i++)
             combinedGenAtoBGrad.SetFlat(i, NumOps.Add(genAtoBGrad.GetFlat(i), identityBGrad.GetFlat(i)));
 
@@ -470,7 +478,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         UpdateGeneratorAtoBParameters();
 
         // GeneratorBtoA receives: adversarial + cycle + identity gradients
-        var combinedGenBtoAGrad = new Tensor<T>(genBtoAGrad.Shape);
+        var combinedGenBtoAGrad = new Tensor<T>(genBtoAGrad.Shape.ToArray());
         for (int i = 0; i < genBtoAGrad.Length; i++)
             combinedGenBtoAGrad.SetFlat(i, NumOps.Add(genBtoAGrad.GetFlat(i), identityAGrad.GetFlat(i)));
 
@@ -597,7 +605,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
-        var gradients = new Tensor<T>(predictions.Shape);
+        var gradients = new Tensor<T>(predictions.Shape.ToArray());
         T epsilon = NumOps.FromDouble(1e-10);
         T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
 
@@ -627,7 +635,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     private Tensor<T> CalculateL1Gradient(Tensor<T> predictions, Tensor<T> targets, double coefficient)
     {
-        var gradients = new Tensor<T>(predictions.Shape);
+        var gradients = new Tensor<T>(predictions.Shape.ToArray());
         int count = predictions.Length;
         T coeff = NumOps.FromDouble(coefficient / count);
 
@@ -808,7 +816,6 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.CycleGAN,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "GeneratorAtoB_Parameters", GeneratorAtoB.GetParameterCount() },

@@ -131,7 +131,7 @@ public class DecisionTreeNode<T>
     /// instead of a single prediction value. This property holds that equation if used. Think of it as making a more
     /// nuanced prediction based on a formula rather than a single value.
     /// </remarks>
-    public SimpleRegression<T>? LinearModel { get; set; }
+    public RegressionBase<T>? LinearModel { get; set; }
 
     /// <summary>
     /// Gets or sets the vector of predictions for samples at this node.

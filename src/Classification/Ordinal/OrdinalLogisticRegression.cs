@@ -3,6 +3,8 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
+using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -74,83 +76,105 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
     private Vector<T>? _coefficients;
 
     /// <summary>
-    /// Learning rate for gradient descent.
+    /// The gradient-based optimizer for parameter updates.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The learning rate controls how big steps the algorithm
-    /// takes when adjusting parameters. Smaller values are more precise but slower.</para>
-    /// </remarks>
-    private readonly double _learningRate;
+    private readonly IGradientBasedOptimizer<T, Matrix<T>, Vector<T>> _paramOptimizer;
 
     /// <summary>
     /// Maximum iterations for optimization.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This limits how many times the algorithm updates its
-    /// parameters. More iterations can improve fit but take longer.</para>
-    /// </remarks>
     private readonly int _maxIterations;
 
     /// <summary>
     /// Convergence tolerance.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Training stops early if improvements become smaller
-    /// than this value. This prevents wasted computation when the model is already good.</para>
-    /// </remarks>
     private readonly double _tolerance;
 
     /// <summary>
     /// L2 regularization strength.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Regularization prevents overfitting by penalizing large
-    /// coefficients. Higher values create simpler models that generalize better.</para>
-    /// </remarks>
     private readonly double _regularizationStrength;
 
     /// <summary>
     /// Random number generator for initialization.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Used to initialize coefficients with small random values.
-    /// Using a seed makes results reproducible.</para>
-    /// </remarks>
     private readonly Random _random;
+
+    /// <summary>
+    /// Legacy learning rate field — kept for backward compatibility with serialization/clone.
+    /// The optimizer handles learning rate internally.
+    /// </summary>
+    private readonly double _learningRate;
 
     /// <summary>
     /// Initializes a new instance of OrdinalLogisticRegression.
     /// </summary>
-    /// <param name="learningRate">Learning rate for gradient descent. Default is 0.01.</param>
+    /// <param name="optimizer">Gradient-based optimizer for training. Defaults to AdamOptimizer with industry-standard settings.</param>
     /// <param name="maxIterations">Maximum training iterations. Default is 1000.</param>
     /// <param name="tolerance">Convergence tolerance. Default is 1e-6.</param>
     /// <param name="regularization">L2 regularization strength. Default is 0.0.</param>
     /// <param name="seed">Random seed for reproducibility.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Parameters control training:
-    /// <list type="bullet">
-    /// <item><b>learningRate:</b> How big steps to take during training. Smaller = slower but more stable.</item>
-    /// <item><b>maxIterations:</b> Maximum training loops. More = better fit but slower.</item>
-    /// <item><b>tolerance:</b> Stop when improvement is below this. Prevents overfitting.</item>
-    /// <item><b>regularization:</b> Penalizes large coefficients. Prevents overfitting.</item>
-    /// </list>
-    /// </para>
-    /// </remarks>
     public OrdinalLogisticRegression(
-        double learningRate = 0.01,
+        IGradientBasedOptimizer<T, Matrix<T>, Vector<T>>? optimizer = null,
         int maxIterations = 1000,
         double tolerance = 1e-6,
         double regularization = 0.0,
         int? seed = null)
         : base()
     {
+        if (maxIterations < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxIterations), "Must be >= 1.");
+        if (double.IsNaN(tolerance) || double.IsInfinity(tolerance) || tolerance <= 0)
+            throw new ArgumentOutOfRangeException(nameof(tolerance), "Must be a positive finite number.");
+        if (double.IsNaN(regularization) || double.IsInfinity(regularization) || regularization < 0)
+            throw new ArgumentOutOfRangeException(nameof(regularization), "Must be a non-negative finite number.");
+
+        _maxIterations = maxIterations;
+        _tolerance = tolerance;
+        _regularizationStrength = regularization;
+        _learningRate = 0.01; // Legacy field for serialization
+        _random = RandomHelper.CreateSeededRandom(seed ?? 42);
+        // Default to Adam optimizer with learning rate 0.01, which is appropriate for
+        // logistic regression models with a small number of parameters. The default Adam
+        // LR of 0.001 (designed for neural networks with millions of params) is too small
+        // for models with O(features) parameters.
+        _paramOptimizer = optimizer ?? new AdamOptimizer<T, Matrix<T>, Vector<T>>(
+            null,
+            new AdamOptimizerOptions<T, Matrix<T>, Vector<T>> { InitialLearningRate = 0.01 });
+    }
+
+    /// <summary>
+    /// Legacy constructor for backward compatibility with existing code and serialization.
+    /// The learningRate is passed to the Adam optimizer as its initial learning rate.
+    /// </summary>
+    public OrdinalLogisticRegression(
+        double learningRate,
+        int maxIterations = 1000,
+        double tolerance = 1e-6,
+        double regularization = 0.0,
+        int? seed = null)
+        : base()
+    {
+        if (double.IsNaN(learningRate) || double.IsInfinity(learningRate) || learningRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(learningRate), "Must be a positive finite number.");
+        if (maxIterations < 1)
+            throw new ArgumentOutOfRangeException(nameof(maxIterations), "Must be >= 1.");
+        if (double.IsNaN(tolerance) || double.IsInfinity(tolerance) || tolerance <= 0)
+            throw new ArgumentOutOfRangeException(nameof(tolerance), "Must be a positive finite number.");
+        if (double.IsNaN(regularization) || double.IsInfinity(regularization) || regularization < 0)
+            throw new ArgumentOutOfRangeException(nameof(regularization), "Must be a non-negative finite number.");
+
         _learningRate = learningRate;
         _maxIterations = maxIterations;
         _tolerance = tolerance;
         _regularizationStrength = regularization;
-        _random = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
-            : RandomHelper.CreateSecureRandom();
+        _random = RandomHelper.CreateSeededRandom(seed ?? 42);
+        // Use Adam optimizer with the user-specified learning rate
+        var adamOptions = new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
+        {
+            InitialLearningRate = learningRate
+        };
+        _paramOptimizer = new AdamOptimizer<T, Matrix<T>, Vector<T>>(null, adamOptions);
     }
 
     /// <summary>
@@ -161,7 +185,6 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
     /// <para><b>For Beginners:</b> Returns an identifier for this model type,
     /// used internally for serialization and model management.</para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.OrdinalLogisticRegression;
 
     /// <summary>
     /// Trains the ordinal logistic regression model.
@@ -215,36 +238,60 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
             yIndices[i] = GetClassIndex(y[i]);
         }
 
-        // Gradient descent optimization
+        // Pre-convert data to double arrays to avoid per-element NumOps.ToDouble in hot loop
+        int N = x.Rows;
+        var xDouble = new double[N, P];
+        for (int i = 0; i < N; i++)
+            for (int p = 0; p < P; p++)
+                xDouble[i, p] = NumOps.ToDouble(x[i, p]);
+
+        var coef = new double[P];
+        for (int p = 0; p < P; p++)
+            coef[p] = NumOps.ToDouble(_coefficients[p]);
+
+        var thresh = new double[K - 1];
+        for (int k = 0; k < K - 1; k++)
+            thresh[k] = NumOps.ToDouble(_thresholds[k]);
+
+        // Optimization using the configured gradient-based optimizer (Adam by default).
         double prevLoss = double.MaxValue;
+
+        // Pre-allocate arrays outside the training loop (avoid GC pressure)
+        var gradCoef = new double[P];
+        var gradThresh = new double[K - 1];
+        var cumProbs = new double[K - 1];
+        var probs = new double[K];
+        var etas = new double[N];
+
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // Compute gradients
-            var gradCoef = new double[P];
-            var gradThresh = new double[K - 1];
+            // Zero gradients
+            Array.Clear(gradCoef, 0, P);
+            Array.Clear(gradThresh, 0, K - 1);
             double loss = 0;
 
-            for (int i = 0; i < x.Rows; i++)
+            // Precompute all linear predictors: eta[i] = X[i,:] * coef
+            for (int i = 0; i < N; i++)
             {
-                int yi = yIndices[i];
-
-                // Compute linear predictor
                 double eta = 0;
                 for (int p = 0; p < P; p++)
-                {
-                    eta += NumOps.ToDouble(_coefficients[p]) * NumOps.ToDouble(x[i, p]);
-                }
+                    eta += coef[p] * xDouble[i, p];
+                etas[i] = eta;
+            }
 
-                // Compute cumulative probabilities
-                var cumProbs = new double[K - 1];
+            for (int i = 0; i < N; i++)
+            {
+                int yi = yIndices[i];
+                double eta = etas[i];
+
+                // Compute cumulative probabilities (reuse pre-allocated array)
                 for (int k = 0; k < K - 1; k++)
                 {
-                    double z = NumOps.ToDouble(_thresholds[k]) - eta;
+                    double z = thresh[k] - eta;
                     cumProbs[k] = 1.0 / (1.0 + Math.Exp(-z));
                 }
 
-                // Compute class probabilities
-                var probs = new double[K];
+                // Compute class probabilities (reuse pre-allocated array)
                 probs[0] = cumProbs[0];
                 for (int k = 1; k < K - 1; k++)
                 {
@@ -261,41 +308,51 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
                 // Accumulate loss
                 loss -= Math.Log(probs[yi]);
 
-                // Compute gradients for coefficients
+                // Compute gradients for coefficients w.r.t. negative log-likelihood.
+                // The sign is negative because ∂η/∂β = x but ∂(α-η)/∂β = -x,
+                // so the chain rule introduces a sign flip: ∂NLL/∂β = -∂NLL/∂η * x.
                 for (int p = 0; p < P; p++)
                 {
-                    double xi = NumOps.ToDouble(x[i, p]);
+                    double xi = xDouble[i, p];
 
                     if (yi == 0)
                     {
-                        // First class
-                        gradCoef[p] += xi * (cumProbs[0] - 1);
+                        // First class: dP(Y=0)/dη = -σ'(α₀-η) = -(cumProbs[0])(1-cumProbs[0])
+                        // dNLL/dβ = -(dP/dη / P) * x = (σ'(α₀-η) / P) * x
+                        gradCoef[p] -= xi * (cumProbs[0] - 1);
                     }
                     else if (yi == K - 1)
                     {
-                        // Last class
-                        gradCoef[p] += xi * cumProbs[K - 2];
+                        // Last class: dP(Y=K-1)/dη = σ'(α_{K-2}-η)
+                        // dNLL/dβ = -(dP/dη / P) * x
+                        gradCoef[p] -= xi * cumProbs[K - 2];
                     }
                     else
                     {
-                        // Middle classes
-                        double term = cumProbs[yi] * (1 - cumProbs[yi]) - cumProbs[yi - 1] * (1 - cumProbs[yi - 1]);
+                        // Middle classes: ∂NLL/∂β = x * (σ'(α_{yi-1} - η) - σ'(α_yi - η)) / P(Y=yi)
+                        double term = cumProbs[yi - 1] * (1 - cumProbs[yi - 1]) - cumProbs[yi] * (1 - cumProbs[yi]);
                         gradCoef[p] += xi * term / probs[yi];
                     }
                 }
 
-                // Compute gradients for thresholds
+                // Compute gradients for thresholds w.r.t. NLL.
+                // For P(Y ≤ k) = σ(αk - η):
+                //   ∂P(Y=k)/∂αk = +σ'(αk - η) = +γk
+                //   ∂P(Y=k+1)/∂αk = -σ'(αk - η) = -γk
+                // For NLL gradient ∂(-log P(Y=yi))/∂αk:
+                //   yi=k:   -γk / P(Y=k)     (negative: raising αk increases P(Y=k), decreasing NLL)
+                //   yi=k+1: +γk / P(Y=k+1)   (positive: raising αk decreases P(Y=k+1), increasing NLL)
                 for (int k = 0; k < K - 1; k++)
                 {
                     double gamma_k = cumProbs[k] * (1 - cumProbs[k]);
 
                     if (yi == k)
                     {
-                        gradThresh[k] += gamma_k / probs[yi];
+                        gradThresh[k] -= gamma_k / probs[yi];
                     }
                     else if (yi == k + 1)
                     {
-                        gradThresh[k] += -gamma_k / probs[yi];
+                        gradThresh[k] += gamma_k / probs[yi];
                     }
                 }
             }
@@ -307,25 +364,46 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
                 loss += 0.5 * _regularizationStrength * NumOps.ToDouble(_coefficients[p]) * NumOps.ToDouble(_coefficients[p]);
             }
 
-            // Update parameters
+            // Pack coefficients + thresholds into a single parameter vector for the optimizer.
+            // Pass the raw (summed) gradient — the optimizer's adaptive learning rate (Adam's v_t)
+            // naturally scales with gradient magnitude, so pre-averaging by N is redundant and
+            // causes underflow when combined with the optimizer's own learning rate.
+            var paramVec = new Vector<T>(P + K - 1);
+            var gradVec = new Vector<T>(P + K - 1);
+
             for (int p = 0; p < P; p++)
             {
-                double newVal = NumOps.ToDouble(_coefficients[p]) - _learningRate * gradCoef[p] / x.Rows;
-                _coefficients[p] = NumOps.FromDouble(newVal);
+                paramVec[p] = _coefficients[p];
+                gradVec[p] = NumOps.FromDouble(gradCoef[p]);
             }
-
             for (int k = 0; k < K - 1; k++)
             {
-                double newVal = NumOps.ToDouble(_thresholds[k]) - _learningRate * gradThresh[k] / x.Rows;
-                _thresholds[k] = NumOps.FromDouble(newVal);
+                paramVec[P + k] = _thresholds[k];
+                gradVec[P + k] = NumOps.FromDouble(gradThresh[k]);
+            }
+
+            // Let the optimizer (Adam by default) handle the update with adaptive learning rates
+            var updatedParams = _paramOptimizer.UpdateParameters(paramVec, gradVec);
+
+            // Unpack updated parameters back into coefficients and thresholds
+            for (int p = 0; p < P; p++)
+            {
+                _coefficients[p] = updatedParams[p];
+                coef[p] = NumOps.ToDouble(updatedParams[p]);
+            }
+            for (int k = 0; k < K - 1; k++)
+            {
+                _thresholds[k] = updatedParams[P + k];
+                thresh[k] = NumOps.ToDouble(updatedParams[P + k]);
             }
 
             // Ensure thresholds are monotonically increasing
             for (int k = 1; k < K - 1; k++)
             {
-                if (NumOps.LessThanOrEquals(_thresholds[k], _thresholds[k - 1]))
+                if (thresh[k] <= thresh[k - 1])
                 {
-                    _thresholds[k] = NumOps.FromDouble(NumOps.ToDouble(_thresholds[k - 1]) + 0.001);
+                    thresh[k] = thresh[k - 1] + 0.001;
+                    _thresholds[k] = NumOps.FromDouble(thresh[k]);
                 }
             }
 
@@ -534,6 +612,39 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
     }
 
     /// <summary>
+    /// Sanitizes random parameters to ensure ordinal constraints are satisfied.
+    /// Thresholds (parameters after coefficients) must be monotonically increasing.
+    /// </summary>
+    public override Vector<T> SanitizeParameters(Vector<T> parameters)
+    {
+        if (parameters.Length <= NumFeatures) return parameters;
+
+        var sanitized = new Vector<T>(parameters.Length);
+        // Copy coefficients as-is
+        for (int i = 0; i < NumFeatures; i++)
+            sanitized[i] = parameters[i];
+
+        // Sort thresholds to ensure monotonically increasing order
+        int numThresholds = parameters.Length - NumFeatures;
+        var thresholds = new double[numThresholds];
+        for (int i = 0; i < numThresholds; i++)
+            thresholds[i] = NumOps.ToDouble(parameters[NumFeatures + i]);
+        Array.Sort(thresholds);
+
+        // Ensure minimum gap between thresholds
+        for (int i = 1; i < numThresholds; i++)
+        {
+            if (thresholds[i] <= thresholds[i - 1])
+                thresholds[i] = thresholds[i - 1] + 0.1;
+        }
+
+        for (int i = 0; i < numThresholds; i++)
+            sanitized[NumFeatures + i] = NumOps.FromDouble(thresholds[i]);
+
+        return sanitized;
+    }
+
+    /// <summary>
     /// Creates a new instance of this model type.
     /// </summary>
     /// <returns>New instance with same hyperparameters.</returns>
@@ -605,38 +716,38 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
                 probs[k] = Math.Max(probs[k], 1e-15);
             }
 
-            // Compute gradients for coefficients
+            // Compute gradients for coefficients (NLL gradient, same sign as Train())
             for (int p = 0; p < P; p++)
             {
                 double xi = NumOps.ToDouble(input[i, p]);
 
                 if (yi == 0)
                 {
-                    gradCoef[p] += xi * (cumProbs[0] - 1);
+                    gradCoef[p] -= xi * (cumProbs[0] - 1);
                 }
                 else if (yi == K - 1)
                 {
-                    gradCoef[p] += xi * cumProbs[K - 2];
+                    gradCoef[p] -= xi * cumProbs[K - 2];
                 }
                 else
                 {
                     double term = cumProbs[yi] * (1 - cumProbs[yi]) - cumProbs[yi - 1] * (1 - cumProbs[yi - 1]);
-                    gradCoef[p] += xi * term / probs[yi];
+                    gradCoef[p] -= xi * term / probs[yi];
                 }
             }
 
-            // Compute gradients for thresholds
+            // Compute gradients for thresholds (consistent with Train())
             for (int k = 0; k < K - 1; k++)
             {
                 double gamma_k = cumProbs[k] * (1 - cumProbs[k]);
 
                 if (yi == k)
                 {
-                    gradThresh[k] += gamma_k / probs[yi];
+                    gradThresh[k] -= gamma_k / probs[yi];
                 }
                 else if (yi == k + 1)
                 {
-                    gradThresh[k] += -gamma_k / probs[yi];
+                    gradThresh[k] += gamma_k / probs[yi];
                 }
             }
         }

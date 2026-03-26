@@ -517,10 +517,7 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     {
         // Compute L2 norm
         T normSquared = NumOps.Zero;
-        for (int i = 0; i < weights.Length; i++)
-        {
-            normSquared = NumOps.Add(normSquared, NumOps.Multiply(weights[i], weights[i]));
-        }
+        normSquared = NumOps.Add(normSquared, Engine.DotProduct(weights, weights));
 
         double norm = Math.Sqrt(Math.Max(NumOps.ToDouble(normSquared), 1e-8));
         double maxNorm = _cnapOptions.FastWeightScale * Math.Sqrt(weights.Length);

@@ -376,7 +376,6 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
         {
             Name = _useNativeMode ? $"{_modelName}-Native" : $"{_modelName}-ONNX",
             Description = $"{_modelName} span-based NER ({_paperCitation})",
-            ModelType = ModelType.NamedEntityRecognition,
             Complexity = _options.NumTransformerLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

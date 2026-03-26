@@ -25,11 +25,32 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// It introduces patching (dividing time series into segments) and channel independence
 /// to achieve efficient and accurate forecasting.
 /// </para>
+/// <para><b>For Beginners:</b> PatchTST treats a time series like a sentence: it breaks the
+/// data into "patches" (chunks of consecutive values) just as a sentence is split into words.
+/// A transformer then processes these patches to make predictions. This patching trick reduces
+/// computational cost dramatically while capturing long-range patterns. Each variable in a
+/// multivariate series is processed independently, which surprisingly improves accuracy.</para>
 /// <para>
 /// Reference: Nie et al., "A Time Series is Worth 64 Words: Long-term Forecasting
 /// with Transformers", ICLR 2023. https://arxiv.org/abs/2211.14730
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PatchTST for long-term forecasting with patching and channel independence
+/// // Divides time series into patches (like words in a sentence) for efficient transformer processing
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 96, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with patch embedding and channel-independent processing
+/// var model = new PatchTST&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new PatchTST&lt;double&gt;(architecture, "patchtst_etth1.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -512,7 +533,7 @@ public class PatchTST<T> : ForecastingModelBase<T>
 
         // Backward pass
         var outputGradient = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(outputGradient, output.Shape));
+        Backward(Tensor<T>.FromVector(outputGradient, output.Shape.ToArray()));
 
         // Update parameters
         _optimizer.UpdateParameters(Layers);
@@ -1044,7 +1065,7 @@ public class PatchTST<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1382,7 +1403,7 @@ public class PatchTST<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ApplyRevIN(Tensor<T> input, bool normalize)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         T epsilon = NumOps.FromDouble(1e-5);
 
         if (normalize)
@@ -1523,7 +1544,7 @@ public class PatchTST<T> : ForecastingModelBase<T>
         Array.Copy(input.Data.ToArray(), shiftAmount, newData, 0, input.Length - shiftAmount);
         Array.Copy(predictions.Data.ToArray(), 0, newData, input.Length - shiftAmount, shiftAmount);
 
-        return new Tensor<T>(input.Shape, new Vector<T>(newData));
+        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(newData));
     }
 
     /// <summary>

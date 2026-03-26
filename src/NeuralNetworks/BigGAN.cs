@@ -36,6 +36,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Based on "Large Scale GAN Training for High Fidelity Natural Image Synthesis"
 /// by Brock et al. (2019)
 /// </summary>
+/// <example>
+/// <code>
+/// var options = new BigGANOptions { LatentSize = 128, NumClasses = 1000 };
+/// var model = new BigGAN&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for computations (e.g., double, float)</typeparam>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Generative)]
@@ -372,7 +380,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
             return latentCodes;
         }
 
-        var truncated = new Tensor<T>(latentCodes.Shape);
+        var truncated = new Tensor<T>(latentCodes.Shape.ToArray());
         var threshold = NumOps.FromDouble(TruncationThreshold);
 
         for (int i = 0; i < latentCodes.Length; i++)
@@ -702,7 +710,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> CalculateHingeLossGradients(Tensor<T> output, bool isReal, int batchSize)
     {
-        var gradients = new Tensor<T>(output.Shape);
+        var gradients = new Tensor<T>(output.Shape.ToArray());
 
         for (int i = 0; i < output.Length; i++)
         {
@@ -995,7 +1003,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
             var loss = CalculateLoss(predictedCpu.ToVector(), actualCpu.ToVector());
             var gradientCpu = CalculateDerivative(predictedCpu.ToVector(), actualCpu.ToVector());
 
-            var gradientTensor = new Tensor<TLoss>(predictedCpu.Shape);
+            var gradientTensor = new Tensor<TLoss>(predictedCpu.Shape.ToArray());
             Array.Copy(gradientCpu.ToArray(), gradientTensor.Data.ToArray(), gradientCpu.Length);
 
             var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;

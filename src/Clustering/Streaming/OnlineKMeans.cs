@@ -46,6 +46,14 @@ namespace AiDotNet.Clustering.Streaming;
 /// - Any data that arrives continuously
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new OnlineKMeansOptions&lt;double&gt;();
+/// var onlineKMeans = new OnlineKMeans&lt;double&gt;(options);
+/// onlineKMeans.Train(dataMatrix);
+/// Vector<double> labels = onlineKMeans.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -82,7 +90,6 @@ public class OnlineKMeans<T> : ClusteringBase<T>
     public double CurrentLearningRate { get; private set; }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -96,6 +103,47 @@ public class OnlineKMeans<T> : ClusteringBase<T>
             MaxIterations = _options.MaxIterations,
             DistanceMetric = _options.DistanceMetric
         });
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (OnlineKMeans<T>)CreateNewInstance();
+        if (_centers is not null)
+        {
+            int k = _centers.Rows;
+            int d = _centers.Columns;
+            clone._centers = new Matrix<T>(k, d);
+            for (int i = 0; i < k; i++)
+                for (int j = 0; j < d; j++)
+                    clone._centers[i, j] = _centers[i, j];
+        }
+        clone._clusterCounts = _clusterCounts?.ToArray() ?? Array.Empty<int>();
+        clone._totalPointsSeen = _totalPointsSeen;
+        clone.CurrentLearningRate = CurrentLearningRate;
+        clone.NumClusters = NumClusters;
+        clone.NumFeatures = NumFeatures;
+        clone.IsTrained = IsTrained;
+
+        if (Labels is not null)
+        {
+            clone.Labels = new Vector<T>(Labels.Length);
+            for (int i = 0; i < Labels.Length; i++)
+                clone.Labels[i] = Labels[i];
+        }
+
+        if (ClusterCenters is not null)
+        {
+            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
+            for (int i = 0; i < ClusterCenters.Rows; i++)
+                for (int j = 0; j < ClusterCenters.Columns; j++)
+                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
+        }
+
+        return clone;
     }
 
     /// <inheritdoc />
@@ -128,6 +176,12 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         var labels = new int[n];
         CurrentLearningRate = _options.LearningRate;
 
+        // Multi-pass: when MaxIterations > 1, iterate through the data multiple times
+        // for better convergence. This is standard for batch online KMeans.
+        int numPasses = Math.Max(1, _options.MaxIterations);
+
+        for (int pass = 0; pass < numPasses; pass++)
+        {
         // Process each point
         for (int i = 0; i < n; i++)
         {
@@ -156,6 +210,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
                 );
             }
         }
+        } // end multi-pass loop
 
         // Set results — clone internal centers to base class property (avoid aliasing)
         ClusterCenters = _centers.Clone();
@@ -166,6 +221,7 @@ public class OnlineKMeans<T> : ClusteringBase<T>
             Labels[i] = NumOps.FromDouble(labels[i]);
         }
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 
@@ -174,15 +230,51 @@ public class OnlineKMeans<T> : ClusteringBase<T>
         _centers = new Matrix<T>(k, d);
         _clusterCounts = new int[k];
 
-        // Initialize from random data points
-        var indices = Enumerable.Range(0, x.Rows).OrderBy(_ => rand.Next()).Take(k).ToArray();
-        for (int c = 0; c < k; c++)
+        // K-Means++ initialization: select well-separated initial centers
+        // First center: random data point
+        int firstIdx = rand.Next(x.Rows);
+        for (int j = 0; j < d; j++)
+            _centers[0, j] = x[firstIdx, j];
+
+        // Subsequent centers: choose proportional to squared distance from nearest existing center
+        for (int c = 1; c < k; c++)
         {
-            int idx = indices[c];
-            for (int j = 0; j < d; j++)
+            var distances = new double[x.Rows];
+            double totalDist = 0;
+
+            for (int i = 0; i < x.Rows; i++)
             {
-                _centers[c, j] = x[idx, j];
+                double minDist = double.MaxValue;
+                for (int cc = 0; cc < c; cc++)
+                {
+                    double dist = 0;
+                    for (int j = 0; j < d; j++)
+                    {
+                        double diff = NumOps.ToDouble(x[i, j]) - NumOps.ToDouble(_centers[cc, j]);
+                        dist += diff * diff;
+                    }
+                    minDist = Math.Min(minDist, dist);
+                }
+                distances[i] = minDist;
+                totalDist += minDist;
             }
+
+            // Weighted random selection
+            double target = rand.NextDouble() * totalDist;
+            double cumulative = 0;
+            int selectedIdx = 0;
+            for (int i = 0; i < x.Rows; i++)
+            {
+                cumulative += distances[i];
+                if (cumulative >= target)
+                {
+                    selectedIdx = i;
+                    break;
+                }
+            }
+
+            for (int j = 0; j < d; j++)
+                _centers[c, j] = x[selectedIdx, j];
         }
     }
 

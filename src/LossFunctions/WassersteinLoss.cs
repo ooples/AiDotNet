@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -40,6 +43,9 @@ namespace AiDotNet.LossFunctions;
 /// Reference: Arjovsky et al., "Wasserstein GAN" (2017)
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Adversarial)]
+[LossTask(LossTask.ImageGeneration)]
+[LossProperty(IsNonNegative = false, ZeroForIdentical = false, TestInputFormat = LossTestInputFormat.CriticScores, ExpectedOutput = OutputType.Logits)]
 public class WassersteinLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
@@ -76,10 +82,7 @@ public class WassersteinLoss<T> : LossFunctionBase<T>
         // Wasserstein loss: -mean(predicted * actual)
         // We negate because we want to minimize loss (which maximizes the Wasserstein distance)
         T sum = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(predicted[i], actual[i]));
-        }
+        sum = NumOps.Add(sum, Engine.DotProduct(predicted, actual));
 
         // Return negative mean (minimizing this maximizes expected score for real, minimizes for fake)
         T mean = NumOps.Divide(sum, NumOps.FromDouble(predicted.Length));

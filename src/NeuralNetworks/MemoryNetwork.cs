@@ -34,6 +34,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Tasks where information needs to be remembered and used later
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new MemoryNetworkOptions { InputSize = 50, MemorySize = 128, EmbeddingSize = 64 };
+/// var model = new MemoryNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 50 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.Language)]
@@ -45,6 +53,9 @@ namespace AiDotNet.NeuralNetworks;
 public class MemoryNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly MemoryNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -294,11 +305,14 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         // Set to inference mode
         SetTrainingMode(false);
 
+        // Ensure 2D input for memory operations (TensorMatMul requires rank >= 2)
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+
         // Convert memory matrix to tensor for memory-augmented layers
         var memoryTensor = Tensor<T>.FromMatrix(_memory);
 
         // Flow through all layers sequentially
-        // Each layer handles its own tensor operations (industry standard)
         Tensor<T> current = input;
 
         foreach (var layer in Layers)
@@ -391,7 +405,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     private Tensor<T> ReadFromMemory(Tensor<T> attentionWeights)
     {
         // Get shape information
-        int[] shape = attentionWeights.Shape;
+        int[] shape = attentionWeights.Shape.ToArray();
         int batchSize = shape[0];
 
         // Create result tensor with shape [batchSize, embeddingSize]
@@ -432,8 +446,8 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     private Tensor<T> CombineInputAndMemory(Tensor<T> encoded, Tensor<T> memoryReadout)
     {
         // Get shape information
-        int[] encodedShape = encoded.Shape;
-        int[] readoutShape = memoryReadout.Shape;
+        int[] encodedShape = encoded.Shape.ToArray();
+        int[] readoutShape = memoryReadout.Shape.ToArray();
         int batchSize = encodedShape[0];
         int encodedSize = encodedShape[1];
 
@@ -514,7 +528,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         // For simplicity, we'll just use the layer output directly as write vector
 
         // Get shape information
-        int[] shape = current.Shape;
+        int[] shape = current.Shape.ToArray();
         int batchSize = shape[0];
 
         // Use first batch's attention and write values
@@ -575,34 +589,43 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     /// - Build up a useful memory of facts and information
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Persistent Adam optimizer for stable training.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Set to training mode
         SetTrainingMode(true);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(true);
 
-        // Forward pass to get predictions
-        var predictions = Predict(input);
+        // Ensure 2D input
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
 
-        // Calculate loss using the specified loss function
-        Vector<T> predictedVector = predictions.ToVector();
-        Vector<T> expectedVector = expectedOutput.ToVector();
-        T loss = LossFunction.CalculateLoss(predictedVector, expectedVector);
+        // Forward pass through all layers
+        var output = ForwardWithMemory(input);
+        var outputVector = output.ToVector();
+        var expectedVector = expectedOutput.ToVector();
 
-        // Set the LastLoss property
-        LastLoss = loss;
+        // Calculate loss
+        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
 
-        // Calculate output gradients using the loss function's derivative
-        var gradientVector = LossFunction.CalculateDerivative(predictedVector, expectedVector);
-        var outputGradients = new Tensor<T>(predictions.Shape, gradientVector);
+        // Backward pass
+        var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
+        var gradTensor = Tensor<T>.FromVector(lossGrad);
+        if (gradTensor.Rank < output.Rank)
+            gradTensor = gradTensor.Reshape(output.Shape.ToArray());
 
-        // Backpropagation
-        BackpropagateMemoryNetwork(outputGradients);
+        Backpropagate(gradTensor);
 
-        // Update parameters
-        UpdateMemoryNetworkParameters();
-
-        // Always update memory during training
-        // This is handled in the Predict method
+        // Persistent Adam optimizer
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        var paramGrads = GetParameterGradients();
+        var currentParams = GetParameters();
+        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
+        UpdateParameters(updatedParams);
     }
 
     /// <summary>
@@ -614,7 +637,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     private T CalculateMeanSquaredError(Tensor<T> predictions, Tensor<T> expected)
     {
         // Verify tensor shapes match
-        if (!AreShapesCompatible(predictions.Shape, expected.Shape))
+        if (!AreShapesCompatible(predictions.Shape.ToArray(), expected.Shape.ToArray()))
         {
             throw new ArgumentException("Prediction and expected output shapes must be compatible");
         }
@@ -698,7 +721,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     private Tensor<T> CalculateOutputGradients(Tensor<T> predictions, Tensor<T> expected)
     {
         // Verify tensor shapes match
-        if (!AreShapesCompatible(predictions.Shape, expected.Shape))
+        if (!AreShapesCompatible(predictions.Shape.ToArray(), expected.Shape.ToArray()))
         {
             throw new ArgumentException("Prediction and expected output shapes must be compatible");
         }
@@ -707,7 +730,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         // We can simplify to (predictions - expected) and adjust learning rate
 
         // Create gradient tensor with same shape as predictions
-        Tensor<T> gradients = new Tensor<T>(predictions.Shape);
+        Tensor<T> gradients = new Tensor<T>(predictions.Shape.ToArray());
 
         // Calculate gradients
         if (predictions.Shape.Length == 2)
@@ -842,7 +865,6 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.MemoryNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "MemorySize", _memorySize },

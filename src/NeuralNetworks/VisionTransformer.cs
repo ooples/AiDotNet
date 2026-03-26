@@ -31,6 +31,14 @@ namespace AiDotNet.NeuralNetworks;
 /// especially when trained on large datasets.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new VisionTransformerOptions { ImageSize = 224, PatchSize = 16, HiddenSize = 768, NumLayers = 12 };
+/// var model = new VisionTransformer&lt;float&gt;(options);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 224, 224 });
+/// var output = model.Predict(image);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -152,7 +160,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     /// </summary>
     public VisionTransformer()
         : this(new NeuralNetworkArchitecture<T>(
-            inputType: Enums.InputType.TwoDimensional,
+            inputType: Enums.InputType.ThreeDimensional,
             taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
             inputHeight: 224, inputWidth: 224, inputDepth: 3,
             outputSize: 1000),
@@ -327,7 +335,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         if (input4D.Shape[1] != _channels || input4D.Shape[2] != _imageHeight || input4D.Shape[3] != _imageWidth)
         {
             throw new ArgumentException(
-                $"Input shape {string.Join("x", input4D.Shape)} does not match expected " +
+                $"Input shape {string.Join("x", input4D.Shape.ToArray())} does not match expected " +
                 $"[batch, {_channels}, {_imageHeight}, {_imageWidth}].",
                 nameof(input));
         }
@@ -508,7 +516,6 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         var metadata = new ModelMetadata<T>
         {
             Name = "VisionTransformer",
-            ModelType = ModelType.Transformer,
             FeatureCount = _imageHeight * _imageWidth * _channels,
             Complexity = ParameterCount,
             Description = $"Vision Transformer with {_numLayers} layers, {_numHeads} attention heads, and {_numPatches} patches",

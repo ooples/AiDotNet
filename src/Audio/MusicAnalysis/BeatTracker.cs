@@ -29,7 +29,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// <code>
 /// var tracker = new BeatTracker&lt;float&gt;();
 /// var result = tracker.Track(audioTensor);
-/// Console.WriteLine($"Tempo: {result.Tempo} BPM");
+/// // Result is available in the returned value
 /// foreach (var beat in result.BeatTimes.Take(10))
 ///     Console.WriteLine($"Beat at {beat:F3}s");
 /// </code>

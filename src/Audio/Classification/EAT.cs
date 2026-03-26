@@ -231,14 +231,14 @@ public class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        var result = new Tensor<T>(modelOutput.Shape);
+        var result = new Tensor<T>(modelOutput.Shape.ToArray());
         for (int i = 0; i < modelOutput.Length; i++) { double l = NumOps.ToDouble(modelOutput[i]); result[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-l))); }
         return result;
     }
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "EAT-Native" : "EAT-ONNX", Description = "EAT: Efficient Audio Transformer (Chen et al., 2024)", ModelType = ModelType.NeuralNetwork, FeatureCount = ClassLabels.Count, Complexity = _options.NumEncoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "EAT-Native" : "EAT-ONNX", Description = "EAT: Efficient Audio Transformer (Chen et al., 2024)", FeatureCount = ClassLabels.Count, Complexity = _options.NumEncoderLayers };
         m.AdditionalInfo["Architecture"] = "EAT"; m.AdditionalInfo["EmbeddingDim"] = _options.EmbeddingDim.ToString();
         m.AdditionalInfo["NumEncoderLayers"] = _options.NumEncoderLayers.ToString(); m.AdditionalInfo["NumClasses"] = ClassLabels.Count.ToString();
         return m;

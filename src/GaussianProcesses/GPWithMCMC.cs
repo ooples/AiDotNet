@@ -40,12 +40,12 @@ public class GPWithMCMC<T> : IGaussianProcess<T>
     /// <summary>
     /// Training input data.
     /// </summary>
-    private Matrix<T> _X = new Matrix<T>(0, 0);
+    private Matrix<T>? _X;
 
     /// <summary>
     /// Training output data.
     /// </summary>
-    private Vector<T> _y = new Vector<T>(0);
+    private Vector<T>? _y;
 
     /// <summary>
     /// MCMC samples of hyperparameters [lengthscale, outputVariance, noiseVariance].
@@ -590,7 +590,7 @@ public class GPWithMCMC<T> : IGaussianProcess<T>
     /// </summary>
     private Matrix<T> BuildKernelMatrix(double lengthscale, double outputVar, double noiseVar)
     {
-        int n = _X.Rows;
+        int n = _X!.Rows;
         var K = new Matrix<T>(n, n);
 
         for (int i = 0; i < n; i++)
@@ -600,10 +600,9 @@ public class GPWithMCMC<T> : IGaussianProcess<T>
             {
                 var xj = GetRow(_X, j);
 
-                // Use the actual kernel function instead of hardcoded RBF
-                // The lengthscale and outputVar parameters are used by the kernel's internal hyperparameters
-                // Note: For kernels other than RBF, the MCMC-sampled lengthscale/outputVar are diagnostic only
-                double kval = _numOps.ToDouble(_kernel.Calculate(xi, xj));
+                // Scale kernel output by MCMC-sampled outputVar.
+                // The base kernel provides correlation structure; outputVar scales magnitude.
+                double kval = _numOps.ToDouble(_kernel.Calculate(xi, xj)) * outputVar;
 
                 // Add noise variance to diagonal
                 if (i == j)
@@ -622,16 +621,16 @@ public class GPWithMCMC<T> : IGaussianProcess<T>
     /// </summary>
     private Vector<T> ComputeCrossCovariance(Vector<T> x, double lengthscale, double outputVar)
     {
-        // Note: lengthscale and outputVar parameters are from MCMC samples but the actual
-        // kernel function is used. For non-RBF kernels, these parameters are diagnostic only.
-        int n = _X.Rows;
+        int n = _X!.Rows;
         var kstar = new Vector<T>(n);
 
+        // Scale kernel output by MCMC-sampled output variance.
+        // The base kernel provides the correlation structure; outputVar scales the magnitude.
+        T scale = _numOps.FromDouble(outputVar);
         for (int i = 0; i < n; i++)
         {
             var xi = GetRow(_X, i);
-            // Use the actual kernel function instead of hardcoded RBF
-            kstar[i] = _kernel.Calculate(x, xi);
+            kstar[i] = _numOps.Multiply(_kernel.Calculate(x, xi), scale);
         }
 
         return kstar;

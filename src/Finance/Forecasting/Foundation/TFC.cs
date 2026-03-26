@@ -27,10 +27,31 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// and frequency-domain representations via contrastive learning, capturing both
 /// temporal and spectral patterns. It uses dual CNN encoders with a shared projection head.
 /// </para>
+/// <para><b>For Beginners:</b> TF-C learns to understand time series by looking at the same
+/// data in two ways: as a sequence of values over time, and as a set of frequencies (like
+/// breaking a musical chord into individual notes). By training the model to agree on what
+/// it sees from both perspectives, it learns robust patterns that work well for downstream
+/// tasks like forecasting and classification.</para>
 /// <para>
 /// <b>Reference:</b> Zhang et al., "Self-Supervised Contrastive Pre-Training For Time Series via Time-Frequency Consistency", NeurIPS 2022.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TF-C model for self-supervised time series representation learning
+/// // Enforces consistency between time-domain and frequency-domain representations
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with dual CNN encoders and contrastive learning
+/// var model = new TFC&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TFC&lt;double&gt;(architecture, "tfc.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -256,7 +277,7 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = NumOps.Add(forecastLoss, contrastiveLoss);
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -298,16 +319,14 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         }
 
         // Cosine similarity / temperature
-        T dotProduct = NumOps.Zero;
-        T normTime = NumOps.Zero;
-        T normFreq = NumOps.Zero;
-        int len = Math.Min(timeProj.Length, freqProj.Length);
-        for (int i = 0; i < len; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(timeProj[i], freqProj[i]));
-            normTime = NumOps.Add(normTime, NumOps.Multiply(timeProj[i], timeProj[i]));
-            normFreq = NumOps.Add(normFreq, NumOps.Multiply(freqProj[i], freqProj[i]));
-        }
+        // Engine-accelerated cosine similarity
+        int projLen = Math.Min(timeProj.Length, freqProj.Length);
+        var tpVec = new Vector<T>(projLen);
+        var fpVec = new Vector<T>(projLen);
+        for (int i = 0; i < projLen; i++) { tpVec[i] = timeProj[i]; fpVec[i] = freqProj[i]; }
+        T dotProduct = Engine.DotProduct(tpVec, fpVec);
+        T normTime = Engine.DotProduct(tpVec, tpVec);
+        T normFreq = Engine.DotProduct(fpVec, fpVec);
         T eps8 = NumOps.FromDouble(1e-8);
         T normProduct = NumOps.Add(NumOps.Multiply(NumOps.Sqrt(normTime), NumOps.Sqrt(normFreq)), eps8);
         T cosSim = NumOps.Divide(dotProduct, normProduct);
@@ -332,7 +351,6 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "TFC" },
@@ -458,7 +476,7 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -584,7 +602,7 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
             current = _projectionHead.Backward(current);
 
         // Scale gradient for dual-encoder averaging
-        var scaledGrad = new Tensor<T>(current.Shape);
+        var scaledGrad = new Tensor<T>(current.Shape.ToArray());
         for (int i = 0; i < current.Length; i++)
             scaledGrad.Data.Span[i] = NumOps.Divide(current[i], NumOps.FromDouble(2.0));
 
@@ -605,7 +623,7 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
             timeGrad = _timeInputProjection.Backward(timeGrad);
 
         // Sum gradients from both paths
-        current = new Tensor<T>(timeGrad.Shape);
+        current = new Tensor<T>(timeGrad.Shape.ToArray());
         for (int i = 0; i < timeGrad.Length && i < freqGrad.Length; i++)
             current.Data.Span[i] = NumOps.Add(timeGrad[i], freqGrad[i]);
 
@@ -668,7 +686,7 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         int n = input.Rank > 1 ? input.Shape[^1] : input.Length;
         int numSamples = input.Rank > 1 ? input.Length / n : 1;
         int halfN = n / 2 + 1;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         T invN = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
 
         for (int s = 0; s < numSamples; s++)

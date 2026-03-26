@@ -40,6 +40,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Parmar et al., "Zero-shot Image-to-Image Translation", SIGGRAPH 2023
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new Pix2PixZeroModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var translated = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Editing)]
@@ -133,7 +141,7 @@ public class Pix2PixZeroModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "Pix2Pix-Zero", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Pix2Pix-Zero", Version = "1.0",
             Description = "Zero-shot image-to-image translation via text embedding direction discovery",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

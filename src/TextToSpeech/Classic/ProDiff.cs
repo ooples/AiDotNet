@@ -20,6 +20,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "ProDiff: Progressive Fast Diffusion Model for High-Quality Text-to-Speech" (Huang et al., 2022)</item></list></para>
 /// <para><b>For Beginners:</b> ProDiff is a diffusion-based text-to-speech model that converts text input into speech audio output.</para>
+/// <example>
+/// <code>
+/// // Create a ProDiff model for progressive fast diffusion TTS
+/// // with knowledge distillation for high-quality generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ProDiff&lt;double&gt;(architecture, "prodiff.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ProDiff&lt;double&gt;(architecture, new ProDiffOptions());
+/// </code>
+/// </example>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -242,7 +258,6 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         {
             Name = _useNativeMode ? "ProDiff-Native" : "ProDiff-ONNX",
             Description = "ProDiff: Progressive Fast Diffusion Model for High-Quality TTS (Huang et al., 2022)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.HiddenDim,
             Complexity = _options.NumEncoderLayers + _options.NumDiffusionSteps
         };

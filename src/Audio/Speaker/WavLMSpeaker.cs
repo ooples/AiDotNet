@@ -264,7 +264,6 @@ public class WavLMSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, I
         {
             Name = _useNativeMode ? "WavLM-Speaker-Native" : "WavLM-Speaker-ONNX",
             Description = $"WavLM {_options.Variant} Speaker Embedding (Chen et al., 2022)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

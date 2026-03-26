@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -25,6 +26,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
+[LayerCategory(LayerCategory.Transformer)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class DecoderLayer<T> : LayerBase<T>
 {
 
@@ -107,6 +111,30 @@ public class DecoderLayer<T> : LayerBase<T>
     /// </summary>
     public override bool SupportsTraining => true;
 
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+        void Set(ILayer<T> layer) { int c = layer.ParameterCount; layer.SetParameters(parameters.Slice(idx, c)); idx += c; }
+        Set(_selfAttention); Set(_crossAttention); Set(_feedForward1); Set(_feedForward2);
+        Set(_norm1); Set(_norm2); Set(_norm3);
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        return Vector<T>.Concatenate(
+            _selfAttention.GetParameterGradients(), _crossAttention.GetParameterGradients(),
+            _feedForward1.GetParameterGradients(), _feedForward2.GetParameterGradients(),
+            _norm1.GetParameterGradients(), _norm2.GetParameterGradients(), _norm3.GetParameterGradients());
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _selfAttention.ClearGradients(); _crossAttention.ClearGradients();
+        _feedForward1.ClearGradients(); _feedForward2.ClearGradients();
+        _norm1.ClearGradients(); _norm2.ClearGradients(); _norm3.ClearGradients();
+    }
+
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
@@ -186,7 +214,7 @@ public class DecoderLayer<T> : LayerBase<T>
         // Handle any rank >= 2: last 2 dims are [seq, features], earlier dims are batch-like
         int rank = decoderInput.Shape.Length;
         _inputWas2D = rank == 2;
-        _originalInputShape = decoderInput.Shape;
+        _originalInputShape = decoderInput.Shape.ToArray();
         Tensor<T> input3D, encoderOutput3D;
 
         if (_inputWas2D)
@@ -563,10 +591,13 @@ public class DecoderLayer<T> : LayerBase<T>
             grad3D = outputGradient;
         }
 
+        // Backward through Norm3 first (output = Norm3(residual + ff))
+        var dNorm3 = _norm3.Backward(grad3D);
+
         // Backward through FFN (reverse order: projection then expansion)
-        var dFF2 = _feedForward2.Backward(grad3D);
+        var dFF2 = _feedForward2.Backward(dNorm3);
         var dNormalized2 = _feedForward1.Backward(dFF2);
-        dNormalized2 = dNormalized2.Add(grad3D);
+        dNormalized2 = dNormalized2.Add(dNorm3); // Residual connection gradient
         var dNorm2 = _norm2.Backward(dNormalized2);
 
         var dCrossAttention = _crossAttention.Backward(dNorm2);
@@ -576,8 +607,9 @@ public class DecoderLayer<T> : LayerBase<T>
         var dSelfAttention = _selfAttention.Backward(dNorm1);
         var dInput = dSelfAttention.Add(dNorm1);
 
-        // Calculate gradient with respect to encoder output
-        var dEncoderOutput = _crossAttention.Backward(dNorm2);
+        // Encoder output gradient: use the cross-attention gradient (same as dCrossAttention)
+        // since cross-attention outputs depend on both query (from self-attention) and context (encoder)
+        var dEncoderOutput = dCrossAttention;
 
         // If input was originally 2D, reshape gradients back to 2D
         if (gradWas2D)

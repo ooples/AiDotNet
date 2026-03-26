@@ -195,7 +195,7 @@ public class InferenceOptimizerTests
         Assert.Contains(model.Layers, l => l is DenseLayer<float>);
 
         var y = optimized.Predict(input);
-        Assert.Equal(baseline.Shape, y.Shape);
+        Assert.Equal(baseline.Shape.ToArray(), y.Shape.ToArray());
 
         for (int i = 0; i < y.Length; i++)
         {

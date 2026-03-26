@@ -49,7 +49,7 @@ namespace AiDotNet.Audio.LanguageIdentification;
 /// <code>
 /// var model = new VoxLingua107Identifier&lt;float&gt;(architecture, "voxlingua107.onnx");
 /// var result = model.IdentifyLanguage(audioTensor);
-/// Console.WriteLine($"Language: {result.LanguageName} ({result.Confidence:P0})");
+/// // Result is available in the returned value
 /// // Output: Language: Swedish (85%)
 ///
 /// // Get top 5 predictions
@@ -431,7 +431,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
         var probs = Softmax(modelOutput.Data.ToArray());
-        return new Tensor<T>(probs, modelOutput.Shape);
+        return new Tensor<T>(probs, modelOutput.Shape.ToArray());
     }
 
     /// <inheritdoc/>
@@ -465,7 +465,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
 
         var loss = _lossFunction.CalculateLoss(predictedVector, expectedVector);
         var gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
-        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape);
+        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape.ToArray());
 
         BackwardNative(gradientTensor);
         _optimizer?.UpdateParameters(Layers);
@@ -496,7 +496,6 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             Version = "1.0.0",
             AdditionalInfo = new Dictionary<string, object>
             {
@@ -795,7 +794,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
             }
         }
 
-        return new Tensor<T>(output, input.Shape);
+        return new Tensor<T>(output, input.Shape.ToArray());
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)

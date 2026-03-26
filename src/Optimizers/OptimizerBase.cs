@@ -265,13 +265,21 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         int? maxFeatures = null)
     {
         int min = minFeatures ?? Options.MinimumFeatures;
-        int max = maxFeatures ?? Math.Min(Options.MaximumFeatures, totalFeatures);
+        // MaximumFeatures = 0 means "use all features" (default behavior)
+        int configMax = Options.MaximumFeatures > 0 ? Options.MaximumFeatures : totalFeatures;
+        int max = maxFeatures ?? Math.Min(configMax, totalFeatures);
+
+        // When neither MinimumFeatures nor MaximumFeatures is explicitly configured,
+        // use all features to avoid random subset selection that can break small-feature models.
+        if (Options.MinimumFeatures == 0 && Options.MaximumFeatures == 0)
+        {
+            return Enumerable.Range(0, totalFeatures).ToList();
+        }
 
         // Ensure min/max values are valid
         min = Math.Max(1, Math.Min(min, totalFeatures));
         max = Math.Min(max, totalFeatures);
 
-        // If min > max (due to constraints), set them equal
         if (min > max)
         {
             max = min;
@@ -386,11 +394,22 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         IFullModel<T, TInput, TOutput> solution,
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        // Step 1: Generate random feature selection independent of model state
-        var selectedFeaturesIndices = RandomlySelectFeatures(
-            InputHelper<T, TInput>.GetInputSize(inputData.XTrain),
-            Options.MinimumFeatures,
-            Options.MaximumFeatures);
+        // Step 1: Generate feature selection.
+        // Models that don't support parameter initialization (NB, decision trees, etc.)
+        // learn their structure from ALL features during training. Random feature selection
+        // can remove features that are critical for discrimination, causing 50% accuracy.
+        int totalFeatures = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
+        List<int> selectedFeaturesIndices;
+
+        if (!solution.SupportsParameterInitialization)
+        {
+            selectedFeaturesIndices = Enumerable.Range(0, totalFeatures).ToList();
+        }
+        else
+        {
+            selectedFeaturesIndices = RandomlySelectFeatures(
+                totalFeatures, Options.MinimumFeatures, Options.MaximumFeatures);
+        }
 
         // Step 2: Apply feature selection to the model BEFORE we check the cache
         ApplyFeatureSelection(solution, selectedFeaturesIndices);
@@ -772,6 +791,13 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <returns>A unique cache key string.</returns>
     protected virtual string GenerateCacheKey(IFullModel<T, TInput, TOutput> solution, OptimizationInputData<T, TInput, TOutput> inputData)
     {
+        // Models that don't support parameter initialization (time series, density-based clustering)
+        // may not have parameters before training — use type name + hash code as fallback.
+        if (!solution.SupportsParameterInitialization)
+        {
+            return $"{solution.GetType().Name}_{solution.GetHashCode()}";
+        }
+
         // Generate a simple cache key based on parameter values
         var parameters = solution.GetParameters();
         var paramHash = parameters.GetHashCode();
@@ -1430,6 +1456,14 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     {
         if (trainingData == null) throw new ArgumentNullException(nameof(trainingData));
 
+        // Use the Strategy pattern: let the model decide if it supports parameter initialization.
+        // Models like decision trees, meta classifiers, and untrained clustering models don't
+        // support having random parameters injected — they learn their structure during training.
+        if (!RequireModel().SupportsParameterInitialization)
+        {
+            return RequireModel().Clone();
+        }
+
         // Compute lower and upper bounds from the training data
         // Following GitHub Copilot's suggestion: compute min/max from the data
         Vector<T> lowerBounds;
@@ -1555,11 +1589,13 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         }
 
         // Generate random parameters within the computed bounds
-        // Note: InitializeRandomSolution(Vector<T>, Vector<T>) returns Vector<T> (verified at line 1184)
-        // This is the correct return type for SetParameters() below
         var randomParams = InitializeRandomSolution(lowerBounds, upperBounds);
 
-        // Create a new model with these random parameters
+        // Let the model sanitize parameters to satisfy structural constraints
+        // (e.g., monotonically increasing thresholds for ordinal models)
+        randomParams = RequireModel().SanitizeParameters(randomParams);
+
+        // Create a new model with these sanitized random parameters
         var randomModel = RequireModel().Clone();
         randomModel.SetParameters(randomParams);
         return randomModel;

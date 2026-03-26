@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// VideoLLaMA 2 (Alibaba, 2024) advances spatial-temporal modeling for video understanding
+/// using convolution-based video token aggregation. It applies spatial-temporal convolutions
+/// to compress frame-level visual tokens along both spatial and temporal dimensions, with
+/// optional audio branch support for multi-modal video understanding.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "VideoLLaMA 2: Advancing Spatial-Temporal Modeling" (Alibaba, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> VideoLLaMA2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> VideoLLaMA 2 is a video-language model with spatial-temporal
+/// convolution for efficient video token processing. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VideoLLaMA 2 model for spatial-temporal video understanding
+/// // with convolution-based video token aggregation and audio support
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new VideoLLaMA2&lt;double&gt;(architecture, "videollama2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new VideoLLaMA2&lt;double&gt;(architecture, new VideoLLaMA2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Video)]
@@ -169,7 +193,7 @@ public class VideoLLaMA2<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "VideoLLaMA2-Native" : "VideoLLaMA2-ONNX", Description = "VideoLLaMA 2: spatial-temporal convolution for video tokens.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "VideoLLaMA2-Native" : "VideoLLaMA2-ONNX", Description = "VideoLLaMA 2: spatial-temporal convolution for video tokens.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "VideoLLaMA2";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         m.AdditionalInfo["SpatialTemporalConv"] = _options.EnableSpatialTemporalConv.ToString();

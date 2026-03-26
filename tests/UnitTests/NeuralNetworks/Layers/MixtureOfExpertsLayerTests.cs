@@ -550,7 +550,7 @@ public class MixtureOfExpertsLayerTests
             }
 
             // Compute gradient (simple: 2 * (output - target) / n)
-            var gradient = new Tensor<float>(output.Shape);
+            var gradient = new Tensor<float>(output.Shape.ToArray());
             for (int i = 0; i < output.Length; i++)
             {
                 gradient[i] = 2.0f * (output[i] - target[i]) / output.Length;

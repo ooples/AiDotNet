@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -54,6 +56,11 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerCategory(LayerCategory.Recurrent)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
 public class RWKVLayer<T> : LayerBase<T>
 {
     // Configuration
@@ -177,12 +184,15 @@ public class RWKVLayer<T> : LayerBase<T>
         int sequenceLength,
         int modelDimension = 256,
         int numHeads = 8,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, modelDimension],
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         if (sequenceLength <= 0)
             throw new ArgumentException($"Sequence length ({sequenceLength}) must be positive.", nameof(sequenceLength));
         if (modelDimension <= 0)
@@ -259,17 +269,13 @@ public class RWKVLayer<T> : LayerBase<T>
 
     private void InitializeTensor(Tensor<T> tensor)
     {
-        int fanIn = tensor.Shape[0];
-        int fanOut = tensor.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
     }
 
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -317,7 +323,7 @@ public class RWKVLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> TimeMixingForward(Tensor<T> x, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State for WKV: numerator [batch, numHeads, headDim, headDim] and denominator [batch, numHeads, headDim]
         var stateNum = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
@@ -472,7 +478,7 @@ public class RWKVLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ChannelMixingForward(Tensor<T> x, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         var xPrev = new Tensor<T>(new[] { batchSize, _modelDimension });
         int expandedDim = _modelDimension * 4;
 
@@ -671,6 +677,36 @@ public class RWKVLayer<T> : LayerBase<T>
         _channelKeyWeights, _channelValueWeights, _channelReceptanceWeights,
         _normGamma1, _normBeta1, _normGamma2, _normBeta2
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_timeMixRGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_timeMixRGradient!.ToArray()),
+            new Vector<T>(_timeMixKGradient!.ToArray()),
+            new Vector<T>(_timeMixVGradient!.ToArray()),
+            new Vector<T>(_receptanceWeightsGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_decayWeightsGradient!.ToArray()),
+            new Vector<T>(_decayBiasGradient!.ToArray()),
+            new Vector<T>(_bonusGradient!.ToArray()),
+            new Vector<T>(_channelMixRGradient!.ToArray()),
+            new Vector<T>(_channelMixKGradient!.ToArray()),
+            new Vector<T>(_channelKeyWeightsGradient!.ToArray()),
+            new Vector<T>(_channelValueWeightsGradient!.ToArray()),
+            new Vector<T>(_channelReceptanceWeightsGradient!.ToArray()),
+            new Vector<T>(_normGamma1Gradient!.ToArray()),
+            new Vector<T>(_normBeta1Gradient!.ToArray()),
+            new Vector<T>(_normGamma2Gradient!.ToArray()),
+            new Vector<T>(_normBeta2Gradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _timeMixRGradient = null; _timeMixKGradient = null; _timeMixVGradient = null; _receptanceWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null; _decayWeightsGradient = null; _decayBiasGradient = null; _bonusGradient = null; _channelMixRGradient = null; _channelMixKGradient = null; _channelKeyWeightsGradient = null; _channelValueWeightsGradient = null; _channelReceptanceWeightsGradient = null; _normGamma1Gradient = null; _normBeta1Gradient = null; _normGamma2Gradient = null; _normBeta2Gradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

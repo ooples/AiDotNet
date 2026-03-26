@@ -40,6 +40,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Parmar et al., "One-Step Image Translation with Text-to-Image Models", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 1 };
+/// var model = new CycleGANTurboModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var translated = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.GAN)]
 [ModelCategory(ModelCategory.Diffusion)]
@@ -135,7 +143,7 @@ public class CycleGANTurboModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "CycleGAN-Turbo", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "CycleGAN-Turbo", Version = "1.0",
             Description = "Single-step unpaired image translation with SDXL backbone and cycle consistency",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

@@ -181,7 +181,6 @@ public class M2M<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "M2M-Native" : "M2M-ONNX",
             Description = $"M2M {_options.Variant} many-to-many splatting interpolation (Hu et al., CVPR 2022)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumFlowHypotheses * _options.NumPyramidLevels
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

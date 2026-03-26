@@ -249,7 +249,6 @@ public class PeakNetFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             Name = _useNativeMode ? "PeakNetFP-Native" : "PeakNetFP-ONNX",
             Description = "PeakNetFP spectral peak-based neural audio fingerprinting",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumEncoderBlocks
         };
         m.AdditionalInfo["EmbeddingDim"] = _options.EmbeddingDim.ToString();

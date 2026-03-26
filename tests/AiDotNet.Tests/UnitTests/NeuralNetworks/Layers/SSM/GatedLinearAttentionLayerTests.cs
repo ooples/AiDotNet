@@ -68,7 +68,7 @@ public class GatedLinearAttentionLayerTests
 
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -83,7 +83,7 @@ public class GatedLinearAttentionLayerTests
 
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -97,10 +97,10 @@ public class GatedLinearAttentionLayerTests
         var input = CreateRandomTensor(new[] { 1, seqLen, modelDim });
 
         var output = layer.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         var inputGrad = layer.Backward(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         Assert.False(ContainsNaN(inputGrad));
     }
 
@@ -114,10 +114,10 @@ public class GatedLinearAttentionLayerTests
         var input = CreateRandomTensor(new[] { seqLen, modelDim });
 
         var output = layer.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         var inputGrad = layer.Backward(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         for (int i = 0; i < inputGrad.Length; i++)
             Assert.False(float.IsNaN(inputGrad[i]), $"NaN detected in backward output at index {i}");
     }
@@ -244,7 +244,7 @@ public class GatedLinearAttentionLayerTests
         var queryWeights = layer.GetQueryWeights();
 
         Assert.NotNull(queryWeights);
-        Assert.Equal(new[] { modelDim, modelDim }, queryWeights.Shape);
+        Assert.Equal(new[] { modelDim, modelDim }, queryWeights.Shape.ToArray());
     }
 
     [Fact]
@@ -258,7 +258,7 @@ public class GatedLinearAttentionLayerTests
 
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaNDouble(output));
     }
 
@@ -272,10 +272,10 @@ public class GatedLinearAttentionLayerTests
         var input = CreateRandomDoubleTensor(new[] { 1, seqLen, modelDim });
 
         var output = layer.Forward(input);
-        var grad = CreateRandomDoubleTensor(output.Shape);
+        var grad = CreateRandomDoubleTensor(output.Shape.ToArray());
         var inputGrad = layer.Backward(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         Assert.False(ContainsNaNDouble(inputGrad));
     }
 

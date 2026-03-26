@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -69,6 +71,10 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerCategory(LayerCategory.Memory)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
 public class MixtureOfMemoriesLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
@@ -195,12 +201,15 @@ public class MixtureOfMemoriesLayer<T> : LayerBase<T>
         int modelDimension = 256,
         int numHeads = 8,
         int numMemories = 4,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, modelDimension],
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         if (sequenceLength <= 0)
             throw new ArgumentException($"Sequence length ({sequenceLength}) must be positive.", nameof(sequenceLength));
         if (modelDimension <= 0)
@@ -265,17 +274,13 @@ public class MixtureOfMemoriesLayer<T> : LayerBase<T>
 
     private void InitializeTensor2D(Tensor<T> tensor)
     {
-        int fanIn = tensor.Shape[0];
-        int fanOut = tensor.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
     }
 
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -373,7 +378,7 @@ public class MixtureOfMemoriesLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> SoftmaxLastDim(Tensor<T> logits, int batchSize, int seqLen, int dim)
     {
-        var result = new Tensor<T>(new[] { batchSize, seqLen, dim });
+        var result = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, dim });
 
         for (int bi = 0; bi < batchSize; bi++)
         {
@@ -412,7 +417,7 @@ public class MixtureOfMemoriesLayer<T> : LayerBase<T>
         Tensor<T> writeWeights, Tensor<T> readWeights, Tensor<T> forgetGates,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // Memory states: [batch, numMemories, numHeads, headDim, headDim]
         var memStates = new T[batchSize, _numMemories, _numHeads, _headDimension, _headDimension];
@@ -782,7 +787,7 @@ public class MixtureOfMemoriesLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape);
+        var ones = new Tensor<T>(x.Shape.ToArray());
         ones.Fill(NumOps.One);
         var oneMinusSig = Engine.TensorSubtract(ones, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
@@ -850,6 +855,30 @@ public class MixtureOfMemoriesLayer<T> : LayerBase<T>
         _outputGateWeights, _outputGateBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_queryBiasGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_keyBiasGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_valueBiasGradient!.ToArray()),
+            new Vector<T>(_writeRouterWeightsGradient!.ToArray()),
+            new Vector<T>(_writeRouterBiasGradient!.ToArray()),
+            new Vector<T>(_readRouterWeightsGradient!.ToArray()),
+            new Vector<T>(_readRouterBiasGradient!.ToArray()),
+            new Vector<T>(_gateRouterWeightsGradient!.ToArray()),
+            new Vector<T>(_gateRouterBiasGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _queryBiasGradient = null; _keyWeightsGradient = null; _keyBiasGradient = null; _valueWeightsGradient = null; _valueBiasGradient = null; _writeRouterWeightsGradient = null; _writeRouterBiasGradient = null; _readRouterWeightsGradient = null; _readRouterBiasGradient = null; _gateRouterWeightsGradient = null; _gateRouterBiasGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

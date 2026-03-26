@@ -40,6 +40,19 @@ namespace AiDotNet.Video.Motion;
 /// ECCV 2020.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a RAFT model for recurrent optical flow estimation
+/// var raft = new RAFT&lt;double&gt;();
+///
+/// // Or configure with custom architecture
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new RAFT&lt;double&gt;(architecture, numFeatures: 128, numIterations: 12);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -437,7 +450,7 @@ public class RAFT<T> : OpticalFlowBase<T>
         var r = Engine.Sigmoid(gruConvR.Forward(gruInput));
         var hNew = ApplyTanh(gruConvH.Forward(gruInput));
 
-        var ones = Tensor<T>.CreateDefault(z.Shape, NumOps.One);
+        var ones = Tensor<T>.CreateDefault(z.Shape.ToArray(), NumOps.One);
         var oneMinusZ = Engine.TensorSubtract(ones, z);
         var term1 = Engine.TensorMultiply(oneMinusZ, hiddenState);
         var term2 = Engine.TensorMultiply(z, hNew);
@@ -659,7 +672,6 @@ public class RAFT<T> : OpticalFlowBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.OpticalFlow,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

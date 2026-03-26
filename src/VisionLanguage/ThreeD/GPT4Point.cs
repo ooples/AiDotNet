@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// GPT4Point (2024) is a unified framework for point cloud-language understanding and generation.
+/// It bridges 3D point cloud representations with language models through a point cloud encoder
+/// that projects geometric features into the LLM's embedding space, enabling both point cloud
+/// captioning and text-conditioned 3D point cloud generation in a single model.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "GPT4Point: A Unified Framework for Point-Language Understanding and Generation (Various, 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> GPT4Point is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> GPT4Point is a vision-language model for understanding and
+/// generating 3D point clouds using natural language. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GPT4Point model for unified point cloud-language understanding
+/// // and 3D point cloud generation from text descriptions
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GPT4Point&lt;double&gt;(architecture, "gpt4point.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GPT4Point&lt;double&gt;(architecture, new GPT4PointOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.ThreeD)]
@@ -227,7 +251,7 @@ public class GPT4Point<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageMod
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GPT4Point-Native" : "GPT4Point-ONNX", Description = "GPT4Point: unified point-language understanding and generation.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GPT4Point-Native" : "GPT4Point-ONNX", Description = "GPT4Point: unified point-language understanding and generation.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "GPT4Point";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

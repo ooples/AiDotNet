@@ -30,7 +30,7 @@ namespace AiDotNet.Autodiff.Testing;
 /// <code>
 /// var verifier = new TensorOperationsVerification&lt;float&gt;();
 /// var result = verifier.VerifyReLU();
-/// Console.WriteLine(result); // "PASSED" or "FAILED" with details
+/// // Result is available in the returned value // "PASSED" or "FAILED" with details
 /// </code>
 /// </para>
 /// </remarks>
@@ -118,17 +118,17 @@ public class TensorOperationsVerification<T>
             var outputNode = operation(inputNode);
 
             // Create output gradient (ones)
-            var outputGradient = CreateOnes(outputNode.Value.Shape);
+            var outputGradient = CreateOnes(outputNode.Value.Shape.ToArray());
             outputNode.Gradient = outputGradient;
 
             // Run backward pass
             RunBackward(outputNode);
 
-            autodiffGradient = inputNode.Gradient ?? new Tensor<T>(input.Shape);
+            autodiffGradient = inputNode.Gradient ?? new Tensor<T>(input.Shape.ToArray());
         }
 
         // Compute numerical gradient
-        var outputGrad = CreateOnes(input.Shape);
+        var outputGrad = CreateOnes(input.Shape.ToArray());
         var numericalGradient = NumericalGradient<T>.ComputeForOperation(
             input.Clone(),
             outputGrad,
@@ -193,18 +193,18 @@ public class TensorOperationsVerification<T>
             var outputNode = operation(node1, node2);
 
             // Create output gradient (ones)
-            var outputGradient = CreateOnes(outputNode.Value.Shape);
+            var outputGradient = CreateOnes(outputNode.Value.Shape.ToArray());
             outputNode.Gradient = outputGradient;
 
             // Run backward pass
             RunBackward(outputNode);
 
-            autodiffGrad1 = node1.Gradient ?? new Tensor<T>(input1.Shape);
-            autodiffGrad2 = node2.Gradient ?? new Tensor<T>(input2.Shape);
+            autodiffGrad1 = node1.Gradient ?? new Tensor<T>(input1.Shape.ToArray());
+            autodiffGrad2 = node2.Gradient ?? new Tensor<T>(input2.Shape.ToArray());
         }
 
         // Compute numerical gradients
-        var outputGrad = CreateOnes(input1.Shape);
+        var outputGrad = CreateOnes(input1.Shape.ToArray());
         var (numericalGrad1, numericalGrad2) = NumericalGradient<T>.ComputeForBinaryOperation(
             input1.Clone(),
             input2.Clone(),

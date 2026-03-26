@@ -52,7 +52,7 @@ public class FoundationSegmentationIntegrationTests
         var model = new SAM<double>(Arch(), numClasses: 1, modelSize: SAMModelSize.ViTBase);
         var input = Rand(1, 3, 32, 32);
         var predicted = model.Predict(input);
-        var expected = Rand(predicted.Shape);
+        var expected = Rand(predicted.Shape.ToArray());
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 
@@ -110,7 +110,7 @@ public class FoundationSegmentationIntegrationTests
         var model = new SAM21<double>(Arch(), numClasses: 1, modelSize: SAM21ModelSize.Tiny);
         var input = Rand(1, 3, 32, 32);
         var predicted = model.Predict(input);
-        var expected = Rand(predicted.Shape);
+        var expected = Rand(predicted.Shape.ToArray());
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 

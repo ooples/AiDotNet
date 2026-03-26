@@ -31,6 +31,14 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// images in just 1-4 steps.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1024, Width = 1024, NumInferenceSteps = 4 };
+/// var model = new Flux2SchnellModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 128, 128 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -138,7 +146,7 @@ public class Flux2SchnellModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "FLUX.2 Schnell", Version = "2.0", ModelType = ModelType.NeuralNetwork,
+            Name = "FLUX.2 Schnell", Version = "2.0",
             Description = "Next-gen ultra-fast FLUX generation in 1-4 steps with improved quality",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

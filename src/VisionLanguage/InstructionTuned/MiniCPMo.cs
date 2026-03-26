@@ -17,10 +17,39 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// MiniCPM-o (OpenBMB, 2025) extends MiniCPM-V to become an omnimodal model that handles vision,
+/// speech, and real-time streaming in a unified architecture. It adds speech understanding and
+/// generation capabilities alongside the existing visual understanding, enabling applications like
+/// live video narration, real-time visual question answering with voice input/output, and
+/// multimodal live streaming analysis. Despite its compact size, it achieves GPT-4o-level
+/// performance on many multimodal benchmarks.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "MiniCPM-o: A GPT-4o Level MLLM for Vision, Speech and Multimodal Live Streaming" (2025)</item></list></para>
-/// <para><b>For Beginners:</b> MiniCPMo is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> MiniCPM-o extends MiniCPM-V beyond just images to handle
+/// speech and real-time video streaming. It can see, hear, and speak — processing live video
+/// feeds, understanding spoken questions, and responding with generated speech, all in a
+/// compact model designed for on-device deployment. Think of it as a GPT-4o-level multimodal
+/// assistant that can run on your own hardware, supporting real-time conversations about what
+/// it sees and hears. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MiniCPM-o model for omnimodal vision + speech understanding
+/// // with real-time streaming and on-device deployment
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MiniCPMo&lt;double&gt;(architecture, "minicpmo.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MiniCPMo&lt;double&gt;(architecture, new MiniCPMoOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -91,7 +120,7 @@ public class MiniCPMo<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "MiniCPM-o-Native" : "MiniCPM-o-ONNX", Description = "MiniCPM-o: omnimodal VLM with speech and real-time streaming support.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "MiniCPM-o-Native" : "MiniCPM-o-ONNX", Description = "MiniCPM-o: omnimodal VLM with speech and real-time streaming support.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "MiniCPM-o";
         m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

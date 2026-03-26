@@ -46,7 +46,7 @@ public class SSMStateCacheTests
 
         var retrieved = cache.GetSSMState(0);
         Assert.NotNull(retrieved);
-        Assert.Equal(state.Shape, retrieved.Shape);
+        Assert.Equal(state.Shape.ToArray(), retrieved.Shape.ToArray());
 
         for (int i = 0; i < state.Length; i++)
         {
@@ -114,7 +114,7 @@ public class SSMStateCacheTests
 
         var retrieved = cache.GetConvBuffer(0);
         Assert.NotNull(retrieved);
-        Assert.Equal(buffer.Shape, retrieved.Shape);
+        Assert.Equal(buffer.Shape.ToArray(), retrieved.Shape.ToArray());
         for (int i = 0; i < buffer.Length; i++)
             Assert.Equal(buffer[i], retrieved[i]);
     }
@@ -227,7 +227,7 @@ public class SSMStateCacheTests
         var retrieved = cache.GetSSMState(0);
 
         Assert.NotNull(retrieved);
-        Assert.Equal(state.Shape, retrieved.Shape);
+        Assert.Equal(state.Shape.ToArray(), retrieved.Shape.ToArray());
 
         // Values should be approximately equal (within quantization error)
         for (int i = 0; i < state.Length; i++)

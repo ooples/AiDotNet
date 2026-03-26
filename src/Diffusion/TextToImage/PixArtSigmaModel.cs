@@ -56,6 +56,14 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// for 4K Text-to-Image Generation", ECCV 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 2048, Width = 2048, NumInferenceSteps = 20 };
+/// var model = new PixArtSigmaModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 256, 256 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
@@ -210,7 +218,7 @@ public class PixArtSigmaModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var ditCount = _dit.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != ditCount + vaeCount)
             throw new ArgumentException(
@@ -266,7 +274,6 @@ public class PixArtSigmaModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "PixArt-Sigma",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "PixArt-Sigma DiT-based text-to-image model with 4K resolution support",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

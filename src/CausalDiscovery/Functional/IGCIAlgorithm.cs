@@ -86,12 +86,20 @@ public class IGCIAlgorithm<T> : FunctionalBase<T>
                 {
                     if (score < 0)
                     {
-                        W[i, j] = NumOps.FromDouble(-score); // i → j with weight |score|
+                        W[i, j] = NumOps.FromDouble(-score);
                     }
                     else
                     {
-                        W[j, i] = NumOps.FromDouble(score);  // j → i with weight |score|
+                        W[j, i] = NumOps.FromDouble(score);
                     }
+                }
+                else
+                {
+                    // IGCI score ≈ 0 means the relationship is linear or indeterminate.
+                    // Per the IGCI paper (Daniusis et al., 2012), the method has no power
+                    // to orient linear edges. Leave W[i,j] and W[j,i] as zero (undirected)
+                    // rather than using a scale-dependent fallback that can reverse edges
+                    // based on variable units instead of causal signal.
                 }
             }
         }

@@ -28,6 +28,25 @@ namespace AiDotNet.Regression;
 /// that branches out into multiple endpoints (leaves) where the final predictions are made.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a decision tree regression model for predicting continuous values
+/// var options = new DecisionTreeOptions&lt;double&gt;();
+/// var model = new DecisionTreeRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train the model on the data
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.DecisionTree)]
@@ -237,8 +256,8 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// Example:
     /// ```csharp
     /// var metadata = decisionTree.GetModelMetadata();
-    /// Console.WriteLine($"Model type: {metadata.ModelType}");
-    /// Console.WriteLine($"Max depth: {metadata.AdditionalInfo["MaxDepth"]}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// ```
     /// </para>
     /// </remarks>
@@ -246,7 +265,6 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.DecisionTree,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "MaxDepth", _options.MaxDepth },
@@ -287,7 +305,7 @@ public class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
     /// ```csharp
     /// // Get importance of the first feature (index 0)
     /// var importance = decisionTree.GetFeatureImportance(0);
-    /// Console.WriteLine($"Feature 0 importance: {importance}");
+    /// // Result is available in the returned value
     /// ```
     /// </para>
     /// </remarks>

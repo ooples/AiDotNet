@@ -238,7 +238,6 @@ public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         {
             Name = _useNativeMode ? "DannaSep-Native" : "DannaSep-ONNX",
             Description = "Danna-Sep dual-path attention music source separation (2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumFreqBins,
             Complexity = _options.NumDualPathBlocks
         };
         m.AdditionalInfo["NumSources"] = _options.NumSources.ToString();
@@ -292,7 +291,7 @@ public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         int numBins = magnitude.Shape[1];
         for (int s = 0; s < _options.NumSources; s++)
         {
-            var maskedMag = new Tensor<T>(magnitude.Shape);
+            var maskedMag = new Tensor<T>(magnitude.Shape.ToArray());
             for (int f = 0; f < numFrames; f++)
                 for (int b = 0; b < numBins; b++)
                 {

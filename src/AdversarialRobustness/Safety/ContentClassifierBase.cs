@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -21,6 +22,11 @@ namespace AiDotNet.AdversarialRobustness.Safety;
 /// <typeparam name="T">The numeric data type used for calculations.</typeparam>
 public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSerializer, IModelShape
 {
+    /// <summary>
+    /// Gets the hardware-accelerated computation engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// Numeric operations for type T.
     /// </summary>
@@ -206,10 +212,7 @@ public abstract class ContentClassifierBase<T> : IContentClassifier<T>, IModelSe
 
         if (!NumOps.Equals(sum, NumOps.Zero))
         {
-            for (int i = 0; i < VectorSize; i++)
-            {
-                vector[i] = NumOps.Divide(vector[i], sum);
-            }
+            vector = (Vector<T>)Engine.Divide(vector, sum);
         }
 
         return vector;

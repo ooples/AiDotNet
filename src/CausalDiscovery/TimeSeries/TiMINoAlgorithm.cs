@@ -46,6 +46,28 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 [ModelPaper("Causal Discovery with Continuous Additive Noise Models", "https://jmlr.org/papers/v14/peters13a.html", Year = 2013, Authors = "Jonas Peters, Joris M. Mooij, Dominik Janzing, Bernhard Scholkopf")]
 public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
 {
+    /// <summary>
+    /// Squared correlation threshold below which residuals are considered independent of the cause.
+    /// Uses squared Pearson correlation as a computationally efficient proxy for HSIC.
+    /// </summary>
+    private const double IndependenceThreshold = 0.1;
+
+    /// <summary>
+    /// Minimum absolute standardized coefficient magnitude for an edge to be included.
+    /// Applied after internal standardization to make the threshold scale-invariant.
+    /// </summary>
+    private const double EdgeCoefficientThreshold = 0.1;
+
+    /// <summary>
+    /// Epsilon for numerical stability in variance/correlation computations.
+    /// </summary>
+    private const double NumericalStabilityEpsilon = 1e-10;
+
+    /// <summary>
+    /// Epsilon for preventing division by zero in correlation denominators.
+    /// </summary>
+    private const double CorrelationDenominatorEpsilon = 1e-15;
+
     /// <inheritdoc/>
     public override string Name => "TiMINo";
 
@@ -78,10 +100,10 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
                 var (hsicJI, _) = FitAndComputeHSIC(data, j, i, n);
 
                 // Lower HSIC = more independent residuals = correct causal direction
-                if (hsicIJ < hsicJI && hsicIJ < 0.1)
+                if (hsicIJ < hsicJI && hsicIJ < IndependenceThreshold)
                 {
                     // Use the fitted lag coefficient as the edge weight
-                    if (Math.Abs(betaIJ) > 0.1)
+                    if (Math.Abs(betaIJ) > EdgeCoefficientThreshold)
                         result[i, j] = NumOps.FromDouble(betaIJ);
                 }
             }
@@ -137,7 +159,7 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
         T varC = Engine.DotProduct(centC, centC);
         T covCT = Engine.DotProduct(centC, centT);
 
-        if (!NumOps.GreaterThan(varC, NumOps.FromDouble(1e-10)))
+        if (!NumOps.GreaterThan(varC, NumOps.FromDouble(NumericalStabilityEpsilon)))
             return (1.0, 0.0); // Can't fit model
 
         T beta = NumOps.Divide(covCT, varC);
@@ -153,9 +175,15 @@ public class TiMINoAlgorithm<T> : TimeSeriesCausalBase<T>
         double dVarR = NumOps.ToDouble(varR);
         double dVarC = NumOps.ToDouble(varC);
         double dCovRC = NumOps.ToDouble(covResiC);
-        double denom = Math.Sqrt(Math.Max(dVarR, 1e-15) * Math.Max(dVarC, 1e-15));
+        double denom = Math.Sqrt(Math.Max(dVarR, CorrelationDenominatorEpsilon) * Math.Max(dVarC, CorrelationDenominatorEpsilon));
         double corrResidual = dCovRC / denom;
 
-        return (corrResidual * corrResidual, NumOps.ToDouble(beta)); // Squared correlation as HSIC proxy
+        // Return standardized beta (scale-invariant): beta_std = beta * std(cause) / std(target)
+        double stdC = Math.Sqrt(Math.Max(dVarC / effectiveN, NumericalStabilityEpsilon));
+        double dVarT = NumOps.ToDouble(Engine.DotProduct(centT, centT));
+        double stdT = Math.Sqrt(Math.Max(dVarT / effectiveN, NumericalStabilityEpsilon));
+        double betaStd = stdT > 1e-15 ? NumOps.ToDouble(beta) * stdC / stdT : 0;
+
+        return (corrResidual * corrResidual, betaStd); // Squared correlation as HSIC proxy
     }
 }

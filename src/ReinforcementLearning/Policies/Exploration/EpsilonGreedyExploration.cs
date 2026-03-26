@@ -10,13 +10,23 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// Epsilon-greedy exploration: with probability epsilon, select random action.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <example>
+    /// <code>
+    /// // Create epsilon-greedy exploration with annealing from 1.0 to 0.01
+    /// var exploration = new EpsilonGreedyExploration&lt;double&gt;(epsilonStart: 1.0, epsilonEnd: 0.01, epsilonDecay: 0.995);
+    ///
+    /// // With probability epsilon, select a random action instead of the policy action
+    /// var policyAction = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0 });
+    /// var action = exploration.GetExplorationAction(state, policyAction, actionSpaceSize: 3, random);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
     [ModelTask(ModelTask.Classification)]
     [ModelComplexity(ModelComplexity.Low)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ModelPaper("Reinforcement Learning: An Introduction",
-        "http://incompleteideas.net/book/the-book-2nd.html",
+        "https://incompleteideas.net/book/the-book-2nd.html",
         Year = 2018,
         Authors = "Sutton, R. S. & Barto, A. G.")]
     public class EpsilonGreedyExploration<T> : ExplorationStrategyBase<T>

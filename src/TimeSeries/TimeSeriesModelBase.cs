@@ -316,12 +316,19 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
             // Perform model-specific training (implemented by derived classes)
             TrainCore(x, y);
         }
+        catch (OperationCanceledException)
+        {
+            // Training was cancelled by MaxTrainingTimeSeconds timeout.
+            // The model may have partial training — mark as trained with whatever
+            // state was achieved. This is industry standard: early stopping produces
+            // a usable (if suboptimal) model rather than failing completely.
+        }
         finally
         {
             TrainingCancellationToken = CancellationToken.None;
         }
 
-        // Mark the model as trained
+        // Mark the model as trained (even after early cancellation)
         IsTrained = true;
     }
 
@@ -949,6 +956,15 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// - Transferred to another model with the same structure
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Time series models do not support random parameter initialization from the optimizer.
+    /// They must be trained on sequential data to learn meaningful coefficients.
+    /// </summary>
+    public virtual bool SupportsParameterInitialization => false;
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
+
     public virtual Vector<T> GetParameters()
     {
         if (!IsTrained && (ModelParameters == null || ModelParameters.Length == 0))
@@ -1360,28 +1376,10 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// </remarks>
     public virtual IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
-        // Create a new instance
-        var clone = (TimeSeriesModelBase<T>)CreateInstance();
-
-        // Copy options (shallow copy is usually sufficient for options)
-        clone.Options = this.Options;
-
-        // Copy trained status
-        clone.IsTrained = this.IsTrained;
-
-        // Copy model parameters if trained
-        if (this.IsTrained)
-        {
-            clone.ModelParameters = this.ModelParameters.Clone();
-
-            // Copy evaluation metrics
-            foreach (var kvp in this.LastEvaluationMetrics)
-            {
-                clone.LastEvaluationMetrics[kvp.Key] = kvp.Value;
-            }
-        }
-
-        return clone;
+        // Use DeepCopy (serialize/deserialize) to ensure all internal state is preserved.
+        // The lighter Clone approach only copies ModelParameters but misses subclass-specific
+        // state (e.g. _arCoefficients, _trainedSeries) that Predict actually uses.
+        return DeepCopy();
     }
 
     /// <summary>

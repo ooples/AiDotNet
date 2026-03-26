@@ -1275,6 +1275,7 @@ public class PipelineParallelismIntegrationTests
         }
 
         public int ParameterCount => _parameterCount;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
         public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
         public bool SupportsJitCompilation => false;
 
@@ -1331,7 +1332,6 @@ public class PipelineParallelismIntegrationTests
             return new ModelMetadata<double>
             {
                 Name = "PipelineTestModel",
-                ModelType = ModelType.NeuralNetwork,
                 TrainingDate = DateTimeOffset.UtcNow,
                 FeatureCount = _parameterCount
             };
@@ -1405,6 +1405,8 @@ public class PipelineParallelismIntegrationTests
             inputNodes.Add(node);
             return node;
         }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     /// <summary>
@@ -1428,6 +1430,7 @@ public class PipelineParallelismIntegrationTests
         }
 
         public int ParameterCount => _parameterCount;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
         public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
         public bool SupportsJitCompilation => false;
 
@@ -1499,7 +1502,6 @@ public class PipelineParallelismIntegrationTests
             return new ModelMetadata<double>
             {
                 Name = "DecomposablePipelineTestModel",
-                ModelType = ModelType.NeuralNetwork,
                 TrainingDate = DateTimeOffset.UtcNow,
                 FeatureCount = _parameterCount
             };
@@ -1573,6 +1575,8 @@ public class PipelineParallelismIntegrationTests
             inputNodes.Add(node);
             return node;
         }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     #endregion

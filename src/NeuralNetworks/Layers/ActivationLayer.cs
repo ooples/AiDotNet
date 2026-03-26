@@ -1,4 +1,6 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -19,6 +21,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (like float, double, etc.)</typeparam>
+[LayerCategory(LayerCategory.Activation)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 1, 4 }, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.ReLUActivation<double>()")]
 public class ActivationLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -275,6 +280,12 @@ public class ActivationLayer<T> : LayerBase<T>
     {
         if (_lastInput == null)
             throw new ForwardPassRequiredException("ActivationLayer", GetType().Name);
+
+        // Reshape gradient to match stored input shape if lengths match but ranks differ
+        if (outputGradient.Length == _lastInput.Length && !_lastInput.Shape.ToArray().SequenceEqual(outputGradient.Shape.ToArray()))
+        {
+            outputGradient = outputGradient.Reshape(_lastInput.Shape.ToArray());
+        }
 
         TensorValidator.ValidateShapesMatch(_lastInput, outputGradient, "Activation Layer", "Backward Pass");
 

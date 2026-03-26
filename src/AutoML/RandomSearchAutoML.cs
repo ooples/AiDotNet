@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
@@ -25,6 +26,17 @@ namespace AiDotNet.AutoML;
 /// If you are new to AutoML, random search is a good first choice because it is reliable and easy to reason about.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var automl = new RandomSearchAutoML&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
+/// var bestModel = await automl.SearchAsync(
+///     trainInputs, trainTargets,
+///     valInputs, valTargets,
+///     maxTrials: 30,
+///     timeLimit: TimeSpan.FromMinutes(5));
+/// </code>
+/// </example>
+[ModelMetadataExempt]
 public class RandomSearchAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLModelBase<T, TInput, TOutput>
 {
     public RandomSearchAutoML(Random? random = null)
@@ -61,7 +73,7 @@ public class RandomSearchAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLMod
 
                 var parameters = await SuggestNextTrialAsync();
 
-                if (!parameters.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not ModelType modelType)
+                if (!parameters.TryGetValue(ModelTypeKey, out var modelTypeObj) || modelTypeObj is not Type modelType)
                 {
                     throw new InvalidOperationException("AutoML trial parameters must include a ModelType entry.");
                 }
@@ -111,7 +123,7 @@ public class RandomSearchAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLMod
     public override Task<Dictionary<string, object>> SuggestNextTrialAsync()
     {
         var modelType = PickCandidateModelType();
-        if (modelType == ModelType.None)
+        if (modelType is null)
         {
             throw new InvalidOperationException("No candidate models are configured for AutoML.");
         }
@@ -129,7 +141,7 @@ public class RandomSearchAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLMod
         }
 
         var sampled = AutoMLParameterSampler.Sample(Random, merged);
-        sampled["ModelType"] = modelType;
+        sampled[ModelTypeKey] = modelType;
         return Task.FromResult(sampled);
     }
 

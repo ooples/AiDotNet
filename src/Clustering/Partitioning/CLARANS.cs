@@ -43,6 +43,14 @@ namespace AiDotNet.Clustering.Partitioning;
 /// - Try swapping whose house, keep improvements
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new CLARANSOptions&lt;double&gt;();
+/// var cLARANS = new CLARANS&lt;double&gt;(options);
+/// cLARANS.Fit(dataMatrix);
+/// int[] labels = cLARANS.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -80,7 +88,6 @@ public class CLARANS<T> : ClusteringBase<T>
     public T BestCost => _bestCost;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -219,20 +226,29 @@ public class CLARANS<T> : ClusteringBase<T>
             Labels[i] = NumOps.FromDouble(nearestMedoid);
         }
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 
     private T[,] ComputeDistanceMatrix(Matrix<T> x, int n, IDistanceMetric<T> metric)
     {
+        int d = x.Columns;
         var distMatrix = new T[n, n];
+
+        // Cache rows as arrays for allocation-free distance
+        var rowArrays = new T[n][];
+        for (int i = 0; i < n; i++)
+        {
+            rowArrays[i] = new T[d];
+            for (int c = 0; c < d; c++)
+                rowArrays[i][c] = x[i, c];
+        }
 
         for (int i = 0; i < n; i++)
         {
-            var pointI = GetRow(x, i);
             for (int j = i + 1; j < n; j++)
             {
-                var pointJ = GetRow(x, j);
-                T dist = metric.Compute(pointI, pointJ);
+                T dist = metric.ComputeInline(rowArrays[i], rowArrays[j], d);
                 distMatrix[i, j] = dist;
                 distMatrix[j, i] = dist;
             }

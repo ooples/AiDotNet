@@ -305,10 +305,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
                 }
 
                 T dotProduct = NumOps.Zero;
-                for (int i = 0; i < rows; i++)
-                {
-                    dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(column[i], prevColumn[i]));
-                }
+                dotProduct = NumOps.Add(dotProduct, Engine.DotProduct(column, prevColumn));
 
                 for (int i = 0; i < rows; i++)
                 {
@@ -317,10 +314,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
             }
 
             T norm = NumOps.Zero;
-            for (int i = 0; i < rows; i++)
-            {
-                norm = NumOps.Add(norm, NumOps.Multiply(column[i], column[i]));
-            }
+            norm = NumOps.Add(norm, Engine.DotProduct(column, column));
             norm = NumOps.Sqrt(norm);
 
             if (NumOps.GreaterThan(norm, NumOps.FromDouble(1e-10)))
@@ -395,7 +389,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
         T scalingFactor = NumOps.FromDouble(Alpha);
         decompressed = decompressed.Multiply(scalingFactor);
 
-        Tensor<T> moraOutput = new Tensor<T>(baseOutput.Shape);
+        Tensor<T> moraOutput = new Tensor<T>(baseOutput.Shape.ToArray());
         int idx = 0;
         for (int i = 0; i < batchSize; i++)
         {
@@ -406,7 +400,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape);
+        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
         for (int i = 0; i < baseOutput.Length; i++)
         {
             result[i] = NumOps.Add(baseOutput[i], moraOutput[i]);
@@ -442,7 +436,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
 
         Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
 
-        Tensor<T> inputGrad = new Tensor<T>(_lastInput.Shape);
+        Tensor<T> inputGrad = new Tensor<T>(_lastInput.Shape.ToArray());
         int idx = 0;
         for (int i = 0; i < batchSize; i++)
         {

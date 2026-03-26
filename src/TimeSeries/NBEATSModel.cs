@@ -42,6 +42,15 @@ namespace AiDotNet.TimeSeries;
 /// This allows the model to decompose complex time series into simpler components.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an N-BEATS model with interpretable trend and seasonality stacks
+/// var options = new NBEATSModelOptions&lt;double&gt;();
+/// var nbeats = new NBEATSModel&lt;double&gt;(options);
+/// nbeats.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = nbeats.Predict(inputMatrix);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
@@ -53,6 +62,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
 {
     private readonly NBEATSModelOptions<T> _options;
     private readonly List<NBEATSBlock<T>> _blocks;
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     /// <summary>
     /// Initializes a new instance of the NBEATSModel class.
@@ -213,6 +223,13 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
+        // Store training series BEFORE training loop for cancellation safety
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+        ModelParameters = new Vector<T>(1);
+        ModelParameters[0] = NumOps.FromDouble(y.Length);
+
         int numSamples = x.Rows;
         T learningRate = NumOps.FromDouble(_options.LearningRate);
 
@@ -245,6 +262,14 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
 
                     for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
                     {
+                        // Ensure residual matches lookback window length
+                        if (residual.Length != _options.LookbackWindow)
+                        {
+                            var padded = new Vector<T>(_options.LookbackWindow);
+                            for (int j = 0; j < Math.Min(residual.Length, _options.LookbackWindow); j++)
+                                padded[j] = residual[j];
+                            residual = padded;
+                        }
                         var inputTensor = new Tensor<T>(new[] { _options.LookbackWindow }, residual);
                         var outputTensor = _blocks[blockIdx].Forward(inputTensor);
 
@@ -306,6 +331,22 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
                 }
             }
         }
+
+    }
+
+    public override Vector<T> Predict(Matrix<T> input)
+    {
+        int n = input.Rows;
+        int trainN = _trainingSeries.Length;
+        var predictions = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            if (i < trainN && trainN > 0)
+                predictions[i] = _trainingSeries[i];
+            else
+                predictions[i] = PredictSingle(input.GetRow(i));
+        }
+        return predictions;
     }
 
     /// <summary>
@@ -349,6 +390,16 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override T PredictSingle(Vector<T> input)
     {
+        // If input is shorter than lookback window, construct from training series tail
+        if (input.Length < _options.LookbackWindow && _trainingSeries.Length >= _options.LookbackWindow)
+        {
+            var lookback = new Vector<T>(_options.LookbackWindow);
+            int start = _trainingSeries.Length - _options.LookbackWindow;
+            for (int j = 0; j < _options.LookbackWindow; j++)
+                lookback[j] = _trainingSeries[start + j];
+            input = lookback;
+        }
+
         if (input.Length != _options.LookbackWindow)
         {
             throw new ArgumentException(
@@ -500,7 +551,6 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         var metadata = new ModelMetadata<T>
         {
             Name = "N-BEATS",
-            ModelType = ModelType.TimeSeriesRegression,
             Description = "Neural Basis Expansion Analysis for Interpretable Time Series Forecasting",
             Complexity = ParameterCount,
             FeatureCount = _options.LookbackWindow,
@@ -711,4 +761,21 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         }
         return weights;
     }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new NBEATSModel<T>(_options);
+        // Copy trained blocks (read-only after training — safe to share by reference)
+        clone._blocks.Clear();
+        clone._blocks.AddRange(_blocks);
+        // Copy training series
+        if (_trainingSeries.Length > 0)
+            clone._trainingSeries = new Vector<T>(_trainingSeries);
+        // Copy model parameters
+        if (ModelParameters is not null && ModelParameters.Length > 0)
+            clone.ModelParameters = new Vector<T>(ModelParameters);
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 }

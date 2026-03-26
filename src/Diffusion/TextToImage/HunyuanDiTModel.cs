@@ -57,6 +57,14 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// with Fine-Grained Chinese Understanding", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 1024, NumInferenceSteps = 30 };
+/// var model = new HunyuanDiTModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 128, 128 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
@@ -215,7 +223,7 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
     {
         EnsureInitialized();
         var ditCount = _dit.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != ditCount + vaeCount)
             throw new ArgumentException(
@@ -272,7 +280,6 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Hunyuan-DiT",
             Version = "1.2",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Hunyuan-DiT bilingual Chinese-English DiT text-to-image model",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

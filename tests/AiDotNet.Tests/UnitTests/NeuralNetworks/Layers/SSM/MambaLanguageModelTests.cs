@@ -87,7 +87,7 @@ public class MambaLanguageModelTests
         var input = CreateOneHotInput(batchSize, seqLen, vocabSize);
         var output = model.Predict(input);
 
-        Assert.Equal(new[] { batchSize, seqLen, vocabSize }, output.Shape);
+        Assert.Equal(new[] { batchSize, seqLen, vocabSize }, output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -105,7 +105,7 @@ public class MambaLanguageModelTests
         var input = CreateOneHotInput(1, seqLen, vocabSize).Reshape(seqLen, vocabSize);
         var output = model.Predict(input);
 
-        Assert.Equal(new[] { seqLen, vocabSize }, output.Shape);
+        Assert.Equal(new[] { seqLen, vocabSize }, output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -124,10 +124,10 @@ public class MambaLanguageModelTests
         var input = CreateOneHotInput(1, seqLen, vocabSize);
         var output = model.Predict(input);
         model.SetTrainingMode(true); // Re-enable after Predict set it to false
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         var inputGrad = model.Backpropagate(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         Assert.False(ContainsNaN(inputGrad));
     }
 
@@ -160,7 +160,7 @@ public class MambaLanguageModelTests
         // Verify model still produces valid output after parameter update
         model.ResetState();
         var output2 = model.Predict(input);
-        Assert.Equal(new[] { 1, seqLen, vocabSize }, output2.Shape);
+        Assert.Equal(new[] { 1, seqLen, vocabSize }, output2.Shape.ToArray());
         Assert.False(ContainsNaN(output2));
     }
 
@@ -252,7 +252,7 @@ public class MambaLanguageModelTests
             CreateArch(100), 100, 64, 4, 16, maxSeqLength: 32);
         var metadata = model.GetModelMetadata();
 
-        Assert.Equal(ModelType.NeuralNetwork, metadata.ModelType);
+
         Assert.True(metadata.AdditionalInfo.ContainsKey("VocabSize"));
         Assert.True(metadata.AdditionalInfo.ContainsKey("ModelDimension"));
         Assert.True(metadata.AdditionalInfo.ContainsKey("NumLayers"));
@@ -275,7 +275,7 @@ public class MambaLanguageModelTests
         var input = CreateOneHotDoubleInput(1, seqLen, vocabSize);
         var output = model.Predict(input);
 
-        Assert.Equal(new[] { 1, seqLen, vocabSize }, output.Shape);
+        Assert.Equal(new[] { 1, seqLen, vocabSize }, output.Shape.ToArray());
         Assert.False(ContainsNaNDouble(output));
     }
 

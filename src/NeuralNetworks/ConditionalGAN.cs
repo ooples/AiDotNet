@@ -35,6 +35,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Reference: Mirza and Osindero, "Conditional Generative Adversarial Nets" (2014)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new ConditionalGANOptions { LatentSize = 100, NumClasses = 10 };
+/// var model = new ConditionalGAN&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.Generative)]
@@ -585,7 +593,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         int conditionSize = conditions.Shape[1];
 
         // Create result tensor with space for both image and condition
-        var result = new Tensor<T>(new int[] { batchSize, imageSize + conditionSize });
+        var result = TensorAllocator.Rent<T>(new int[] { batchSize, imageSize + conditionSize });
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -672,7 +680,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         int[] outputShape = isChannelsFirst
             ? new int[] { batchSize, channels + conditionSize, height, width }
             : new int[] { batchSize, height, width, channels + conditionSize };
-        var result = new Tensor<T>(outputShape);
+        var result = TensorAllocator.Rent<T>(outputShape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -840,7 +848,6 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ConditionalGAN,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "GeneratorParameters", Generator.GetParameterCount() },

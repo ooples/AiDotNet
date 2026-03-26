@@ -44,7 +44,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 ///     architecture,
 ///     modelPath: "path/to/wav2vec2.onnx");
 /// var result = wav2vec2.Transcribe(audioTensor);
-/// Console.WriteLine(result.Text);
+/// // Result is available in the returned value
 /// </code>
 ///
 /// Training Mode Example:
@@ -647,7 +647,6 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Name = "Wav2Vec2",
             Description = "Wav2Vec2 self-supervised speech recognition model",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = SampleRate * _maxAudioLengthSeconds,
             Complexity = 3
         };

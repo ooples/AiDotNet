@@ -15,6 +15,16 @@ namespace AiDotNet.Regression;
 /// <b>For Beginners:</b> While linear regression fits a straight line to your data,
 /// polynomial regression can fit curves, allowing it to capture more complex patterns.
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new PolynomialRegressionOptions&lt;double&gt;();
+/// var model = new PolynomialRegression&lt;double&gt;(options);
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 1, new double[] { 1, 2, 3, 4, 5 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 1.0, 4.1, 9.0, 16.2, 25.0 });
+/// model.Train(features, targets);
+/// var prediction = model.Predict(Matrix&lt;double&gt;.Build.Dense(1, 1, new double[] { 6 }));
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.Regression)]
@@ -67,6 +77,7 @@ public class PolynomialRegression<T> : RegressionBase<T>
     /// </remarks>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
+        TrainingFeatureCount = x.Columns;
         var polyX = CreatePolynomialFeatures(x);
 
         if (Options.UseIntercept)
@@ -136,15 +147,6 @@ public class PolynomialRegression<T> : RegressionBase<T>
     {
         var polyInput = CreatePolynomialFeatures(input);
         return base.Predict(polyInput);
-    }
-
-    /// <summary>
-    /// Gets the type of regression model.
-    /// </summary>
-    /// <returns>The model type identifier for polynomial regression.</returns>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.PolynomialRegression;
     }
 
     /// <summary>

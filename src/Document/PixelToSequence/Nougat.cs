@@ -589,7 +589,7 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int width = image.Shape[3];
 
         // Normalize with ImageNet stats
-        var normalized = new Tensor<T>(image.Shape);
+        var normalized = new Tensor<T>(image.Shape.ToArray());
         double[] means = [0.485, 0.456, 0.406];
         double[] stds = [0.229, 0.224, 0.225];
 
@@ -627,7 +627,6 @@ public class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         return new ModelMetadata<T>
         {
             Name = "Nougat",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Nougat for academic document understanding (arXiv 2023)",
             FeatureCount = _hiddenDim,
             Complexity = _numEncoderLayers + _numDecoderLayers,

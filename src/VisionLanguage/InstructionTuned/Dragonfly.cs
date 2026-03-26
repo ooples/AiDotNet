@@ -17,10 +17,40 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Dragonfly (Together AI, 2024) introduces multi-resolution visual encoding that processes images
+/// at multiple zoom levels simultaneously. It uses a "zoom-in" module that identifies important
+/// regions of the image and processes them at higher resolution, while maintaining a global view
+/// at lower resolution. This multi-resolution approach gives the model both broad scene understanding
+/// and fine-grained detail recognition without requiring extremely high-resolution processing of
+/// the entire image.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Dragonfly: Multi-Resolution Zoom Supercharges Large Visual-Language Model" (Together AI, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Dragonfly is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Dragonfly is a vision-language model that looks at images at
+/// multiple zoom levels — like how you might first glance at a whole photo, then zoom into
+/// interesting parts for more detail. Its multi-resolution zoom module automatically identifies
+/// important regions and processes them at higher resolution while keeping the overall scene
+/// context at lower resolution. This approach is more efficient than processing the entire
+/// image at high resolution, while still capturing fine details where they matter. Default
+/// values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Dragonfly model for multi-resolution visual understanding
+/// // using zoom-in modules for fine-grained detail recognition
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Dragonfly&lt;double&gt;(architecture, "dragonfly.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Dragonfly&lt;double&gt;(architecture, new DragonflyOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -92,7 +122,7 @@ public class Dragonfly<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Dragonfly-Native" : "Dragonfly-ONNX", Description = "Dragonfly: multi-resolution visual encoding VLM for fine-grained understanding.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Dragonfly-Native" : "Dragonfly-ONNX", Description = "Dragonfly: multi-resolution visual encoding VLM for fine-grained understanding.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Dragonfly";
         m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

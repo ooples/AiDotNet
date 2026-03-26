@@ -31,6 +31,14 @@ namespace AiDotNet.Diffusion.StyleTransfer;
 /// Reference: Wang et al., "InstantStyle: Free Lunch towards Style-Preserving in Text-to-Image Generation", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new InstantStyleModel&lt;float&gt;(options);
+/// var styleRef = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var stylized = model.Predict(styleRef);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.StyleTransfer)]
@@ -109,7 +117,7 @@ public class InstantStyleModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "InstantStyle", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "InstantStyle", Version = "1.0",
             Description = "Zero-shot IP-Adapter style transfer with content-style separation",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "ip-adapter-style-injection");

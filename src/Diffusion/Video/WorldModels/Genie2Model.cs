@@ -34,6 +34,14 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 720, Width = 1280, NumInferenceSteps = 10 };
+/// var model = new Genie2Model&lt;float&gt;(options);
+/// var actionInput = Tensor&lt;float&gt;.Random(new[] { 1, 16, 60, 90, 160 });
+/// var world = model.Predict(actionInput);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -179,7 +187,6 @@ public class Genie2Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "Genie2",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Genie 2 real-time interactive 3D environment generation.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

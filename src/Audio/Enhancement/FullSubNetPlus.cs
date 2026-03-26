@@ -283,7 +283,6 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         {
             Name = _useNativeMode ? "FullSubNet+-Native" : "FullSubNet+-ONNX",
             Description = "FullSubNet+ Channel Attention Speech Enhancement (Chen et al., ICASSP 2022)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.NumFreqBins,
             Complexity = _options.FullBandLayers + _options.SubBandLayers
         };
@@ -342,7 +341,7 @@ public class FullSubNetPlus<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             throw new ArgumentException(
                 $"STFT and mask length mismatch ({stft.Length} vs {mask.Length}). " +
                 "Network output must match STFT dimensions.");
-        var result = new Tensor<T>(stft.Shape);
+        var result = new Tensor<T>(stft.Shape.ToArray());
         for (int i = 0; i < stft.Length; i++)
             result[i] = NumOps.Multiply(stft[i], mask[i]);
         return result;

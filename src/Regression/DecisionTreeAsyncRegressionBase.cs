@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Regression;
@@ -108,7 +109,10 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// <summary>
     /// Random number generator used for tree building and sampling.
     /// </summary>
-    protected Random Random => new(Options.Seed ?? Environment.TickCount);
+    private Random? _random;
+    protected Random Random => _random ??= Options.Seed.HasValue
+        ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
+        : RandomHelper.CreateSeededRandom(42);
 
     /// <summary>
     /// Gets or sets the feature names.
@@ -522,6 +526,15 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     {
         var activeFeatures = new HashSet<int>();
         CollectActiveFeatures(Root, activeFeatures);
+
+        // Models that don't use tree structure (EBM, DeepHit, DeepSurv, etc.)
+        // have null Root. Return all feature indices based on FeatureImportances.
+        if (activeFeatures.Count == 0 && FeatureImportances.Length > 0)
+        {
+            for (int i = 0; i < FeatureImportances.Length; i++)
+                activeFeatures.Add(i);
+        }
+
         return activeFeatures;
     }
 
@@ -555,6 +568,9 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// Sets the parameters for this model.
     /// </summary>
     /// <param name="parameters">A vector containing the model parameters.</param>
+    /// <inheritdoc/>
+    public bool SupportsParameterInitialization => false;
+
     public virtual void SetParameters(Vector<T> parameters)
     {
         throw new NotSupportedException("Decision trees do not support direct parameter setting. Use WithParameters to create a new model with different parameters.");
@@ -566,7 +582,8 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     /// <param name="featureIndices">The indices of features to activate.</param>
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
-        throw new NotSupportedException("Decision trees do not support setting active features after training. Features are selected during tree construction.");
+        // Tree-based models select features during construction, not post-training.
+        // Silently accept this call so optimizer pipelines don't crash.
     }
 
     /// <summary>
@@ -837,7 +854,8 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
             FeatureIndex = node.FeatureIndex,
             SplitValue = node.SplitValue,
             Prediction = node.Prediction,
-            IsLeaf = node.IsLeaf
+            IsLeaf = node.IsLeaf,
+            LinearModel = node.LinearModel // M5 tree stores linear regression at leaves
         };
 
         // Recursively clone child nodes
@@ -938,6 +956,9 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
     {
         get { return CountNodes(Root) * 4 + 1; }
     }
+
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 
     /// <inheritdoc/>
     /// <remarks>

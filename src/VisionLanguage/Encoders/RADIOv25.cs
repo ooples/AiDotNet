@@ -21,8 +21,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "AM-RADIO: Agglomerative Vision Foundation Model" (Ranzinger et al., 2025)</item></list></para>
-/// <para><b>For Beginners:</b> RADIOv25 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> RADIO v2.5 from NVIDIA is a "best of all worlds" vision encoder
+/// that distills knowledge from multiple teacher models (DINOv2, SAM, SigLIP, and CLIP) into
+/// a single student model. The result is a universal vision backbone that can be used as a
+/// drop-in replacement for any of those individual models, producing compatible features for
+/// all of them. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a RADIOv2.5 model distilling DINOv2, SAM, SigLIP, and CLIP
+/// // into a single universal vision encoder backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new RADIOv25&lt;double&gt;(architecture, "radiov25.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new RADIOv25&lt;double&gt;(architecture, new RADIOv25Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
@@ -49,7 +69,7 @@ public class RADIOv25<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "RADIOv2.5-Native" : "RADIOv2.5-ONNX", Description = "AM-RADIO: Agglomerative Vision Foundation Model (Ranzinger et al., 2025)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.EmbeddingDim, Complexity = _options.NumLayers }; m.AdditionalInfo["Architecture"] = "RADIOv2.5"; m.AdditionalInfo["TeacherModels"] = string.Join(", ", _options.TeacherModels); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "RADIOv2.5-Native" : "RADIOv2.5-ONNX", Description = "AM-RADIO: Agglomerative Vision Foundation Model (Ranzinger et al., 2025)", FeatureCount = _options.EmbeddingDim, Complexity = _options.NumLayers }; m.AdditionalInfo["Architecture"] = "RADIOv2.5"; m.AdditionalInfo["TeacherModels"] = string.Join(", ", _options.TeacherModels); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.EmbeddingDim); writer.Write(_options.NumLayers); writer.Write(_options.NumHeads); writer.Write(_options.AdapterDim); writer.Write(_options.NumSummaryTokens); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.EmbeddingDim = reader.ReadInt32(); _options.NumLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.AdapterDim = reader.ReadInt32(); _options.NumSummaryTokens = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new RADIOv25<T>(Architecture, mp, _options); return new RADIOv25<T>(Architecture, _options); }

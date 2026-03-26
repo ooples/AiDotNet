@@ -128,15 +128,15 @@ internal sealed class DeterministicNeuralNetworkParameterOptimizer<TInput, TOutp
 
     public OptimizationResult<double, TInput, TOutput> Optimize(OptimizationInputData<double, TInput, TOutput> inputData)
     {
-        var nn = _model as NeuralNetworkModel<double>;
+        var nn = _model as NeuralNetworkBase<double>;
         if (nn != null)
         {
-            var parameters = nn.Network.GetParameters();
+            var parameters = nn.GetParameters();
             for (int i = 0; i < parameters.Length; i++)
             {
                 parameters[i] = (i + 1) * 0.01;
             }
-            nn.Network.UpdateParameters(parameters);
+            nn.UpdateParameters(parameters);
         }
 
         return new OptimizationResult<double, TInput, TOutput> { BestSolution = _model };

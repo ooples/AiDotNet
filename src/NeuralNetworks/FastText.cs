@@ -32,6 +32,14 @@ namespace AiDotNet.NeuralNetworks
     /// It's like a person who can understand a complex new word by looking at its root and its suffix.
     /// </para>
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var options = new FastTextOptions { EmbeddingDim = 300, MinNgramLength = 3, MaxNgramLength = 6 };
+    /// var model = new FastText&lt;float&gt;(options);
+    /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 50 });
+    /// var embedding = model.Predict(input);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Language)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.EmbeddingModel)]
@@ -106,7 +114,7 @@ namespace AiDotNet.NeuralNetworks
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
             inputSize: 768,
-            outputSize: 768))
+            outputSize: 10000)) // Must match default vocabSize=10000
     {
     }
 
@@ -264,7 +272,7 @@ namespace AiDotNet.NeuralNetworks
             LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
             var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+            var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
 
             var gradients = new List<Tensor<T>>();
             var currentGradient = outputGradientTensor;
@@ -431,7 +439,6 @@ namespace AiDotNet.NeuralNetworks
             return new ModelMetadata<T>
             {
                 Name = "FastText",
-                ModelType = ModelType.NeuralNetwork,
                 Description = "FastText embedding model with subword support",
                 Complexity = ParameterCount,
                 AdditionalInfo = new Dictionary<string, object>

@@ -332,15 +332,15 @@ public class AutoencoderDetector<T> : AnomalyDetectorBase<T>
         // Encoder: encoded = ReLU(input * W_enc + b_enc)
         var encoded = new Vector<T>(encoderWeights.Columns);
 
+        // Pre-extract encoder weight columns for Engine.DotProduct
         for (int j = 0; j < encoderWeights.Columns; j++)
         {
-            T sum = encoderBias[j];
+            var encCol = new Vector<T>(encoderWeights.Rows);
             for (int i = 0; i < encoderWeights.Rows; i++)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(input[i], encoderWeights[i, j]));
+                encCol[i] = encoderWeights[i, j];
             }
-
-            encoded[j] = sum;
+            encoded[j] = NumOps.Add(encoderBias[j], Engine.DotProduct(input, encCol));
         }
 
         // Apply ReLU activation
@@ -355,13 +355,12 @@ public class AutoencoderDetector<T> : AnomalyDetectorBase<T>
 
         for (int j = 0; j < decoderWeights.Columns; j++)
         {
-            T sum = decoderBias[j];
+            var decCol = new Vector<T>(decoderWeights.Rows);
             for (int i = 0; i < decoderWeights.Rows; i++)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(activated[i], decoderWeights[i, j]));
+                decCol[i] = decoderWeights[i, j];
             }
-
-            reconstruction[j] = sum;
+            reconstruction[j] = NumOps.Add(decoderBias[j], Engine.DotProduct(activated, decCol));
         }
 
         return (encoded, activated, reconstruction);
@@ -389,11 +388,7 @@ public class AutoencoderDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Output error: d_output = reconstruction - input (MSE derivative)
-        var outputError = new Vector<T>(reconstruction.Length);
-        for (int i = 0; i < reconstruction.Length; i++)
-        {
-            outputError[i] = NumOps.Subtract(reconstruction[i], input[i]);
-        }
+        var outputError = Engine.Subtract(reconstruction, input);
 
         // Decoder gradients
         for (int i = 0; i < decoderWeights.Rows; i++)
@@ -415,11 +410,13 @@ public class AutoencoderDetector<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < decoderWeights.Rows; i++)
         {
-            T sum = NumOps.Zero;
+            // Extract decoder weight row for Engine.DotProduct
+            var decRow = new Vector<T>(decoderWeights.Columns);
             for (int j = 0; j < decoderWeights.Columns; j++)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(outputError[j], decoderWeights[i, j]));
+                decRow[j] = decoderWeights[i, j];
             }
+            T sum = Engine.DotProduct(outputError, decRow);
 
             // Apply ReLU derivative
             hiddenError[i] = NumOps.GreaterThan(encoded[i], NumOps.Zero) ? sum : NumOps.Zero;
@@ -472,16 +469,9 @@ public class AutoencoderDetector<T> : AnomalyDetectorBase<T>
 
     private T ComputeReconstructionError(Vector<T> original, Vector<T> reconstruction)
     {
-        // Mean Squared Error
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < original.Length; i++)
-        {
-            T diff = NumOps.Subtract(original[i], reconstruction[i]);
-            sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
-        }
-
-        return NumOps.Divide(sum, NumOps.FromDouble(original.Length));
+        // Mean Squared Error using Engine.Subtract + Engine.DotProduct
+        var diff = Engine.Subtract(original, reconstruction);
+        return NumOps.Divide(Engine.DotProduct(diff, diff), NumOps.FromDouble(original.Length));
     }
 
     /// <summary>

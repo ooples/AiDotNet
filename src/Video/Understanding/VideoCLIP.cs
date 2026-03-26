@@ -46,6 +46,19 @@ namespace AiDotNet.Video.Understanding;
 /// EMNLP 2021.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VideoCLIP model for video-text understanding
+/// var videoCLIP = new VideoCLIP&lt;double&gt;();
+///
+/// // Or configure with custom embedding dimensions
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 400);
+/// var model = new VideoCLIP&lt;double&gt;(architecture, numFrames: 32, embeddingDim: 512);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
@@ -1013,7 +1026,7 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         int batchSize = input.Shape[0];
         int channels = input.Shape[1];
         int seqLen = input.Shape[3];
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape.ToArray());
         double eps = 1e-5;
 
         for (int b = 0; b < batchSize; b++)
@@ -1176,7 +1189,6 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoCLIP,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

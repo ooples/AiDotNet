@@ -1,5 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -28,6 +30,21 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// Reference: Genmo, "Mochi 1: A New SOTA in Open-Source Video Generation", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var predictor = new AsymmDiTPredictor&lt;float&gt;(inputChannels: 16, hiddenSize: 3072, numLayers: 48, numHeads: 24);
+/// var noisyLatent = Tensor&lt;float&gt;.Random(new[] { 1, 16, 24, 40 });
+/// var predicted = predictor.PredictNoise(noisyLatent, timestep: 500);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Generative)]
+[ModelDomain(ModelDomain.Video)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Denoising)]
+[ModelTask(ModelTask.VideoGeneration)]
+[ModelComplexity(ModelComplexity.VeryHigh)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class AsymmDiTPredictor<T> : NoisePredictorBase<T>
 {
     private readonly int _inputChannels;

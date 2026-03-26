@@ -195,7 +195,7 @@ public class AutoIntClassifier<T> : AutoIntBase<T>
                 $"Targets length ({targets.Length}) must match batch size ({batchSize}).");
         }
 
-        var logitsGrad = new Tensor<T>(_logitsCache.Shape);
+        var logitsGrad = new Tensor<T>(_logitsCache.Shape.ToArray());
         var scale = NumOps.FromDouble(1.0 / batchSize);
 
         for (int b = 0; b < batchSize; b++)

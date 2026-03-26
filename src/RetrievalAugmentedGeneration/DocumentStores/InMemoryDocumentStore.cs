@@ -331,7 +331,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// <code>
     /// // Get all documents
     /// var allDocs = store.GetAll().ToList();
-    /// Console.WriteLine($"Total documents in database: {allDocs.Count}");
+    /// // Result is available in the returned value
     /// 
     /// // Export to JSON
     /// var json = JsonConvert.SerializeObject(allDocs);
@@ -371,7 +371,7 @@ public class InMemoryDocumentStore<T> : DocumentStoreBase<T>
     /// 
     /// // Clear the database
     /// store.Clear();
-    /// Console.WriteLine($"Documents remaining: {store.DocumentCount}"); // 0
+    /// // Result is available in the returned value // 0
     /// </code>
     /// </para>
     /// </remarks>

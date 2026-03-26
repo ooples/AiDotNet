@@ -17,10 +17,41 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// VILA-U (NVIDIA, 2024) unifies visual understanding and visual generation in a single
+/// autoregressive model. Unlike most VLMs that can only understand images and generate text,
+/// VILA-U can also generate images autoregressively by predicting visual tokens one at a time.
+/// It uses a discrete visual tokenizer to convert images into a sequence of tokens that the
+/// language model can both consume (for understanding) and produce (for generation), creating
+/// a truly unified visual-linguistic model.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "VILA-U: a Unified Foundation Model Integrating Visual Understanding and Generation" (NVIDIA, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> VILAU is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> VILA-U extends VILA to not just understand images but also
+/// generate them. Most vision-language models are one-way — they look at images and produce
+/// text. VILA-U works both ways: it can analyze an image and describe it, or take a text
+/// description and generate an image. It does this by converting images into discrete tokens
+/// (like a visual vocabulary) that the language model can both read and write. This unified
+/// approach means a single model handles image understanding, text generation, and image
+/// generation without needing separate specialized models for each task. Default values
+/// follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VILA-U model for unified visual understanding and generation
+/// // using autoregressive visual token prediction
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new VILAU&lt;double&gt;(architecture, "vilau.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new VILAU&lt;double&gt;(architecture, new VILAUOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -91,7 +122,7 @@ public class VILAU<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "VILA-U-Native" : "VILA-U-ONNX", Description = "VILA-U: unified VLM with autoregressive visual generation and understanding.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "VILA-U-Native" : "VILA-U-ONNX", Description = "VILA-U: unified VLM with autoregressive visual generation and understanding.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "VILA-U";
         m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

@@ -12,6 +12,16 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// Process equation: dx = θ(μ - x)dt + σdW
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <example>
+    /// <code>
+    /// // Create Ornstein-Uhlenbeck noise for temporally correlated exploration
+    /// var ouNoise = new OrnsteinUhlenbeckNoise&lt;double&gt;(actionSize: 2, theta: 0.15, sigma: 0.2);
+    ///
+    /// // Add temporally correlated noise to continuous actions
+    /// var policyAction = new Vector&lt;double&gt;(new double[] { 0.5, -0.3 });
+    /// var noisyAction = ouNoise.GetExplorationAction(state, policyAction, actionSpaceSize: 2, random);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
     [ModelTask(ModelTask.Regression)]

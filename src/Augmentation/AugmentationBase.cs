@@ -1,4 +1,5 @@
 using AiDotNet.Augmentation.Image;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
@@ -27,6 +28,11 @@ namespace AiDotNet.Augmentation;
 /// <typeparam name="TData">The data type being augmented.</typeparam>
 public abstract class AugmentationBase<T, TData> : IAugmentation<T, TData>
 {
+    /// <summary>
+    /// Gets the hardware-accelerated computation engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// Numeric operations for type T.
     /// </summary>

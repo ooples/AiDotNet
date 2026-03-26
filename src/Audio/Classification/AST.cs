@@ -536,7 +536,7 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        var result = new Tensor<T>(modelOutput.Shape);
+        var result = new Tensor<T>(modelOutput.Shape.ToArray());
         for (int i = 0; i < modelOutput.Length; i++)
         {
             double logit = NumOps.ToDouble(modelOutput[i]);
@@ -553,7 +553,6 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         {
             Name = _useNativeMode ? "AST-Native" : "AST-ONNX",
             Description = "AST: Audio Spectrogram Transformer (Gong et al., Interspeech 2021)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = ClassLabels.Count,
             Complexity = _options.NumEncoderLayers
         };

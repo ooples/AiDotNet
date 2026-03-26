@@ -103,7 +103,7 @@ public class RWKV7LanguageModelTests
         var input = CreateRandomTensor(new[] { batchSize, seqLen, modelDim });
         var output = block.Forward(input);
 
-        Assert.Equal(new[] { batchSize, seqLen, modelDim }, output.Shape);
+        Assert.Equal(new[] { batchSize, seqLen, modelDim }, output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -117,7 +117,7 @@ public class RWKV7LanguageModelTests
         var input = CreateRandomTensor(new[] { seqLen, modelDim });
         var output = block.Forward(input);
 
-        Assert.Equal(new[] { seqLen, modelDim }, output.Shape);
+        Assert.Equal(new[] { seqLen, modelDim }, output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -151,10 +151,10 @@ public class RWKV7LanguageModelTests
         var block = new RWKV7Block<float>(4, 32, 4);
         var input = CreateRandomTensor(new[] { 1, 4, 32 });
         var output = block.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         var inputGrad = block.Backward(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         Assert.False(ContainsNaN(inputGrad));
     }
 
@@ -173,13 +173,13 @@ public class RWKV7LanguageModelTests
         var input = CreateRandomTensor(new[] { 1, 4, 16 });
 
         var output = block.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         block.Backward(grad);
         block.UpdateParameters(0.001f);
 
         block.ResetState();
         var output2 = block.Forward(input);
-        Assert.Equal(output.Shape, output2.Shape);
+        Assert.Equal(output.Shape.ToArray(), output2.Shape.ToArray());
         Assert.False(ContainsNaN(output2));
     }
 
@@ -336,7 +336,7 @@ public class RWKV7LanguageModelTests
         var input = CreateOneHotInput(batchSize, seqLen, vocabSize);
         var output = model.Predict(input);
 
-        Assert.Equal(new[] { batchSize, seqLen, vocabSize }, output.Shape);
+        Assert.Equal(new[] { batchSize, seqLen, vocabSize }, output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -354,7 +354,7 @@ public class RWKV7LanguageModelTests
         var input = CreateOneHotInput(1, seqLen, vocabSize).Reshape(seqLen, vocabSize);
         var output = model.Predict(input);
 
-        Assert.Equal(new[] { seqLen, vocabSize }, output.Shape);
+        Assert.Equal(new[] { seqLen, vocabSize }, output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -402,10 +402,10 @@ public class RWKV7LanguageModelTests
         var input = CreateOneHotInput(1, seqLen, vocabSize);
         var output = model.Predict(input);
         model.SetTrainingMode(true); // Re-enable after Predict set it to false
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         var inputGrad = model.Backpropagate(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         Assert.False(ContainsNaN(inputGrad));
     }
 
@@ -435,7 +435,7 @@ public class RWKV7LanguageModelTests
 
         model.ResetState();
         var output2 = model.Predict(input);
-        Assert.Equal(new[] { 1, seqLen, vocabSize }, output2.Shape);
+        Assert.Equal(new[] { 1, seqLen, vocabSize }, output2.Shape.ToArray());
         Assert.False(ContainsNaN(output2));
     }
 
@@ -528,7 +528,7 @@ public class RWKV7LanguageModelTests
             CreateArch(100), 100, 64, 4, 8, maxSeqLength: 32);
         var metadata = model.GetModelMetadata();
 
-        Assert.Equal(ModelType.NeuralNetwork, metadata.ModelType);
+
         Assert.True(metadata.AdditionalInfo.ContainsKey("VocabSize"));
         Assert.True(metadata.AdditionalInfo.ContainsKey("ModelDimension"));
         Assert.True(metadata.AdditionalInfo.ContainsKey("NumLayers"));
@@ -558,7 +558,7 @@ public class RWKV7LanguageModelTests
         var input = CreateOneHotDoubleInput(1, seqLen, vocabSize);
         var output = model.Predict(input);
 
-        Assert.Equal(new[] { 1, seqLen, vocabSize }, output.Shape);
+        Assert.Equal(new[] { 1, seqLen, vocabSize }, output.Shape.ToArray());
         Assert.False(ContainsNaNDouble(output));
     }
 

@@ -1,5 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -38,6 +40,20 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// Reference: Bao et al., "All are Worth Words: A ViT Backbone for Diffusion Models", CVPR 2023
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var predictor = new UViTNoisePredictor&lt;float&gt;(inputChannels: 4, hiddenSize: 1024, numLayers: 22, numHeads: 16);
+/// var noisyLatent = Tensor&lt;float&gt;.Random(new[] { 1, 4, 32, 32 });
+/// var predicted = predictor.PredictNoise(noisyLatent, timestep: 500);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Denoising)]
+[ModelTask(ModelTask.Generation)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class UViTNoisePredictor<T> : NoisePredictorBase<T>
 {
     private readonly int _inputChannels;
@@ -233,7 +249,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> Forward(Tensor<T> x, Tensor<T> timeEmbed, Tensor<T>? conditioning)
     {
-        var shape = x.Shape;
+        var shape = x.Shape.ToArray();
         var batch = shape[0];
 
         // Patchify and embed
@@ -277,7 +293,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
                         }
                     }
                 }
-                patches = new Tensor<T>(patches.Shape, new Vector<T>(resultData));
+                patches = new Tensor<T>(patches.Shape.ToArray(), new Vector<T>(resultData));
             }
         }
 
@@ -334,7 +350,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> Patchify(Tensor<T> x)
     {
-        var shape = x.Shape;
+        var shape = x.Shape.ToArray();
         var batch = shape[0];
         var height = shape.Length > 2 ? shape[2] : 1;
         var width = shape.Length > 3 ? shape[3] : 1;
@@ -446,7 +462,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         var span = t.AsSpan();
         var data = new T[span.Length];
         span.CopyTo(data);
-        return new Tensor<T>(t.Shape, new Vector<T>(data));
+        return new Tensor<T>(t.Shape.ToArray(), new Vector<T>(data));
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)

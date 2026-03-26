@@ -243,7 +243,7 @@ public class SoundStormModel<T> : AudioDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "SoundStorm", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SoundStorm", Version = "1.0",
             Description = "SoundStorm parallel masked audio generation with conformer backbone",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

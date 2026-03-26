@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -31,6 +33,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Upsampling)]
+[LayerTask(LayerTask.UpSampling)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "new[] { 1, 4, 4 }, 2")]
 public class UpsamplingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -233,7 +239,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
         // Cache input shape for backward pass during training
         if (IsTrainingMode)
         {
-            _gpuCachedInputShape = (int[])input.Shape.Clone();
+            _gpuCachedInputShape = (int[])input.Shape.ToArray().Clone();
         }
 
         return gpuEngine.UpsampleGpu(input, _scaleFactor);
@@ -303,7 +309,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
     {
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        return Engine.UpsampleBackward(outputGradient, _lastInput.Shape, _scaleFactor, _scaleFactor);
+        return Engine.UpsampleBackward(outputGradient, _lastInput.Shape.ToArray(), _scaleFactor, _scaleFactor);
     }
 
     /// <summary>

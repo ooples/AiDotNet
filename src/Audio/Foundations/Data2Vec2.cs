@@ -196,7 +196,7 @@ public class Data2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
             }
         }
 
-        var result = new Tensor<T>(layerOutputs[0].Shape);
+        var result = new Tensor<T>(layerOutputs[0].Shape.ToArray());
         for (int li = 0; li < count; li++)
         {
             for (int i = 0; i < result.Length && i < layerOutputs[li].Length; i++)
@@ -254,7 +254,6 @@ public class Data2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         {
             Name = _useNativeMode ? "data2vec2-Native" : "data2vec2-ONNX",
             Description = $"data2vec 2.0 {_options.Variant} self-supervised audio model (Baevski et al., 2023, Meta)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.HiddenDim,
             Complexity = _options.NumLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

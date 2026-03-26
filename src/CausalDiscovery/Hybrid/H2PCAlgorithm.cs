@@ -365,38 +365,5 @@ public class H2PCAlgorithm<T> : HybridBase<T>
         return 0.5 * (1.0 + sign * y);
     }
 
-    private static double[] SolveSmallSystem(double[,] A, double[] b, int p)
-    {
-        var aug = new double[p, p + 1];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < p; j++) aug[i, j] = A[i, j];
-            aug[i, p] = b[i];
-        }
-        for (int col = 0; col < p; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < p; row++)
-                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col])) maxRow = row;
-            if (maxRow != col)
-                for (int j = col; j <= p; j++)
-                    (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-            double pivot = aug[col, col];
-            if (Math.Abs(pivot) < 1e-15) continue;
-            for (int row = col + 1; row < p; row++)
-            {
-                double factor = aug[row, col] / pivot;
-                for (int j = col; j <= p; j++) aug[row, j] -= factor * aug[col, j];
-            }
-        }
-        var x = new double[p];
-        for (int row = p - 1; row >= 0; row--)
-        {
-            double sum = aug[row, p];
-            for (int j = row + 1; j < p; j++) sum -= aug[row, j] * x[j];
-            double diag = aug[row, row];
-            x[row] = Math.Abs(diag) > 1e-15 ? sum / diag : 0;
-        }
-        return x;
-    }
+    // SolveSmallSystem is inherited from CausalDiscoveryBase<T>
 }

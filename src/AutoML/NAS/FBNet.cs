@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.AutoML.SearchSpace;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -16,6 +18,28 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "FBNet: Hardware-Aware Efficient ConvNet Design via Differentiable NAS" (CVPR 2019)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> FBNet (Facebook Net) finds architectures that are both
+    /// accurate and fast on specific hardware. It uses differentiable search with real
+    /// hardware latency measurements as constraints. Think of it as an architect who designs
+    /// buildings that are both beautiful and structurally efficient for a specific site,
+    /// rather than designing in the abstract.</para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
+    /// var fbnet = new FBNet&lt;float&gt;(searchSpace, numNodes: 4, targetPlatform: HardwarePlatform.Mobile);
+    /// Architecture&lt;float&gt; architecture = fbnet.DeriveArchitecture();
+    /// </code>
+    /// </example>
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.ConvolutionalNetwork)]
+    [ModelCategory(ModelCategory.Optimization)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     public class FBNet<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;

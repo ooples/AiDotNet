@@ -12,6 +12,22 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <summary>DiffWave: diffusion probabilistic model for conditional and unconditional waveform generation.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "DiffWave: A Versatile Diffusion Model for Audio Synthesis" (Kong et al., 2021)</item></list></para><para><b>For Beginners:</b> DiffWave: diffusion probabilistic model for conditional and unconditional waveform generation.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a DiffWave vocoder using diffusion probabilistic modeling
+/// // for conditional and unconditional waveform generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new DiffWave&lt;double&gt;(architecture, "diffwave.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new DiffWave&lt;double&gt;(architecture, new DiffWaveOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]
@@ -65,7 +81,7 @@ public class DiffWave<T> : TtsModelBase<T>, IVocoder<T>
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); SetTrainingMode(false); }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "DiffWave-Native" : "DiffWave-ONNX", Description = "DiffWave: A Versatile Diffusion Model for Audio Synthesis (Kong et al., 2021)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.MelChannels, Complexity = _options.NumDiffusionSteps }; }
+    public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "DiffWave-Native" : "DiffWave-ONNX", Description = "DiffWave: A Versatile Diffusion Model for Audio Synthesis (Kong et al., 2021)", FeatureCount = _options.MelChannels, Complexity = _options.NumDiffusionSteps }; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.MelChannels); writer.Write(_options.HopSize); writer.Write(_options.NumDiffusionSteps); writer.Write(_options.DropoutRate); writer.Write(_options.NumResLayers); writer.Write(_options.ResChannels); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = reader.ReadInt32(); _options.MelChannels = reader.ReadInt32(); _options.HopSize = reader.ReadInt32(); _options.NumDiffusionSteps = reader.ReadInt32();  _options.DropoutRate = reader.ReadDouble(); _options.NumResLayers = reader.ReadInt32(); _options.ResChannels = reader.ReadInt32();  base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new DiffWave<T>(Architecture, mp, _options); return new DiffWave<T>(Architecture, _options); }

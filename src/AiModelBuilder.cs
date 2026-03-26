@@ -839,7 +839,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     ///     "Explain why this prediction was made and what factors contributed most?",
     ///     ReasoningMode.ChainOfThought
     /// );
-    /// Console.WriteLine(reasoningResult.FinalAnswer);
+    /// // Result is available in the returned value
     /// </code>
     /// </para>
     /// </remarks>
@@ -2111,8 +2111,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // Standard supervised learning path: split FIRST, then fit preprocessing on training only.
             // This prevents data leakage from test/validation sets into the preprocessing pipeline.
             // Disable shuffling for time-series tasks to preserve chronological ordering.
-            bool shuffleBeforeSplit = !(_autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
-                || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection);
+            // Disable shuffling for time-series models to preserve chronological ordering.
+            // Random shuffling destroys the sequential dependencies that TS models rely on.
+            bool isTimeSeriesModel = _model is TimeSeries.TimeSeriesModelBase<T>
+                || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesForecasting
+                || _autoMLOptions?.TaskFamilyOverride == AutoMLTaskFamily.TimeSeriesAnomalyDetection;
+            bool shuffleBeforeSplit = !isTimeSeriesModel;
             (XTrain, yTrain, XVal, yVal, XTest, yTest) = DataSplitter.Split<T, TInput, TOutput>(
                 preparedX, preparedY, trainRatio: 0.7, validationRatio: 0.15, shuffle: shuffleBeforeSplit);
 
@@ -2496,6 +2500,55 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 Iterations = federatedLearningMetadata.RoundsCompleted
             };
         }
+        else if (!model.SupportsParameterInitialization)
+        {
+            // DIRECT TRAINING PATH for non-parametric models (TS, density-based clustering, etc.)
+            // These models use their own internal optimizers and don't benefit from the outer
+            // optimizer's clone-evaluate-select loop. Train directly on the full training data.
+            // For clustering/density models, train on the full preprocessed dataset (not the
+            // train/test split) since cluster structure depends on having all data points.
+            // Note: preprocessedX/preprocessedY contain ALL preprocessed samples.
+            bool useFullData = model is Clustering.Base.ClusteringBase<T>;
+            // Use preprocessed data (not raw x/y) so models operate in the same
+            // coordinate space as the validation/test predictions
+            var directX = useFullData ? preprocessedX : XTrain;
+            var directY = useFullData ? preprocessedY : yTrain;
+            model.Train(directX, directY);
+
+            // Compute evaluation metrics
+            int inputSize = InputHelper<T, TInput>.GetInputSize(directX);
+            TOutput trainPredOutput = model.Predict(directX);
+            var trainPredVec = ConversionsHelper.ConvertToVector<T, TOutput>(trainPredOutput);
+            var trainActual = ConversionsHelper.ConvertToVector<T, TOutput>(directY);
+
+            var trainErrorStats = new ErrorStats<T>(new ErrorStatsInputs<T>
+            {
+                Actual = trainActual,
+                Predicted = trainPredVec,
+                FeatureCount = inputSize
+            });
+            var trainPredStats = new PredictionStats<T>(new PredictionStatsInputs<T>
+            {
+                Actual = trainActual,
+                Predicted = trainPredVec,
+                NumberOfParameters = inputSize
+            });
+
+            // trainPredOutput is already TOutput from model.Predict
+
+            optimizationResult = new OptimizationResult<T, TInput, TOutput>
+            {
+                BestSolution = model,
+                Iterations = 1,
+                SelectedFeatureIndices = Enumerable.Range(0, inputSize).ToList(),
+                TrainingResult = new OptimizationResult<T, TInput, TOutput>.DatasetResult
+                {
+                    X = directX, Y = directY, Predictions = trainPredOutput,
+                    ErrorStats = trainErrorStats,
+                    PredictionStats = trainPredStats
+                }
+            };
+        }
         else
         {
             // REGULAR TRAINING PATH
@@ -2585,28 +2638,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             registeredModelName = $"{model.GetType().Name}-{trainingStartTime:yyyyMMdd-HHmmss}";
 
-            // Determine model type from the actual model class
-            var modelTypeName = optimizationResult.BestSolution.GetType().Name;
-            ModelType derivedModelType = ModelType.None;
-            if (Enum.TryParse<ModelType>(modelTypeName, ignoreCase: true, out var parsedType))
-            {
-                derivedModelType = parsedType;
-            }
-            else if (modelTypeName.Contains("Regression", StringComparison.OrdinalIgnoreCase))
-            {
-                derivedModelType = ModelType.SimpleRegression;
-            }
-            else if (modelTypeName.Contains("Neural", StringComparison.OrdinalIgnoreCase))
-            {
-                derivedModelType = ModelType.NeuralNetwork;
-            }
-
             var modelMetadata = new ModelMetadata<T>
             {
                 Name = registeredModelName,
                 Version = "1.0",
                 TrainingDate = trainingStartTime,
-                ModelType = derivedModelType,
                 FeatureCount = convertedX.Columns,
                 Complexity = optimizationResult.BestSolution.GetType().GetProperties().Length,
                 Description = $"Model trained via AiModelBuilder on {trainingStartTime:yyyy-MM-dd HH:mm:ss} UTC",
@@ -3727,7 +3763,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// // After training
     /// var result = builder.Build();
     /// var shapExplanation = result.ExplainWithSHAP(inputInstance, backgroundData);
-    /// Console.WriteLine($"Age contributed: {shapExplanation.ShapValues[0]}");
+    /// // Result is available in the returned value
     /// </code>
     /// </para>
     /// </remarks>
@@ -4615,7 +4651,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     ///
     /// var advice = await builder.AskAgentAsync(
     ///     "Should I use Ridge or Lasso regression for my dataset with 50 features?");
-    /// Console.WriteLine(advice);
+    /// // Result is available in the returned value
     /// </code>
     /// </remarks>
     public async Task<string> AskAgentAsync(string question)
@@ -4784,7 +4820,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     ///
     /// // Access the profiling report
     /// var report = result.ProfilingReport;
-    /// Console.WriteLine(report?.GetFormattedSummary());
+    /// // Result is available in the returned value
     /// </code>
     ///
     /// Features tracked:
@@ -5524,7 +5560,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 }
             }
 
-            // Step 5: Define forward and backward functions
+            // Step 5: Validate that student supports gradient backpropagation
+            if (studentModel is not INeuralNetwork<T>)
+            {
+                throw new InvalidOperationException(
+                    $"Knowledge distillation requires a neural network (INeuralNetwork<T>) for gradient backpropagation. " +
+                    $"Current model type: {studentModel.GetType().Name}. Use a neural network model as the student.");
+            }
+
+            // Step 6: Define forward and backward functions
             // Storage for per-sample inputs to enable forward pass replay during backprop
             // Use a queue to match forward inputs with backward gradients in FIFO order
             var inputQueue = new Queue<Vector<T>>();
@@ -5549,7 +5593,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     return output.ToVector();
                 }
 
-                // Fallback for non-NeuralNetworkModel: call Predict and convert result
+                // Fallback for non-neural-network models: call Predict and convert result
                 TOutput modelOutput = studentModel.Predict(modelInput);
                 return ConversionsHelper.ConvertToVector<T, TOutput>(modelOutput);
             };
@@ -5631,6 +5675,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 BestFitnessScore = NumOps.FromDouble(0.0) // Score tracking happened during KD training
             };
             return Task.FromResult(result);
+        }
+        catch (InvalidOperationException)
+        {
+            // Re-throw validation errors (e.g., non-neural-network student) —
+            // these are configuration bugs that must not be silently swallowed.
+            throw;
         }
         catch (Exception ex)
         {
@@ -5769,21 +5819,48 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             reasoningTrace.AppendLine($"Data Analysis Results:\n{dataAnalysisResult}\n");
         }
 
+        // Derive computational budget and data complexity from dataset characteristics
+        var computationalBudget = nSamples > 100000 ? ComputationalBudget.High : ComputationalBudget.Moderate;
+        var dataComplexity = nFeatures > 50 ? DataComplexity.Complex
+            : nFeatures > 10 ? DataComplexity.Moderate
+            : DataComplexity.Simple;
+
+        // Derive problem type from builder configuration (used across multiple steps)
+        var problemType = _autoMLOptions?.TaskFamilyOverride switch
+        {
+                AutoMLTaskFamily.BinaryClassification => "classification",
+                AutoMLTaskFamily.MultiClassClassification => "classification",
+                AutoMLTaskFamily.TimeSeriesForecasting => "time_series",
+                AutoMLTaskFamily.TimeSeriesAnomalyDetection => "anomaly_detection",
+                AutoMLTaskFamily.Ranking => "ranking",
+                _ => "regression"
+            };
+
         // 2. MODEL SELECTION
         if (_agentOptions.EnableModelSelection && _model == null)
         {
             reasoningTrace.AppendLine("STEP 2: Selecting optimal model type...\n");
 
+            recommendation.SuggestedModelType = ModelSelectionTool.RecommendModelType(
+                problemType: problemType,
+                nSamples: nSamples,
+                nFeatures: nFeatures,
+                isLinear: nFeatures <= 5,
+                hasOutliers: false,
+                computationalConstraints: computationalBudget.ToString().ToLowerInvariant(),
+                requiresInterpretability: false);
+
+            // Also run the tool via the agent for detailed reasoning text
             var modelSelectionInput = new Newtonsoft.Json.Linq.JObject
             {
-                ["problem_type"] = "regression",  // Assuming regression for now
+                ["problem_type"] = problemType,
                 ["n_samples"] = nSamples,
                 ["n_features"] = nFeatures,
-                ["is_linear"] = false,  // Conservative default
-                ["has_outliers"] = false,  // Would need analysis
+                ["is_linear"] = nFeatures <= 5,
+                ["has_outliers"] = false,
                 ["has_missing_values"] = false,
                 ["requires_interpretability"] = false,
-                ["computational_constraints"] = "moderate"
+                ["computational_constraints"] = computationalBudget.ToString().ToLowerInvariant()
             }.ToString(Formatting.None);
 
             var modelSelectionResult = await agent.RunAsync(
@@ -5792,28 +5869,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 Input for ModelSelectionTool:
                 {modelSelectionInput}
 
-                Based on the tool's recommendation, suggest ONE specific ModelType.");
+                Provide detailed reasoning for your recommendation.");
 
             recommendation.ModelSelectionReasoning = modelSelectionResult;
-
-            // Try to extract model type from agent response
-            var agentResponse = modelSelectionResult.ToLower();
-            recommendation.SuggestedModelType = agentResponse switch
-            {
-                var r when r.Contains("random forest") || r.Contains("randomforest") => ModelType.RandomForest,
-                var r when r.Contains("neural network") || r.Contains("neuralnetwork") => ModelType.NeuralNetworkRegression,
-                var r when r.Contains("polynomial") => ModelType.PolynomialRegression,
-                var r when r.Contains("ridge") => ModelType.SimpleRegression,
-                var r when r.Contains("multiple") => ModelType.MultipleRegression,
-                var r when r.Contains("simple") || r.Contains("linear") => ModelType.SimpleRegression,
-                _ => null
-            };
-
             reasoningTrace.AppendLine($"Model Selection:\n{modelSelectionResult}\n");
-            if (recommendation.SuggestedModelType.HasValue)
-            {
-                reasoningTrace.AppendLine($"Selected Model: {recommendation.SuggestedModelType.Value}\n");
-            }
+            reasoningTrace.AppendLine($"Selected Model: {recommendation.SuggestedModelType.Name}\n");
         }
 
         // 3. HYPERPARAMETER TUNING
@@ -5821,15 +5881,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             reasoningTrace.AppendLine("STEP 3: Recommending hyperparameter values...\n");
 
-            var modelTypeStr = recommendation.SuggestedModelType?.ToString() ?? _model?.GetType().Name ?? "RandomForest";
+            var modelTypeStr = recommendation.SuggestedModelType?.Name ?? _model?.GetType().Name ?? "RandomForest";
 
             var hyperparameterInput = new Newtonsoft.Json.Linq.JObject
             {
                 ["model_type"] = modelTypeStr,
                 ["n_samples"] = nSamples,
                 ["n_features"] = nFeatures,
-                ["problem_type"] = "regression",
-                ["data_complexity"] = "moderate"
+                ["problem_type"] = problemType,
+                ["data_complexity"] = dataComplexity.ToString().ToLowerInvariant()
             }.ToString(Formatting.None);
 
             var hyperparameterResult = await agent.RunAsync(
@@ -5948,11 +6008,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             {
                 ["n_samples"] = nSamples,
                 ["n_features"] = nFeatures,
-                ["problem_type"] = "regression",
-                ["is_time_series"] = false,
+                ["problem_type"] = problemType,
+                ["is_time_series"] = problemType == "time_series",
                 ["is_imbalanced"] = false,
                 ["has_groups"] = false,
-                ["computational_budget"] = "moderate"
+                ["computational_budget"] = computationalBudget.ToString().ToLowerInvariant()
             }.ToString(Formatting.None);
 
             var cvResult = await agent.RunAsync(
@@ -5968,7 +6028,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // Regularization recommendations
             var regularizationInput = new Newtonsoft.Json.Linq.JObject
             {
-                ["model_type"] = recommendation.SuggestedModelType?.ToString() ?? "RandomForest",
+                ["model_type"] = recommendation.SuggestedModelType?.Name ?? "RandomForest",
                 ["n_samples"] = nSamples,
                 ["n_features"] = nFeatures,
                 ["training_score"] = 0.0,
@@ -6259,7 +6319,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private void ApplyAgentRecommendationsCore(AgentRecommendation<T, TInput, TOutput> recommendation)
     {
         // Apply agent recommendations where possible
-        if (_model == null && recommendation.SuggestedModelType.HasValue)
+        if (_model == null && recommendation.SuggestedModelType is not null)
         {
             // Agent recommended a model type
             // Note: Auto-creation of model instances is not implemented to avoid the complexity
@@ -6268,7 +6328,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // to review and manually configure using the builder's UseModel() method.
 
             Console.WriteLine($"\n=== AGENT RECOMMENDATION ===");
-            Console.WriteLine($"The AI agent recommends using: {recommendation.SuggestedModelType.Value}");
+            Console.WriteLine($"The AI agent recommends using: {recommendation.SuggestedModelType.Name}");
 
             var reasoning = recommendation.ModelSelectionReasoning ?? string.Empty;
             if (reasoning.Length > 0)
@@ -6278,7 +6338,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             }
 
             Console.WriteLine($"\nTo use this recommendation, configure your builder:");
-            Console.WriteLine($"  builder.UseModel(/* create {recommendation.SuggestedModelType.Value} instance */);");
+            Console.WriteLine($"  builder.UseModel(/* create {recommendation.SuggestedModelType.Name} instance */);");
             Console.WriteLine($"\nFull recommendation details available in result.AgentRecommendation");
             Console.WriteLine("===========================\n");
         }
@@ -6290,7 +6350,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             var registry = new HyperparameterRegistry();
             var applicator = new AgentHyperparameterApplicator<T>(registry);
-            var modelType = recommendation.SuggestedModelType ?? DeriveModelTypeFromModel(_model);
+            var modelType = DeriveModelType(_model) ?? recommendation.SuggestedModelType;
+            if (modelType is null) return;
 
             var applicationResult = applicator.Apply(configurableModel, modelType, recommendation.SuggestedHyperparameters);
             recommendation.HyperparameterApplicationResult = applicationResult;
@@ -6305,35 +6366,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     }
 
     /// <summary>
-    /// Derives the ModelType from the actual model instance by examining its class name.
+    /// Derives the open generic type definition from the actual model instance.
     /// </summary>
-    private static ModelType DeriveModelTypeFromModel(IFullModel<T, TInput, TOutput>? model)
+    private static Type? DeriveModelType(IFullModel<T, TInput, TOutput>? model)
     {
-        if (model == null) return ModelType.None;
+        if (model is null)
+            return null;
 
-        var modelTypeName = model.GetType().Name;
-
-        // Try direct enum parse first (handles cases like "RandomForest", "GradientBoosting")
-        if (Enum.TryParse<ModelType>(modelTypeName, true, out var parsedType))
-        {
-            return parsedType;
-        }
-
-        // Try common suffixes removal
-        var suffixes = new[] { "Regression", "Model", "Classifier", "Network" };
-        foreach (var suffix in suffixes)
-        {
-            if (modelTypeName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-            {
-                var baseName = modelTypeName.Substring(0, modelTypeName.Length - suffix.Length);
-                if (Enum.TryParse<ModelType>(baseName, true, out var strippedType))
-                {
-                    return strippedType;
-                }
-            }
-        }
-
-        return ModelType.None;
+        var runtimeType = model.GetType();
+        return runtimeType.IsGenericType ? runtimeType.GetGenericTypeDefinition() : runtimeType;
     }
 
     /// <summary>
@@ -6495,9 +6536,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             return;
         }
 
-        var preTransformer = _preprocessingPipeline as IDataTransformer<T, Tensor<T>, Tensor<T>>;
-        var postTransformer = _postprocessingPipeline as IDataTransformer<T, Tensor<T>, Tensor<T>>;
-        documentModel.ConfigureTransformers(preTransformer, postTransformer);
+        // Transformers are now configured through the pipeline directly, not on the model
     }
 
     private void ApplyGpuConfiguration()
@@ -7223,9 +7262,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         for (int memberIndex = members.Count; memberIndex < ensembleSize; memberIndex++)
         {
-            var memberModel = deepEnsembleTemplate is Models.NeuralNetworkModel<T> nnTemplate
-                ? (IFullModel<T, TInput, TOutput>)(object)new Models.NeuralNetworkModel<T>(nnTemplate.Architecture)
-                : deepEnsembleTemplate.DeepCopy();
+            var memberModel = deepEnsembleTemplate.DeepCopy();
 
             PerturbInitialParametersIfSupported(memberModel, baseSeed, memberIndex, options.DeepEnsembleInitialNoiseStdDev);
 
@@ -7510,11 +7547,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             return;
         }
 
-        if (model is not Models.NeuralNetworkModel<T> neuralNetworkModel)
+        if (model is not NeuralNetworks.NeuralNetworkBase<T> neuralNetworkModel)
         {
             throw new InvalidOperationException(
                 "Uncertainty quantification is currently supported for neural network models only. " +
-                "ConfigureModel(new NeuralNetworkModel<T>(...)) to enable Monte Carlo Dropout uncertainty estimation.");
+                "Use a NeuralNetworkBase<T> subclass to enable Monte Carlo Dropout uncertainty estimation.");
         }
 
         var injectedCount = TryInjectMonteCarloDropoutLayers(neuralNetworkModel, options);
@@ -7528,10 +7565,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     }
 
     private static int TryInjectMonteCarloDropoutLayers(
-        Models.NeuralNetworkModel<T> neuralNetworkModel,
+        NeuralNetworks.NeuralNetworkBase<T> neuralNetworkModel,
         UncertaintyQuantificationOptions options)
     {
-        var layers = neuralNetworkModel.Network.LayersReadOnly;
+        var layers = neuralNetworkModel.LayersReadOnly;
         if (layers.OfType<MCDropoutLayer<T>>().Any())
         {
             return -1;
@@ -7561,7 +7598,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             }
 
             int? seed = options.RandomSeed.HasValue ? options.RandomSeed.Value + i : (int?)null;
-            neuralNetworkModel.Network.InsertLayerIntoCollection(i + 1, new MCDropoutLayer<T>(options.MonteCarloDropoutRate, mcMode: false, randomSeed: seed));
+            neuralNetworkModel.InsertLayerIntoCollection(i + 1, new MCDropoutLayer<T>(options.MonteCarloDropoutRate, mcMode: false, randomSeed: seed));
             injectedCount++;
             i++;
         }

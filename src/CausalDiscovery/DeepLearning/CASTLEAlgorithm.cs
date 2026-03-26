@@ -99,25 +99,29 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
                     mask[i, j] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
                 }
 
+            // Pre-allocate reusable vectors outside the sample/target loops
+            var xMasked = new Vector<T>(d);
+            var hidden = new Vector<T>(h);
+            var whCol = new Vector<T>(d);
+            var woCol = new Vector<T>(h);
+
             for (int s = 0; s < n; s++)
             {
                 for (int j = 0; j < d; j++)
                 {
                     // Masked input: x_masked[i] = x[i] * mask[i,j]
-                    var hidden = new T[h];
+                    for (int i = 0; i < d; i++)
+                        xMasked[i] = NumOps.Multiply(data[s, i], mask[i, j]);
+
                     for (int k = 0; k < h; k++)
                     {
-                        T sum = NumOps.Zero;
-                        for (int i = 0; i < d; i++)
-                            sum = NumOps.Add(sum, NumOps.Multiply(
-                                NumOps.Multiply(data[s, i], mask[i, j]), Wh[i, k]));
-                        double sv = NumOps.ToDouble(sum);
+                        for (int i = 0; i < d; i++) whCol[i] = Wh[i, k];
+                        double sv = NumOps.ToDouble(Engine.DotProduct(xMasked, whCol));
                         hidden[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
                     }
 
-                    T pred = NumOps.Zero;
-                    for (int k = 0; k < h; k++)
-                        pred = NumOps.Add(pred, NumOps.Multiply(hidden[k], Wo[k, 0]));
+                    for (int k = 0; k < h; k++) woCol[k] = Wo[k, 0];
+                    T pred = Engine.DotProduct(hidden, woCol);
 
                     T residual = NumOps.Multiply(NumOps.Subtract(pred, data[s, j]), invN);
 
@@ -182,31 +186,17 @@ public class CASTLEAlgorithm<T> : DeepCausalBase<T>
         }
 
         // Compute final mask and threshold
-        var result = new Matrix<T>(d, d);
         var cov = ComputeCovarianceMatrix(data);
-        var finalMask = new Matrix<T>(d, d);
+        var learnedP = new double[d, d];
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
                 if (i == j) continue;
                 double sv = NumOps.ToDouble(M[i, j]);
-                finalMask[i, j] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
+                learnedP[i, j] = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
             }
 
-        T threshold = NumOps.FromDouble(0.5);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j) continue;
-                if (NumOps.GreaterThan(finalMask[i, j], threshold))
-                {
-                    T varI = cov[i, i];
-                    if (NumOps.GreaterThan(varI, NumOps.FromDouble(1e-10)))
-                        result[i, j] = NumOps.Divide(cov[i, j], varI);
-                }
-            }
-
-        return result;
+        return BuildFinalAdjacency(learnedP, cov, d);
     }
 
 }

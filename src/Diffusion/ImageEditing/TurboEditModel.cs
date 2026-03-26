@@ -40,6 +40,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Deutch et al., "TurboEdit: Text-Based Image Editing Using Few-Step Diffusion Models", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 1024, NumInferenceSteps = 4 };
+/// var model = new TurboEditModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 128, 128 });
+/// var edited = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.GAN)]
@@ -134,7 +142,7 @@ public class TurboEditModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "TurboEdit", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "TurboEdit", Version = "1.0",
             Description = "Fast 3-5 step image editing with distilled SDXL Turbo inversion",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

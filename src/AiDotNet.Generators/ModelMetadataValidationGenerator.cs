@@ -30,10 +30,13 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         title: "Missing required model metadata attribute",
         messageFormat: "Model class '{0}' is missing required attribute '[{1}]'",
         category: "AiDotNet.ModelMetadata",
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "Every concrete model class must have all required metadata attributes: ModelDomain, ModelCategory, ModelTask, ModelComplexity, and ModelInput.");
 
+    // NOTE: AIDN010/011/012 temporarily set to Warning while XML docs are being
+    // added across ~5000 model classes. Will be restored to Error once complete.
+    // Tracked by issue #990 and related annotation PRs.
     private static readonly DiagnosticDescriptor MissingSummary = new(
         id: "AIDN010",
         title: "Missing XML doc summary",
@@ -63,8 +66,9 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         title: "Invalid ModelPaper URL",
         messageFormat: "ModelPaper URL '{0}' on '{1}' is not well-formed (must start with https://)",
         category: "AiDotNet.ModelMetadata",
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
+
 
     // Fully-qualified attribute names (without "Attribute" suffix for matching)
     private const string ModelDomainAttributeName = "AiDotNet.Attributes.ModelDomainAttribute";
@@ -73,6 +77,7 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
     private const string ModelComplexityAttributeName = "AiDotNet.Attributes.ModelComplexityAttribute";
     private const string ModelInputAttributeName = "AiDotNet.Attributes.ModelInputAttribute";
     private const string ModelPaperAttributeName = "AiDotNet.Attributes.ModelPaperAttribute";
+    private const string ModelMetadataExemptAttributeName = "AiDotNet.Attributes.ModelMetadataExemptAttribute";
 
     // Interface/base type names to detect model classes
     private const string IFullModelName = "AiDotNet.Interfaces.IFullModel";
@@ -165,6 +170,8 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
         var inputAttr = compilation.GetTypeByMetadataName(ModelInputAttributeName);
         var paperAttr = compilation.GetTypeByMetadataName(ModelPaperAttributeName);
 
+        var exemptAttr = compilation.GetTypeByMetadataName(ModelMetadataExemptAttributeName);
+
         // If attributes don't exist in the compilation yet, skip validation
         if (domainAttr is null || categoryAttr is null || taskAttr is null ||
             complexityAttr is null || inputAttr is null)
@@ -179,6 +186,10 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
                 continue;
 
             if (!seen.Add(modelClass))
+                continue;
+
+            // Skip classes marked with [ModelMetadataExempt]
+            if (exemptAttr is not null && HasAttribute(modelClass.GetAttributes(), exemptAttr))
                 continue;
 
             ValidateRequiredAttributes(context, modelClass, domainAttr, categoryAttr, taskAttr, complexityAttr, inputAttr);
@@ -267,7 +278,18 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
     {
         var className = modelClass.Name;
         var location = modelClass.Locations.FirstOrDefault();
-        var xmlDoc = modelClass.GetDocumentationCommentXml();
+
+        // Use syntax tree trivia as the primary source of truth for XML doc detection.
+        // GetDocumentationCommentXml() depends on compilation settings (DocumentationMode)
+        // and can return empty on certain build configurations (observed on CI for net471).
+        // The syntax tree always has the trivia regardless of compilation settings.
+        var xmlDoc = ExtractXmlDocFromSyntax(modelClass);
+
+        // Fallback to semantic API if syntax extraction found nothing
+        if (string.IsNullOrWhiteSpace(xmlDoc))
+        {
+            xmlDoc = modelClass.GetDocumentationCommentXml();
+        }
 
         if (string.IsNullOrWhiteSpace(xmlDoc))
         {
@@ -277,20 +299,69 @@ public class ModelMetadataValidationGenerator : IIncrementalGenerator
             return;
         }
 
-        if (!xmlDoc.Contains("<summary>"))
+        // Case-insensitive checks to avoid brittle string matching
+        if (xmlDoc.IndexOf("<summary>", System.StringComparison.OrdinalIgnoreCase) < 0)
         {
             context.ReportDiagnostic(Diagnostic.Create(MissingSummary, location, className));
         }
 
-        if (!xmlDoc.Contains("For Beginners"))
+        if (xmlDoc.IndexOf("For Beginners", System.StringComparison.OrdinalIgnoreCase) < 0)
         {
             context.ReportDiagnostic(Diagnostic.Create(MissingBeginnerRemarks, location, className));
         }
 
-        if (!xmlDoc.Contains("<example>") && !xmlDoc.Contains("<code>"))
+        if (xmlDoc.IndexOf("<example>", System.StringComparison.OrdinalIgnoreCase) < 0 &&
+            xmlDoc.IndexOf("<code>", System.StringComparison.OrdinalIgnoreCase) < 0)
         {
             context.ReportDiagnostic(Diagnostic.Create(MissingExample, location, className));
         }
+    }
+
+    /// <summary>
+    /// Fallback: extracts XML documentation directly from the syntax tree trivia
+    /// when <see cref="ISymbol.GetDocumentationCommentXml"/> returns empty.
+    /// This can happen in certain build configurations or target frameworks.
+    /// </summary>
+    private static string? ExtractXmlDocFromSyntax(INamedTypeSymbol modelClass)
+    {
+        foreach (var syntaxRef in modelClass.DeclaringSyntaxReferences)
+        {
+            var syntaxNode = syntaxRef.GetSyntax();
+            if (syntaxNode is not ClassDeclarationSyntax classDecl)
+                continue;
+
+            // XML doc comments may be leading trivia on:
+            // 1. The class declaration itself
+            // 2. The first attribute (when attributes separate the doc from the class keyword)
+            // 3. The first token of the entire declaration
+            // Check all leading trivia sources to find the doc comment.
+
+            // First: check the first token of the entire class declaration (includes attributes)
+            var firstToken = classDecl.GetFirstToken();
+            foreach (var trivia in firstToken.LeadingTrivia)
+            {
+                if (trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SingleLineDocumentationCommentTrivia) ||
+                    trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.MultiLineDocumentationCommentTrivia))
+                {
+                    return trivia.ToFullString();
+                }
+            }
+
+            // Second: check attribute lists (doc comments may be trivia on the first attribute)
+            foreach (var attrList in classDecl.AttributeLists)
+            {
+                foreach (var trivia in attrList.GetLeadingTrivia())
+                {
+                    if (trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.SingleLineDocumentationCommentTrivia) ||
+                        trivia.IsKind(Microsoft.CodeAnalysis.CSharp.SyntaxKind.MultiLineDocumentationCommentTrivia))
+                    {
+                        return trivia.ToFullString();
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     private static bool HasAttribute(ImmutableArray<AttributeData> attributes, INamedTypeSymbol attributeType)

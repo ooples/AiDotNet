@@ -41,6 +41,14 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// Reference: "TabPFN: A Transformer That Solves Small Tabular Classification Problems in a Second" (2022)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new TabPFNOptions { NumFeatures = 20, MaxTrainSamples = 1000 };
+/// var model = new TabPFNNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -209,7 +217,6 @@ public class TabPFNNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Architecture", "TabPFN" },

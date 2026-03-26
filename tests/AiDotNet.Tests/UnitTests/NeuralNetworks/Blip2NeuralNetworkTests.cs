@@ -275,7 +275,7 @@ public class Blip2NeuralNetworkTests
         var metadata = network.GetModelMetadata();
 
         // Assert
-        Assert.Equal(ModelType.Blip2, metadata.ModelType);
+
     }
 
     [Fact]

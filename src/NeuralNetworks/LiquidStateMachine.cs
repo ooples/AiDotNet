@@ -34,6 +34,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Learning temporal patterns without needing extensive training
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LiquidStateMachineOptions { InputSize = 10, ReservoirSize = 1000 };
+/// var model = new LiquidStateMachine&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 100, 10 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.TimeSeries)]
@@ -46,6 +54,7 @@ namespace AiDotNet.NeuralNetworks;
 public class LiquidStateMachine<T> : NeuralNetworkBase<T>
 {
     private readonly LiquidStateMachineOptions _options;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -240,7 +249,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         double connectionProbability = 0.1,
         double spectralRadius = 0.9,
         double inputScaling = 1.0,
-        double leakingRate = 1.0,
+        double leakingRate = 0.3, // Jaeger & Haas (2004): leakingRate < 1 for temporal dynamics
         ILossFunction<T>? lossFunction = null,
         LiquidStateMachineOptions? options = null) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
@@ -462,8 +471,10 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
             SetTrainingMode(true);
         }
 
-        // Forward pass through the network, storing intermediate values
-        Tensor<T> prediction = Predict(input);
+        // Forward pass with memory for backpropagation
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(true);
+        Tensor<T> prediction = ForwardWithMemory(input);
 
         // Calculate loss
         var flattenedPredictions = prediction.ToVector();
@@ -474,25 +485,27 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
 
         // Backpropagate to get parameter gradients
-        Vector<T> gradients = Backpropagate(Tensor<T>.FromVector(outputGradients)).ToVector();
+        Backpropagate(Tensor<T>.FromVector(outputGradients));
 
-        // Get parameter gradients for all trainable layers
-        Vector<T> parameterGradients = GetParameterGradients();
+        // Only update trainable (non-reservoir) layers
+        // ReservoirLayer weights are fixed; only readout Dense layers train
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        foreach (var layer in Layers)
+        {
+            if (layer is ReservoirLayer<T>)
+                continue; // Skip fixed reservoir
 
-        // Clip gradients to prevent exploding gradients
-        parameterGradients = ClipGradient(parameterGradients);
-
-        // Create optimizer
-        var optimizer = new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
-        // Get current parameters
-        Vector<T> currentParameters = GetParameters();
-
-        // Update parameters using the optimizer
-        Vector<T> updatedParameters = optimizer.UpdateParameters(currentParameters, parameterGradients);
-
-        // Apply updated parameters
-        UpdateParameters(updatedParameters);
+            if (layer.SupportsTraining && layer.ParameterCount > 0)
+            {
+                var layerParams = layer.GetParameters();
+                var layerGrads = layer.GetParameterGradients();
+                if (layerParams.Length == layerGrads.Length && layerGrads.Length > 0)
+                {
+                    var updated = _trainOptimizer.UpdateParameters(layerParams, layerGrads);
+                    layer.SetParameters(updated);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -521,7 +534,6 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.LiquidStateMachine,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ReservoirSize", _reservoirSize },

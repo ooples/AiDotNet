@@ -481,7 +481,7 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
 
         // Standard backward pass (no cache during training)
         // Implementation similar to MultiHeadAttentionLayer
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
         // Simplified gradient computation
         // In practice, use autodiff or detailed manual gradient

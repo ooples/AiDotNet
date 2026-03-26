@@ -15,6 +15,17 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// Policy for discrete action spaces using a neural network to output action logits.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <example>
+    /// <code>
+    /// // Create a discrete policy that outputs action probabilities via softmax
+    /// var network = new NeuralNetwork&lt;double&gt;();
+    /// var policy = new DiscretePolicy&lt;double&gt;(network, actionSize: 4, new EpsilonGreedyExploration&lt;double&gt;());
+    ///
+    /// // Select a discrete action from the policy
+    /// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+    /// var action = policy.SelectAction(state, training: true);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -22,7 +33,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ModelPaper("Reinforcement Learning: An Introduction",
-        "http://incompleteideas.net/book/the-book-2nd.html",
+        "https://incompleteideas.net/book/the-book-2nd.html",
         Year = 2018,
         Authors = "Sutton, R. S. & Barto, A. G.")]
     public class DiscretePolicy<T> : PolicyBase<T>

@@ -108,6 +108,23 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     /// DeepONet was introduced by Lu et al. (2021) and has been highly successful
     /// in learning solution operators for PDEs with theoretical guarantees.
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(
+    ///     inputType: InputType.OneDimensional,
+    ///     taskType: NeuralNetworkTaskType.Regression,
+    ///     inputSize: 100, outputSize: 1);
+    /// var branchArch = new NeuralNetworkArchitecture&lt;float&gt;(
+    ///     inputType: InputType.OneDimensional,
+    ///     taskType: NeuralNetworkTaskType.Regression,
+    ///     inputSize: 100, outputSize: 128);
+    /// var trunkArch = new NeuralNetworkArchitecture&lt;float&gt;(
+    ///     inputType: InputType.OneDimensional,
+    ///     taskType: NeuralNetworkTaskType.Regression,
+    ///     inputSize: 2, outputSize: 128);
+    /// var deepONet = new DeepOperatorNetwork&lt;float&gt;(arch, branchArch, trunkArch);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Science)]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -589,7 +606,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
                         // Backpropagation: compute gradients for both branch and trunk networks
                         var outputGradientVector = lossFunction.CalculateDerivative(predictions.ToVector(), targets.ToVector());
-                        var outputGradient = new Tensor<T>(predictions.Shape, outputGradientVector);
+                        var outputGradient = new Tensor<T>(predictions.Shape.ToArray(), outputGradientVector);
 
                         // Gradient for branch network: grad_branch = (grad_output)^T * trunk_output
                         var branchGradient = Engine.TensorMatMul(Engine.TensorTranspose(outputGradient), trunkOutput2D);
@@ -849,7 +866,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
             // Step 3: Backward pass - compute gradients for both networks
             var outputGradientVector = lossFunction.CalculateDerivative(predictions.ToVector(), expectedOutputTensor.ToVector());
-            var outputGradient = new Tensor<T>(predictions.Shape, outputGradientVector);
+            var outputGradient = new Tensor<T>(predictions.Shape.ToArray(), outputGradientVector);
             var outputGradientExpanded = Engine.TensorRepeatElements(outputGradient, _p, axis: 1);
 
             var branchGradient = Engine.TensorMultiply(outputGradientExpanded, trunkOutput2D);
@@ -873,7 +890,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         {
             return new ModelMetadata<T>
             {
-                ModelType = ModelType.NeuralNetwork,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "LatentDimension", _p },

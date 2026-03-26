@@ -174,7 +174,6 @@ public class TTVSR<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "TTVSR-Native" : "TTVSR-ONNX",
             Description = $"TTVSR {_options.Variant} trajectory-aware transformer VSR (Liu et al., ECCV 2022)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumTransformerBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

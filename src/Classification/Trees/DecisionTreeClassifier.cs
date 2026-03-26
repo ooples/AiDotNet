@@ -30,6 +30,17 @@ namespace AiDotNet.Classification.Trees;
 /// Each question splits the data based on a feature value, and leaves contain the final decisions.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Use AiModelBuilder facade for decisiontreeclassifier classification
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new DecisionTreeClassifier&lt;double&gt;(
+///         new DecisionTreeClassifierOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(features, labels);
+/// var prediction = result.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.DecisionTree)]
 [ModelTask(ModelTask.Classification)]
@@ -78,7 +89,6 @@ public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBa
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.DecisionTreeClassifier;
 
     /// <summary>
     /// Trains the decision tree on the provided data.

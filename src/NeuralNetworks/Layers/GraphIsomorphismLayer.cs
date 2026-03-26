@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -33,6 +35,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Graph)]
+[LayerTask(LayerTask.GraphProcessing)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
 public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly int _inputFeatures;
@@ -150,9 +156,12 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         int mlpHiddenDim = -1,
         bool learnEpsilon = true,
         double epsilon = 0.0,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputFeatures], [outputFeatures], activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         _inputFeatures = inputFeatures;
         _outputFeatures = outputFeatures;
         _mlpHiddenDim = mlpHiddenDim > 0 ? mlpHiddenDim : outputFeatures;
@@ -186,15 +195,7 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
     private void InitializeTensor(Tensor<T> tensor, int fanIn, int fanOut)
     {
-        // Xavier/Glorot initialization: fully vectorized
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape);
-        var halfTensor = new Tensor<T>(tensor.Shape);
-        Engine.TensorFill(halfTensor, NumOps.FromDouble(0.5));
-        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
-        var scaled = Engine.TensorMultiplyScalar(shifted, scale);
-        // Copy result using vectorized operation
-        Engine.TensorCopy(scaled, tensor);
+        InitializeLayerWeights(tensor, fanIn, fanOut);
     }
 
     /// <inheritdoc/>
@@ -219,7 +220,7 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Handle tensor shapes for graph processing:
@@ -295,7 +296,7 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var lastMlpHiddenPreRelu = _lastMlpHiddenPreRelu;
 
         // Apply ReLU activation using Engine operations
-        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
+        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape.ToArray());
         zeroTensor.Fill(NumOps.Zero);
         _lastMlpHidden = Engine.TensorMax(lastMlpHiddenPreRelu, zeroTensor);
 
@@ -354,9 +355,26 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <inheritdoc/>
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        return UseAutodiff
+        // Forward reshapes 2D→3D internally but returns 2D.
+        // Backward receives 2D gradient but internal state is 3D.
+        // Reshape gradient to 3D for internal computation, then reshape result to original input rank.
+        bool needsReshape = _originalInputShape != null && outputGradient.Rank < 3;
+        if (needsReshape && _lastOutput != null)
+        {
+            outputGradient = outputGradient.Reshape(_lastOutput.Shape.ToArray());
+        }
+
+        var result = UseAutodiff
             ? BackwardViaAutodiff(outputGradient)
             : BackwardManual(outputGradient);
+
+        // Reshape result back to original input rank
+        if (needsReshape && _originalInputShape != null)
+        {
+            result = result.Reshape(_originalInputShape);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -371,20 +389,22 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             throw new InvalidOperationException("Forward pass must be called before Backward.");
         }
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
 
         // Gradient through MLP Layer 2 bias: sum over batch and nodes
         _mlpBias2Gradient = Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
 
-        // Gradient through MLP Layer 2 weights: hidden^T @ grad (batched matmul then sum)
-        // Use permute for batched transpose: [batch, nodes, hidden] -> [batch, hidden, nodes]
-        var hiddenBatchedT = Engine.TensorPermute(_lastMlpHidden, [0, 2, 1]);
-        // Batched matmul: [batch, hidden, nodes] @ [batch, nodes, output] -> [batch, hidden, output]
-        var weights2GradBatched = Engine.BatchMatMul(hiddenBatchedT, activationGradient);
-        // Sum over batch dimension
-        _mlpWeights2Gradient = Engine.ReduceSum(weights2GradBatched, [0], keepDims: false);
+        // Gradient through MLP Layer 2 weights: per-batch matmul (Engine.BatchMatMul has issues)
+        _mlpWeights2Gradient = new Tensor<T>(_mlpWeights2.Shape.ToArray());
+        for (int b = 0; b < batchSize; b++)
+        {
+            var hiddenB = _lastMlpHidden.GetSliceAlongDimension(b, 0);
+            var gradB = activationGradient.GetSliceAlongDimension(b, 0);
+            _mlpWeights2Gradient = _mlpWeights2Gradient.Add(
+                Engine.TensorMatMul(Engine.TensorTranspose(hiddenB), gradB));
+        }
 
         // Gradient to hidden layer: grad @ weights2^T (broadcasting over batch)
         var weights2T = Engine.TensorTranspose(_mlpWeights2);
@@ -392,10 +412,10 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Gradient through ReLU: element-wise vectorized
         var lastMlpHiddenPreRelu = _lastMlpHiddenPreRelu;
-        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
+        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape.ToArray());
         Engine.TensorFill(zeroTensor, NumOps.Zero);
         var reluMask = Engine.TensorGreaterThan(lastMlpHiddenPreRelu, zeroTensor);
-        var oneTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
+        var oneTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape.ToArray());
         Engine.TensorFill(oneTensor, NumOps.One);
         var reluDeriv = Engine.TensorWhere(reluMask, oneTensor, zeroTensor);
         var hiddenGrad = Engine.TensorMultiply(hiddenGradPre, reluDeriv);
@@ -403,10 +423,15 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Gradient through MLP Layer 1 bias: sum over batch and nodes
         _mlpBias1Gradient = Engine.ReduceSum(hiddenGrad, [0, 1], keepDims: false);
 
-        // Gradient through MLP Layer 1 weights: aggregated^T @ hiddenGrad (batched matmul then sum)
-        var aggBatchedT = Engine.TensorPermute(_lastAggregated, [0, 2, 1]);
-        var weights1GradBatched = Engine.BatchMatMul(aggBatchedT, hiddenGrad);
-        _mlpWeights1Gradient = Engine.ReduceSum(weights1GradBatched, [0], keepDims: false);
+        // Gradient through MLP Layer 1 weights: per-batch matmul
+        _mlpWeights1Gradient = new Tensor<T>(_mlpWeights1.Shape.ToArray());
+        for (int b = 0; b < batchSize; b++)
+        {
+            var aggB = _lastAggregated.GetSliceAlongDimension(b, 0);
+            var hGradB = hiddenGrad.GetSliceAlongDimension(b, 0);
+            _mlpWeights1Gradient = _mlpWeights1Gradient.Add(
+                Engine.TensorMatMul(Engine.TensorTranspose(aggB), hGradB));
+        }
 
         // Gradient to aggregated: hiddenGrad @ weights1^T (broadcasting over batch)
         var weights1T = Engine.TensorTranspose(_mlpWeights1);
@@ -419,7 +444,11 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var selfGrad = Engine.TensorMultiplyScalar(aggregatedGrad, onePlusEpsilon);
 
         // Neighbor gradient: A^T @ aggregatedGrad (batched via permute)
-        var adjT = Engine.TensorPermute(_adjacencyMatrix, [0, 2, 1]);
+        // Ensure adjacency is 3D [batch, nodes, nodes] for batched operations
+        var adj3D = _adjacencyMatrix.Rank == 2
+            ? _adjacencyMatrix.Reshape([1, _adjacencyMatrix.Shape[0], _adjacencyMatrix.Shape[1]])
+            : _adjacencyMatrix;
+        var adjT = Engine.TensorPermute(adj3D, [0, 2, 1]);
         var neighborGrad = Engine.TensorMatMul(adjT, aggregatedGrad);
 
         // Combine gradients: fully vectorized addition
@@ -452,7 +481,7 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             throw new InvalidOperationException("Forward pass must be called before Backward.");
         }
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
 
@@ -571,7 +600,7 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Compute input gradient from aggregated gradient
-        var aggregatedGrad = aggregatedNode.Gradient ?? new Tensor<T>(_lastAggregated.Shape);
+        var aggregatedGrad = aggregatedNode.Gradient ?? new Tensor<T>(_lastAggregated.Shape.ToArray());
 
         // Gradient through aggregation
         T onePlusEpsilon = NumOps.Add(NumOps.One, _epsilon);
@@ -614,10 +643,10 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Gradient through ReLU: fully vectorized element-wise operations
         var lastMlpHiddenPreRelu = _lastMlpHiddenPreRelu ?? throw new InvalidOperationException("_lastMlpHiddenPreRelu has not been initialized.");
-        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
+        var zeroTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape.ToArray());
         Engine.TensorFill(zeroTensor, NumOps.Zero);
         var reluMask = Engine.TensorGreaterThan(lastMlpHiddenPreRelu, zeroTensor);
-        var oneTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape);
+        var oneTensor = new Tensor<T>(lastMlpHiddenPreRelu.Shape.ToArray());
         Engine.TensorFill(oneTensor, NumOps.One);
         var reluDeriv = Engine.TensorWhere(reluMask, oneTensor, zeroTensor);
         var hiddenGrad = Engine.TensorMultiply(hiddenGradPre, reluDeriv);
@@ -655,6 +684,45 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         {
             _epsilon = NumOps.Subtract(_epsilon, NumOps.Multiply(learningRate, _epsilonGradient));
         }
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gradList = new List<T>();
+
+        var w1Grad = _mlpWeights1Gradient;
+        for (int i = 0; i < _mlpWeights1.Length; i++)
+            gradList.Add(w1Grad != null ? w1Grad.GetFlat(i) : NumOps.Zero);
+
+        var b1Grad = _mlpBias1Gradient;
+        for (int i = 0; i < _mlpBias1.Length; i++)
+            gradList.Add(b1Grad != null ? b1Grad.GetFlat(i) : NumOps.Zero);
+
+        var w2Grad = _mlpWeights2Gradient;
+        for (int i = 0; i < _mlpWeights2.Length; i++)
+            gradList.Add(w2Grad != null ? w2Grad.GetFlat(i) : NumOps.Zero);
+
+        var b2Grad = _mlpBias2Gradient;
+        for (int i = 0; i < _mlpBias2.Length; i++)
+            gradList.Add(b2Grad != null ? b2Grad.GetFlat(i) : NumOps.Zero);
+
+        if (_learnEpsilon)
+            gradList.Add(_epsilonGradient);
+
+        return new Vector<T>(gradList.ToArray());
+    }
+
+    /// <summary>
+    /// Returns layer-specific metadata for serialization.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["MlpHiddenDim"] = _mlpHiddenDim.ToString();
+        metadata["LearnEpsilon"] = _learnEpsilon.ToString();
+        metadata["InitialEpsilon"] = NumOps.ToDouble(_epsilon).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
     }
 
     /// <inheritdoc/>
@@ -714,7 +782,7 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Set MLP weights 1
         _mlpWeights1 = Tensor<T>.FromVector(parameters.SubVector(index, weights1Count))
-            .Reshape(_mlpWeights1.Shape);
+            .Reshape(_mlpWeights1.Shape.ToArray());
         index += weights1Count;
 
         // Set MLP bias 1
@@ -723,7 +791,7 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Set MLP weights 2
         _mlpWeights2 = Tensor<T>.FromVector(parameters.SubVector(index, weights2Count))
-            .Reshape(_mlpWeights2.Shape);
+            .Reshape(_mlpWeights2.Shape.ToArray());
         index += weights2Count;
 
         // Set MLP bias 2
@@ -735,6 +803,14 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         {
             _epsilon = parameters[index];
         }
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _epsilonGradient = NumOps.Zero;
+        _mlpWeights1Gradient = null; _mlpWeights2Gradient = null;
+        _mlpBias1Gradient = null; _mlpBias2Gradient = null;
     }
 
     /// <inheritdoc/>
@@ -771,7 +847,7 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
         var input = inputs[0];
-        if (input.Shape == null || input.Shape.Length < 2)
+        if (input.Shape.ToArray() == null || input.Shape.Length < 2)
             throw new ArgumentException("Input must be at least 2D [numNodes, inputFeatures].");
 
         if (_adjacencyMatrix == null)

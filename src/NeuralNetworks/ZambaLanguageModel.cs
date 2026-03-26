@@ -20,6 +20,14 @@ namespace AiDotNet.NeuralNetworks;
 /// reused at regular intervals, achieving strong quality with fewer parameters.</para>
 /// <para><b>Reference:</b> Glorioso et al., "Zamba: A Compact 7B SSM Hybrid Model", 2024.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new ZambaOptions { VocabSize = 32000, ModelDim = 3712, NumLayers = 76 };
+/// var model = new ZambaLanguageModel&lt;float&gt;(options);
+/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var logits = model.Predict(tokens);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -144,7 +152,6 @@ public class ZambaLanguageModel<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Architecture", "Zamba" },

@@ -40,6 +40,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Kulikov et al., "FlowEdit: Inversion-Free Text-Based Editing Using Pre-Trained Flow Models", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1024, Width = 1024, NumInferenceSteps = 28 };
+/// var model = new FlowEditModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 16, 128, 128 });
+/// var edited = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -135,7 +143,7 @@ public class FlowEditModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "FlowEdit", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "FlowEdit", Version = "1.0",
             Description = "Inversion-free text-based editing via rectified flow models",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

@@ -43,6 +43,27 @@ namespace AiDotNet.Classification.Ensemble;
 /// - Together, they give a more reliable prediction than any single tree
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create random forest classifier with bootstrap aggregation
+/// var options = new RandomForestClassifierOptions&lt;double&gt;();
+/// var classifier = new RandomForestClassifier&lt;double&gt;(options);
+///
+/// // Prepare training data
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
+///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
+///
+/// // Train multiple trees on random subsets of data and features
+/// classifier.Train(features, labels);
+///
+/// // Predict using majority vote across all trees in the forest
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
+/// var prediction = classifier.Predict(newSample);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelCategory(ModelCategory.DecisionTree)]
@@ -96,7 +117,6 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.RandomForestClassifier;
 
     /// <summary>
     /// Trains the Random Forest on the provided data.

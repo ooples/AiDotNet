@@ -107,7 +107,7 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public EfficientNetNetwork()
         : this(new NeuralNetworkArchitecture<T>(
-            inputType: Enums.InputType.TwoDimensional,
+            inputType: Enums.InputType.ThreeDimensional,
             taskType: Enums.NeuralNetworkTaskType.MultiClassClassification,
             inputHeight: 224, inputWidth: 224, inputDepth: 3,
             outputSize: 1000),
@@ -321,7 +321,7 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
         LastLoss = loss;
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
 
         var currentGradient = outputGradientTensor;
         for (int i = Layers.Count - 1; i >= 0; i--)
@@ -354,7 +354,6 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ConvolutionalNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "EfficientNetNetwork" },

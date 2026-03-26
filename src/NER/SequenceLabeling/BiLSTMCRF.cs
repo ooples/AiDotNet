@@ -112,6 +112,16 @@ namespace AiDotNet.NER.SequenceLabeling;
 /// </list>
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 512,
+///     outputSize: 9,
+///     hiddenLayers: new[] { 256, 128 },
+///     networkType: NetworkType.Classification);
+/// var biLSTMCRF = new BiLSTMCRF&lt;float&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
@@ -1012,7 +1022,6 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         {
             Name = _useNativeMode ? "BiLSTM-CRF-Native" : "BiLSTM-CRF-ONNX",
             Description = $"BiLSTM-CRF {_options.Variant} sequence labeling NER (Lample et al., NAACL 2016)",
-            ModelType = ModelType.NamedEntityRecognition,
             Complexity = _options.NumLSTMLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

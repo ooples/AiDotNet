@@ -1,4 +1,5 @@
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Results;
@@ -26,6 +27,26 @@ namespace AiDotNet.UncertaintyQuantification.BayesianNeuralNetworks;
 /// It's like getting a second (and third, and fourth...) opinion from slightly different versions of your model.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an MC Dropout network for uncertainty-aware predictions
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 10, outputSize: 1,
+///     hiddenLayers: new[] { 128, 64 },
+///     networkType: NetworkType.Regression);
+/// // Add MCDropoutLayer instances to the architecture for stochastic inference
+/// var mcDropout = new MCDropoutNeuralNetwork&lt;float&gt;(architecture, numSamples: 50);
+/// var result = mcDropout.PredictWithUncertainty(inputTensor);
+/// // result.Mean = average prediction, result.Variance = epistemic uncertainty
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<T>
 {
     private readonly int _numSamples;
@@ -102,9 +123,9 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
     {
         // MC Dropout primarily captures epistemic uncertainty
         // Return a small baseline aleatoric estimate
-        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input.Shape);
+        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input.Shape.ToArray());
 
-        var aleatoric = new Tensor<T>(totalUncertainty.Shape);
+        var aleatoric = new Tensor<T>(totalUncertainty.Shape.ToArray());
         var aleatoricFactor = NumOps.FromDouble(0.2); // Assume 20% of variance is aleatoric
 
         for (int i = 0; i < totalUncertainty.Length; i++)
@@ -126,9 +147,9 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
     /// </remarks>
     public Tensor<T> EstimateEpistemicUncertainty(Tensor<T> input)
     {
-        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input.Shape);
+        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input.Shape.ToArray());
 
-        var epistemic = new Tensor<T>(totalUncertainty.Shape);
+        var epistemic = new Tensor<T>(totalUncertainty.Shape.ToArray());
         var epistemicFactor = NumOps.FromDouble(0.8); // Assume 80% of variance is epistemic
 
         for (int i = 0; i < totalUncertainty.Length; i++)
@@ -158,7 +179,7 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
         if (predictions.Count == 0)
             throw new ArgumentException("Cannot compute mean of empty prediction list");
 
-        var sum = new Tensor<T>(predictions[0].Shape);
+        var sum = new Tensor<T>(predictions[0].Shape.ToArray());
         foreach (var pred in predictions)
         {
             for (int i = 0; i < pred.Length; i++)
@@ -181,7 +202,7 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
     /// </summary>
     private Tensor<T> ComputeVariance(List<Tensor<T>> predictions, Tensor<T> mean)
     {
-        var variance = new Tensor<T>(mean.Shape);
+        var variance = new Tensor<T>(mean.Shape.ToArray());
 
         foreach (var pred in predictions)
         {

@@ -35,6 +35,14 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 720, Width = 1280, NumInferenceSteps = 30 };
+/// var model = new GameGenXModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 60, 90, 160 });
+/// var gameplay = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -180,7 +188,6 @@ public class GameGenXModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "GameGenX",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "GameGen-X open-world game video generation with interactive control.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

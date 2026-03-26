@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -40,6 +41,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.Projection)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
 public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -521,27 +526,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // === Vectorized Xavier/Glorot Initialization (Phase B: US-GPU-015) ===
-        // Initialize weights with random values scaled by Xavier initialization
-        // Initialize biases to zero using vectorized operation
-
-        T scaleT = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(InputShape[0] + OutputShape[0])));
-        var scale = Convert.ToDouble(scaleT);
-
-        // Initialize weights (still requires loop for individual random values)
-        for (int i = 0; i < _weights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _weights.Shape[1]; j++)
-            {
-                _weights[i, j] = NumOps.FromDouble(Random.NextDouble() * scale - scale / 2);
-            }
-        }
-
-        // Vectorized bias initialization - set all biases to zero at once
-        for (int i = 0; i < _biases.Shape[0]; i++)
-        {
-            _biases[i] = NumOps.Zero;
-        }
+        InitializeLayerWeights(_weights, InputShape[0], OutputShape[0]);
+        InitializeLayerBiases(_biases);
     }
 
     /// <summary>
@@ -795,7 +781,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         EnsureInitialized();
 
         _lastInput = input;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         // Industry standard: Support any-rank input tensors [..., inputSize]
         // Transformation is applied to the last dimension
@@ -924,7 +910,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var input = inputs[0];
 
         // Store for potential backward pass
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int actualInputSize = input.Shape[^1]; // Last dimension is always features
         int expectedInputSize = _weights.Shape[0];
@@ -990,7 +976,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             // Store GPU-resident tensors for BackwardGpu (no CPU roundtrip)
             _lastInputGpu = input2D;
-            _gpuOriginalInputShape = input.Shape.ToArray();
+            _gpuOriginalInputShape = input.Shape.ToArray().ToArray();
 
             // For fused activations, we need pre-activation for gradient computation
             if (fusedActivation != FusedActivationType.None)
@@ -1230,7 +1216,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             if (outputGradient.Length == _lastOutput.Length)
             {
-                outputGradient = outputGradient.Reshape(_lastOutput.Shape);
+                outputGradient = outputGradient.Reshape(_lastOutput.Shape.ToArray());
             }
             else
             {
@@ -1238,7 +1224,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 var gradData = new T[_lastOutput.Length];
                 int copyLen = Math.Min(outputGradient.Length, gradData.Length);
                 outputGradient.Data.Span.Slice(0, copyLen).CopyTo(gradData.AsSpan());
-                outputGradient = new Tensor<T>(_lastOutput.Shape, new Vector<T>(gradData));
+                outputGradient = new Tensor<T>(_lastOutput.Shape.ToArray(), new Vector<T>(gradData));
             }
         }
 
@@ -1556,13 +1542,13 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Initialize velocity tensors if needed (lazily)
             if (_weightsVelocity == null)
             {
-                _weightsVelocity = new Tensor<T>(_weights.Shape);
+                _weightsVelocity = new Tensor<T>(_weights.Shape.ToArray());
                 _weightsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_weightsVelocity, PersistentTensorRole.OptimizerState);
             }
             if (_biasesVelocity == null)
             {
-                _biasesVelocity = new Tensor<T>(_biases.Shape);
+                _biasesVelocity = new Tensor<T>(_biases.Shape.ToArray());
                 _biasesVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_biasesVelocity, PersistentTensorRole.OptimizerState);
             }
@@ -1663,12 +1649,58 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}");
         }
 
+        // Modify weights and biases IN PLACE to preserve engine's persistent tensor references
         int index = 0;
-        _weights = new Tensor<T>(_weights.Shape, parameters.Slice(index, _weights.Length));
+        var wSpan = _weights.Data.Span;
+        for (int i = 0; i < _weights.Length; i++)
+            wSpan[i] = parameters[index + i];
         index += _weights.Length;
-        _biases = new Tensor<T>(_biases.Shape, parameters.Slice(index, _biases.Length));
 
-        // Notify engine that weights/biases have changed (for GPU cache invalidation)
+        var bSpan = _biases.Data.Span;
+        for (int i = 0; i < _biases.Length; i++)
+            bSpan[i] = parameters[index + i];
+
+        // Notify engine that data changed (for GPU re-upload)
+        Engine.InvalidatePersistentTensor(_weights);
+        Engine.InvalidatePersistentTensor(_biases);
+    }
+
+    public override void Serialize(BinaryWriter writer)
+    {
+        EnsureInitialized();
+        // Write weights
+        writer.Write(_weights.Length);
+        var wSpan = _weights.Data.Span;
+        for (int i = 0; i < _weights.Length; i++)
+            writer.Write(Convert.ToDouble(wSpan[i]));
+        // Write biases
+        writer.Write(_biases.Length);
+        var bSpan = _biases.Data.Span;
+        for (int i = 0; i < _biases.Length; i++)
+            writer.Write(Convert.ToDouble(bSpan[i]));
+    }
+
+    public override void Deserialize(BinaryReader reader)
+    {
+        EnsureInitialized();
+        // Read weights IN PLACE to preserve engine's persistent tensor reference
+        int wLen = reader.ReadInt32();
+        var wSpan = _weights.Data.Span;
+        for (int i = 0; i < Math.Min(wLen, _weights.Length); i++)
+            wSpan[i] = NumOps.FromDouble(reader.ReadDouble());
+        // Skip any extra values if serialized layer was bigger
+        for (int i = _weights.Length; i < wLen; i++)
+            reader.ReadDouble();
+
+        // Read biases IN PLACE
+        int bLen = reader.ReadInt32();
+        var bSpan = _biases.Data.Span;
+        for (int i = 0; i < Math.Min(bLen, _biases.Length); i++)
+            bSpan[i] = NumOps.FromDouble(reader.ReadDouble());
+        for (int i = _biases.Length; i < bLen; i++)
+            reader.ReadDouble();
+
+        // Notify engine that data changed (for GPU re-upload)
         Engine.InvalidatePersistentTensor(_weights);
         Engine.InvalidatePersistentTensor(_biases);
     }

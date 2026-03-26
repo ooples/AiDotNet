@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -35,6 +37,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.AttentionComputation)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 2, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -350,12 +356,15 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int sequenceLength,
         int embeddingDimension,
         int headCount = 8,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, embeddingDimension],
             [sequenceLength, embeddingDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         // Initialize auxiliary loss fields first so compiler knows they're set
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastEntropyLoss = NumOps.Zero;
@@ -410,12 +419,15 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int sequenceLength,
         int embeddingDimension,
         int headCount = 8,
-        IVectorActivationFunction<T>? vectorActivationFunction = null)
+        IVectorActivationFunction<T>? vectorActivationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, embeddingDimension],
             [sequenceLength, embeddingDimension],
             vectorActivationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         // Initialize auxiliary loss fields first so compiler knows they're set
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastEntropyLoss = NumOps.Zero;
@@ -471,7 +483,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: need at least 2D [seqLen, embedDim]
@@ -606,7 +618,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var input = inputs[0];
 
         // Get dimensions from input shape
-        int[] inputShape = input.Shape;
+        int[] inputShape = input.Shape.ToArray();
         int rank = inputShape.Length;
 
         int batchSize;
@@ -799,11 +811,11 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         Tensor<T> lastOutput3D = _lastOutput;
         if (outputGradient.Shape.Length != 3)
         {
-            outputGrad3D = outputGradient.Reshape(_lastInput.Shape);
+            outputGrad3D = outputGradient.Reshape(_lastInput.Shape.ToArray());
         }
         if (_lastOutput.Shape.Length != 3)
         {
-            lastOutput3D = _lastOutput.Reshape(_lastInput.Shape);
+            lastOutput3D = _lastOutput.Reshape(_lastInput.Shape.ToArray());
         }
 
         var activationGradient = ApplyActivationDerivative(lastOutput3D, outputGrad3D);
@@ -1031,7 +1043,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Connect parent for gradient flow
             outputNode = Autodiff.TensorOperations<T>.Add(
                 biasedOutput,
-                Autodiff.TensorOperations<T>.Constant(new Tensor<T>(biasedOutput.Value.Shape), "zero"));
+                Autodiff.TensorOperations<T>.Constant(new Tensor<T>(biasedOutput.Value.Shape.ToArray()), "zero"));
         }
         else
         {
@@ -1108,8 +1120,10 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T> BroadcastBias(Tensor<T> bias, int batchSize)
     {
         var biasReshaped = bias.Reshape(1, 1, _embeddingDimension);
-        var zeros = new Tensor<T>(new[] { batchSize, _sequenceLength, _embeddingDimension });
-        return Engine.TensorBroadcastAdd(zeros, biasReshaped);
+        // Rent and zero-fill for broadcast (used as broadcast target, needs zeros)
+        var target = TensorAllocator.Rent<T>(new[] { batchSize, _sequenceLength, _embeddingDimension });
+        target.Fill(NumOps.Zero);
+        return Engine.TensorBroadcastAdd(target, biasReshaped);
     }
 
     /// <summary>
@@ -1152,19 +1166,19 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
             if (_queryWeightsVelocity == null)
             {
-                _queryWeightsVelocity = new Tensor<T>(_queryWeights.Shape);
+                _queryWeightsVelocity = new Tensor<T>(_queryWeights.Shape.ToArray());
                 _queryWeightsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_queryWeightsVelocity, PersistentTensorRole.OptimizerState);
 
-                _keyWeightsVelocity = new Tensor<T>(_keyWeights.Shape);
+                _keyWeightsVelocity = new Tensor<T>(_keyWeights.Shape.ToArray());
                 _keyWeightsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_keyWeightsVelocity, PersistentTensorRole.OptimizerState);
 
-                _valueWeightsVelocity = new Tensor<T>(_valueWeights.Shape);
+                _valueWeightsVelocity = new Tensor<T>(_valueWeights.Shape.ToArray());
                 _valueWeightsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_valueWeightsVelocity, PersistentTensorRole.OptimizerState);
 
-                _outputBiasVelocity = new Tensor<T>(_outputBias.Shape);
+                _outputBiasVelocity = new Tensor<T>(_outputBias.Shape.ToArray());
                 _outputBiasVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_outputBiasVelocity, PersistentTensorRole.OptimizerState);
             }
@@ -1376,6 +1390,22 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// each new sequence is processed independently.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null)
+            return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient.ToArray()),
+            new Vector<T>(_keyWeightsGradient.ToArray()),
+            new Vector<T>(_valueWeightsGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
@@ -1667,15 +1697,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
-        int rows = tensor.Shape[0];
-        int cols = tensor.Shape[1];
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                tensor[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-            }
-        }
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
     }
 
     /// <summary>

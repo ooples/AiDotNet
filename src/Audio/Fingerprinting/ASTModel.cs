@@ -55,6 +55,26 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// Reference: Gong, Y., Chung, Y. A., &amp; Glass, J. (2021). AST: Audio Spectrogram Transformer.
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
+/// <example>
+/// <code>
+/// // Create an AST model for audio classification
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputSize: 128,
+///     outputSize: 527);
+///
+/// var model = new ASTModel&lt;float&gt;(
+///     architecture: architecture,
+///     modelPath: "ast_model.onnx",
+///     sampleRate: 16000,
+///     numClasses: 527);
+///
+/// // Classify audio events
+/// Tensor&lt;float&gt; predictions = model.Predict(audioTensor);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.EmbeddingModel)]
@@ -912,7 +932,6 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             Name = "AST",
             Description = $"Audio Spectrogram Transformer ({_numClasses} classes, {_numLayers} layers)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = SampleRate,
             Complexity = _numLayers * _numHeads
         };
@@ -1032,7 +1051,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             {
                 residual1[i] = _ops.Add(input.Data.Span[i], attended.Data.Span[i]);
             }
-            var res1Tensor = new Tensor<T>(residual1, input.Shape);
+            var res1Tensor = new Tensor<T>(residual1, input.Shape.ToArray());
 
             // Pre-norm + MLP
             var normed2 = LayerNorm(res1Tensor, _norm2Gamma, _norm2Beta);
@@ -1045,7 +1064,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                 output[i] = _ops.Add(res1Tensor.Data.Span[i], mlpOut.Data.Span[i]);
             }
 
-            return new Tensor<T>(output, input.Shape);
+            return new Tensor<T>(output, input.Shape.ToArray());
         }
 
         private Tensor<T> LayerNorm(Tensor<T> input, T[] gamma, T[] beta)
@@ -1060,7 +1079,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             // Simplified self-attention (identity for performance)
             var output = new T[input.Length];
             Array.Copy(input.Data.ToArray(), output, input.Length);
-            return new Tensor<T>(output, input.Shape);
+            return new Tensor<T>(output, input.Shape.ToArray());
         }
 
         private Tensor<T> MLP(Tensor<T> input)
@@ -1120,7 +1139,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                 }
             }
 
-            return new Tensor<T>(output, input.Shape);
+            return new Tensor<T>(output, input.Shape.ToArray());
         }
     }
 

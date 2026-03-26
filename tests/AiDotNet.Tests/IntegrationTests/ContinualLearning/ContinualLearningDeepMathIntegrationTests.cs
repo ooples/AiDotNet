@@ -851,6 +851,7 @@ public class ContinualLearningDeepMathIntegrationTests
                 _parameters[i] = parameters[i];
         }
         public int ParameterCount => _parameters.Length;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
         public IFullModel<double, Tensor<double>, Tensor<double>> WithParameters(Vector<double> p)
         {
             var m = new CLMockModel(p.Length);
@@ -871,6 +872,8 @@ public class ContinualLearningDeepMathIntegrationTests
         public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
             => throw new NotSupportedException();
         public bool SupportsJitCompilation => false;
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     /// <summary>

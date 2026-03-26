@@ -832,7 +832,6 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["GeneratorType"] = "TimeGAN",
@@ -852,7 +851,7 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     private static Tensor<T> ApplySigmoid(Tensor<T> input)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             double v = numOps.ToDouble(input[i]);
@@ -865,7 +864,7 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     private static Tensor<T> ApplySigmoidDerivative(Tensor<T> grad, Tensor<T> preActivation)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(grad.Shape);
+        var result = new Tensor<T>(grad.Shape.ToArray());
         int len = Math.Min(grad.Length, preActivation.Length);
         for (int i = 0; i < len; i++)
         {
@@ -881,7 +880,7 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     private static Tensor<T> ApplyLeakyReLU(Tensor<T> input, double alpha)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             double v = numOps.ToDouble(input[i]);
@@ -893,7 +892,7 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     private static Tensor<T> ApplyLeakyReLUDerivative(Tensor<T> grad, Tensor<T> preActivation, double alpha)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(grad.Shape);
+        var result = new Tensor<T>(grad.Shape.ToArray());
         int len = Math.Min(grad.Length, preActivation.Length);
         for (int i = 0; i < len; i++)
         {
@@ -983,7 +982,7 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
     private static Tensor<T> CloneTensor(Tensor<T> source)
     {
-        var clone = new Tensor<T>(source.Shape);
+        var clone = new Tensor<T>(source.Shape.ToArray());
         for (int i = 0; i < source.Length; i++) clone[i] = source[i];
         return clone;
     }

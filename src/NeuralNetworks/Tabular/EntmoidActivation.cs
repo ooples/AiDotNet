@@ -159,7 +159,7 @@ public class EntmoidActivation<T> : ActivationFunctionBase<T>
     /// <returns>Activated tensor.</returns>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape.ToArray());
 
         for (int i = 0; i < input.Length; i++)
         {
@@ -176,7 +176,7 @@ public class EntmoidActivation<T> : ActivationFunctionBase<T>
     /// <returns>Derivative tensor.</returns>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
-        var derivative = new Tensor<T>(input.Shape);
+        var derivative = new Tensor<T>(input.Shape.ToArray());
 
         for (int i = 0; i < input.Length; i++)
         {
@@ -195,7 +195,7 @@ public class EntmoidActivation<T> : ActivationFunctionBase<T>
     public override Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
     {
         var deriv = Derivative(input);
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
 
         for (int i = 0; i < input.Length; i++)
         {
@@ -311,12 +311,12 @@ public class EntmaxAttention<T>
     {
         var reshaped = scores.Reshape([batchSize, seqLen]);
         var result = AiDotNetEngine.Current.Softmax(reshaped, -1);
-        return result.Reshape(scores.Shape);
+        return result.Reshape(scores.Shape.ToArray());
     }
 
     private Tensor<T> ApplySparsemax(Tensor<T> scores, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(scores.Shape);
+        var output = new Tensor<T>(scores.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -358,7 +358,7 @@ public class EntmaxAttention<T>
 
     private Tensor<T> ApplyEntmaxBisection(Tensor<T> scores, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(scores.Shape);
+        var output = new Tensor<T>(scores.Shape.ToArray());
         var alphaMinusOne = _alpha - 1.0;
         var invAlphaMinusOne = 1.0 / alphaMinusOne;
 

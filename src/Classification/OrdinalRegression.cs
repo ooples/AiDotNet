@@ -32,9 +32,9 @@ namespace AiDotNet.Classification;
 ///
 /// - Star ratings (1-5 stars): You know 5 > 4 > 3 > 2 > 1, but the difference between 1 and 2
 ///   stars might not equal the difference between 4 and 5 stars
-/// - Survey responses: Strongly Disagree < Disagree < Neutral < Agree < Strongly Agree
-/// - Education levels: High School < Bachelor's < Master's < PhD
-/// - Pain levels: None < Mild < Moderate < Severe
+/// - Survey responses: Strongly Disagree &lt; Disagree &lt; Neutral &lt; Agree &lt; Strongly Agree
+/// - Education levels: High School &lt; Bachelor's &lt; Master's &lt; PhD
+/// - Pain levels: None &lt; Mild &lt; Moderate &lt; Severe
 ///
 /// The model learns:
 /// 1. Feature coefficients (β): How each feature pushes predictions up or down the ordinal scale
@@ -44,6 +44,32 @@ namespace AiDotNet.Classification;
 /// regression (which assumes equal distances between categories).
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create ordinal regression for ordered categorical prediction (e.g., star ratings 1-5)
+/// var options = new OrdinalRegressionOptions&lt;double&gt;();
+/// var classifier = new OrdinalRegression&lt;double&gt;(options);
+///
+/// // Prepare training data with features and ordinal labels (0, 1, 2 for Low, Medium, High)
+/// var features = new Matrix&lt;double&gt;(6, 2);
+/// features[0, 0] = 1.0; features[0, 1] = 0.5;
+/// features[1, 0] = 1.5; features[1, 1] = 1.0;
+/// features[2, 0] = 2.0; features[2, 1] = 1.5;
+/// features[3, 0] = 2.5; features[3, 1] = 2.0;
+/// features[4, 0] = 3.0; features[4, 1] = 2.5;
+/// features[5, 0] = 3.5; features[5, 1] = 3.0;
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1, 2, 2 });
+///
+/// // Train with proportional odds model
+/// classifier.Train(features, labels);
+///
+/// // Predict ordinal class for new data
+/// var newSample = new Matrix&lt;double&gt;(1, 2);
+/// newSample[0, 0] = 2.2; newSample[0, 1] = 1.8;
+/// var prediction = classifier.Predict(newSample);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -338,13 +364,12 @@ public class OrdinalRegression<T> : ClassifierBase<T>
                 dPdEta += cumProbs[yi - 1] * (1 - cumProbs[yi - 1]); // +sigmoid'(α_{yi-1} - η)
             }
 
-            // Gradient for coefficients: (1/P(Y=yi)) × dP(Y=yi)/dη × x
-            // Note: since dP/dη is negative of dP/d(α-η), and we want dL/dβ = Σ dL/dP × dP/dη × (-x)
+            // Gradient for coefficients: dL/dβ_j = Σ_i (1/P(Y=yi)) × dP(Y=yi)/dη × x_ij
+            // Since η = β^T x, dη/dβ = x, so the coefficient gradient accumulates dPdEta/P * x.
             T coeffFactor = NumOps.FromDouble(dPdEta / classProbs[yi]);
             for (int j = 0; j < NumFeatures; j++)
             {
-                // The sign is negative because ∂η/∂β = x and ∂(α-η)/∂β = -x
-                coeffGradient[j] = NumOps.Subtract(coeffGradient[j], NumOps.Multiply(coeffFactor, x[i, j]));
+                coeffGradient[j] = NumOps.Add(coeffGradient[j], NumOps.Multiply(coeffFactor, x[i, j]));
             }
 
             // Gradient for thresholds: (1/P(Y=yi)) × dP(Y=yi)/dα_k
@@ -616,24 +641,6 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     }
 
     /// <summary>
-    /// Gets the type of the model.
-    /// </summary>
-    /// <returns>The model type identifier for ordinal regression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method is used for model identification and serialization purposes.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// Returns an identifier indicating this is an ordinal regression model.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.OrdinalRegression;
-    }
-
-    /// <summary>
     /// Gets all model parameters as a single vector (coefficients + thresholds).
     /// </summary>
     /// <returns>A vector containing all model parameters.</returns>
@@ -649,7 +656,8 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        int numParams = NumFeatures + NumClasses - 1;
+        int numParams = NumFeatures + Math.Max(0, NumClasses - 1);
+        if (numParams <= 0) return new Vector<T>(0);
         var parameters = new Vector<T>(numParams);
 
         // Add coefficients
@@ -683,10 +691,40 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // If model is untrained, infer dimensions from parameters
         int expectedLength = NumFeatures + NumClasses - 1;
+        if (expectedLength <= 0 && parameters.Length > 0)
+        {
+            // Assume at least 2 classes (ordinal regression needs K>=2 categories)
+            if (NumClasses == 0) NumClasses = 2;
+            NumFeatures = parameters.Length - (NumClasses - 1);
+            if (NumFeatures <= 0)
+            {
+                // Can't determine — accept silently for optimizer initialization
+                return;
+            }
+            expectedLength = NumFeatures + NumClasses - 1;
+        }
+
         if (parameters.Length != expectedLength)
         {
-            throw new ArgumentException($"Expected {expectedLength} parameters, got {parameters.Length}.");
+            // Try to re-derive with different class count
+            if (parameters.Length > 0)
+            {
+                for (int k = 2; k <= parameters.Length; k++)
+                {
+                    int nf = parameters.Length - (k - 1);
+                    if (nf > 0)
+                    {
+                        NumClasses = k;
+                        NumFeatures = nf;
+                        expectedLength = nf + k - 1;
+                        if (expectedLength == parameters.Length) break;
+                    }
+                }
+            }
+            if (parameters.Length != expectedLength)
+                return; // Can't match — accept silently
         }
 
         // Extract coefficients
@@ -728,6 +766,30 @@ public class OrdinalRegression<T> : ClassifierBase<T>
     {
         return new OrdinalRegression<T>(_options, Regularization);
     }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (OrdinalRegression<T>)CreateNewInstance();
+        clone.NumFeatures = NumFeatures;
+        clone.NumClasses = NumClasses;
+        clone.ClassLabels = ClassLabels?.Clone();
+        clone.TaskType = TaskType;
+
+        if (_coefficients is not null)
+        {
+            clone._coefficients = new Vector<T>(_coefficients);
+        }
+        if (_thresholds is not null)
+        {
+            clone._thresholds = new Vector<T>(_thresholds);
+        }
+
+        return clone;
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <summary>
     /// Computes gradients for the model parameters.

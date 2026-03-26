@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -22,9 +23,29 @@ namespace AiDotNet.AutoML;
 /// This often improves stability and accuracy.
 /// </para>
 /// </remarks>
-public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
+/// <example>
+/// <code>
+/// // Create an ensemble from multiple trained models
+/// var models = new List&lt;IFullModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;&gt;
+/// {
+///     trainedModel1,
+///     trainedModel2,
+///     trainedModel3
+/// };
+/// var ensemble = new AutoMLEnsembleModel&lt;double&gt;(
+///     models, PredictionType.Regression);
+/// Vector&lt;double&gt; predictions = ensemble.Predict(testData);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Ensemble)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     [JsonProperty("Members")]
     private List<IFullModel<T, Matrix<T>, Vector<T>>> _members = new();
@@ -84,11 +105,11 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
     /// </remarks>
     public double[] Weights { get; set; }
 
-    public ILossFunction<T> DefaultLossFunction => Members.Count == 0
+    public override ILossFunction<T> DefaultLossFunction => Members.Count == 0
         ? throw new InvalidOperationException("Ensemble has no members.")
         : Members[0].DefaultLossFunction;
 
-    public void Train(Matrix<T> input, Vector<T> expectedOutput)
+    public override void Train(Matrix<T> input, Vector<T> expectedOutput)
     {
         if (Members.Count == 0)
         {
@@ -101,7 +122,7 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         }
     }
 
-    public Vector<T> Predict(Matrix<T> input)
+    public override Vector<T> Predict(Matrix<T> input)
     {
         if (Members.Count == 0)
         {
@@ -119,7 +140,7 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
             : WeightedAverage(predictions);
     }
 
-    public ModelMetadata<T> GetModelMetadata()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         var metadata = Members.Count == 0
             ? new ModelMetadata<T>()
@@ -133,7 +154,7 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         return metadata;
     }
 
-    public byte[] Serialize()
+    public override byte[] Serialize()
     {
         ModelPersistenceGuard.EnforceBeforeSerialize();
         var settings = new JsonSerializerSettings
@@ -147,7 +168,7 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         return Encoding.UTF8.GetBytes(json);
     }
 
-    public void Deserialize(byte[] data)
+    public override void Deserialize(byte[] data)
     {
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data is null)
@@ -179,7 +200,7 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         _membersView = _members.AsReadOnly();
     }
 
-    public void SaveModel(string filePath)
+    public override void SaveModel(string filePath)
     {
         Helpers.ModelPersistenceGuard.EnforceBeforeSave();
         using (Helpers.ModelPersistenceGuard.InternalOperation())
@@ -188,7 +209,7 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         }
     }
 
-    public void LoadModel(string filePath)
+    public override void LoadModel(string filePath)
     {
         Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
         using (Helpers.ModelPersistenceGuard.InternalOperation())
@@ -197,7 +218,7 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         }
     }
 
-    public void SaveState(Stream stream)
+    public override void SaveState(Stream stream)
     {
         if (stream is null)
         {
@@ -214,7 +235,7 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         stream.Flush();
     }
 
-    public void LoadState(Stream stream)
+    public override void LoadState(Stream stream)
     {
         if (stream is null)
         {
@@ -231,7 +252,7 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         Deserialize(ms.ToArray());
     }
 
-    public Vector<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         if (Members.Count == 0)
         {
@@ -242,7 +263,7 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         return Vector<T>.Concatenate(vectors);
     }
 
-    public void SetParameters(Vector<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         if (Members.Count == 0)
         {
@@ -270,16 +291,16 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         }
     }
 
-    public int ParameterCount => Members.Sum(m => m.ParameterCount);
+    public override int ParameterCount => Members.Sum(m => m.ParameterCount);
 
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var copy = DeepCopy();
         copy.SetParameters(parameters);
         return copy;
     }
 
-    public IEnumerable<int> GetActiveFeatureIndices()
+    public override IEnumerable<int> GetActiveFeatureIndices()
     {
         if (Members.Count == 0)
         {
@@ -298,7 +319,7 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         return indices.OrderBy(i => i).ToArray();
     }
 
-    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
         foreach (var member in Members)
         {
@@ -306,12 +327,12 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         }
     }
 
-    public bool IsFeatureUsed(int featureIndex)
+    public override bool IsFeatureUsed(int featureIndex)
     {
         return Members.Any(m => m.IsFeatureUsed(featureIndex));
     }
 
-    public Dictionary<string, T> GetFeatureImportance()
+    public override Dictionary<string, T> GetFeatureImportance()
     {
         if (Members.Count == 0)
         {
@@ -359,19 +380,19 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         return result;
     }
 
-    public IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
         var copiedMembers = Members.Select(m => m.DeepCopy()).ToList();
         return new AutoMLEnsembleModel<T>(copiedMembers, PredictionType, GetSafeNormalizedWeights(copiedMembers.Count));
     }
 
-    public IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {
         var clonedMembers = Members.Select(m => m.Clone()).ToList();
         return new AutoMLEnsembleModel<T>(clonedMembers, PredictionType, GetSafeNormalizedWeights(clonedMembers.Count));
     }
 
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         if (Members.Count == 0)
         {
@@ -385,7 +406,7 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         return Vector<T>.Concatenate(gradients);
     }
 
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         if (Members.Count == 0)
         {
@@ -413,12 +434,12 @@ public sealed class AutoMLEnsembleModel<T> : IFullModel<T, Matrix<T>, Vector<T>>
         }
     }
 
-    public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
         throw new NotSupportedException("Ensemble models do not currently support JIT compilation.");
     }
 
-    public bool SupportsJitCompilation => false;
+    public override bool SupportsJitCompilation => false;
 
     private Vector<T> WeightedAverage(IReadOnlyList<Vector<T>> predictions)
     {

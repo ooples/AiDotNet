@@ -21,6 +21,15 @@ namespace AiDotNet.Finance.Trading.Environments;
 /// keeping inventory small. This environment teaches an agent to balance profit and risk.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a market making environment for bid/ask spread optimization
+/// var marketData = new Tensor&lt;double&gt;(new[] { 1000, 1 }); // 1000 timesteps, 1 asset
+/// var env = new MarketMakingEnvironment&lt;double&gt;(
+///     marketData, windowSize: 20, initialCapital: NumOps.FromDouble(100000.0),
+///     tradeSize: NumOps.FromDouble(10.0), baseSpread: 0.01, orderArrivalRate: 0.5);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]

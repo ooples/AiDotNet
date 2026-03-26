@@ -110,7 +110,7 @@ public static class SegmentationTensorOps
             throw new ArgumentException("Logits must be rank 3 [C, H, W] or rank 4 [B, C, H, W].", nameof(logits));
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(logits.Shape);
+        var result = new Tensor<T>(logits.Shape.ToArray());
 
         if (logits.Rank == 3)
         {
@@ -246,7 +246,7 @@ public static class SegmentationTensorOps
     {
         if (values is null) throw new ArgumentNullException(nameof(values));
         var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(values.Shape);
+        var result = new Tensor<T>(values.Shape.ToArray());
         var one = numOps.FromDouble(1.0);
         var zero = numOps.Zero;
         for (int i = 0; i < values.Length; i++)
@@ -261,7 +261,7 @@ public static class SegmentationTensorOps
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             double x = numOps.ToDouble(input[i]);

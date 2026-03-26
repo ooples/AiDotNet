@@ -272,7 +272,6 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             Name = _useNativeMode ? "GraFPrint-Native" : "GraFPrint-ONNX",
             Description = "GraFPrint graph neural network audio fingerprinting",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumGnnLayers
         };
         m.AdditionalInfo["EmbeddingDim"] = _options.EmbeddingDim.ToString();

@@ -197,7 +197,6 @@ public sealed class CodeModelBaseAdditionalCoverageTests
 
         public override ModelMetadata<double> GetModelMetadata() => new()
         {
-            ModelType = ModelType.Transformer,
             AdditionalInfo = new Dictionary<string, object> { { "ModelName", nameof(MinimalCodeModel) } }
         };
 

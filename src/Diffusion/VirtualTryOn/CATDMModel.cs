@@ -28,6 +28,14 @@ namespace AiDotNet.Diffusion.VirtualTryOn;
 /// fabric drapes, and other fine details of the garment's appearance.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 384, NumInferenceSteps = 30 };
+/// var model = new CATDMModel&lt;float&gt;(options);
+/// var personGarment = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 48 });
+/// var tryOn = model.Predict(personGarment);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -106,7 +114,7 @@ public class CATDMModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "CATDM", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "CATDM", Version = "1.0",
             Description = "Controllable appearance transfer for virtual try-on with fine-grained attributes",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "appearance-transfer-attention-tryon");

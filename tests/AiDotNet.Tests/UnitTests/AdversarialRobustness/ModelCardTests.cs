@@ -768,8 +768,7 @@ public class ModelCardTests
                 ModelName = "IntegrationTestModel",
                 Version = "3.0.0",
                 Developers = "Test Team",
-                ModelType = "Classification",
-                TrainingData = "Custom dataset"
+                                TrainingData = "Custom dataset"
             };
             card.IntendedUses.Add("Testing");
             card.PerformanceMetrics["Test"] = new Dictionary<string, double> { ["Accuracy"] = 0.99 };
@@ -859,8 +858,7 @@ public class ModelCardTests
             Version = "2.5.0",
             Date = new DateTime(2024, 6, 15),
             Developers = "AI Research Team",
-            ModelType = "Image Classification",
-            TrainingData = "ImageNet-1k with 1.2M images"
+                        TrainingData = "ImageNet-1k with 1.2M images"
         };
 
         card.IntendedUses.Add("Image classification");

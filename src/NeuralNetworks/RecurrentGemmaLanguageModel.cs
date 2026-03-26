@@ -19,6 +19,14 @@ namespace AiDotNet.NeuralNetworks;
 /// attention, giving O(n) complexity and constant memory per token during text generation.</para>
 /// <para><b>Reference:</b> Botev et al., "RecurrentGemma: Moving Past Transformers for Efficient Open Language Models", 2024.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new RecurrentGemmaOptions { VocabSize = 256000, ModelDim = 2560, NumLayers = 26 };
+/// var model = new RecurrentGemmaLanguageModel&lt;float&gt;(options);
+/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var logits = model.Predict(tokens);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -136,7 +144,6 @@ public class RecurrentGemmaLanguageModel<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Architecture", "RecurrentGemma" },

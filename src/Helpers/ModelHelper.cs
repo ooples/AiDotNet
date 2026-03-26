@@ -108,12 +108,12 @@ public static class ModelHelper<T, TInput, TOutput>
     /// <para>
     /// This method creates an appropriate default model based on the input and output types.
     /// It supports creating VectorModel for linear models with matrix input and vector output,
-    /// and NeuralNetworkModel for models with tensor input and output.
+    /// and NeuralNetwork for models with tensor input and output.
     /// </para>
     /// <para><b>For Beginners:</b> This method helps create a starting point model based on your data types.
-    /// 
+    ///
     /// - For simple linear models (like regression), it creates a VectorModel.
-    /// - For more complex models (like neural networks), it creates a NeuralNetworkModel.
+    /// - For more complex models (like neural networks), it creates a NeuralNetwork.
     /// - If your data types don't match these patterns, it will throw an error to let you know.
     /// 
     /// This is useful when you need a basic model to start with, which you can then customize or optimize.
@@ -212,7 +212,15 @@ public static class ModelHelper<T, TInput, TOutput>
     {
         if (input is Matrix<T> matrix)
         {
-            return [.. indices.Select(i => matrix.GetColumn(i))];
+            // Filter out-of-bounds indices rather than throwing, since models
+            // like SymbolicRegression may produce coefficients beyond input features.
+            var validIndices = indices.Where(i => i >= 0 && i < matrix.Columns).ToArray();
+            if (validIndices.Length == 0)
+            {
+                // Return all columns if no valid indices remain
+                validIndices = Enumerable.Range(0, matrix.Columns).ToArray();
+            }
+            return [.. validIndices.Select(i => matrix.GetColumn(i))];
         }
         else if (input is Tensor<T> tensor)
         {
@@ -227,7 +235,7 @@ public static class ModelHelper<T, TInput, TOutput>
                 if (index < 0 || index >= tensor.Shape[1])
                 {
                     throw new ArgumentOutOfRangeException(nameof(indices),
-                        $"Column index {index} is out of range for tensor with shape {string.Join("×", tensor.Shape)}");
+                        $"Column index {index} is out of range for tensor with shape {string.Join("×", tensor.Shape.ToArray())}");
                 }
 
                 // Create a vector from the column

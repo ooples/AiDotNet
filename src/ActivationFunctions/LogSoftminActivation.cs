@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 
 namespace AiDotNet.ActivationFunctions;
@@ -24,6 +26,9 @@ namespace AiDotNet.ActivationFunctions;
 /// because it needs to consider all values together to determine their relative importance.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.Normalization)]
+[ActivationTask(ActivationTask.NormalizationOutput)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = false, IsVectorActivation = true, Cost = ComputeCost.High)]
 public class LogSoftminActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

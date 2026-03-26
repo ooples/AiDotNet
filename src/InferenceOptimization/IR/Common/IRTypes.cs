@@ -212,7 +212,7 @@ public class TensorType
     public TensorType Clone() => new()
     {
         DataType = DataType,
-        Shape = (int[])Shape.Clone(),
+        Shape = Shape,
         Layout = Layout,
         Device = Device,
         Quantization = Quantization,

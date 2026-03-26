@@ -1,5 +1,8 @@
 
 
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -31,6 +34,9 @@ namespace AiDotNet.LossFunctions;
 /// It's often preferred over Euclidean distance when working with high-dimensional sparse vectors.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Contrastive)]
+[LossTask(LossTask.Embedding)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, IsSymmetric = true, ExpectedOutput = OutputType.Continuous)]
 public class CosineSimilarityLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
@@ -50,16 +56,9 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T dotProduct = NumOps.Zero;
-        T normPredicted = NumOps.Zero;
-        T normActual = NumOps.Zero;
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(predicted[i], actual[i]));
-            normPredicted = NumOps.Add(normPredicted, NumOps.Multiply(predicted[i], predicted[i]));
-            normActual = NumOps.Add(normActual, NumOps.Multiply(actual[i], actual[i]));
-        }
+        T dotProduct = Engine.DotProduct(predicted, actual);
+        T normPredicted = Engine.DotProduct(predicted, predicted);
+        T normActual = Engine.DotProduct(actual, actual);
 
         T cosineSimilarity = NumericalStabilityHelper.SafeDiv(
             dotProduct,
@@ -81,16 +80,9 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T dotProduct = NumOps.Zero;
-        T normPredicted = NumOps.Zero;
-        T normActual = NumOps.Zero;
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(predicted[i], actual[i]));
-            normPredicted = NumOps.Add(normPredicted, NumOps.Multiply(predicted[i], predicted[i]));
-            normActual = NumOps.Add(normActual, NumOps.Multiply(actual[i], actual[i]));
-        }
+        T dotProduct = Engine.DotProduct(predicted, actual);
+        T normPredicted = Engine.DotProduct(predicted, predicted);
+        T normActual = Engine.DotProduct(actual, actual);
 
         T normPredSqrt = NumOps.Sqrt(normPredicted);
         T normProduct = NumOps.Multiply(normPredSqrt, NumOps.Sqrt(normActual));

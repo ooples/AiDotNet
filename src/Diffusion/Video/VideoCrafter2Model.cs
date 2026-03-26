@@ -35,6 +35,14 @@ namespace AiDotNet.Diffusion.Video;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 320, Width = 512, NumInferenceSteps = 50 };
+/// var model = new VideoCrafter2Model&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 16, 40, 64 });
+/// var video = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.VideoGeneration)]
@@ -180,7 +188,6 @@ public class VideoCrafter2Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "VideoCrafter2",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "VideoCrafter 2 with improved quality and style fusion.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

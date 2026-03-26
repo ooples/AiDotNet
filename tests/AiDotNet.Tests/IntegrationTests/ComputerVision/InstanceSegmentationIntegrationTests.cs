@@ -51,7 +51,7 @@ public class InstanceSegmentationIntegrationTests
         var model = new YOLOv8Seg<double>(Arch(), modelSize: YOLOv8SegModelSize.N);
         var input = Rand(1, 3, 32, 32);
         var predicted = model.Predict(input);
-        var expected = Rand(predicted.Shape);
+        var expected = Rand(predicted.Shape.ToArray());
         Assert.Null(Record.Exception(() => model.Train(input, expected)));
     }
 

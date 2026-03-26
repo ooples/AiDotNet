@@ -408,7 +408,7 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape);
+        var normalized = new Tensor<T>(image.Shape.ToArray());
         for (int i = 0; i < image.Data.Length; i++)
         {
             normalized.Data.Span[i] = NumOps.FromDouble(NumOps.ToDouble(image.Data.Span[i]) / 255.0);
@@ -431,7 +431,6 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         return new ModelMetadata<T>
         {
             Name = "DocGCN",
-            ModelType = ModelType.NeuralNetwork,
             Description = "DocGCN for graph-based document understanding",
             FeatureCount = _nodeDim,
             Complexity = _gcnLayers,

@@ -34,6 +34,14 @@ namespace AiDotNet.Diffusion.Video;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new LumiereModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 80, 64, 64 });
+/// var video = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.VideoGeneration)]
@@ -179,7 +187,6 @@ public class LumiereModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "Lumiere",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Lumiere Space-Time UNet for single-pass 80-frame video generation.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

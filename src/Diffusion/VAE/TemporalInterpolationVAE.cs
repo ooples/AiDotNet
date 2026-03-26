@@ -34,6 +34,13 @@ namespace AiDotNet.Diffusion.VAE;
 /// - Interpolation uses bidirectional temporal attention and flow estimation
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var vae = new TemporalInterpolationVAE&lt;float&gt;(inputChannels: 3, latentChannels: 4, numFrames: 8);
+/// var video = Tensor&lt;float&gt;.Random(new[] { 1, 3, 8, 256, 256 });
+/// var latent = vae.Encode(video);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.FeatureExtraction)]
@@ -142,10 +149,10 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
         x = _encoderOut.Forward(x);
 
         int halfLen = x.Shape[^1] / 2;
-        var meanShape = GetReducedShape(x.Shape, halfLen);
+        var meanShape = GetReducedShape(x.Shape.ToArray(), halfLen);
         var mean = new Tensor<T>(meanShape);
         var logVar = new Tensor<T>(meanShape);
-        int elements = mean.Shape.Aggregate(1, (a, b) => a * b);
+        int elements = mean.Length;
         for (int i = 0; i < elements; i++)
         {
             mean[i] = x[i];

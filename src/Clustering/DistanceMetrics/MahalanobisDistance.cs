@@ -89,21 +89,14 @@ public class MahalanobisDistance<T> : DistanceMetricBase<T>
         }
 
         // Compute difference vector: d = a - b
-        var diff = new Vector<T>(a.Length);
-        for (int i = 0; i < a.Length; i++)
-        {
-            diff[i] = NumOps.Subtract(a[i], b[i]);
-        }
+        var diff = Engine.Subtract(a, b);
 
         // Compute Σ^(-1) × (a - b)
         var temp = MultiplyMatrixVector(_inverseCovarianceMatrix, diff);
 
         // Compute (a - b)^T × temp
         T result = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-        {
-            result = NumOps.Add(result, NumOps.Multiply(diff[i], temp[i]));
-        }
+        result = NumOps.Add(result, Engine.DotProduct(diff, temp));
 
         return Sqrt(result);
     }
@@ -173,12 +166,7 @@ public class MahalanobisDistance<T> : DistanceMetricBase<T>
         var result = new Vector<T>(matrix.Rows);
         for (int i = 0; i < matrix.Rows; i++)
         {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(matrix[i, j], vector[j]));
-            }
-            result[i] = sum;
+            result[i] = Engine.DotProduct(matrix.GetRow(i), vector);
         }
         return result;
     }

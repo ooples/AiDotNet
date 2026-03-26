@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.AutoML;
-using AiDotNet.Enums;
+
 using AiDotNet.Models;
 
 namespace AiDotNet.Interfaces
@@ -82,13 +82,13 @@ namespace AiDotNet.Interfaces
         /// Sets the models to consider in the search
         /// </summary>
         /// <param name="modelTypes">List of model types to evaluate</param>
-        void SetCandidateModels(List<ModelType> modelTypes);
+        void SetCandidateModels(List<Type> modelTypes);
 
         /// <summary>
         /// Sets which model types should be considered during the search
         /// </summary>
         /// <param name="modelTypes">List of model types to evaluate</param>
-        void SetModelsToTry(List<ModelType> modelTypes);
+        void SetModelsToTry(List<Type> modelTypes);
 
         /// <summary>
         /// Sets the optimization metric

@@ -18,7 +18,7 @@ namespace AiDotNet.PromptEngineering.Analysis;
 /// var analyzer = new PatternDetectionAnalyzer();
 /// var metrics = analyzer.Analyze("Let's think step by step. First, we need to...");
 ///
-/// Console.WriteLine(string.Join(", ", metrics.DetectedPatterns));
+/// // Result is available in the returned value
 /// // Output: "chain-of-thought, instruction"
 ///
 /// // This tells you:

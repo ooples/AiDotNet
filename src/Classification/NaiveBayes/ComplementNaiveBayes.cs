@@ -37,6 +37,30 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// - Topic categorization
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Complement NB for imbalanced text classification
+/// var options = new NaiveBayesOptions&lt;double&gt;();
+/// var classifier = new ComplementNaiveBayes&lt;double&gt;(options);
+///
+/// // Prepare word count features (term-frequency vectors)
+/// var features = new Matrix&lt;double&gt;(4, 3);
+/// features[0, 0] = 3; features[0, 1] = 0; features[0, 2] = 1; // Class 0
+/// features[1, 0] = 2; features[1, 1] = 0; features[1, 2] = 2; // Class 0
+/// features[2, 0] = 0; features[2, 1] = 3; features[2, 2] = 1; // Class 1
+/// features[3, 0] = 0; features[3, 1] = 2; features[3, 2] = 2; // Class 1
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1 });
+///
+/// // Train using complement class statistics to handle imbalance
+/// classifier.Train(features, labels);
+///
+/// // Predict class using complement likelihood ratio
+/// var newSample = new Matrix&lt;double&gt;(1, 3);
+/// newSample[0, 0] = 3; newSample[0, 1] = 0; newSample[0, 2] = 1;
+/// var prediction = classifier.Predict(newSample);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Bayesian)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -50,6 +74,7 @@ public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
     /// Complement feature log-probabilities: log P(feature|NOT class).
     /// </summary>
     private Matrix<T>? _complementLogProbs;
+    private T[]? _featureMinShift;
 
     /// <summary>
     /// Whether to normalize feature weights.
@@ -73,7 +98,6 @@ public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.ComplementNaiveBayes;
 
     /// <summary>
     /// Computes class-specific parameters for Complement Naive Bayes.
@@ -83,6 +107,34 @@ public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
         if (ClassLabels is null)
         {
             throw new InvalidOperationException("ClassLabels must be set before computing class parameters.");
+        }
+
+        // Shift features to non-negative if any negatives are present.
+        _featureMinShift = new T[x.Columns];
+        bool hasNegative = false;
+        for (int f = 0; f < x.Columns; f++)
+        {
+            T minVal = x[0, f];
+            for (int i = 1; i < x.Rows; i++)
+                if (NumOps.LessThan(x[i, f], minVal))
+                    minVal = x[i, f];
+            if (NumOps.LessThan(minVal, NumOps.Zero))
+            {
+                _featureMinShift[f] = NumOps.Negate(minVal);
+                hasNegative = true;
+            }
+            else
+            {
+                _featureMinShift[f] = NumOps.Zero;
+            }
+        }
+        if (hasNegative)
+        {
+            var xShifted = new Matrix<T>(x.Rows, x.Columns);
+            for (int i = 0; i < x.Rows; i++)
+                for (int f = 0; f < x.Columns; f++)
+                    xShifted[i, f] = NumOps.Add(x[i, f], _featureMinShift[f]);
+            x = xShifted;
         }
 
         // Initialize complement log probabilities
@@ -106,8 +158,11 @@ public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
                 {
                     for (int j = 0; j < NumFeatures; j++)
                     {
-                        complementCounts[j] = NumOps.Add(complementCounts[j], x[i, j]);
-                        complementTotal = NumOps.Add(complementTotal, x[i, j]);
+                        // CNB expects non-negative counts per Rennie et al. (2003)
+                        T val = x[i, j];
+                        if (NumOps.LessThan(val, NumOps.Zero)) val = NumOps.Zero;
+                        complementCounts[j] = NumOps.Add(complementCounts[j], val);
+                        complementTotal = NumOps.Add(complementTotal, val);
                     }
                 }
             }
@@ -153,13 +208,19 @@ public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
         }
 
         // For CNB, we compute NEGATIVE sum of (feature * complement_weight)
-        // because we want to minimize the complement probability
+        // because we want to minimize the complement probability.
         T logLikelihood = NumOps.Zero;
 
         for (int j = 0; j < NumFeatures; j++)
         {
-            // Negate because we're using complement weights
-            T contribution = NumOps.Multiply(sample[j], _complementLogProbs[classIndex, j]);
+            // Apply the same shift used during training
+            T featureVal = sample[j];
+            if (_featureMinShift is not null && j < _featureMinShift.Length)
+                featureVal = NumOps.Add(featureVal, _featureMinShift[j]);
+            if (NumOps.LessThan(featureVal, NumOps.Zero))
+                featureVal = NumOps.Zero;
+
+            T contribution = NumOps.Multiply(featureVal, _complementLogProbs[classIndex, j]);
             logLikelihood = NumOps.Subtract(logLikelihood, contribution);
         }
 
@@ -219,6 +280,11 @@ public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
             }
         }
 
+        if (_featureMinShift is not null)
+        {
+            clone._featureMinShift = _featureMinShift.ToArray();
+        }
+
         return clone;
     }
 
@@ -255,6 +321,14 @@ public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
         }
 
         SerializeMatrix(modelData, "ComplementLogProbs", _complementLogProbs);
+
+        if (_featureMinShift is not null)
+        {
+            var shiftArray = new double[_featureMinShift.Length];
+            for (int i = 0; i < _featureMinShift.Length; i++)
+                shiftArray[i] = NumOps.ToDouble(_featureMinShift[i]);
+            modelData["FeatureMinShift"] = shiftArray;
+        }
 
         var modelMetadata = GetModelMetadata();
         modelMetadata.ModelData = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(modelData));
@@ -314,6 +388,18 @@ public class ComplementNaiveBayes<T> : NaiveBayesBase<T>
         }
 
         _complementLogProbs = DeserializeMatrix(modelDataObj, "ComplementLogProbs");
+
+        var shiftToken = modelDataObj["FeatureMinShift"];
+        if (shiftToken is not null)
+        {
+            var shiftArray = shiftToken.ToObject<double[]>() ?? Array.Empty<double>();
+            if (shiftArray.Length > 0)
+            {
+                _featureMinShift = new T[shiftArray.Length];
+                for (int i = 0; i < shiftArray.Length; i++)
+                    _featureMinShift[i] = NumOps.FromDouble(shiftArray[i]);
+            }
+        }
     }
 
     private void SerializeMatrix(Dictionary<string, object> data, string name, Matrix<T>? matrix)

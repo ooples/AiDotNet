@@ -91,7 +91,6 @@ public class ElasticWeightConsolidationTests
             return new ModelMetadata<double>
             {
                 Name = "MockModel",
-                ModelType = ModelType.None,
                 FeatureCount = 0,
                 Complexity = 1
             };
@@ -139,6 +138,7 @@ public class ElasticWeightConsolidationTests
         }
 
         public int ParameterCount => _parameters.Length;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
 
         public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
         {
@@ -224,5 +224,7 @@ public class ElasticWeightConsolidationTests
         {
             throw new NotSupportedException("MockModel does not support JIT compilation.");
         }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 }

@@ -177,7 +177,6 @@ public class STMFNet<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "STMFNet-Native" : "STMFNet-ONNX",
             Description = $"STMFNet {_options.Variant} spatio-temporal multi-flow interpolation (2022)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumFlowHypotheses * _options.NumFusionBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

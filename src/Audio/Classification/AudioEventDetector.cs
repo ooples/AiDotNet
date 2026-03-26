@@ -619,7 +619,7 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
         // Apply sigmoid for multi-label classification
-        var result = new Tensor<T>(modelOutput.Shape);
+        var result = new Tensor<T>(modelOutput.Shape.ToArray());
         for (int i = 0; i < modelOutput.Length; i++)
         {
             double logit = NumOps.ToDouble(modelOutput[i]);
@@ -638,7 +638,6 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
         {
             Name = _useNativeMode ? "AudioEventDetector-Native" : "AudioEventDetector-ONNX",
             Description = "Audio event detection model for identifying sounds (AudioSet-style)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = ClassLabels.Count,
             Complexity = 1
         };

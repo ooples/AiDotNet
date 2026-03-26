@@ -47,6 +47,23 @@ namespace AiDotNet.Diffusion.Control;
 /// Reference: Zavadski et al., "ControlNet-XS", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create ControlNet-XS for ultra-lightweight spatial control
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 4,
+///     Height = 512,
+///     Width = 512,
+///     NumInferenceSteps = 20
+/// };
+/// var model = new ControlNetXSModel&lt;float&gt;(options, ControlType.Depth);
+///
+/// // Generate with minimal compute overhead
+/// var depthMap = Tensor&lt;float&gt;.Random(new[] { 1, 1, 512, 512 });
+/// var result = model.Predict(depthMap);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -231,7 +248,7 @@ public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "ControlNet-XS", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "ControlNet-XS", Version = "1.0",
             Description = "ControlNet-XS lightweight spatial control with ~1% parameters",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

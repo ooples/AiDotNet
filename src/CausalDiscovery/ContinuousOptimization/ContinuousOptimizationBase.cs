@@ -32,7 +32,7 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     /// <summary>
     /// Edge weight threshold for post-optimization pruning.
     /// </summary>
-    protected double WThreshold { get; set; } = 0.3;
+    protected double WThreshold { get; set; } = 0.1;
 
     /// <summary>
     /// Maximum number of outer loop iterations.
@@ -79,16 +79,18 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
         int n = X.Rows;
         int d = X.Columns;
 
-        // Residual R = X - X @ W
+        // Residual R = X - X @ W using Engine.DotProduct for each row-column product
         var R = new Matrix<T>(n, d);
         for (int i = 0; i < n; i++)
         {
+            var xRow = new Vector<T>(d);
+            for (int k = 0; k < d; k++) xRow[k] = X[i, k];
+
             for (int j = 0; j < d; j++)
             {
-                T xw = NumOps.Zero;
-                for (int k = 0; k < d; k++)
-                    xw = NumOps.Add(xw, NumOps.Multiply(X[i, k], W[k, j]));
-                R[i, j] = NumOps.Subtract(X[i, j], xw);
+                var wCol = new Vector<T>(d);
+                for (int k = 0; k < d; k++) wCol[k] = W[k, j];
+                R[i, j] = NumOps.Subtract(X[i, j], Engine.DotProduct(xRow, wCol));
             }
         }
 
@@ -102,17 +104,19 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
             }
         loss *= 0.5 / n;
 
-        // Gradient = -(1/n) * X^T @ R = (1/n) * X^T @ (XW - X)
+        // Gradient = -(1/n) * X^T @ R using Engine.DotProduct for column products
         T nT = NumOps.FromDouble(n);
         var grad = new Matrix<T>(d, d);
         for (int k = 0; k < d; k++)
         {
+            var xColK = new Vector<T>(n);
+            for (int i = 0; i < n; i++) xColK[i] = X[i, k];
+
             for (int j = 0; j < d; j++)
             {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < n; i++)
-                    sum = NumOps.Add(sum, NumOps.Multiply(X[i, k], R[i, j]));
-                grad[k, j] = NumOps.Negate(NumOps.Divide(sum, nT));
+                var rColJ = new Vector<T>(n);
+                for (int i = 0; i < n; i++) rColJ[i] = R[i, j];
+                grad[k, j] = NumOps.Negate(NumOps.Divide(Engine.DotProduct(xColK, rColJ), nT));
             }
         }
 
@@ -178,6 +182,48 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
             for (int j = 0; j < d; j++)
                 if (i != j && Math.Abs(NumOps.ToDouble(W[i, j])) >= threshold)
                     result[i, j] = W[i, j];
+
+        return result;
+    }
+
+    /// <summary>
+    /// Thresholds the weight matrix, with covariance-based fallback when no edges survive.
+    /// Use this instead of ThresholdAndClean when the original data is available.
+    /// </summary>
+    protected Matrix<T> ThresholdWithFallback(Matrix<T> W, double threshold, Matrix<T> data)
+    {
+        var result = ThresholdAndClean(W, threshold);
+
+        // Check if any edges survived
+        int d = W.Rows;
+        bool hasEdges = false;
+        for (int i = 0; i < d && !hasEdges; i++)
+            for (int j = 0; j < d && !hasEdges; j++)
+                if (i != j && NumOps.ToDouble(result[i, j]) != 0)
+                    hasEdges = true;
+
+        if (!hasEdges)
+        {
+            // No edges survived thresholding — use covariance-based edges
+            var cov = ComputeCovarianceMatrix(data);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                {
+                    if (i == j) continue;
+                    double varI = NumOps.ToDouble(cov[i, i]);
+                    if (varI < 1e-10) continue;
+                    double covIJ = NumOps.ToDouble(cov[i, j]);
+                    double weight = covIJ / varI;
+                    if (Math.Abs(weight) < threshold) continue;
+
+                    double varJ = NumOps.ToDouble(cov[j, j]);
+                    double reverseWeight = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
+                    // Use strict > to avoid creating both directions for ties.
+                    // For exact ties, use i < j as tie-breaker.
+                    if (Math.Abs(weight) > reverseWeight || (Math.Abs(weight) == reverseWeight && i < j))
+                        result[i, j] = NumOps.FromDouble(weight);
+                }
+        }
 
         return result;
     }
@@ -263,15 +309,17 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
         {
             for (int b = a + 1; b < d; b++)
             {
-                T sxy = NumOps.Zero, sxx = NumOps.Zero, syy = NumOps.Zero;
+                // Vectorized correlation using Engine.DotProduct
+                var centA = new Vector<T>(n);
+                var centB = new Vector<T>(n);
                 for (int i = 0; i < n; i++)
                 {
-                    T dx = NumOps.Subtract(data[i, a], means[a]);
-                    T dy = NumOps.Subtract(data[i, b], means[b]);
-                    sxy = NumOps.Add(sxy, NumOps.Multiply(dx, dy));
-                    sxx = NumOps.Add(sxx, NumOps.Multiply(dx, dx));
-                    syy = NumOps.Add(syy, NumOps.Multiply(dy, dy));
+                    centA[i] = NumOps.Subtract(data[i, a], means[a]);
+                    centB[i] = NumOps.Subtract(data[i, b], means[b]);
                 }
+                T sxy = Engine.DotProduct(centA, centB);
+                T sxx = Engine.DotProduct(centA, centA);
+                T syy = Engine.DotProduct(centB, centB);
 
                 double sxxD = NumOps.ToDouble(sxx), syyD = NumOps.ToDouble(syy);
                 if (sxxD > 1e-10 && syyD > 1e-10)

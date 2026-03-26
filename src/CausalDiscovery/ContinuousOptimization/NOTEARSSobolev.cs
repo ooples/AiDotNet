@@ -95,11 +95,21 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
     {
         ApplyOptions(options);
         if (options?.MaxPenalty is { } maxPenalty)
+        {
+            if (double.IsNaN(maxPenalty) || double.IsInfinity(maxPenalty) || maxPenalty <= 0)
+                throw new ArgumentException("MaxPenalty must be a positive finite number.");
             _rhoMax = maxPenalty;
+        }
         if (options?.HiddenUnits is { } hiddenUnits)
+        {
+            if (hiddenUnits < 1)
+                throw new ArgumentException("HiddenUnits must be at least 1.");
             _hiddenSize = hiddenUnits;
+        }
         _seed = options?.Seed;
         _sobolevWeight = options?.SobolevWeight ?? DEFAULT_SOBOLEV_WEIGHT;
+        if (_sobolevWeight < 0 || double.IsNaN(_sobolevWeight) || double.IsInfinity(_sobolevWeight))
+            throw new ArgumentException("SobolevWeight must be a non-negative finite number.");
     }
 
     /// <inheritdoc/>
@@ -219,22 +229,26 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
         var hidden = new T[h];
         var preAct = new T[h];
 
+        // Vectorized forward pass using Engine.DotProduct
+        var inputVec = new Vector<T>(d);
+        for (int i = 0; i < d; i++) inputVec[i] = data[sample, i];
+
         for (int k = 0; k < h; k++)
         {
-            T sum = _b1[j][0, k];
-            for (int i = 0; i < d; i++)
-                sum = NumOps.Add(sum, NumOps.Multiply(data[sample, i], _W1[j][i, k]));
+            var wCol = new Vector<T>(d);
+            for (int i = 0; i < d; i++) wCol[i] = _W1[j][i, k];
+            T sum = NumOps.Add(_b1[j][0, k], Engine.DotProduct(inputVec, wCol));
             preAct[k] = sum;
 
-            // Sigmoid activation
             double sv = NumOps.ToDouble(sum);
             double sigVal = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
             hidden[k] = NumOps.FromDouble(sigVal);
         }
 
-        T output = _b2[j];
-        for (int k = 0; k < h; k++)
-            output = NumOps.Add(output, NumOps.Multiply(hidden[k], _W2[j][0, k]));
+        var hiddenVec = new Vector<T>(h);
+        var w2Vec = new Vector<T>(h);
+        for (int k = 0; k < h; k++) { hiddenVec[k] = hidden[k]; w2Vec[k] = _W2[j][0, k]; }
+        T output = NumOps.Add(_b2[j], Engine.DotProduct(hiddenVec, w2Vec));
 
         return (output, hidden, preAct);
     }

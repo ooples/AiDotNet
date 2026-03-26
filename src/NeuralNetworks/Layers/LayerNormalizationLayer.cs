@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -34,6 +36,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Normalization)]
+[LayerTask(LayerTask.ActivationNormalization)]
+[LayerProperty(IsTrainable = true, HasTrainingMode = false, TestInputShape = "1, 4", TestConstructorArgs = "4")]
 public class LayerNormalizationLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -518,13 +523,13 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
 
             if (_gammaVelocity == null)
             {
-                _gammaVelocity = new Tensor<T>(_gamma.Shape);
+                _gammaVelocity = new Tensor<T>(_gamma.Shape.ToArray());
                 _gammaVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_gammaVelocity, PersistentTensorRole.OptimizerState);
             }
             if (_betaVelocity == null)
             {
-                _betaVelocity = new Tensor<T>(_beta.Shape);
+                _betaVelocity = new Tensor<T>(_beta.Shape.ToArray());
                 _betaVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_betaVelocity, PersistentTensorRole.OptimizerState);
             }
@@ -582,11 +587,11 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
-        var gammaVec = parameters.Slice(0, _gamma.Length);
-        var betaVec = parameters.Slice(_gamma.Length, _beta.Length);
-
-        _gamma = Tensor<T>.FromVector(gammaVec, _gamma.Shape);
-        _beta = Tensor<T>.FromVector(betaVec, _beta.Shape);
+        // Write in-place to preserve engine persistent tensor references
+        var gSpan = _gamma.Data.Span;
+        for (int i = 0; i < _gamma.Length; i++) gSpan[i] = parameters[i];
+        var bSpan = _beta.Data.Span;
+        for (int i = 0; i < _beta.Length; i++) bSpan[i] = parameters[_gamma.Length + i];
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_gamma);
@@ -615,6 +620,14 @@ public class LayerNormalizationLayer<T> : LayerBase<T>
     /// - Starting a new training episode
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_gammaGradient == null || _betaGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
+    }
+
+    public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
+
     public override void ResetState()
     {
         // Clear GPU cached values

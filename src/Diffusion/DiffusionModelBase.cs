@@ -95,6 +95,12 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// <inheritdoc />
     public abstract int ParameterCount { get; }
 
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
     /// <inheritdoc />
     public ILossFunction<T> DefaultLossFunction => LossFunction;
 
@@ -191,19 +197,33 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         // Set up the scheduler for inference
         _scheduler.SetTimesteps(numInferenceSteps);
 
+        // Pre-allocate reusable tensor for the denoising loop to avoid
+        // creating a new Tensor per step (50 allocations → 1)
+        var sampleTensor = new Tensor<T>(shape, sample);
+
+        // Pre-allocate reusable noise prediction vector to avoid per-step allocation
+        var noisePredVec = new Vector<T>(sample.Length);
+
         // Iterative denoising loop
         foreach (var timestep in _scheduler.Timesteps)
         {
-            // Convert vector to tensor for noise prediction
-            var sampleTensor = new Tensor<T>(shape, sample);
+            // Update tensor data in-place from sample vector using Span copy
+            var sampleSpan = sample.AsSpan();
+            var tensorSpan = sampleTensor.AsWritableSpan();
+            sampleSpan.CopyTo(tensorSpan);
 
             // Predict the noise
             var noisePrediction = PredictNoise(sampleTensor, timestep);
 
+            // Copy prediction to pre-allocated vector (avoids ToVector() allocation)
+            int copyLen = Math.Min(noisePrediction.Length, noisePredVec.Length);
+            for (int idx = 0; idx < copyLen; idx++)
+                noisePredVec[idx] = noisePrediction[idx];
+
             // Perform one denoising step
             // eta=0 for deterministic generation
             sample = _scheduler.Step(
-                noisePrediction.ToVector(),
+                noisePredVec,
                 timestep,
                 sample,
                 NumOps.Zero);
@@ -233,7 +253,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         var noisySample = _scheduler.AddNoise(cleanVector, noiseVector, timesteps[0]);
 
         // Create tensor for noise prediction
-        var noisySampleTensor = new Tensor<T>(cleanSamples.Shape, noisySample);
+        var noisySampleTensor = new Tensor<T>(cleanSamples.Shape.ToArray(), noisySample);
 
         // Predict the noise
         var predictedNoise = PredictNoise(noisySampleTensor, timesteps[0]);
@@ -277,9 +297,15 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// <inheritdoc />
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
-        // For diffusion models, prediction is generating samples
-        // Use the input shape for generation
-        return Generate(input.Shape, _options.DefaultInferenceSteps);
+        // For diffusion models, prediction is generating samples.
+        // Use a deterministic seed derived from the input so Predict is reproducible
+        // across clones and repeated calls with the same input.
+        int seed = 0;
+        for (int i = 0; i < Math.Min(input.Length, 16); i++)
+        {
+            seed = unchecked(seed * 31 + NumOps.ToDouble(input[i]).GetHashCode());
+        }
+        return Generate(input.Shape.ToArray(), _options.DefaultInferenceSteps, seed);
     }
 
     /// <inheritdoc />
@@ -288,7 +314,6 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         return new ModelMetadata<T>
         {
             Name = GetType().Name,
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = ParameterCount,
             Complexity = ParameterCount,
             Description = $"Diffusion model with {ParameterCount} parameters using {_scheduler.GetType().Name} scheduler."
@@ -596,7 +621,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
         // Add noise to the clean sample using the scheduler
         var noisySample = _scheduler.AddNoise(inputVector, noiseVector, timestep);
-        var noisySampleTensor = new Tensor<T>(input.Shape, noisySample);
+        var noisySampleTensor = new Tensor<T>(input.Shape.ToArray(), noisySample);
 
         // Get current parameters
         var parameters = GetParameters();
@@ -669,34 +694,61 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             // Fall through to numerical gradients
         }
 
-        // Fallback: Numerical gradient computation using finite differences
-        var epsilon = NumOps.FromDouble(1e-5);
+        // Fallback: Multi-sample SPSA (Simultaneous Perturbation Stochastic Approximation)
+        // Averages multiple perturbations for more stable gradient estimates.
+        // Each sample requires 2 forward passes; total = 2 * numSamples.
+        // Reference: Spall, J.C., IEEE TAC, 1992.
+        var epsilon = NumOps.FromDouble(1e-3);
         var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
+        var rng = RandomGenerator;
+        int numSamples = 3;
 
-        for (int i = 0; i < parameters.Length; i++)
+        // Pre-allocate reusable vectors outside the loop to avoid 9 Vector allocations
+        var delta = new Vector<T>(parameters.Length);
+        var perturbedParams = new Vector<T>(parameters.Length);
+        var negOne = NumOps.FromDouble(-1.0);
+        var posOne = NumOps.FromDouble(1.0);
+
+        for (int s = 0; s < numSamples; s++)
         {
-            // Compute f(x + epsilon)
-            var paramsPlus = new Vector<T>(parameters.Length);
-            for (int j = 0; j < parameters.Length; j++)
+            // Generate random perturbation vector: each element ±1 (Rademacher distribution)
+            for (int i = 0; i < parameters.Length; i++)
             {
-                paramsPlus[j] = j == i ? NumOps.Add(parameters[j], epsilon) : parameters[j];
+                delta[i] = rng.NextDouble() < 0.5 ? negOne : posOne;
             }
-            SetParameters(paramsPlus);
+
+            // Compute f(x + epsilon * delta) — reuse perturbedParams
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                perturbedParams[i] = NumOps.Add(parameters[i], NumOps.Multiply(epsilon, delta[i]));
+            }
+            SetParameters(perturbedParams);
             var predictedPlus = PredictNoise(noisySampleTensor, timestep);
             var lossPlus = effectiveLossFunction.CalculateLoss(predictedPlus.ToVector(), noiseVector);
 
-            // Compute f(x - epsilon)
-            var paramsMinus = new Vector<T>(parameters.Length);
-            for (int j = 0; j < parameters.Length; j++)
+            // Compute f(x - epsilon * delta) — reuse perturbedParams
+            for (int i = 0; i < parameters.Length; i++)
             {
-                paramsMinus[j] = j == i ? NumOps.Subtract(parameters[j], epsilon) : parameters[j];
+                perturbedParams[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(epsilon, delta[i]));
             }
-            SetParameters(paramsMinus);
+            SetParameters(perturbedParams);
             var predictedMinus = PredictNoise(noisySampleTensor, timestep);
             var lossMinus = effectiveLossFunction.CalculateLoss(predictedMinus.ToVector(), noiseVector);
 
-            // Gradient = (f(x+eps) - f(x-eps)) / (2*eps)
-            gradients[i] = NumOps.Divide(NumOps.Subtract(lossPlus, lossMinus), twoEpsilon);
+            // Accumulate SPSA gradient estimate: g_i += (f+ - f-) / (2 * epsilon * delta_i)
+            var lossDiff = NumOps.Subtract(lossPlus, lossMinus);
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                var sampleGrad = NumOps.Divide(lossDiff, NumOps.Multiply(twoEpsilon, delta[i]));
+                gradients[i] = NumOps.Add(gradients[i], sampleGrad);
+            }
+        }
+
+        // Average across samples
+        var invSamples = NumOps.FromDouble(1.0 / numSamples);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            gradients[i] = NumOps.Multiply(gradients[i], invSamples);
         }
 
         // Restore original parameters

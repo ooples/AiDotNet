@@ -27,6 +27,19 @@ namespace AiDotNet.Video.Denoising;
 /// gating to suppress unreliable aligned features.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FloRNN model for optical-flow-guided video denoising
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new FloRNNOptions();
+/// var flornn = new FloRNN&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var flornnOnnx = new FloRNN&lt;double&gt;(architecture, "flornn_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -147,7 +160,6 @@ public class FloRNN<T> : VideoDenoisingBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoDenoising,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "FloRNN" },

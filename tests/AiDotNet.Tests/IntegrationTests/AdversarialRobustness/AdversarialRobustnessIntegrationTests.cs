@@ -1847,6 +1847,7 @@ public class AdversarialRobustnessIntegrationTests
 
         public ILossFunction<double>? DefaultLossFunction => null;
         public int ParameterCount => _weights.Length;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
         public bool SupportsJitCompilation => false;
 
         public Vector<double> Predict(Vector<double> input)
@@ -1886,7 +1887,6 @@ public class AdversarialRobustnessIntegrationTests
         {
             return new ModelMetadata<double>
             {
-                ModelType = ModelType.None,
                 Description = "Mock classification model for testing"
             };
         }
@@ -1952,6 +1952,8 @@ public class AdversarialRobustnessIntegrationTests
         {
             throw new NotImplementedException();
         }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     #endregion

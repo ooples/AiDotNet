@@ -36,6 +36,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Transformers are behind many recent AI advances, including large language models like GPT and BERT.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new TransformerOptions { HiddenSize = 512, NumHeads = 8, NumLayers = 6 };
+/// var model = new Transformer&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 128, 512 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -472,7 +480,7 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 
         Tensor<T> output = input;
         Tensor<T>? encoderOutput = null;
-        Tensor<T> mask = AttentionMask ?? Tensor<T>.CreateDefault(input.Shape, NumOps.One); // Default to all ones if no mask is provided
+        Tensor<T> mask = AttentionMask ?? Tensor<T>.CreateDefault(input.Shape.ToArray(), NumOps.One); // Default to all ones if no mask is provided
 
         // Process all layers sequentially
         // The layer list structure: input projection, positional encoding, dropout, then encoder/decoder blocks
@@ -607,7 +615,6 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.Transformer,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumHeads", _transformerArchitecture.NumHeads },

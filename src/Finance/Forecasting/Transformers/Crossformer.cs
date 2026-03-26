@@ -13,7 +13,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Transformers;
 
@@ -44,6 +44,22 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// https://openreview.net/forum?id=vSVLM2j9eie
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Crossformer for multivariate forecasting with cross-dimension attention
+/// // Captures both temporal and cross-variable dependencies simultaneously
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 96, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with two-stage attention (cross-time + cross-dimension)
+/// var model = new Crossformer&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new Crossformer&lt;double&gt;(architecture, "crossformer_weather.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -423,7 +439,7 @@ public class Crossformer<T> : ForecastingModelBase<T>
 
         // Backward pass - convert gradient back to tensor
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape));
+        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         // Update weights via optimizer
         _optimizer.UpdateParameters(Layers);
@@ -452,7 +468,6 @@ public class Crossformer<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "Crossformer" },
@@ -817,7 +832,7 @@ public class Crossformer<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -861,7 +876,7 @@ public class Crossformer<T> : ForecastingModelBase<T>
         if (input.Length != processed.Length)
         {
             int minLen = Math.Min(input.Length, processed.Length);
-            var result = new Tensor<T>(input.Shape);
+            var result = new Tensor<T>(input.Shape.ToArray());
             for (int i = 0; i < minLen; i++)
                 result[i] = NumOps.Add(input[i], processed[i]);
             for (int i = minLen; i < input.Length; i++)
@@ -896,7 +911,7 @@ public class Crossformer<T> : ForecastingModelBase<T>
             _instanceMean = new Tensor<T>(new[] { batchSize, 1, features });
             _instanceStd = new Tensor<T>(new[] { batchSize, 1, features });
 
-            var normalized = new Tensor<T>(input.Shape);
+            var normalized = new Tensor<T>(input.Shape.ToArray());
             T epsilon = NumOps.FromDouble(1e-5);
 
             for (int b = 0; b < batchSize; b++)
@@ -934,7 +949,7 @@ public class Crossformer<T> : ForecastingModelBase<T>
             if (_instanceMean is null || _instanceStd is null)
                 return input;
 
-            var denormalized = new Tensor<T>(input.Shape);
+            var denormalized = new Tensor<T>(input.Shape.ToArray());
             int batchSize = input.Shape[0];
             int horizonLen = input.Shape[1];
             int features = input.Shape[2];

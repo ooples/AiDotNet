@@ -39,6 +39,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Emergent alignment: Compare modalities never directly paired during training
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new ImageBindOptions { ImageSize = 224, EmbeddingDim = 1024 };
+/// var model = new ImageBindNeuralNetwork&lt;float&gt;(options);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 224, 224 });
+/// var embedding = model.Predict(image);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
@@ -1723,7 +1731,6 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     {
         return new ModelMetadata<T>
         {
-            ModelType = Enums.ModelType.ImageBind,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ImageSize", _imageSize },

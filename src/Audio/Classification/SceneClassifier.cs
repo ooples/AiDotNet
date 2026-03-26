@@ -31,7 +31,7 @@ namespace AiDotNet.Audio.Classification;
 /// <code>
 /// var classifier = new SceneClassifier&lt;float&gt;("model.onnx");
 /// var result = classifier.Classify(audioTensor);
-/// Console.WriteLine($"Scene: {result.PredictedScene} ({result.Confidence})");
+/// // Result is available in the returned value
 /// </code>
 ///
 /// Usage for training:
@@ -613,7 +613,7 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
         // Apply softmax for scene classification (single-label)
-        var result = new Tensor<T>(modelOutput.Shape);
+        var result = new Tensor<T>(modelOutput.Shape.ToArray());
 
         // Find max for numerical stability
         double maxVal = double.MinValue;
@@ -649,7 +649,6 @@ public class SceneClassifier<T> : AudioClassifierBase<T>, ISceneClassifier<T>
         {
             Name = _useNativeMode ? "SceneClassifier-Native" : "SceneClassifier-ONNX",
             Description = "Acoustic scene classification model (DCASE-style)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.NumMfccs,  // Input feature count, not output class count
             Complexity = 1
         };

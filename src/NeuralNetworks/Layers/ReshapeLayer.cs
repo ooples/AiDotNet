@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -33,6 +35,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Structural)]
+[LayerTask(LayerTask.Projection)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 1, 4 }, new[] { 2, 2 }")]
 public class ReshapeLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -295,7 +300,7 @@ public class ReshapeLayer<T> : LayerBase<T>
 
         // Reshape gradient back to input shape
         // Input shape is [batchSize, ..._inputShape]
-        return Engine.Reshape(outputGradient, _lastInput.Shape);
+        return Engine.Reshape(outputGradient, _lastInput.Shape.ToArray());
     }
 
     /// <summary>
@@ -424,7 +429,7 @@ public class ReshapeLayer<T> : LayerBase<T>
         // Cache input shape for backward pass
         if (IsTrainingMode)
         {
-            _gpuCachedInputShape = (int[])input.Shape.Clone();
+            _gpuCachedInputShape = (int[])input.Shape.ToArray().Clone();
         }
 
         // Calculate full target shape including batch dimension

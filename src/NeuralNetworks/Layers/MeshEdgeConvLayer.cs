@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -32,6 +34,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Graph)]
+[LayerTask(LayerTask.GraphProcessing)]
+[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "8, 3", TestConstructorArgs = "3, 6, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var e = new int[8, 3]; for (int i = 0; i < 8; i++) for (int j = 0; j < 3; j++) e[i, j] = (i * 3 + j + 1) % 8; ((AiDotNet.NeuralNetworks.Layers.MeshEdgeConvLayer<double>)layer).SetEdgeAdjacency(e);")]
 public class MeshEdgeConvLayer<T> : LayerBase<T>
 {
     #region Properties
@@ -250,10 +255,10 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
             NumOps.FromDouble(fanIn)));
 
         // Initialize weights in [-scale, scale] range
-        _weights = Engine.TensorRandomUniformRange<T>(_weights.Shape, NumOps.Negate(scale), scale);
+        _weights = Engine.TensorRandomUniformRange<T>(_weights.Shape.ToArray(), NumOps.Negate(scale), scale);
 
         // Initialize biases to zero
-        _biases = new Tensor<T>(_biases.Shape);
+        _biases = new Tensor<T>(_biases.Shape.ToArray());
         Engine.TensorFill(_biases, NumOps.Zero);
     }
 
@@ -283,7 +288,7 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
         if (input.Rank != 2 || input.Shape[1] != InputChannels)
         {
             throw new ArgumentException(
-                $"MeshEdgeConvLayer expects input shape [numEdges, {InputChannels}], got [{string.Join(", ", input.Shape)}].",
+                $"MeshEdgeConvLayer expects input shape [numEdges, {InputChannels}], got [{string.Join(", ", input.Shape.ToArray())}].",
                 nameof(input));
         }
 
@@ -362,11 +367,10 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
     private Tensor<T> AggregateEdgeFeatures(Tensor<T> input, int[,] adjacency, int numEdges, int aggregatedSize)
     {
         // Create result tensor [numEdges, aggregatedSize]
-        var result = new Tensor<T>([numEdges, aggregatedSize]);
+        var result = TensorAllocator.Rent<T>([numEdges, aggregatedSize]);
 
         // Step 1: Copy self-features (first InputChannels columns)
-        // Use TensorSetSlice for consistent API usage
-        Engine.TensorSetSlice(result, input, [0, 0]);
+        result = Engine.TensorSetSlice(result, input, [0, 0]);
 
         // Step 2: Gather neighbor features for each neighbor position
         for (int n = 0; n < NumNeighbors; n++)
@@ -400,7 +404,7 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
             gathered = Engine.TensorMultiply(gathered, Engine.TensorTile(mask, [1, InputChannels]));
 
             // Set the gathered features into the result at the appropriate offset
-            Engine.TensorSetSlice(result, gathered, [0, featureOffset]);
+            result = Engine.TensorSetSlice(result, gathered, [0, featureOffset]);
         }
 
         return result;
@@ -448,7 +452,7 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
         }
 
         var input = inputs[0];
-        int[] shape = input.Shape;
+        int[] shape = input.Shape.ToArray();
 
         if (shape.Length != 2 || shape[1] != InputChannels)
         {
@@ -572,7 +576,7 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastPreActivation == null || _lastOutput == null || _lastEdgeAdjacency == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
 
         int numEdges = _lastInput.Shape[0];
         int aggregatedFeatures = InputChannels * (1 + NumNeighbors);
@@ -582,7 +586,7 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
         // Compute weight gradient: delta.T @ aggregatedInput
         var deltaTransposed = Engine.TensorTranspose(delta);
         _weightsGradient = Engine.TensorMatMul(deltaTransposed, aggregatedInput);
-        _weightsGradient = _weightsGradient.Reshape(_weights.Shape);
+        _weightsGradient = _weightsGradient.Reshape(_weights.Shape.ToArray());
 
         _biasesGradient = ComputeBiasGradient(delta);
 
@@ -644,7 +648,7 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
     private Tensor<T> ScatterGradients(Tensor<T> aggregatedGrad, int[,] adjacency, int numEdges)
     {
         // Initialize input gradient tensor
-        var inputGrad = new Tensor<T>([numEdges, InputChannels]);
+        var inputGrad = TensorAllocator.Rent<T>([numEdges, InputChannels]);
 
         // Step 1: Add self-gradients (first InputChannels columns)
         var selfGrad = Engine.TensorSlice(aggregatedGrad, [0, 0], [numEdges, InputChannels]);
@@ -733,9 +737,9 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {expected} parameters, but got {parameters.Length}");
 
         int index = 0;
-        _weights = new Tensor<T>(_weights.Shape, parameters.Slice(index, _weights.Length));
+        _weights = new Tensor<T>(_weights.Shape.ToArray(), parameters.Slice(index, _weights.Length));
         index += _weights.Length;
-        _biases = new Tensor<T>(_biases.Shape, parameters.Slice(index, _biases.Length));
+        _biases = new Tensor<T>(_biases.Shape.ToArray(), parameters.Slice(index, _biases.Length));
     }
 
     /// <summary>
@@ -842,7 +846,7 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
         {
             weightArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _weights = new Tensor<T>(weightArray, _weights.Shape);
+        _weights = new Tensor<T>(weightArray, _weights.Shape.ToArray());
 
         _biases = new Tensor<T>([OutputChannels]);
         var biasArray = new T[OutputChannels];
@@ -850,7 +854,7 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
         {
             biasArray[i] = NumOps.FromDouble(reader.ReadDouble());
         }
-        _biases = new Tensor<T>(biasArray, _biases.Shape);
+        _biases = new Tensor<T>(biasArray, _biases.Shape.ToArray());
     }
 
     #endregion

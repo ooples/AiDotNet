@@ -21,7 +21,7 @@ public class DoublePrecisionInferenceTests
         var input = CreateRandomTensor(new[] { 1, 4, headDim });
         var output = rope.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -36,8 +36,8 @@ public class DoublePrecisionInferenceTests
 
         var (rotQ, rotK) = rope.ApplyRoPE(q, k, startPosition: 0);
 
-        Assert.Equal(q.Shape, rotQ.Shape);
-        Assert.Equal(k.Shape, rotK.Shape);
+        Assert.Equal(q.Shape.ToArray(), rotQ.Shape.ToArray());
+        Assert.Equal(k.Shape.ToArray(), rotK.Shape.ToArray());
         Assert.False(ContainsNaN(rotQ));
         Assert.False(ContainsNaN(rotK));
     }
@@ -68,7 +68,7 @@ public class DoublePrecisionInferenceTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -84,7 +84,7 @@ public class DoublePrecisionInferenceTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -100,7 +100,7 @@ public class DoublePrecisionInferenceTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -116,7 +116,7 @@ public class DoublePrecisionInferenceTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -133,7 +133,7 @@ public class DoublePrecisionInferenceTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -148,10 +148,10 @@ public class DoublePrecisionInferenceTests
 
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         var inputGrad = layer.Backward(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         Assert.False(ContainsNaN(inputGrad));
     }
 
@@ -168,7 +168,7 @@ public class DoublePrecisionInferenceTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -183,7 +183,7 @@ public class DoublePrecisionInferenceTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -199,7 +199,7 @@ public class DoublePrecisionInferenceTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -215,7 +215,7 @@ public class DoublePrecisionInferenceTests
         var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
         var output = layer.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 

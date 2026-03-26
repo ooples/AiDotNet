@@ -45,6 +45,21 @@ namespace AiDotNet.CausalDiscovery.Bayesian;
 [ModelPaper("Being Bayesian About Network Structure", "https://doi.org/10.1023/B:MACH.0000033120.25888.1e", Year = 2003, Authors = "Nir Friedman, Daphne Koller")]
 public class OrderMCMCAlgorithm<T> : BayesianCausalBase<T>
 {
+    /// <summary>
+    /// Minimum absolute weight for an edge to be included in the DAG.
+    /// </summary>
+    private const double MinEdgeWeight = 1e-6;
+
+    /// <summary>
+    /// Regularization epsilon for numerical stability in matrix inversion.
+    /// </summary>
+    private const double RegularizationEpsilon = 1e-10;
+
+    /// <summary>
+    /// Pivot tolerance for detecting singular/near-singular matrices during Gaussian elimination.
+    /// </summary>
+    private const double PivotTolerance = 1e-12;
+
     private readonly int _maxParents;
     private readonly int _burnIn;
 
@@ -179,11 +194,22 @@ public class OrderMCMCAlgorithm<T> : BayesianCausalBase<T>
                 continue;
 
             var weights = ComputeMultivariateOLSWeights(cov, parents, target);
+            // BIC already decided these parents improve the model — preserve
+            // the edge even when OLS gives a near-zero weight by using a
+            // minimum weight, preventing coefficient estimation from erasing
+            // structurally selected parents.
             for (int p = 0; p < parents.Length; p++)
             {
                 T absWeight = NumOps.Abs(weights[p]);
-                if (NumOps.GreaterThan(absWeight, NumOps.FromDouble(1e-6)))
+                double wDouble = NumOps.ToDouble(weights[p]);
+                if (double.IsNaN(wDouble) || double.IsInfinity(wDouble))
+                {
+                    // NaN/Infinity coefficient — skip edge (no meaningful causal effect)
+                    continue;
+                }
+                if (NumOps.GreaterThan(absWeight, NumOps.FromDouble(MinEdgeWeight)))
                     W[parents[p], target] = weights[p];
+                // else: coefficient below threshold — leave edge as zero (no effect)
             }
         }
         return W;
@@ -196,7 +222,7 @@ public class OrderMCMCAlgorithm<T> : BayesianCausalBase<T>
     private T[] ComputeMultivariateOLSWeights(Matrix<T> cov, int[] parents, int target)
     {
         int k = parents.Length;
-        T eps = NumOps.FromDouble(1e-10);
+        T eps = NumOps.FromDouble(RegularizationEpsilon);
 
         // Single parent: use simple univariate formula
         if (k == 1)
@@ -263,7 +289,7 @@ public class OrderMCMCAlgorithm<T> : BayesianCausalBase<T>
             }
 
             // Singular or near-singular: return zeros
-            if (Math.Abs(augmented[col, col]) < 1e-12)
+            if (Math.Abs(augmented[col, col]) < PivotTolerance)
             {
                 return new T[k];
             }

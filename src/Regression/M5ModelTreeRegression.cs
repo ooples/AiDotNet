@@ -26,6 +26,25 @@ namespace AiDotNet.Regression;
 /// The M5 model tree captures these different patterns for different groups of data.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an M5 model tree with linear models at leaves
+/// var options = new M5ModelTreeRegressionOptions&lt;double&gt;();
+/// var model = new M5ModelTree&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train tree structure with linear regression at each leaf
+/// model.Train(features, targets);
+///
+/// // Predict using the appropriate leaf's linear model
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.DecisionTree)]
@@ -414,12 +433,23 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     /// rather than just using a single average value.
     /// </para>
     /// </remarks>
-    private SimpleRegression<T> FitLinearModel(Matrix<T> x, Vector<T> y)
+    private RegressionBase<T> FitLinearModel(Matrix<T> x, Vector<T> y)
     {
-        var regression = new SimpleRegression<T>(regularization: Regularization);
-        regression.Train(x, y);
-
-        return regression;
+        // Use RidgeRegression for multi-feature data, SimpleRegression for single-feature.
+        // M5 model trees fit linear models at each leaf using all features in the split path,
+        // which can be more than one feature.
+        if (x.Columns == 1)
+        {
+            var regression = new SimpleRegression<T>(regularization: Regularization);
+            regression.Train(x, y);
+            return regression;
+        }
+        else
+        {
+            var regression = new RidgeRegression<T>();
+            regression.Train(x, y);
+            return regression;
+        }
     }
 
     /// <summary>
@@ -550,8 +580,10 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
         {
             if (_options.UseLinearRegressionAtLeaves && node.LinearModel != null)
             {
-                // Convert the input vector to a single-column matrix using the new method
-                var inputMatrix = Matrix<T>.FromVector(input);
+                // Convert the input vector to a single-row matrix (1 sample, N features)
+                var inputMatrix = new Matrix<T>(1, input.Length);
+                for (int i = 0; i < input.Length; i++)
+                    inputMatrix[0, i] = input[i];
                 return node.LinearModel.Predict(inputMatrix)[0];
             }
             else
@@ -664,7 +696,6 @@ public class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.M5ModelTree,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "MaxDepth", _options.MaxDepth },

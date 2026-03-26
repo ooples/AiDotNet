@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -51,6 +52,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// ECCV 2018 Workshops. https://arxiv.org/abs/1809.00219
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Residual)]
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4")]
 public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     #region Fields
@@ -110,6 +115,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     public int GrowthChannels => _growthChannels;
 
     /// <inheritdoc />
+    public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -236,7 +242,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
 
         // Cache input for backward pass
         if (IsTrainingMode)
@@ -315,7 +321,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         // Scale the gradient for the RDB path
         var rdb3GradBuffer = backend.AllocateBuffer(size);
         backend.Scale(outputGradient.Buffer, rdb3GradBuffer, (float)_residualScale, size);
-        var rdb3Grad = new GpuTensor<T>(backend, rdb3GradBuffer, outputGradient.Shape, GpuTensorRole.Gradient, ownsBuffer: true);
+        var rdb3Grad = new GpuTensor<T>(backend, rdb3GradBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
 
         // Backward through RDB3, RDB2, RDB1
         IGpuTensor<T> grad = rdb3Grad;
@@ -341,7 +347,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var resultBuffer = backend.AllocateBuffer(size);
         backend.Add(grad.Buffer, outputGradient.Buffer, resultBuffer, size);
 
-        return new GpuTensor<T>(backend, resultBuffer, outputGradient.Shape, GpuTensorRole.Gradient, ownsBuffer: true);
+        return new GpuTensor<T>(backend, resultBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
     #endregion
@@ -401,6 +407,18 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             }
         }
         return new Vector<T>([.. allParams]);
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        var gradVectors = _rdbBlocks.Select(r => r.GetParameterGradients()).ToArray();
+        return Vector<T>.Concatenate(gradVectors);
+    }
+
+    public override void ClearGradients()
+    {
+        foreach (var rdb in _rdbBlocks)
+            rdb.ClearGradients();
     }
 
     /// <inheritdoc />
@@ -466,7 +484,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         var scaleValue = numOps.FromDouble(scale);
 
         // Create a constant tensor filled with the scale value matching the input shape
-        var scaleTensor = new Tensor<T>(node.Value.Shape);
+        var scaleTensor = new Tensor<T>(node.Value.Shape.ToArray());
         for (int i = 0; i < scaleTensor.Length; i++)
         {
             scaleTensor.Data.Span[i] = scaleValue;

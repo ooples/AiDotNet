@@ -9,6 +9,46 @@ using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.EligibilityTraces;
 
+/// <summary>
+/// Watkins's Q(lambda) agent that combines Q-learning with eligibility traces but
+/// cuts traces when an exploratory (non-greedy) action is taken, ensuring convergence
+/// to the optimal policy.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// Watkins's Q(lambda) is a variant of Q(lambda) that resets eligibility traces to zero
+/// whenever the agent takes a non-greedy action. This ensures that only greedy actions
+/// contribute to the trace-based updates, maintaining the off-policy guarantee of Q-learning
+/// while still benefiting from multi-step credit assignment during greedy sequences.
+/// </para>
+/// <para><b>For Beginners:</b>
+/// Regular Q(lambda) has a problem: it uses eligibility traces to propagate rewards
+/// backwards, but since Q-learning is off-policy (learns the optimal policy while
+/// exploring), the traces can cause incorrect updates when exploratory actions are taken.
+///
+/// Watkins's Q(lambda) solves this by "cutting" the traces whenever the agent explores:
+/// - Greedy action taken: traces decay normally (lambda * gamma)
+/// - Exploratory action taken: ALL traces reset to zero
+///
+/// This means:
+/// - During greedy sequences, you get fast multi-step learning (like Q(lambda))
+/// - When exploring, you revert to safe 1-step Q-learning
+///
+/// Trade-off: More conservative than naive Q(lambda), but theoretically sound.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a Watkins Q(lambda) agent that cuts traces on exploration
+/// var options = new WatkinsQLambdaOptions&lt;double&gt; { Lambda = 0.9, LearningRate = 0.1, StateSize = 4, ActionSize = 2 };
+/// var agent = new WatkinsQLambdaAgent&lt;double&gt;(options);
+///
+/// // Select an action for the current state
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
@@ -128,7 +168,7 @@ public class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
-    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
+    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _qTable.Count * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()

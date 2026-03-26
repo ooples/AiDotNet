@@ -46,6 +46,20 @@ namespace AiDotNet.Video.Generation;
 /// Stability AI, 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Stable Video Diffusion model for image-to-video generation
+/// var svd = new StableVideoDiffusion&lt;double&gt;();
+///
+/// // Or configure with a specific variant and frame count
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 576, inputWidth: 576, inputDepth: 3, outputSize: 3);
+/// var model = new StableVideoDiffusion&lt;double&gt;(architecture,
+///     variant: SVDModelVariant.SVD, numFrames: 14, numInferenceSteps: 25);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -342,7 +356,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         var imageLatent = EncodeToLatent(inputImage);
 
         // Initialize noise
-        var latents = InitializeLatents(imageLatent.Shape, random);
+        var latents = InitializeLatents(imageLatent.Shape.ToArray(), random);
 
         // Condition on input image
         var imageCondition = ImageConditioner.Forward(imageLatent);
@@ -531,7 +545,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
 
         // Add noise
         double noiseLevel = random.NextDouble();
-        var noise = GenerateNoise(latent.Shape, random);
+        var noise = GenerateNoise(latent.Shape.ToArray(), random);
         var noisyLatent = AddNoiseAtLevel(latent, noise, noiseLevel);
 
         // Predict noise
@@ -874,7 +888,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     {
         int batch = input.Shape[0];
         int channels = input.Shape[1];
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape.ToArray());
         double eps = 1e-5;
 
         for (int b = 0; b < batch; b++)
@@ -1029,7 +1043,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
 
     private Tensor<T> AddNoise(Tensor<T> latent, double noiseLevel, Random random)
     {
-        var noise = GenerateNoise(latent.Shape, random);
+        var noise = GenerateNoise(latent.Shape.ToArray(), random);
         var scaledNoise = Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(noiseLevel));
         return Engine.TensorAdd(latent, scaledNoise);
     }
@@ -1254,7 +1268,6 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.TextToVideo,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

@@ -35,6 +35,14 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 360, Width = 640, NumInferenceSteps = 1 };
+/// var model = new OasisModel&lt;float&gt;(options);
+/// var actionInput = Tensor&lt;float&gt;.Random(new[] { 1, 16, 1, 45, 80 });
+/// var nextFrame = model.Predict(actionInput);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -179,7 +187,6 @@ public class OasisModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "Oasis",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Oasis playable AI game via next-frame prediction.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

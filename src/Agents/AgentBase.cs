@@ -1,5 +1,6 @@
 using System.Text;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Validation;
 
 namespace AiDotNet.Agents;
@@ -25,6 +26,11 @@ namespace AiDotNet.Agents;
 /// </remarks>
 public abstract class AgentBase<T> : IAgent<T>
 {
+    /// <summary>
+    /// Gets the hardware-accelerated computation engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     private readonly List<ITool> _tools;
     private readonly StringBuilder _scratchpad;
 

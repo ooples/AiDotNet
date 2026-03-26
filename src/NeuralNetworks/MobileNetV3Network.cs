@@ -31,6 +31,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Two variants: "Large" for higher accuracy, "Small" for extreme efficiency
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new MobileNetV3Options { Variant = MobileNetV3Variant.Large, NumClasses = 1000 };
+/// var model = new MobileNetV3Network&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 3, 224, 224 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -202,7 +210,7 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
         LastLoss = loss;
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
 
         var currentGradient = outputGradientTensor;
         for (int i = Layers.Count - 1; i >= 0; i--)
@@ -231,7 +239,6 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ConvolutionalNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "MobileNetV3Network" },

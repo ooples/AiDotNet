@@ -13,6 +13,25 @@ namespace AiDotNet.ReinforcementLearning.Agents.AdvancedRL;
 /// LSTD (Least-Squares Temporal Difference) agent using direct solution for value function weights.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> LSTD computes the value function weights directly using
+/// matrix operations instead of iterative updates. While standard TD learning takes many
+/// small steps toward the answer, LSTD solves for the answer in one computation (like
+/// solving a system of equations). This is much more sample-efficient but uses more memory
+/// and compute per update. Best for problems with linear function approximation and
+/// moderate state spaces.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create an LSTD agent that solves value function weights directly
+/// var options = new LSTDOptions&lt;double&gt; { StateSize = 4, ActionSize = 2 };
+/// var agent = new LSTDAgent&lt;double&gt;(options);
+///
+/// // Select an action using the computed value function
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Regression)]
@@ -302,7 +321,7 @@ public class LSTDAgent<T> : ReinforcementLearningAgentBase<T>
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
-    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
+    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _options.ActionSize * _options.FeatureSize;
     public override int FeatureCount => _options.FeatureSize;
 

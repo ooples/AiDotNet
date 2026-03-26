@@ -27,6 +27,19 @@ namespace AiDotNet.Video.Denoising;
 /// latent buffers for constant-memory operation regardless of video length.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a BSVD model for real-time bidirectional video denoising
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new BSVDOptions();
+/// var bsvd = new BSVD&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var bsvdOnnx = new BSVD&lt;double&gt;(architecture, "bsvd_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -149,7 +162,6 @@ public class BSVD<T> : VideoDenoisingBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoDenoising,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "BSVD" },

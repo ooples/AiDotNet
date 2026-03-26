@@ -79,7 +79,7 @@ public class FinanceDeepMathIntegrationTests
     public void FinancialSearchSpace_GetSearchSpace_PatchTST()
     {
         var searchSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var space = searchSpace.GetSearchSpace(ModelType.PatchTST);
+        var space = searchSpace.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>));
         Assert.NotNull(space);
         Assert.NotEmpty(space);
     }
@@ -88,7 +88,7 @@ public class FinanceDeepMathIntegrationTests
     public void FinancialSearchSpace_GetSearchSpace_NeuralVaR()
     {
         var searchSpace = new FinancialSearchSpace(FinancialDomain.Risk);
-        var space = searchSpace.GetSearchSpace(ModelType.NeuralVaR);
+        var space = searchSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.NeuralVaR<>));
         Assert.NotNull(space);
         Assert.NotEmpty(space);
     }
@@ -98,7 +98,7 @@ public class FinanceDeepMathIntegrationTests
     {
         var searchSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
         // Unknown model type should return domain-aware default
-        var space = searchSpace.GetSearchSpace(ModelType.None);
+        var space = searchSpace.GetSearchSpace(typeof(object));
         Assert.NotNull(space);
         Assert.NotEmpty(space);
     }
@@ -107,7 +107,7 @@ public class FinanceDeepMathIntegrationTests
     public void FinancialSearchSpace_SearchSpace_ContainsLearningRate()
     {
         var searchSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var space = searchSpace.GetSearchSpace(ModelType.PatchTST);
+        var space = searchSpace.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>));
 
         // Most financial models should have a learning_rate parameter
         Assert.True(space.ContainsKey("learning_rate") || space.ContainsKey("LearningRate") || space.Count > 0,

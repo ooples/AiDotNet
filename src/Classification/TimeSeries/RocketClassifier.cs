@@ -40,6 +40,38 @@ namespace AiDotNet.Classification.TimeSeries;
 /// <para><b>Reference:</b> Dempster et al., "ROCKET: Exceptionally fast and accurate time series classification
 /// using random convolutional kernels" (2020)</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create ROCKET classifier with short kernel lengths matching the data
+/// var options = new RocketOptions&lt;double&gt; { KernelLengths = new[] { 3, 5 } };
+/// var classifier = new RocketClassifier&lt;double&gt;(options);
+///
+/// // Prepare time series data: rows are samples, columns are time steps
+/// // Series length must be >= max kernel length
+/// var features = new Matrix&lt;double&gt;(4, 8);
+/// // Class 0: low-amplitude oscillation
+/// features[0, 0] = 1.0; features[0, 1] = 1.2; features[0, 2] = 1.5; features[0, 3] = 1.3;
+/// features[0, 4] = 1.1; features[0, 5] = 1.4; features[0, 6] = 1.2; features[0, 7] = 1.0;
+/// features[1, 0] = 1.1; features[1, 1] = 1.3; features[1, 2] = 1.4; features[1, 3] = 1.2;
+/// features[1, 4] = 1.0; features[1, 5] = 1.3; features[1, 6] = 1.1; features[1, 7] = 1.2;
+/// // Class 1: high-amplitude trend
+/// features[2, 0] = 2.0; features[2, 1] = 2.5; features[2, 2] = 2.3; features[2, 3] = 2.8;
+/// features[2, 4] = 3.0; features[2, 5] = 3.2; features[2, 6] = 3.5; features[2, 7] = 3.8;
+/// features[3, 0] = 2.1; features[3, 1] = 2.4; features[3, 2] = 2.6; features[3, 3] = 2.9;
+/// features[3, 4] = 3.1; features[3, 5] = 3.3; features[3, 6] = 3.4; features[3, 7] = 3.7;
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1 });
+///
+/// // Train: extract max and PPV features from random kernels and fit classifier
+/// classifier.Train(features, labels);
+///
+/// // Predict class for new time series
+/// var newSample = new Matrix&lt;double&gt;(1, 8);
+/// newSample[0, 0] = 1.0; newSample[0, 1] = 1.1; newSample[0, 2] = 1.3; newSample[0, 3] = 1.2;
+/// newSample[0, 4] = 1.0; newSample[0, 5] = 1.2; newSample[0, 6] = 1.1; newSample[0, 7] = 1.0;
+/// var predictions = classifier.Predict(newSample);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.TimeSeries)]
@@ -109,7 +141,6 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.TimeSeriesClassifier;
 
     /// <summary>
     /// Trains the ROCKET classifier on time series data.
@@ -236,18 +267,24 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
     {
         int n = x.Columns;
 
+        // Pre-extract columns from X as Vector<T> for Engine.DotProduct
+        var xCols = new Vector<T>[n];
+        for (int col = 0; col < n; col++)
+        {
+            xCols[col] = new Vector<T>(x.Rows);
+            for (int row = 0; row < x.Rows; row++)
+            {
+                xCols[col][row] = x[row, col];
+            }
+        }
+
         // Compute X'X + alpha*I
         var xtx = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
             {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < x.Rows; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(x[k, i], x[k, j]));
-                }
-                xtx[i, j] = sum;
+                xtx[i, j] = Engine.DotProduct(xCols[i], xCols[j]);
 
                 if (i == j)
                 {
@@ -260,12 +297,7 @@ public class RocketClassifier<T> : ClassifierBase<T>, ITimeSeriesClassifier<T>
         var xty = new Vector<T>(n);
         for (int j = 0; j < n; j++)
         {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < x.Rows; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(x[i, j], y[i]));
-            }
-            xty[j] = sum;
+            xty[j] = Engine.DotProduct(xCols[j], y);
         }
 
         // Solve using simple Gauss-Jordan elimination

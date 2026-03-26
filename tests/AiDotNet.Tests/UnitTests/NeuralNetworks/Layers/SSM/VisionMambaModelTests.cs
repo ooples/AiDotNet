@@ -99,7 +99,7 @@ public class VisionMambaModelTests
         var input = CreateRandomTensor(new[] { batchSize, channels, height, width });
         var output = model.Predict(input);
 
-        Assert.Equal(new[] { batchSize, numClasses }, output.Shape);
+        Assert.Equal(new[] { batchSize, numClasses }, output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -121,7 +121,7 @@ public class VisionMambaModelTests
         var input = CreateRandomTensor(new[] { channels, height, width });
         var output = model.Predict(input);
 
-        Assert.Equal(new[] { numClasses }, output.Shape);
+        Assert.Equal(new[] { numClasses }, output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -144,10 +144,10 @@ public class VisionMambaModelTests
         var input = CreateRandomTensor(new[] { 1, channels, height, width });
         var output = model.Predict(input);
         model.SetTrainingMode(true); // Re-enable after Predict set it to false
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         var inputGrad = model.Backpropagate(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         Assert.False(ContainsNaN(inputGrad));
     }
 
@@ -185,7 +185,7 @@ public class VisionMambaModelTests
 
         model.ResetState();
         var output2 = model.Predict(input);
-        Assert.Equal(new[] { 1, numClasses }, output2.Shape);
+        Assert.Equal(new[] { 1, numClasses }, output2.Shape.ToArray());
         Assert.False(ContainsNaN(output2));
     }
 
@@ -238,7 +238,7 @@ public class VisionMambaModelTests
 
         var metadata = model.GetModelMetadata();
 
-        Assert.Equal(ModelType.NeuralNetwork, metadata.ModelType);
+
         Assert.True(metadata.AdditionalInfo.ContainsKey("ImageHeight"));
         Assert.True(metadata.AdditionalInfo.ContainsKey("ImageWidth"));
         Assert.True(metadata.AdditionalInfo.ContainsKey("PatchSize"));
@@ -288,7 +288,7 @@ public class VisionMambaModelTests
         var input = CreateRandomTensor(new[] { 1, 1, 32, 16 });
         var output = model.Predict(input);
 
-        Assert.Equal(new[] { 1, 5 }, output.Shape);
+        Assert.Equal(new[] { 1, 5 }, output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -302,7 +302,7 @@ public class VisionMambaModelTests
         var input = CreateRandomDoubleTensor(new[] { 1, 1, 16, 16 });
         var output = model.Predict(input);
 
-        Assert.Equal(new[] { 1, 3 }, output.Shape);
+        Assert.Equal(new[] { 1, 3 }, output.Shape.ToArray());
         Assert.False(ContainsNaNDouble(output));
     }
 

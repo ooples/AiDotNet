@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 namespace AiDotNet.JitCompiler.IR.Operations;
 
 /// <summary>
@@ -9,8 +10,10 @@ namespace AiDotNet.JitCompiler.IR.Operations;
 /// Self-gated activation with smooth gradient.
 /// </para>
 /// </remarks>
-public class SwishOp : IROp
+public class SwishOp : IROp, IFusableActivation
 {
+    public FusedActivationType FusedType => FusedActivationType.Swish;
+
     public override bool Validate()
     {
         if (!base.Validate()) return false;

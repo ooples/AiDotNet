@@ -42,6 +42,17 @@ namespace AiDotNet.ReinforcementLearning.Agents.PPO;
 /// Schulman, J., et al. (2017). "Proximal Policy Optimization Algorithms." arXiv:1707.06347.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PPO agent for stable policy optimization
+/// var options = new PPOOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, ClipEpsilon = 0.2 };
+/// var agent = new PPOAgent&lt;double&gt;(options);
+///
+/// // Select an action using the clipped policy
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -639,7 +650,6 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.PPOAgent,
             FeatureCount = _ppoOptions.StateSize,
         };
     }

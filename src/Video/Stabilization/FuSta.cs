@@ -27,6 +27,19 @@ namespace AiDotNet.Video.Stabilization;
 /// to fill missing border regions, avoiding the field-of-view loss of traditional cropping.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FuSta model for full-frame video stabilization
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new FuStaOptions();
+/// var fuSta = new FuSta&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var fuStaOnnx = new FuSta&lt;double&gt;(architecture, "fusta_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -149,7 +162,6 @@ public class FuSta<T> : VideoStabilizationBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoStabilization,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "FuSta" },

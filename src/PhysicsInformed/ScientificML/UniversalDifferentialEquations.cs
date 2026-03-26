@@ -61,6 +61,11 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     /// - Biology (known population dynamics + unknown environmental factors)
     /// - Engineering (known mechanics + unknown friction/damping)
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var ude = new UniversalDifferentialEquation&lt;float&gt;();
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Science)]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -432,7 +437,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
 
             // Step 3: Backward pass - compute gradients
             var outputGradient = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+            var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
             Backward(outputGradientTensor);
 
             // Step 4: Update parameters
@@ -449,7 +454,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         {
             return new ModelMetadata<T>
             {
-                ModelType = ModelType.NeuralNetwork,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "StateDimension", _stateDim },

@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Skywork R1V (2025) pioneers cross-modal transfer of reasoning capabilities from text-only
+/// LLMs to vision-language models. It transfers chain-of-thought reasoning patterns learned
+/// by text reasoning models to the visual domain, enabling structured multi-step reasoning
+/// about images without requiring vision-specific reasoning data from scratch.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Skywork R1V: Pioneering Multimodal Reasoning with Chain-of-Thought" (2025)</item></list></para>
-/// <para><b>For Beginners:</b> SkyworkR1V is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Skywork R1V is a vision-language model that transfers reasoning
+/// capabilities from text LLMs to multimodal understanding. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Skywork R1V model for multimodal chain-of-thought reasoning
+/// // with cross-modal transfer of reasoning capabilities from LLMs to vision
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SkyworkR1V&lt;double&gt;(architecture, "skyworkr1v.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SkyworkR1V&lt;double&gt;(architecture, new SkyworkR1VOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -215,7 +239,7 @@ public class SkyworkR1V<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Skywork-R1V-Native" : "Skywork-R1V-ONNX", Description = "Skywork R1V: cross-modal transfer of reasoning LLMs to vision.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Skywork-R1V-Native" : "Skywork-R1V-ONNX", Description = "Skywork R1V: cross-modal transfer of reasoning LLMs to vision.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Skywork-R1V";
         m.AdditionalInfo["ReasoningApproach"] = _options.ReasoningApproach;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

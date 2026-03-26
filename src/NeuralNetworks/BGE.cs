@@ -34,6 +34,14 @@ namespace AiDotNet.NeuralNetworks
     /// exactly what you're looking for, even if your query is phrased in a confusing way.
     /// </para>
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var options = new BGEOptions { ModelSize = "base", MaxSequenceLength = 512 };
+    /// var model = new BGE&lt;float&gt;(options);
+    /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 512 });
+    /// var embedding = model.Predict(input);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Language)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Transformer)]

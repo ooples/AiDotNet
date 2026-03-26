@@ -53,6 +53,14 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// Reference: Google DeepMind, "Imagen 2", 2023
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 64, Width = 64, NumInferenceSteps = 50 };
+/// var model = new Imagen2Model&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 8, 8 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
@@ -217,8 +225,8 @@ public class Imagen2Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != unetCount + vaeCount)
             throw new ArgumentException(
@@ -280,7 +288,6 @@ public class Imagen2Model<T> : LatentDiffusionModelBase<T>
         {
             Name = name,
             Version = _isImagen3 ? "3.0" : "2.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = $"{name} cascaded text-to-image generation with T5-XXL text encoding",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 namespace AiDotNet.JitCompiler.IR.Operations;
 
 /// <summary>
@@ -17,8 +18,10 @@ namespace AiDotNet.JitCompiler.IR.Operations;
 /// Used for binary classification (outputs can be interpreted as probabilities).
 /// </para>
 /// </remarks>
-public class SigmoidOp : IROp
+public class SigmoidOp : IROp, IFusableActivation
 {
+    public FusedActivationType FusedType => FusedActivationType.Sigmoid;
+
     public override bool Validate()
     {
         if (!base.Validate()) return false;

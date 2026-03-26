@@ -13,7 +13,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Neural;
 
@@ -64,6 +64,16 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 /// https://papers.nips.cc/paper/2018/hash/5cf68969fb67aa6082363a6d4e6468e2-Abstract.html
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 60, inputWidth: 1, inputDepth: 1, outputSize: 24);
+/// var model = new DeepState&lt;double&gt;(architecture);
+/// var onnxModel = new DeepState&lt;double&gt;(architecture, "deepstate.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -497,7 +507,7 @@ public class DeepState<T> : ForecastingModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-            Backward(Tensor<T>.FromVector(gradient, predictions.Shape));
+            Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -527,7 +537,6 @@ public class DeepState<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "DeepState" },
@@ -932,7 +941,7 @@ public class DeepState<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
 
         // Defensive check: verify OnnxSession.InputMetadata is not null/empty
         var inputMeta = OnnxSession.InputMetadata;
@@ -1029,7 +1038,7 @@ public class DeepState<T> : ForecastingModelBase<T>
     {
         int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
         int totalElements = _lookbackWindow * _numFeatures;
-        var newInput = new Tensor<T>(input.Shape);
+        var newInput = new Tensor<T>(input.Shape.ToArray());
 
         int steps = Math.Min(stepsUsed, _lookbackWindow);
         int shift = steps * _numFeatures;

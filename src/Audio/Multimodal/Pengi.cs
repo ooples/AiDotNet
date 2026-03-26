@@ -204,7 +204,6 @@ public class Pengi<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
         {
             Name = _useNativeMode ? "Pengi-Native" : "Pengi-ONNX",
             Description = "Pengi audio language model (Deshmukh et al., 2023, Microsoft)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.AudioEncoderDim,
             Complexity = _options.NumProjectionLayers
         };
         m.AdditionalInfo["LLMHiddenDim"] = _options.LLMHiddenDim.ToString();

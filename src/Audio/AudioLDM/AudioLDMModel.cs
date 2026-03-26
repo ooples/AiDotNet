@@ -882,7 +882,7 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// </summary>
     private Tensor<T> ApplyGuidance(Tensor<T> uncondPred, Tensor<T> condPred, double scale)
     {
-        var result = new Tensor<T>(condPred.Shape);
+        var result = new Tensor<T>(condPred.Shape.ToArray());
         var scaleT = NumOps.FromDouble(scale);
 
         for (int i = 0; i < result.Length; i++)
@@ -904,7 +904,7 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         double sqrtAlphaCumprod = Math.Sqrt(alphaCumprod);
         double sqrtOneMinusAlphaCumprod = Math.Sqrt(1.0 - alphaCumprod);
 
-        var result = new Tensor<T>(latents.Shape);
+        var result = new Tensor<T>(latents.Shape.ToArray());
 
         for (int i = 0; i < result.Length; i++)
         {
@@ -1352,7 +1352,6 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         {
             Name = $"AudioLDM-{_options.ModelSize}",
             Description = $"AudioLDM text-to-audio model ({_options.ModelSize})",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.MaxTextLength,
             Complexity = (int)_options.ModelSize,
             AdditionalInfo = new Dictionary<string, object>

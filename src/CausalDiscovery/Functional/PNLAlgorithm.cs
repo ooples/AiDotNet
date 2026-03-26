@@ -116,18 +116,14 @@ public class PNLAlgorithm<T> : FunctionalBase<T>
         // Step 1: Estimate inner function f via kernel regression
         var fHat = KernelRegressOut(cause, effect);
         // fHat is the residual; we need the prediction: predicted = effect - residual
-        var fPredicted = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-            fPredicted[i] = NumOps.Subtract(effect[i], fHat[i]);
+        var fPredicted = Engine.Subtract(effect, fHat);
 
         // Step 2: Invert g using rank-based probability integral transform
         var gInvY = RankTransform(effect);
         var gInvFHat = RankTransform(fPredicted);
 
         // Step 3: Compute residuals in the linearized space
-        var residuals = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-            residuals[i] = NumOps.Subtract(gInvY[i], gInvFHat[i]);
+        var residuals = Engine.Subtract(gInvY, gInvFHat);
 
         // Step 4: Measure independence of residuals from cause
         return Math.Abs(GaussianMI(residuals, cause));

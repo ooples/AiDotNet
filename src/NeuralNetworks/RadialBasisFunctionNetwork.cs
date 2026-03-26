@@ -32,6 +32,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Classification problems (determining which category something belongs to)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new RadialBasisFunctionNetworkOptions { InputSize = 10, NumCenters = 50 };
+/// var model = new RadialBasisFunctionNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 10 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -335,7 +343,7 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(input), "Input tensor cannot be null.");
         }
 
-        var inputShape = input.Shape;
+        var inputShape = input.Shape.ToArray();
         var expectedShape = Architecture.GetInputShape();
 
         // Ensure input has correct shape
@@ -402,19 +410,33 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(expectedOutput), "Expected output tensor cannot be null.");
         }
 
+        SetTrainingMode(true);
+
         // Forward pass with memory for backpropagation
-        Vector<T> outputVector = ForwardWithMemory(input).ToVector();
+        var output = ForwardWithMemory(input);
+        Vector<T> outputVector = output.ToVector();
 
         // Calculate error/loss
         Vector<T> expectedOutputVector = expectedOutput.ToVector();
-        Vector<T> errorVector = outputVector.Subtract(expectedOutputVector);
 
         // Calculate and set the loss using the loss function
         LastLoss = LossFunction.CalculateLoss(outputVector, expectedOutputVector);
 
+        // Compute gradient of loss w.r.t. output
+        var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedOutputVector);
+
         // Backpropagate error through the network
-        Backpropagate(Tensor<T>.FromVector(errorVector));
+        Backpropagate(Tensor<T>.FromVector(lossGrad));
+
+        // Update parameters using Adam optimizer
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        var paramGrads = GetParameterGradients();
+        var currentParams = GetParameters();
+        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
+        UpdateParameters(updatedParams);
     }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 
     /// <summary>
     /// Gets metadata about the Radial Basis Function Network model.
@@ -446,7 +468,6 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetworkRegression,
             FeatureCount = _inputSize,
             Description = $"RBFN with {_inputSize} inputs, {_hiddenSize} RBF neurons, and {_outputSize} outputs",
             AdditionalInfo = new Dictionary<string, object>

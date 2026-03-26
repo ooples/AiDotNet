@@ -45,6 +45,14 @@ namespace AiDotNet.Clustering.Streaming;
 /// Quality is usually 90-99% of regular K-Means!
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new MiniBatchKMeansOptions&lt;double&gt;();
+/// var miniBatchKMeans = new MiniBatchKMeans&lt;double&gt;(options);
+/// miniBatchKMeans.Train(dataMatrix);
+/// Vector<double> labels = miniBatchKMeans.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -80,7 +88,6 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
     public int IterationsPerformed { get; private set; }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -142,14 +149,16 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
                 T minDist = NumOps.MaxValue;
                 int bestCluster = 0;
 
+                // Extract data row as Vector<T>
+                var dataRow = new Vector<T>(d);
+                for (int j = 0; j < d; j++) dataRow[j] = x[pointIdx, j];
+
                 for (int c = 0; c < k; c++)
                 {
-                    T dist = NumOps.Zero;
-                    for (int j = 0; j < d; j++)
-                    {
-                        T diff = NumOps.Subtract(x[pointIdx, j], centers[c][j]);
-                        dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
-                    }
+                    var centerVec = new Vector<T>(centers[c]);
+                    var diff = new Vector<T>(d);
+                    for (int j = 0; j < d; j++) diff[j] = NumOps.Subtract(dataRow[j], centerVec[j]);
+                    T dist = Engine.DotProduct(diff, diff);
 
                     batchDistances[b, c] = dist;
                     if (NumOps.LessThan(dist, minDist))
@@ -250,6 +259,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         }
 
         Inertia = FinalInertia;
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 

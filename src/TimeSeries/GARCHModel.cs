@@ -32,6 +32,15 @@ namespace AiDotNet.TimeSeries;
 /// This is especially useful for financial risk management, option pricing, and trading strategies.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GARCH(1,1) model for modeling financial volatility clustering
+/// var options = new GARCHModelOptions&lt;double&gt;();
+/// var garch = new GARCHModel&lt;double&gt;(options);
+/// garch.Train(returnsMatrix, returnsVector);
+/// Vector&lt;double&gt; volatilityForecast = garch.Predict(inputMatrix);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelDomain(ModelDomain.Finance)]
@@ -297,13 +306,14 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
             variances[t] = variance;
             lastVariance = variance;
 
-            // Generate prediction
-            T standardNormal = GenerateStandardNormal();
-            T residual = NumOps.Multiply(NumOps.Sqrt(variance), standardNormal);
-            predictions[t] = NumOps.Add(meanPredictions[t], residual);
+            // Point forecast: return the conditional mean (mean model prediction).
+            // The variance captures uncertainty but the point forecast is the mean —
+            // this is the industry standard for GARCH point predictions.
+            // Stochastic sampling (adding sqrt(variance) * N(0,1)) is for simulation.
+            predictions[t] = meanPredictions[t];
 
-            // Update last residual for the next iteration
-            lastResidual = residual;
+            // For variance forecasting, update the last residual using expected value (0)
+            lastResidual = NumOps.Zero;
         }
 
         return predictions;
@@ -1025,7 +1035,6 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.GARCHModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include the actual model state variables
@@ -1086,6 +1095,18 @@ public class GARCHModel<T> : TimeSeriesModelBase<T>
 
         // Step 5: Calculate final residuals and conditional variances
         CalculateResidualsAndVariances(_residuals);
+
+        // Store learned GARCH parameters as ModelParameters for GetParameters() / serialization
+        // Layout: [omega_0, alpha_0..alpha_p, beta_0..beta_q]
+        int totalParams = _omega.Length + _alpha.Length + _beta.Length;
+        ModelParameters = new Vector<T>(totalParams);
+        int idx = 0;
+        for (int i = 0; i < _omega.Length; i++)
+            ModelParameters[idx++] = _omega[i];
+        for (int i = 0; i < _alpha.Length; i++)
+            ModelParameters[idx++] = _alpha[i];
+        for (int i = 0; i < _beta.Length; i++)
+            ModelParameters[idx++] = _beta[i];
     }
 
     /// <summary>

@@ -14,16 +14,33 @@ namespace AiDotNet.ReinforcementLearning.Agents.DynamicProgramming;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// Value Iteration combines policy evaluation and improvement in a single update step,
-/// converging to the optimal value function.
+/// <para>Value Iteration combines policy evaluation and improvement in a single update step,
+/// converging to the optimal value function.</para>
+/// <para><b>For Beginners:</b> Value Iteration repeatedly updates state values using the
+/// Bellman optimality equation until they converge. Unlike Policy Iteration which does
+/// full evaluation then improvement, Value Iteration does both in a single sweep - making
+/// it simpler but potentially slower per iteration. Think of it like iteratively improving
+/// a GPS estimate: each pass gets closer to the true shortest path. Requires a complete
+/// model of the environment.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Value Iteration agent for dynamic programming
+/// var options = new ValueIterationOptions&lt;double&gt; { StateSize = 4, ActionSize = 2 };
+/// var agent = new ValueIterationAgent&lt;double&gt;(options);
+///
+/// // Select an action using the converged value function
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Reinforcement Learning: An Introduction",
-    "http://incompleteideas.net/book/the-book-2nd.html",
+    "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
@@ -258,7 +275,6 @@ public class ValueIterationAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ReinforcementLearning,
         };
     }
 

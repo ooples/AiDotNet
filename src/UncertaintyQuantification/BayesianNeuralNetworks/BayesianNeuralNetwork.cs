@@ -1,4 +1,5 @@
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Results;
@@ -25,6 +26,26 @@ namespace AiDotNet.UncertaintyQuantification.BayesianNeuralNetworks;
 /// (sampled from learned probability distributions) and analyzing how much these predictions vary.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Bayesian Neural Network with uncertainty estimation
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 10, outputSize: 1,
+///     hiddenLayers: new[] { 64, 32 },
+///     networkType: NetworkType.Regression);
+/// var bnn = new BayesianNeuralNetwork&lt;float&gt;(architecture, numSamples: 30);
+/// // Get prediction with uncertainty via multiple weight-sampled forward passes
+/// var result = bnn.PredictWithUncertainty(inputTensor);
+/// // result.Mean, result.Variance provide prediction and uncertainty
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.Bayesian)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<T>
 {
     private readonly int _numSamples;
@@ -88,7 +109,7 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
             outputTensor.Shape[1] == 1 &&
             expectedOutput.Length == outputTensor.Shape[0])
         {
-            alignedExpected = expectedOutput.Reshape(outputTensor.Shape);
+            alignedExpected = expectedOutput.Reshape(outputTensor.Shape.ToArray());
         }
 
         Vector<T> expectedVector = alignedExpected.ToVector();
@@ -106,7 +127,7 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
         var klScale = NumOps.Divide(NumOps.One, NumOps.FromDouble(batch));
         LastLoss = NumOps.Add(dataLoss, NumOps.Multiply(klScale, kl));
 
-        Backpropagate(new Tensor<T>(outputTensor.Shape, errorVector));
+        Backpropagate(new Tensor<T>(outputTensor.Shape.ToArray(), errorVector));
 
         // Add KL divergence gradients into Bayesian layers before applying updates.
         foreach (var bayesianLayer in Layers.OfType<IBayesianLayer<T>>())
@@ -198,7 +219,7 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
             aleatoricData[i] = NumOps.Multiply(aleatoricData[i], aleatoricFactor);
         }
 
-        return new Tensor<T>(variance.Shape, aleatoricData);
+        return new Tensor<T>(variance.Shape.ToArray(), aleatoricData);
     }
 
     /// <summary>
@@ -236,7 +257,7 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
             epistemicData[i] = NumOps.Multiply(epistemicData[i], epistemicFactor);
         }
 
-        return new Tensor<T>(variance.Shape, epistemicData);
+        return new Tensor<T>(variance.Shape.ToArray(), epistemicData);
     }
 
     /// <summary>
@@ -247,7 +268,7 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
         if (predictions.Count == 0)
             throw new ArgumentException("Cannot compute mean of empty prediction list");
 
-        var shape = predictions[0].Shape;
+        var shape = predictions[0].Shape.ToArray();
         var sum = Vector<T>.CreateDefault(predictions[0].Length, NumOps.Zero);
         foreach (var pred in predictions)
         {
@@ -272,7 +293,7 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
     /// </summary>
     private Tensor<T> ComputeVariance(List<Tensor<T>> predictions, Tensor<T> mean)
     {
-        var shape = mean.Shape;
+        var shape = mean.Shape.ToArray();
         var meanData = mean.ToVector();
         var variance = Vector<T>.CreateDefault(meanData.Length, NumOps.Zero);
 

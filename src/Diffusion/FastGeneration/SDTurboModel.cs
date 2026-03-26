@@ -329,8 +329,8 @@ public class SDTurboModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -423,7 +423,6 @@ public class SDTurboModel<T> : LatentDiffusionModelBase<T>
         {
             Name = variant,
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = $"{variant} distilled single/few-step image generation via Adversarial Diffusion Distillation",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

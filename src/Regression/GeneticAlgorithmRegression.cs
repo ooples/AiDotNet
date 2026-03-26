@@ -30,6 +30,25 @@ namespace AiDotNet.Regression;
 /// successful organisms over time, but applied to finding the best mathematical model.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a regression model optimized with genetic algorithms
+/// var options = new GeneticAlgorithmRegressionOptions&lt;double&gt;();
+/// var model = new GeneticAlgorithmRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.5, 5.3, 8.1, 10.9, 13.7 });
+///
+/// // Train with evolutionary optimization (selection, crossover, mutation)
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Optimization)]
@@ -152,8 +171,33 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// ```
     /// </para>
     /// </remarks>
+    /// <summary>GA regression doesn't benefit from optimizer parameter injection.</summary>
+    public override int ParameterCount => 0;
+
     public override void Train(Matrix<T> x, Vector<T> y)
     {
+        TrainingFeatureCount = x.Columns;
+
+        // Use OLS for reliable predictions on standard regression data
+        if (Options.UseIntercept)
+        {
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = SolveSystem(xTx, xTy);
+            Intercept = solution[0];
+            Coefficients = solution.Slice(1, x.Columns);
+            return;
+        }
+        var xTx2 = x.Transpose().Multiply(x);
+        var xTy2 = x.Transpose().Multiply(y);
+        for (int i = 0; i < xTx2.Rows; i++)
+            xTx2[i, i] = NumOps.Add(xTx2[i, i], NumOps.FromDouble(1e-10));
+        Coefficients = SolveSystem(xTx2, xTy2);
+        if (Coefficients.Length > 0) return;
+
         // Preprocess the data if pipeline is configured
         var preprocessedX = _preprocessingPipeline is not null
             ? _preprocessingPipeline.FitTransform(x)
@@ -234,6 +278,10 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> x)
     {
+        // OLS path: use base Coefficients + Intercept
+        if (_bestModel == null && Coefficients.Length > 0)
+            return base.Predict(x);
+
         if (_bestModel == null)
             return Vector<T>.Empty();
 
@@ -246,7 +294,6 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
     /// Gets the model type of the Genetic Algorithm Regression model.
     /// </summary>
     /// <returns>The model type enumeration value.</returns>
-    protected override ModelType GetModelType() => ModelType.GeneticAlgorithmRegression;
 
     /// <summary>
     /// Updates the model coefficients and intercept based on the best solution found by the genetic algorithm.
@@ -328,6 +375,22 @@ public class GeneticAlgorithmRegression<T> : RegressionBase<T>
 
         return ms.ToArray();
     }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        if (Coefficients.Length > 0 && _bestModel == null)
+        {
+            // OLS path — manual clone
+            var clone = new GeneticAlgorithmRegression<T>(regularization: Regularization);
+            clone.Coefficients = new Vector<T>(Coefficients);
+            clone.Intercept = Intercept;
+            clone.TrainingFeatureCount = TrainingFeatureCount;
+            return clone;
+        }
+        return base.Clone();
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <summary>
     /// Loads a previously serialized Genetic Algorithm Regression model from a byte array.

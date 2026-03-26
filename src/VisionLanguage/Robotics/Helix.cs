@@ -17,10 +17,33 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Helix (Figure AI, 2025) is the first vision-language-action model for full humanoid upper body
+/// control. It processes visual observations and language instructions to generate coordinated
+/// motor commands for both arms and hands simultaneously, enabling dexterous bimanual manipulation
+/// tasks in real-world environments.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Helix: A Vision-Language-Action Model for Humanoid Robots (Figure AI, 2025)"</item></list></para>
-/// <para><b>For Beginners:</b> Helix is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Helix is a vision-language-action model from Figure AI for
+/// humanoid robot dexterous manipulation. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Helix model for full humanoid upper body control
+/// // the first VLA model from Figure AI for dexterous manipulation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Helix&lt;double&gt;(architecture, "helix.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Helix&lt;double&gt;(architecture, new HelixOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Robotics)]
@@ -217,7 +240,7 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Helix-Native" : "Helix-ONNX", Description = "Helix: first VLA model for full humanoid upper body control.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Helix-Native" : "Helix-ONNX", Description = "Helix: first VLA model for full humanoid upper body control.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Helix";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

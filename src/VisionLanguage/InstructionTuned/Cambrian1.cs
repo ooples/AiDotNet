@@ -24,8 +24,30 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Cambrian-1: A Fully Open, Vision-Centric Exploration of Multimodal LLMs" (2024)</item></list></para>
-/// <para><b>For Beginners:</b> Cambrian1 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Cambrian-1 takes a unique approach to vision by combining
+/// multiple different vision encoders (CLIP, DINOv2, SigLIP, ConvNeXt — over 35 combinations
+/// tested) rather than using just one. Its Spatial Vision Aggregator (SVA) uses cross-attention
+/// to dynamically select and fuse the most useful features from each encoder based on what part
+/// of the image is relevant. This gives it stronger visual understanding than any single encoder
+/// alone, and it uses LLaMA-3 as its language backbone. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Cambrian-1 model for multi-encoder visual understanding
+/// // using Spatial Vision Aggregator with 35+ vision encoder combinations
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Cambrian1&lt;double&gt;(architecture, "cambrian1.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Cambrian1&lt;double&gt;(architecture, new Cambrian1Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -98,7 +120,7 @@ public class Cambrian1<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "Cambrian-1-Native" : "Cambrian-1-ONNX", Description = "Cambrian-1: Spatial Vision Aggregator VLM (NYU, 2024)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "Cambrian-1"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["NumVisionEncoders"] = _options.NumVisionEncoders.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "Cambrian-1-Native" : "Cambrian-1-ONNX", Description = "Cambrian-1: Spatial Vision Aggregator VLM (NYU, 2024)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "Cambrian-1"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["NumVisionEncoders"] = _options.NumVisionEncoders.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.DecoderDim); writer.Write(_options.ProjectionDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.NumVisionEncoders); writer.Write(_options.EnableSpatialVisionAggregator); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.ProjectionDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.NumVisionEncoders = reader.ReadInt32(); _options.EnableSpatialVisionAggregator = reader.ReadBoolean(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new Cambrian1<T>(Architecture, mp, _options); return new Cambrian1<T>(Architecture, _options); }

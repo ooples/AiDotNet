@@ -39,6 +39,30 @@ namespace AiDotNet.Classification.NaiveBayes;
 /// - Any classification with boolean attributes
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Bernoulli Naive Bayes for binary feature classification
+/// var options = new NaiveBayesOptions&lt;double&gt;();
+/// var classifier = new BernoulliNaiveBayes&lt;double&gt;(options);
+///
+/// // Prepare binary feature data (0 = absent, 1 = present)
+/// var features = new Matrix&lt;double&gt;(4, 3);
+/// features[0, 0] = 1; features[0, 1] = 1; features[0, 2] = 0; // Class 0
+/// features[1, 0] = 1; features[1, 1] = 0; features[1, 2] = 0; // Class 0
+/// features[2, 0] = 0; features[2, 1] = 1; features[2, 2] = 1; // Class 1
+/// features[3, 0] = 0; features[3, 1] = 0; features[3, 2] = 1; // Class 1
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1 });
+///
+/// // Train by learning feature presence/absence probabilities per class
+/// classifier.Train(features, labels);
+///
+/// // Predict using Bernoulli likelihood with absence penalty
+/// var newSample = new Matrix&lt;double&gt;(1, 3);
+/// newSample[0, 0] = 1; newSample[0, 1] = 1; newSample[0, 2] = 0;
+/// var prediction = classifier.Predict(newSample);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Bayesian)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -82,7 +106,6 @@ public class BernoulliNaiveBayes<T> : NaiveBayesBase<T>
     /// Returns the model type identifier for this classifier.
     /// </summary>
     /// <returns>ModelType.BernoulliNaiveBayes</returns>
-    protected override ModelType GetModelType() => ModelType.BernoulliNaiveBayes;
 
     /// <summary>
     /// Computes the log feature probabilities for presence and absence for each class.

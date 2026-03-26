@@ -16,10 +16,34 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// SlowFast-LLaVA (Meta, 2025) is a training-free video understanding baseline that uses
+/// dual slow/fast pathways for token-efficient long video processing. The slow pathway processes
+/// fewer frames at high spatial resolution, while the fast pathway samples many frames at low
+/// spatial resolution, combining detailed spatial and broad temporal information efficiently.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "SlowFast-LLaVA: A Strong Training-Free Baseline for Video Large Language Models" (Meta, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> SlowFastLLaVA is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> SlowFast-LLaVA is a training-free video-language model using
+/// dual pathways for efficient long video understanding. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SlowFast-LLaVA model for long video understanding
+/// // with token-efficient dual slow/fast pathways for temporal modeling
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SlowFastLLaVA&lt;double&gt;(architecture, "slowfastllava.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SlowFastLLaVA&lt;double&gt;(architecture, new SlowFastLLaVAOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Video)]
@@ -196,7 +220,7 @@ public class SlowFastLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "SlowFast-LLaVA-Native" : "SlowFast-LLaVA-ONNX", Description = "SlowFast-LLaVA: token-efficient slow/fast pathways for long video.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "SlowFast-LLaVA-Native" : "SlowFast-LLaVA-ONNX", Description = "SlowFast-LLaVA: token-efficient slow/fast pathways for long video.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "SlowFast-LLaVA";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         m.AdditionalInfo["SlowFrames"] = _options.SlowFrames.ToString();

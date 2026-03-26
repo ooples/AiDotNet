@@ -35,6 +35,14 @@ namespace AiDotNet.Diffusion.Video;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 512, Width = 512, NumInferenceSteps = 50 };
+/// var model = new VideoPoetModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 128, 64, 64 });
+/// var video = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -181,7 +189,6 @@ public class VideoPoetModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "VideoPoet",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "VideoPoet LLM-based zero-shot video generation.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

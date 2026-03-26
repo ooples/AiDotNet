@@ -34,6 +34,17 @@ namespace AiDotNet.Classification.SVM;
 /// - Any problem with clear separation between classes
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Use AiModelBuilder facade for supportvectorclassifier classification
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new SupportVectorClassifier&lt;double&gt;(
+///         new SupportVectorClassifierOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(features, labels);
+/// var prediction = result.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.SVM)]
 [ModelCategory(ModelCategory.Kernel)]
@@ -93,7 +104,6 @@ public class SupportVectorClassifier<T> : SVMBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.SupportVectorClassifier;
 
     /// <summary>
     /// Trains the SVC on the provided data.

@@ -33,6 +33,17 @@ namespace AiDotNet.Classification.MultiLabel;
 ///
 /// <para><b>Reference:</b> Tsoumakas et al., "Random k-Labelsets for Multilabel Classification" (2011)</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Use AiModelBuilder facade for rakelclassifier classification
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new RAkELClassifier&lt;double&gt;(
+///         new RAkELClassifierOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(features, labels);
+/// var prediction = result.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
@@ -480,7 +491,6 @@ public class RAkELClassifier<T> : MultiLabelClassifierBase<T>
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.RAkEL;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Matrix<T>> CreateNewInstance()

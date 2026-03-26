@@ -34,6 +34,14 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: "SCott: Accelerating Diffusion Models with Stochastic Consistency Distillation", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 2 };
+/// var model = new SCottModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -141,7 +149,7 @@ public class SCottModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SCott", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SCott", Version = "1.0",
             Description = "Score consistency via optimal transport for efficient single/few-step generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

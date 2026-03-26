@@ -17,10 +17,40 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Ovis (Lu et al., 2024) introduces structural embedding alignment, a technique that aligns the
+/// structural properties of visual embeddings with the text embedding space of the language model.
+/// Rather than using a simple MLP projection, Ovis learns a visual token scaling approach that
+/// maps visual features into the language model's embedding space while preserving their structural
+/// relationships. This produces better-aligned representations for the language model to work with.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Ovis: Structural Embedding Alignment for Multimodal Large Language Model" (2024)</item></list></para>
-/// <para><b>For Beginners:</b> Ovis is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Ovis takes a different approach to connecting vision and language
+/// than most models. Instead of just projecting visual features through an MLP, it uses
+/// "structural embedding alignment" — a technique that ensures the visual tokens not only
+/// have the right dimensions for the language model, but also preserve the structural
+/// relationships between them (like spatial layout and relative importance). With visual
+/// token scaling, it can adjust how many visual tokens to use based on the complexity of
+/// the image, using fewer tokens for simple images and more for complex ones. Default
+/// values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Ovis model for structural embedding alignment
+/// // with visual token scaling for efficient visual representation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Ovis&lt;double&gt;(architecture, "ovis.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Ovis&lt;double&gt;(architecture, new OvisOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -93,7 +123,7 @@ public class Ovis<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Ovis-Native" : "Ovis-ONNX", Description = "Ovis: structural embedding alignment VLM with visual token scaling.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Ovis-Native" : "Ovis-ONNX", Description = "Ovis: structural embedding alignment VLM with visual token scaling.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Ovis";
         m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

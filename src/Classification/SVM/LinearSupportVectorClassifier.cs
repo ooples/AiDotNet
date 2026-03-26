@@ -39,6 +39,32 @@ namespace AiDotNet.Classification.SVM;
 /// - High-dimensional bioinformatics data
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create linear SVC for fast large-scale classification
+/// var options = new LinearSVCOptions&lt;double&gt;();
+/// var classifier = new LinearSupportVectorClassifier&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features
+/// var features = new Matrix&lt;double&gt;(6, 2);
+/// features[0, 0] = 1.0; features[0, 1] = 1.1;
+/// features[1, 0] = 1.2; features[1, 1] = 0.9;
+/// features[2, 0] = 0.8; features[2, 1] = 1.0;
+/// features[3, 0] = 5.0; features[3, 1] = 5.1;
+/// features[4, 0] = 5.2; features[4, 1] = 4.9;
+/// features[5, 0] = 4.8; features[5, 1] = 5.0;
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
+///
+/// // Train using primal SGD in original feature space
+/// classifier.Train(features, labels);
+///
+/// // Predict class using learned linear hyperplane
+/// var newSample = new Matrix&lt;double&gt;(1, 2);
+/// newSample[0, 0] = 1.1; newSample[0, 1] = 1.0;
+/// var prediction = classifier.Predict(newSample);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.SVM)]
 [ModelCategory(ModelCategory.Linear)]
@@ -81,7 +107,6 @@ public class LinearSupportVectorClassifier<T> : SVMBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.LinearSupportVectorClassifier;
 
     /// <summary>
     /// Trains the Linear SVC on the provided data using SGD.
@@ -225,10 +250,7 @@ public class LinearSupportVectorClassifier<T> : SVMBase<T>
         }
 
         T output = _bias;
-        for (int i = 0; i < _weights.Length; i++)
-        {
-            output = NumOps.Add(output, NumOps.Multiply(_weights[i], x[i]));
-        }
+        output = NumOps.Add(output, Engine.DotProduct(_weights, x));
         return output;
     }
 

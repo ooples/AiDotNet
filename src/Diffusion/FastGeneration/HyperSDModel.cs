@@ -34,6 +34,14 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: Ren et al., "Hyper-SD: Trajectory Segmented Consistency Model", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 4 };
+/// var model = new HyperSDModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -157,7 +165,7 @@ public class HyperSDModel<T> : LatentDiffusionModelBase<T>
         var variant = _isXLVariant ? "SDXL" : "SD 1.5";
         var m = new ModelMetadata<T>
         {
-            Name = $"Hyper-SD ({variant})", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = $"Hyper-SD ({variant})", Version = "1.0",
             Description = $"Trajectory-segmented consistency model for unified 1-8 step {variant} generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

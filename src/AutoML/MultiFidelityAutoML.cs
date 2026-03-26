@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -34,6 +35,22 @@ namespace AiDotNet.AutoML;
 /// </list>
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var automl = new MultiFidelityAutoML&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
+/// var bestModel = await automl.SearchAsync(
+///     trainInputs, trainTargets,
+///     valInputs, valTargets,
+///     maxTrials: 100,
+///     timeLimit: TimeSpan.FromMinutes(20));
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLModelBase<T, TInput, TOutput>
 {
     private const string FidelityFractionKey = "FidelityFraction";
@@ -237,7 +254,7 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
         int[] shuffledTrainingRowIndices,
         CancellationToken cancellationToken)
     {
-        if (!config.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not ModelType modelType)
+        if (!config.TryGetValue(ModelTypeKey, out var modelTypeObj) || modelTypeObj is not Type modelType)
         {
             throw new InvalidOperationException("AutoML trial parameters must include a ModelType entry.");
         }
@@ -361,7 +378,7 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
     public override Task<Dictionary<string, object>> SuggestNextTrialAsync()
     {
         var modelType = PickCandidateModelType();
-        if (modelType == ModelType.None)
+        if (modelType is null)
         {
             throw new InvalidOperationException("No candidate models are configured for AutoML.");
         }
@@ -379,7 +396,7 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
         }
 
         var sampled = AutoMLParameterSampler.Sample(Random, merged);
-        sampled["ModelType"] = modelType;
+        sampled[ModelTypeKey] = modelType;
         return Task.FromResult(sampled);
     }
 
@@ -537,7 +554,7 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
     private static (TInput Inputs, TOutput Targets) CreateRungTrainingSubset(
         TInput inputs,
         TOutput targets,
-        ModelType modelType,
+        Type modelType,
         int subsetSize,
         int[] shuffledRowIndices)
     {
@@ -577,8 +594,20 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
         return ((TInput)(object)xs, (TOutput)(object)ys);
     }
 
-    private static bool IsTimeSeriesModel(ModelType modelType)
+    private static bool IsTimeSeriesModel(Type modelType)
     {
-        return modelType == ModelType.TimeSeriesRegression || modelType == ModelType.BayesianStructuralTimeSeriesModel;
+        // Check for ModelCategory.TimeSeriesModel attribute (preferred)
+        var checkType = modelType.IsGenericType ? modelType.GetGenericTypeDefinition() : modelType;
+        var categoryAttrs = checkType.GetCustomAttributes(typeof(ModelCategoryAttribute), inherit: true);
+        foreach (var attr in categoryAttrs)
+        {
+            if (attr is ModelCategoryAttribute cat && cat.Category == ModelCategory.TimeSeriesModel)
+                return true;
+        }
+
+        // Fallback for unannotated models
+        var typeName = checkType.Name;
+        return typeName.StartsWith("TimeSeriesRegression", StringComparison.Ordinal)
+            || typeName.StartsWith("BayesianStructuralTimeSeriesModel", StringComparison.Ordinal);
     }
 }

@@ -294,7 +294,6 @@ public class Instant3DModel<T> : ThreeDDiffusionModelBase<T>
         {
             Name = "Instant3D",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Instant3D feed-forward text-to-3D generation",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

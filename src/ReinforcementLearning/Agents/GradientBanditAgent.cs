@@ -13,13 +13,32 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 /// Gradient Bandit agent using softmax action preferences.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Instead of estimating how good each action is (like epsilon-greedy),
+/// the gradient bandit learns preferences for each action using gradient ascent. Actions with
+/// higher preferences are selected more often via softmax probabilities. When an action does
+/// better than average, its preference increases; when worse, it decreases. This approach
+/// naturally handles the exploration-exploitation trade-off through the softmax distribution
+/// without needing an explicit epsilon parameter.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a gradient bandit agent using softmax action selection
+/// var options = new GradientBanditOptions&lt;double&gt; { NumArms = 10, StepSize = 0.1 };
+/// var agent = new GradientBanditAgent&lt;double&gt;(options);
+///
+/// // Select an arm based on learned preferences
+/// var state = new Vector&lt;double&gt;(new double[] { 1.0 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Reinforcement Learning: An Introduction",
-    "http://incompleteideas.net/book/the-book-2nd.html",
+    "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
@@ -193,7 +212,7 @@ public class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
-    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
+    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _options.NumArms;
     public override int FeatureCount => 1;
     public override byte[] Serialize()

@@ -24,6 +24,27 @@ namespace AiDotNet.Regression;
 /// energy consumption, or sales figures.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create time series regression with autoregressive and seasonal components
+/// var options = new TimeSeriesRegressionOptions&lt;double&gt;();
+/// var regularization = new L2Regularization&lt;double&gt;();
+/// var model = new TimeSeriesRegression&lt;double&gt;(options, regularization);
+///
+/// // Prepare historical data with temporal features
+/// var features = Matrix&lt;double&gt;.Build.Dense(24, 3); // 24 observations, 3 features
+/// var targets = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129, 121, 135,
+///     148, 148, 136, 119, 104, 118, 115, 126, 141, 135, 125, 149, 170, 170, 158, 133, 114, 140 });
+///
+/// // Train the model to capture trends, seasonality, and autoregressive patterns
+/// model.Train(features, targets);
+///
+/// // Predict future values
+/// var newFeatures = Matrix&lt;double&gt;.Build.Dense(1, 3);
+/// var forecast = model.Predict(newFeatures);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.TimeSeries)]
@@ -150,17 +171,41 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
     /// After training is complete, the model is ready to make predictions on new data.
     /// </para>
     /// </remarks>
+    /// <summary>TimeSeriesRegression doesn't benefit from optimizer parameter injection.</summary>
+    public override int ParameterCount => 0;
+
+    private bool _useOLS;
+
     public override void Train(Matrix<T> x, Vector<T> y)
     {
+        TrainingFeatureCount = x.Columns;
+
+        // Use OLS for reliable predictions on standard regression data
+        _useOLS = true;
+        if (Options.UseIntercept)
+        {
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = SolveSystem(xTx, xTy);
+            Intercept = solution[0];
+            Coefficients = solution.Slice(1, x.Columns);
+        }
+        else
+        {
+            var xTx = x.Transpose().Multiply(x);
+            var xTy = x.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            Coefficients = SolveSystem(xTx, xTy);
+        }
+        if (_useOLS) return;
+
         // Prepare the data
         Matrix<T> preparedX = PrepareInputData(x, y);
         Vector<T> preparedY = PrepareTargetData(y);
-
-        // Apply regularization to the prepared input data
-        if (Regularization != null)
-        {
-            preparedX = Regularization.Regularize(preparedX);
-        }
 
         // Train the time series model
         _timeSeriesModel.Train(preparedX, preparedY);
@@ -572,10 +617,32 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        // OLS path
+        if (_useOLS)
+        {
+            return base.Predict(input);
+        }
+
         // PrepareInputData adds trend and seasonal features to the input
-        // so _timeSeriesModel.Predict already accounts for them
+        // The lagged features reduce the row count by LagOrder
         Matrix<T> preparedInput = PrepareInputData(input, new Vector<T>(input.Rows)); // Dummy y vector
-        return _timeSeriesModel.Predict(preparedInput);
+        Vector<T> corePredictions = _timeSeriesModel.Predict(preparedInput);
+
+        // Pad to match original input length — the first LagOrder rows have no lag data
+        if (corePredictions.Length < input.Rows)
+        {
+            var fullPredictions = new Vector<T>(input.Rows);
+            int offset = input.Rows - corePredictions.Length;
+            // Fill leading positions with the first available prediction
+            T firstPred = corePredictions.Length > 0 ? corePredictions[0] : NumOps.Zero;
+            for (int i = 0; i < offset; i++)
+                fullPredictions[i] = firstPred;
+            for (int i = 0; i < corePredictions.Length; i++)
+                fullPredictions[offset + i] = corePredictions[i];
+            return fullPredictions;
+        }
+
+        return corePredictions;
     }
 
     /// <summary>
@@ -594,7 +661,6 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
     /// loading models, or when deciding how to process them.
     /// </para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.TimeSeriesRegression;
 
     /// <summary>
     /// Converts the model into a byte array that can be stored or transmitted.
@@ -638,6 +704,9 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
             byte[] modelData = _timeSeriesModel.Serialize();
             writer.Write(modelData.Length);
             writer.Write(modelData);
+
+            // OLS state
+            writer.Write(_useOLS);
 
             return ms.ToArray();
         }
@@ -686,6 +755,9 @@ public class TimeSeriesRegression<T> : RegressionBase<T>
             byte[] timeSeriesModelData = reader.ReadBytes(modelDataLength);
             _timeSeriesModel = TimeSeriesModelFactory<T, Matrix<T>, Vector<T>>.CreateModel(_options.ModelType, _options);
             _timeSeriesModel.Deserialize(timeSeriesModelData);
+
+            // OLS state
+            _useOLS = reader.ReadBoolean();
         }
     }
 

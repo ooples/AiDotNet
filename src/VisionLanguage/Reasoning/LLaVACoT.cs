@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// LLaVA-CoT (2024) extends the LLaVA architecture with chain-of-thought visual reasoning,
+/// generating structured step-by-step reasoning traces for complex visual tasks. The model
+/// produces intermediate reasoning steps including observation, hypothesis, and conclusion
+/// phases before arriving at the final answer, improving accuracy on visual reasoning benchmarks.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LLaVA-CoT: Let Vision Language Models Reason Step-by-Step" (2024)</item></list></para>
-/// <para><b>For Beginners:</b> LLaVACoT is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> LLaVA-CoT is a vision-language model that reasons step-by-step
+/// through visual problems using chain-of-thought. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a LLaVA-CoT model for step-by-step visual reasoning
+/// // with chain-of-thought structured output for complex visual tasks
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LLaVACoT&lt;double&gt;(architecture, "llavacot.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LLaVACoT&lt;double&gt;(architecture, new LLaVACoTOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -218,7 +242,7 @@ public class LLaVACoT<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LLaVA-CoT-Native" : "LLaVA-CoT-ONNX", Description = "LLaVA-CoT: chain-of-thought visual reasoning with structured output.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LLaVA-CoT-Native" : "LLaVA-CoT-ONNX", Description = "LLaVA-CoT: chain-of-thought visual reasoning with structured output.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "LLaVA-CoT";
         m.AdditionalInfo["ReasoningApproach"] = _options.ReasoningApproach;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

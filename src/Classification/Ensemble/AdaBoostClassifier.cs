@@ -34,6 +34,28 @@ namespace AiDotNet.Classification.Ensemble;
 /// This creates a powerful classifier from many weak ones.
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
+/// <example>
+/// <code>
+/// // Create AdaBoost classifier that combines weak learners
+/// var options = new AdaBoostClassifierOptions&lt;double&gt;();
+/// var classifier = new AdaBoostClassifier&lt;double&gt;(options);
+///
+/// // Prepare training data
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
+///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
+///
+/// // Train by iteratively re-weighting misclassified samples
+/// classifier.Train(features, labels);
+///
+/// // Predict using weighted vote of all weak learners
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
+/// var prediction = classifier.Predict(newSample);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelCategory(ModelCategory.DecisionTree)]
@@ -72,7 +94,6 @@ public class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.AdaBoostClassifier;
 
     /// <summary>
     /// Trains the AdaBoost classifier on the provided data.

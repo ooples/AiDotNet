@@ -20,6 +20,14 @@ namespace AiDotNet.NeuralNetworks;
 /// giving strict O(n) complexity and O(1) memory per token during generation.</para>
 /// <para><b>Reference:</b> De et al., "Griffin: Mixing Gated Linear Recurrences with Local Attention", 2024.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new HawkOptions { VocabSize = 256000, ModelDim = 2560, NumLayers = 26 };
+/// var model = new HawkLanguageModel&lt;float&gt;(options);
+/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var logits = model.Predict(tokens);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -137,7 +145,6 @@ public class HawkLanguageModel<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Architecture", "Hawk" },

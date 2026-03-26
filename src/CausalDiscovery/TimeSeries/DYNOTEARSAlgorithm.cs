@@ -32,6 +32,7 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Causal)]
+[ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.CausalModel)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelTask(ModelTask.CausalInference)]
@@ -236,26 +237,33 @@ public class DYNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
 
             // Gradient of loss w.r.t. W: -1/n * Xt' * R
             T nT = NumOps.FromDouble(n);
+            // Gradient of loss w.r.t. W: -1/n * Xt' * R using Engine.DotProduct
             var gradW = new Matrix<T>(d, d);
             for (int i = 0; i < d; i++)
+            {
+                var xtCol = new Vector<T>(n);
+                for (int t = 0; t < n; t++) xtCol[t] = Xt[t, i];
                 for (int j = 0; j < d; j++)
                 {
-                    T sum = NumOps.Zero;
-                    for (int t = 0; t < n; t++)
-                        sum = NumOps.Add(sum, NumOps.Multiply(Xt[t, i], R[t, j]));
-                    gradW[i, j] = NumOps.Negate(NumOps.Divide(sum, nT));
+                    var rCol = new Vector<T>(n);
+                    for (int t = 0; t < n; t++) rCol[t] = R[t, j];
+                    gradW[i, j] = NumOps.Negate(NumOps.Divide(Engine.DotProduct(xtCol, rCol), nT));
                 }
+            }
 
-            // Gradient of loss w.r.t. A: -1/n * Z' * R
+            // Gradient of loss w.r.t. A: -1/n * Z' * R using Engine.DotProduct
             var gradA = new Matrix<T>(lagDim, d);
             for (int i = 0; i < lagDim; i++)
+            {
+                var zCol = new Vector<T>(n);
+                for (int t = 0; t < n; t++) zCol[t] = Z[t, i];
                 for (int j = 0; j < d; j++)
                 {
-                    T sum = NumOps.Zero;
-                    for (int t = 0; t < n; t++)
-                        sum = NumOps.Add(sum, NumOps.Multiply(Z[t, i], R[t, j]));
-                    gradA[i, j] = NumOps.Negate(NumOps.Divide(sum, nT));
+                    var rCol2 = new Vector<T>(n);
+                    for (int t = 0; t < n; t++) rCol2[t] = R[t, j];
+                    gradA[i, j] = NumOps.Negate(NumOps.Divide(Engine.DotProduct(zCol, rCol2), nT));
                 }
+            }
 
             // Gradient of acyclicity constraint w.r.t. W: 2 * (e^{W∘W}) ∘ W
             double h = ComputeAcyclicity(W, d);

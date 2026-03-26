@@ -33,6 +33,21 @@ namespace AiDotNet.Finance.Risk;
 /// Reference: Riskfuel, "Neural Value at Risk", 2021.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for Value-at-Risk estimation (10 market risk factors)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 10, outputSize: 1);
+///
+/// // Training mode: neural network learns non-linear VaR from historical data
+/// var model = new NeuralVaR&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained VaR model
+/// var onnxModel = new NeuralVaR&lt;double&gt;(architecture, "neural_var.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -170,7 +185,7 @@ public class NeuralVaR<T> : RiskModelBase<T>
             for (int i = 0; i < action.Length; i++)
                 scaledData[i] = NumOps.Multiply(action.Data.Span[i], scale);
             
-            return new Tensor<T>(action.Shape, new Vector<T>(scaledData));
+            return new Tensor<T>(action.Shape.ToArray(), new Vector<T>(scaledData));
         }
 
         return action;
@@ -211,7 +226,7 @@ public class NeuralVaR<T> : RiskModelBase<T>
         var output = Predict(input);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
         
-        var currentGrad = Tensor<T>.FromVector(grad, output.Shape);
+        var currentGrad = Tensor<T>.FromVector(grad, output.Shape.ToArray());
         for (int i = Layers.Count - 1; i >= 0; i--)
             currentGrad = Layers[i].Backward(currentGrad);
 
@@ -251,7 +266,6 @@ public class NeuralVaR<T> : RiskModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelType", "NeuralVaR" },

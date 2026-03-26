@@ -24,8 +24,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Fuyu-8B: A Multimodal Architecture for AI Agents" (Adept, 2023)</item></list></para>
-/// <para><b>For Beginners:</b> Fuyu is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Fuyu takes the simplest possible approach to combining vision
+/// and language: instead of using a separate vision encoder like CLIP or ViT, it feeds raw
+/// image patches directly into the transformer decoder. Each image patch is simply projected
+/// to the model's hidden dimension with a linear layer and treated like a text token. This
+/// means the same transformer processes both image and text tokens, making the architecture
+/// extremely simple. The trade-off is that it needs more compute to process images compared
+/// to models with dedicated vision encoders, but it avoids any information loss from
+/// pre-processing. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Fuyu model for encoder-free multimodal processing
+/// // feeding raw image patches directly into the transformer
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Fuyu&lt;double&gt;(architecture, "fuyu.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Fuyu&lt;double&gt;(architecture, new FuyuOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -108,7 +131,7 @@ public class Fuyu<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "Fuyu-Native" : "Fuyu-ONNX", Description = "Fuyu: Direct Patch-to-Transformer Multimodal Model (Adept, 2023)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "Fuyu"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["PatchSize"] = _options.PatchSize.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "Fuyu-Native" : "Fuyu-ONNX", Description = "Fuyu: Direct Patch-to-Transformer Multimodal Model (Adept, 2023)", FeatureCount = _options.DecoderDim, Complexity = _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "Fuyu"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["PatchSize"] = _options.PatchSize.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.DecoderDim); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.PatchSize); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.PatchSize = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new Fuyu<T>(Architecture, mp, _options); return new Fuyu<T>(Architecture, _options); }

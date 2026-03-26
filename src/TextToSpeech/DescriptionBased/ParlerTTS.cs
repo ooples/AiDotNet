@@ -23,6 +23,22 @@ namespace AiDotNet.TextToSpeech.DescriptionBased;
 /// and the model will generate speech matching that description. It works by using a text encoder for the
 /// voice description, a DAC (Descript Audio Codec) encoder for tokenizing audio, and a transformer decoder
 /// that generates audio tokens conditioned on both the voice description and the text to speak.</para>
+/// <example>
+/// <code>
+/// // Create a Parler-TTS model for description-guided speech generation
+/// // where you describe the desired voice in natural language
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ParlerTTS&lt;double&gt;(architecture, "parler_tts.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ParlerTTS&lt;double&gt;(architecture, new ParlerTTSOptions());
+/// </code>
+/// </example>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -238,7 +254,6 @@ public class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
         {
             Name = _useNativeMode ? "ParlerTTS-Native" : "ParlerTTS-ONNX",
             Description = "Parler-TTS: Description-Guided TTS (Lyth et al., 2024)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.LLMDim
         };
     }

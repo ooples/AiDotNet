@@ -144,7 +144,7 @@ public class DenseLayerGpuBenchmark
             data[i] = data[i] > 0 ? data[i] : 0;
         }
 
-        return new Tensor<float>(data, withBias.Shape);
+        return new Tensor<float>(data, withBias.Shape.ToArray());
     }
 
     [GlobalCleanup]

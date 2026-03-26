@@ -29,10 +29,31 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// The encoder processes the input context and the decoder directly outputs all forecast
 /// quantiles in a single forward pass without iterative generation.
 /// </para>
+/// <para><b>For Beginners:</b> Chronos-Bolt is a faster version of the Chronos time series
+/// forecasting model from Amazon. While the original Chronos generates predictions one step
+/// at a time (like writing a sentence word by word), Chronos-Bolt outputs all predictions at
+/// once (like writing the whole sentence in one go). This makes it much faster while still
+/// providing probabilistic forecasts that tell you the range of likely future values.</para>
 /// <para>
 /// <b>Reference:</b> Part of Amazon Chronos family, Nov 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Chronos-Bolt for fast non-autoregressive time series forecasting
+/// // Outputs all forecast quantiles in a single forward pass instead of iterative generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with direct quantile forecasting
+/// var model = new ChronosBolt&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new ChronosBolt&lt;double&gt;(architecture, "chronos_bolt.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -250,7 +271,7 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
             var output = ForwardNative(input);
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
             _optimizer.UpdateParameters(Layers);
         }
         finally { SetTrainingMode(false); }
@@ -267,7 +288,6 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "ChronosBolt" },
@@ -416,7 +436,7 @@ public class ChronosBolt<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         for (int b = 0; b < batchSize; b++)
         {
             T mean = NumOps.Zero;

@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -34,6 +36,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Normalization)]
+[LayerTask(LayerTask.ActivationNormalization)]
+[LayerProperty(IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
 public class InstanceNormalizationLayer<T> : LayerBase<T>
 {
     private readonly T _epsilon;
@@ -159,7 +164,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         // Instance Norm expects input [batch, channels, ...spatial]
         // We flatten to 4D and use GroupNorm with numGroups = numChannels
@@ -246,7 +251,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
         var backend = gpuEngine.GetBackend();
         if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable.");
@@ -396,7 +401,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
         _betaGradient = new Tensor<T>([channels], new Vector<T>(DirectGpuEngine.FromFloatArray<T>(gradBetaData)));
 
         // Return input gradient as GPU tensor
-        return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape, GpuTensorRole.Gradient, ownsBuffer: true);
+        return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
     /// <summary>
@@ -514,11 +519,11 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
         if (parameters.Length != totalParams)
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
 
-        var gammaVec = parameters.Slice(0, _gamma.Length);
-        var betaVec = parameters.Slice(_gamma.Length, _beta.Length);
-
-        _gamma = Tensor<T>.FromVector(gammaVec, _gamma.Shape);
-        _beta = Tensor<T>.FromVector(betaVec, _beta.Shape);
+        // Write in-place to preserve engine persistent tensor references
+        var gSpan = _gamma.Data.Span;
+        for (int i = 0; i < _gamma.Length; i++) gSpan[i] = parameters[i];
+        var bSpan = _beta.Data.Span;
+        for (int i = 0; i < _beta.Length; i++) bSpan[i] = parameters[_gamma.Length + i];
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_gamma);
@@ -533,6 +538,14 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_gammaGradient == null || _betaGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
+    }
+
+    public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
+
     public override void ResetState()
     {
         _lastInput = null;

@@ -30,6 +30,14 @@ namespace AiDotNet.NeuralNetworks;
 /// inputs they've never seen before during training.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new SiameseNetworkOptions { InputSize = 128, EmbeddingSize = 64 };
+/// var model = new SiameseNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var embedding = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Embedding)]
@@ -106,7 +114,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// <remarks>
     /// This network creates the embeddings (compact representations) for each input.
     /// </remarks>
-    private ConvolutionalNeuralNetwork<T> _subnetwork;
+    private NeuralNetworkBase<T> _subnetwork;
 
     /// <summary>
     /// The final layer that compares the embeddings and produces a similarity score.
@@ -151,7 +159,10 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         _options = options ?? new SiameseNetworkOptions();
         Options = _options;
-        _subnetwork = new ConvolutionalNeuralNetwork<T>(architecture);
+        // Use CNN for 2D/3D input (images), FFNN for 1D input (features)
+        _subnetwork = architecture.InputType == Enums.InputType.OneDimensional
+            ? (NeuralNetworkBase<T>)new FeedForwardNeuralNetwork<T>(architecture)
+            : new ConvolutionalNeuralNetwork<T>(architecture);
         int embeddingSize = architecture.GetOutputShape()[0];
         _outputLayer = new DenseLayer<T>(embeddingSize * 2, 1, new SigmoidActivation<T>() as IActivationFunction<T>);
 
@@ -361,7 +372,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int subnetworkParameterCount = _subnetwork.GetParameterCount();
+        int subnetworkParameterCount = _subnetwork.ParameterCount;
         Vector<T> subnetworkParameters = parameters.SubVector(0, subnetworkParameterCount);
         _subnetwork.UpdateParameters(subnetworkParameters);
 
@@ -437,11 +448,11 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             if (input.Shape.Length < 2 || input.Shape[1] != 2)
             {
                 throw new ArgumentException(
-                    $"Input tensor must have shape [batchSize, 2, ...dimensions] for Siamese comparison. Got shape: {string.Join(",", input.Shape)}");
+                    $"Input tensor must have shape [batchSize, 2, ...dimensions] for Siamese comparison. Got shape: {string.Join(",", input.Shape.ToArray())}");
             }
 
             int batchSize = input.Shape[0];
-            var output = new Tensor<T>(new[] { batchSize, 1 });
+            var output = TensorAllocator.Rent<T>(new[] { batchSize, 1 });
 
             // Process each pair in the batch
             for (int b = 0; b < batchSize; b++)
@@ -496,13 +507,13 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         if (input.Shape.Length < 2 || input.Shape[1] != 2)
         {
             throw new ArgumentException(
-                $"Input tensor must have shape [batchSize, 2, ...dimensions] for Siamese training. Got shape: {string.Join(",", input.Shape)}");
+                $"Input tensor must have shape [batchSize, 2, ...dimensions] for Siamese training. Got shape: {string.Join(",", input.Shape.ToArray())}");
         }
 
         if (expectedOutput.Shape.Length != 2 || expectedOutput.Shape[0] != input.Shape[0] || expectedOutput.Shape[1] != 1)
         {
             throw new ArgumentException(
-                $"Expected output tensor must have shape [batchSize, 1]. Got shape: {string.Join(",", expectedOutput.Shape)}");
+                $"Expected output tensor must have shape [batchSize, 1]. Got shape: {string.Join(",", expectedOutput.Shape.ToArray())}");
         }
 
         int batchSize = input.Shape[0];
@@ -522,7 +533,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         LastLoss = LossFunction.CalculateLoss(predictedVector, expectedVector);
 
         // Calculate error gradients
-        var outputGradients = new Tensor<T>(predictions.Shape);
+        var outputGradients = new Tensor<T>(predictions.Shape.ToArray());
         for (int b = 0; b < batchSize; b++)
         {
             // Error = expected - predicted
@@ -539,8 +550,8 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             var input2 = input.GetSlice(b).GetSlice(1);
 
             // Forward pass through the subnetwork
-            var embedding1 = _subnetwork.Forward(input1).ToVector();
-            var embedding2 = _subnetwork.Forward(input2).ToVector();
+            var embedding1 = _subnetwork.Predict(input1).ToVector();
+            var embedding2 = _subnetwork.Predict(input2).ToVector();
 
             // Cache embeddings and label for contrastive loss computation
             if (UseAuxiliaryLoss)
@@ -569,8 +580,8 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             }
 
             // Backpropagate through the subnetwork for each input
-            _subnetwork.Backward(Tensor<T>.FromVector(embedding1Gradients).Reshape(input1.Shape));
-            _subnetwork.Backward(Tensor<T>.FromVector(embedding2Gradients).Reshape(input2.Shape));
+            _subnetwork.Backpropagate(Tensor<T>.FromVector(embedding1Gradients).Reshape(input1.Shape.ToArray()));
+            _subnetwork.Backpropagate(Tensor<T>.FromVector(embedding2Gradients).Reshape(input2.Shape.ToArray()));
         }
 
         // Get the learning rate from the architecture or use default
@@ -643,7 +654,9 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         // Deserialize the subnetwork
-        _subnetwork = new ConvolutionalNeuralNetwork<T>(Architecture);
+        _subnetwork = Architecture.InputType == Enums.InputType.OneDimensional
+            ? (NeuralNetworkBase<T>)new FeedForwardNeuralNetwork<T>(Architecture)
+            : new ConvolutionalNeuralNetwork<T>(Architecture);
         var subNetworkCount = reader.ReadInt32();
         _subnetwork.Deserialize(reader.ReadBytes(subNetworkCount));
 
@@ -682,7 +695,6 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Prepare Siamese-specific information
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.SiameseNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "EmbeddingSize", Architecture.GetOutputShape()[0] },

@@ -281,13 +281,20 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     public override Vector<T> UpdateParameters(Vector<T> parameters, Vector<T> gradient)
     {
-        if (_m == null || _v == null || _m.Length != parameters.Length)
+        if (_m == null || _v == null || _m.Length != parameters.Length || _m.Length != gradient.Length)
         {
             _m = new Vector<T>(parameters.Length);
             _v = new Vector<T>(parameters.Length);
             _previousM = new Vector<T>(parameters.Length);
             _previousV = new Vector<T>(parameters.Length);
             _t = 0;
+        }
+
+        // Guard against parameter/gradient size mismatch
+        if (parameters.Length != gradient.Length)
+        {
+            throw new ArgumentException(
+                $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).");
         }
 
         // Save pre-update state for accurate reverse updates

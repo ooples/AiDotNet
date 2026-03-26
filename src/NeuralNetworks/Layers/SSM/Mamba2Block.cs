@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -49,6 +51,10 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
 public class Mamba2Block<T> : LayerBase<T>
 {
     // Configuration
@@ -231,12 +237,15 @@ public class Mamba2Block<T> : LayerBase<T>
         int expandFactor = 2,
         int convKernelSize = 4,
         int chunkSize = 64,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, modelDimension],
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         if (modelDimension <= 0)
             throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));
         if (stateDimension <= 0)
@@ -328,21 +337,13 @@ public class Mamba2Block<T> : LayerBase<T>
 
     private void InitializeTensor(Tensor<T> tensor)
     {
-        int fanIn = tensor.Shape[0];
-        int fanOut = tensor.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = NumOps.Multiply(
-                NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-        }
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
     }
 
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -449,7 +450,7 @@ public class Mamba2Block<T> : LayerBase<T>
         Tensor<T> x, Tensor<T> delta, Tensor<T> b, Tensor<T> c,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
 
         // Pre-compute A = -exp(A_log) per head: [numHeads]
         var negAPerHead = new T[_numHeads];
@@ -889,7 +890,7 @@ public class Mamba2Block<T> : LayerBase<T>
     private Tensor<T> DepthwiseConv1DBackward(
         Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
         _convBiasGradient = new Tensor<T>(new[] { _innerDimension });
 
         var weightGradSlices = new Tensor<T>[_convKernelSize];
@@ -950,7 +951,7 @@ public class Mamba2Block<T> : LayerBase<T>
 
     private static Tensor<T> SliceTensor(Tensor<T> input, int axis, int start, int length)
     {
-        var shape = (int[])input.Shape.Clone();
+        var shape = (int[])input.Shape.ToArray().Clone();
         shape[axis] = length;
         var output = new Tensor<T>(shape);
         var indices = new int[input.Shape.Length];
@@ -1059,6 +1060,39 @@ public class Mamba2Block<T> : LayerBase<T>
             for (int i = 0; i < tensor.Length; i++)
                 tensor[i] = parameters[index++];
         }
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
+            new Vector<T>(_convWeightsGradient!.ToArray()),
+            new Vector<T>(_convBiasGradient!.ToArray()),
+            new Vector<T>(_bProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_cProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_aLogGradient!.ToArray()),
+            new Vector<T>(_dtProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_dtProjectionBiasGradient!.ToArray()),
+            new Vector<T>(_dParamGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient!.ToArray()),
+            new Vector<T>(_normGammaGradient!.ToArray()),
+            new Vector<T>(_normBetaGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _inputProjectionWeightsGradient = null; _inputProjectionBiasGradient = null;
+        _convWeightsGradient = null; _convBiasGradient = null;
+        _bProjectionWeightsGradient = null; _cProjectionWeightsGradient = null;
+        _aLogGradient = null;
+        _dtProjectionWeightsGradient = null; _dtProjectionBiasGradient = null;
+        _dParamGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
+        _normGammaGradient = null; _normBetaGradient = null;
     }
 
     /// <inheritdoc />

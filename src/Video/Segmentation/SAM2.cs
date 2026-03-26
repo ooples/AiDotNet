@@ -46,6 +46,19 @@ namespace AiDotNet.Video.Segmentation;
 /// Meta AI, 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SAM2 model for interactive video object segmentation
+/// var sam2 = new SAM2&lt;double&gt;();
+///
+/// // Or configure with a specific model size and memory bank
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 1);
+/// var model = new SAM2&lt;double&gt;(architecture, modelSize: SAM2ModelSize.Large, memoryBankSize: 7);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -577,7 +590,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
         for (int i = 0; i < copyLen; i++)
             targetFlat[i] = expectedOutput[i];
         var gradVec = LossFunction.CalculateDerivative(predFlat, targetFlat);
-        var lossGradient = new Tensor<T>(predicted.Shape);
+        var lossGradient = new Tensor<T>(predicted.Shape.ToArray());
         for (int i = 0; i < gradVec.Length; i++)
             lossGradient[i] = gradVec[i];
 
@@ -628,7 +641,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
         }
 
         // Create ONNX input tensor
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, image.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, image.Shape.ToArray());
         var inputMeta = _onnxSession.InputMetadata;
 
         // SAM2 encoder typically has 'image' as input name
@@ -724,7 +737,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
         }
 
         // Average pool memory features
-        var memoryAggregate = new Tensor<T>(currentFeatures.Shape);
+        var memoryAggregate = new Tensor<T>(currentFeatures.Shape.ToArray());
         foreach (var memory in _memoryBank)
         {
             memoryAggregate = AddTensors(memoryAggregate, memory);
@@ -1128,7 +1141,6 @@ public class SAM2<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoObjectSegmentation,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

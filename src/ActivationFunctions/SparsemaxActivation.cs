@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -24,6 +26,10 @@ namespace AiDotNet.ActivationFunctions;
 /// are likely to be correct. It makes the model's predictions more focused and interpretable.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.Normalization)]
+[ActivationTask(ActivationTask.AttentionGating)]
+[ActivationTask(ActivationTask.NormalizationOutput)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = true, IsVectorActivation = true, Cost = ComputeCost.High)]
 public class SparsemaxActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

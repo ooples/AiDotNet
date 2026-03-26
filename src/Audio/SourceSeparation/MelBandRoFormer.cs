@@ -166,7 +166,7 @@ public class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparat
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "MelBand-RoFormer-Native" : "MelBand-RoFormer-ONNX", Description = "MelBand-RoFormer Mel-Band Source Separation (2024)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumFreqBins, Complexity = _options.NumTransformerLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "MelBand-RoFormer-Native" : "MelBand-RoFormer-ONNX", Description = "MelBand-RoFormer Mel-Band Source Separation (2024)", FeatureCount = _options.NumFreqBins, Complexity = _options.NumTransformerLayers };
         m.AdditionalInfo["NumMelBands"] = _options.NumMelBands.ToString(); m.AdditionalInfo["NumStems"] = _options.NumStems.ToString();
         return m;
     }
@@ -210,7 +210,7 @@ public class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparat
         var sources = new Dictionary<string, Tensor<T>>();
         for (int si = 0; si < _options.NumStems && si < _options.Sources.Length; si++)
         {
-            var maskedMag = new Tensor<T>(magnitude.Shape);
+            var maskedMag = new Tensor<T>(magnitude.Shape.ToArray());
             for (int f = 0; f < nf; f++)
                 for (int b = 0; b < numBins; b++)
                 {

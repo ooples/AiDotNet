@@ -54,6 +54,24 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// - Graph structure helps propagate label information
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a node classification model for semi-supervised learning on graphs
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 16,   // node feature dimension
+///     outputSize: 7,   // number of node classes
+///     hiddenSizes: new[] { 64 });
+/// var model = new NodeClassificationModel&lt;float&gt;(architecture);
+///
+/// // Prepare graph data (adjacency + node features as tensors)
+/// var adjacency = new Tensor&lt;float&gt;(new[] { 100, 100 }); // 100-node graph
+/// var nodeFeatures = new Tensor&lt;float&gt;(new[] { 100, 16 });
+///
+/// // Classify each node using GCN with neighborhood aggregation
+/// var predictions = model.Predict(nodeFeatures);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
@@ -461,7 +479,7 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     private Tensor<T> ComputeGradient(Tensor<T> logits, Tensor<T> labels, int[] trainIndices, int numClasses)
     {
         // Initialize gradient tensor (zeros)
-        var gradient = new Tensor<T>(logits.Shape);
+        var gradient = new Tensor<T>(logits.Shape.ToArray());
         Engine.TensorFill(gradient, NumOps.Zero);
 
         if (trainIndices.Length == 0)
@@ -569,7 +587,7 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
 
         if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
         {
-            gradOutput = gradOutput.Reshape(predictions.Shape);
+            gradOutput = gradOutput.Reshape(predictions.Shape.ToArray());
         }
 
         Backward(gradOutput);
@@ -588,7 +606,6 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GraphNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["NetworkType"] = "NodeClassificationModel",

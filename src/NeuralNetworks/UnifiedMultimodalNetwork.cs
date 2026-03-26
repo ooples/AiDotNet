@@ -21,6 +21,22 @@ namespace AiDotNet.NeuralNetworks;
 /// in a single architecture with cross-modal attention and any-to-any generation.
 /// </summary>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> This network handles text, images, audio, and video all in
+/// one architecture. Instead of needing separate models for each type of data, it processes
+/// all modalities through shared transformer layers with cross-modal attention. It can both
+/// understand any combination of inputs and generate outputs in any modality, enabling tasks
+/// like describing a video, generating images from text, or answering questions about audio
+/// clips.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new UnifiedMultimodalOptions { ImageSize = 224, EmbeddingDim = 768 };
+/// var model = new UnifiedMultimodalNetwork&lt;float&gt;(options);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 224, 224 });
+/// var output = model.Predict(image);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Audio)]
@@ -926,7 +942,6 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         return new ModelMetadata<T>
         {
             Name = "UnifiedMultimodalNetwork",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _embeddingDimension,
             Complexity = _numTransformerLayers * 4,
             Description = "Unified multimodal network for any-to-any modality generation"

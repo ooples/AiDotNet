@@ -40,6 +40,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Esser et al., "Scaling Rectified Flow Transformers for High-Resolution Image Synthesis", ICML 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1024, Width = 1024, NumInferenceSteps = 28 };
+/// var model = new SD3InpaintingModel&lt;float&gt;(options);
+/// var maskedInput = Tensor&lt;float&gt;.Random(new[] { 1, 16, 128, 128 });
+/// var inpainted = model.Predict(maskedInput);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -135,7 +143,7 @@ public class SD3InpaintingModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SD3 Inpainting", Version = "3.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SD3 Inpainting", Version = "3.0",
             Description = "SD3 MMDiT-based inpainting with triple text encoders and rectified flow",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

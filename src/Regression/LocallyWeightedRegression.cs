@@ -33,6 +33,25 @@ namespace AiDotNet.Regression;
 /// data around for making predictions, which can be computationally intensive for large datasets.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a locally weighted regression (LOESS/LOWESS)
+/// var options = new LocallyWeightedRegressionOptions&lt;double&gt;();
+/// var model = new LocallyWeightedRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Store all training examples for local model fitting
+/// model.Train(features, targets);
+///
+/// // Predict by fitting a weighted local model near the query point
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 6, 7 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.InstanceBased)]
@@ -120,11 +139,57 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     /// postpones the real work until prediction time.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// LWR is a lazy learner — no optimizer parameter injection.
+    /// </summary>
+    public override int ParameterCount => 0;
+
+    /// <summary>
+    /// Returns all features used during training.
+    /// </summary>
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        return Enumerable.Range(0, _xTrain.Columns > 0 ? _xTrain.Columns : 0);
+    }
+
+    /// <summary>
+    /// Deep copy via serialization.
+    /// </summary>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new LocallyWeightedRegression<T>(null, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         // In LWR, we don't pre-compute a global model. Instead, we store the training data.
         _xTrain = x;
         _yTrain = y;
+
+        // Auto-scale bandwidth if using the default value of 1.0.
+        // The tricube kernel returns 0 for |distance/bandwidth| > 1,
+        // so bandwidth must be large enough relative to typical inter-point distances.
+        if (Math.Abs(_options.Bandwidth - 1.0) < 1e-10)
+        {
+            // Use the median of pairwise distances as a robust bandwidth estimate
+            double totalDist = 0;
+            int count = 0;
+            int sampleSize = Math.Min(50, x.Rows);
+            for (int i = 0; i < sampleSize; i++)
+            {
+                for (int j = i + 1; j < sampleSize; j++)
+                {
+                    totalDist += NumOps.ToDouble(VectorHelper.EuclideanDistance(x.GetRow(i), x.GetRow(j)));
+                    count++;
+                }
+            }
+            double meanDist = count > 0 ? totalDist / count : 1.0;
+            _options.Bandwidth = Math.Max(meanDist, 0.1);
+        }
     }
 
     /// <summary>
@@ -202,7 +267,9 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         // For weighted least squares, we multiply each row of X by its corresponding weight
         // This is equivalent to W^0.5 * X where W is the diagonal weight matrix
         var sqrtWeights = weights.Transform(w => NumOps.Sqrt(w));
-        var weightedX = sqrtWeights.CreateDiagonal().Multiply(_xTrain);
+        // Add intercept column to training data for bias term
+        var xWithIntercept = _xTrain.AddConstantColumn(NumOps.One);
+        var weightedX = sqrtWeights.CreateDiagonal().Multiply(xWithIntercept);
         var weightedY = _yTrain.PointwiseMultiply(sqrtWeights);
 
         // Solve the weighted least squares problem
@@ -229,8 +296,12 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
             coefficients = Regularization.Regularize(coefficients);
         }
 
-        // Make prediction
-        return input.DotProduct(coefficients);
+        // Make prediction: AddConstantColumn puts intercept at index 0
+        // coefficients[0] is intercept, coefficients[1..p] are feature weights
+        T prediction = coefficients[0]; // intercept (first column)
+        for (int j = 0; j < input.Length; j++)
+            prediction = NumOps.Add(prediction, NumOps.Multiply(input[j], coefficients[j + 1]));
+        return prediction;
     }
 
     /// <summary>
@@ -272,7 +343,6 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     /// Gets the model type of the Locally Weighted Regression model.
     /// </summary>
     /// <returns>The model type enumeration value.</returns>
-    protected override ModelType GetModelType() => ModelType.LocallyWeightedRegression;
 
     /// <summary>
     /// Serializes the Locally Weighted Regression model to a byte array for storage or transmission.

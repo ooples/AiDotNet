@@ -38,6 +38,30 @@ namespace AiDotNet.Classification.TimeSeries;
 ///
 /// <para><b>Reference:</b> Deng et al., "A Time Series Forest for Classification and Feature Extraction" (2013)</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Time Series Forest with ensemble of interval-based decision trees
+/// var options = new TimeSeriesForestOptions&lt;double&gt;();
+/// var classifier = new TimeSeriesForestClassifier&lt;double&gt;(options);
+///
+/// // Prepare time series data: rows are samples, columns are time steps
+/// var features = new Matrix&lt;double&gt;(4, 5);
+/// features[0, 0] = 1.0; features[0, 1] = 1.2; features[0, 2] = 1.5; features[0, 3] = 1.3; features[0, 4] = 1.1;
+/// features[1, 0] = 1.1; features[1, 1] = 1.3; features[1, 2] = 1.4; features[1, 3] = 1.2; features[1, 4] = 1.0;
+/// features[2, 0] = 2.0; features[2, 1] = 2.5; features[2, 2] = 2.3; features[2, 3] = 2.8; features[2, 4] = 3.0;
+/// features[3, 0] = 2.1; features[3, 1] = 2.4; features[3, 2] = 2.6; features[3, 3] = 2.9; features[3, 4] = 3.1;
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1 });
+///
+/// // Train: classify using mean, std, and slope features from random intervals
+/// classifier.Train(features, labels);
+///
+/// // Predict class for new time series
+/// var newSample = new Matrix&lt;double&gt;(1, 5);
+/// newSample[0, 0] = 1.0; newSample[0, 1] = 1.1; newSample[0, 2] = 1.3; newSample[0, 3] = 1.2; newSample[0, 4] = 1.0;
+/// var predictions = classifier.Predict(newSample);
+/// // predictions[0] contains the predicted class
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.TimeSeries)]
@@ -114,7 +138,6 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.TimeSeriesClassifier;
 
     /// <summary>
     /// Trains the Time Series Forest on time series sequences.
@@ -132,14 +155,16 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
 
         int numSamples = sequences.Shape[0];
         int seqLen = sequences.Shape[1];
+        if (seqLen == 0)
+            throw new ArgumentException("Sequence length must be greater than 0.", nameof(sequences));
         NumChannels = sequences.Shape.Length > 2 ? sequences.Shape[2] : 1;
         SequenceLength = seqLen;
 
         ClassLabels = ExtractClassLabels(labels);
         NumClasses = ClassLabels.Length;
 
-        int minInterval = Math.Max(3, (int)(seqLen * _options.MinIntervalFraction));
-        int maxInterval = Math.Min(seqLen, (int)(seqLen * _options.MaxIntervalFraction));
+        int minInterval = Math.Max(1, Math.Min(seqLen, (int)(seqLen * _options.MinIntervalFraction)));
+        int maxInterval = Math.Min(seqLen, Math.Max(minInterval, (int)(seqLen * _options.MaxIntervalFraction)));
 
         _trees = new List<IntervalTree>(_options.NumTrees);
 
@@ -831,6 +856,11 @@ public class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSeriesClass
         if (sequences.Shape.Length < 2)
         {
             throw new ArgumentException("Sequences must be at least 2D [samples, sequence_length].");
+        }
+
+        if (sequences.Shape[1] == 0)
+        {
+            throw new ArgumentException("Sequence length must be greater than 0.", nameof(sequences));
         }
 
         if (labels is not null && labels.Length != sequences.Shape[0])

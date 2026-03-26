@@ -88,24 +88,29 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
                 }
 
                 T invN = NumOps.FromDouble(1.0 / n);
+
+                // Pre-allocate reusable vectors outside the sample/target loops
+                var xRow = new Vector<T>(d);
+                var hidden = new Vector<T>(h);
+                var w1Col = new Vector<T>(d);
+                var w2Col = new Vector<T>(h);
+
                 for (int s = 0; s < n; s++)
                 {
                     for (int j = 0; j < d; j++)
                     {
-                        // Forward: hidden = sigmoid(W1^T * x), output = W2^T * hidden
-                        var hidden = new T[h];
+                        // Forward using Engine.DotProduct for vectorized matmul
+                        for (int i = 0; i < d; i++) xRow[i] = data[s, i];
+
                         for (int k = 0; k < h; k++)
                         {
-                            T sum = NumOps.Zero;
-                            for (int i = 0; i < d; i++)
-                                sum = NumOps.Add(sum, NumOps.Multiply(data[s, i], W1[j][i, k]));
-                            double sv = NumOps.ToDouble(sum);
+                            for (int i = 0; i < d; i++) w1Col[i] = W1[j][i, k];
+                            double sv = NumOps.ToDouble(Engine.DotProduct(xRow, w1Col));
                             hidden[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
                         }
 
-                        T pred = NumOps.Zero;
-                        for (int k = 0; k < h; k++)
-                            pred = NumOps.Add(pred, NumOps.Multiply(hidden[k], W2[j][k, 0]));
+                        for (int k = 0; k < h; k++) w2Col[k] = W2[j][k, 0];
+                        T pred = Engine.DotProduct(hidden, w2Col);
 
                         T residual = NumOps.Multiply(NumOps.Subtract(pred, data[s, j]), invN);
 
@@ -170,15 +175,21 @@ public class GraNDAGAlgorithm<T> : DeepCausalBase<T>
             if (!NumOps.GreaterThan(hFinal, NumOps.FromDouble(1e-8))) break;
         }
 
-        var result = ExtractAdjacency(W1, d, h);
-        // Threshold using configurable EdgeThreshold from DeepCausalBase
-        T wThreshold = NumOps.FromDouble(EdgeThreshold);
+        var rawAdj = ExtractAdjacency(W1, d, h);
+        // Use raw adjacency magnitudes as learned edge probabilities (normalize to [0,1])
+        double maxNorm = 0;
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
-                if (!NumOps.GreaterThan(NumOps.Abs(result[i, j]), wThreshold))
-                    result[i, j] = NumOps.Zero;
+                if (i != j)
+                    maxNorm = Math.Max(maxNorm, NumOps.ToDouble(rawAdj[i, j]));
+        var learnedP = new double[d, d];
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                if (i != j && maxNorm > 0)
+                    learnedP[i, j] = NumOps.ToDouble(rawAdj[i, j]) / maxNorm;
 
-        return result;
+        var cov = ComputeCovarianceMatrix(data);
+        return BuildFinalAdjacency(learnedP, cov, d);
     }
 
     private Matrix<T> ExtractAdjacency(Matrix<T>[] W1, int d, int h)

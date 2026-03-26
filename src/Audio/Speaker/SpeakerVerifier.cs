@@ -545,7 +545,6 @@ public class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>
         {
             Name = _useNativeMode ? "SpeakerVerifier-Native" : "SpeakerVerifier-ONNX",
             Description = "Speaker verification model for voice authentication",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = EmbeddingDimension,
             Complexity = 1
         };

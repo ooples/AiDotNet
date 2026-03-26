@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -11,6 +12,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// A single layer within a DenseBlock: BN-ReLU-Conv1x1-BN-ReLU-Conv3x3.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4, 8, 8")]
 internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     private readonly BatchNormalizationLayer<T> _bn1;
@@ -31,7 +35,21 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     private IGpuTensor<T>? _gpuConv1Out;
     private IGpuTensor<T>? _gpuBn2Out;
 
+    public override int ParameterCount => _bn1.ParameterCount + _conv1x1.ParameterCount + _bn2.ParameterCount + _conv3x3.ParameterCount;
     public override bool SupportsTraining => true;
+
+    public override Vector<T> GetParameterGradients()
+    {
+        return Vector<T>.Concatenate(
+            Vector<T>.Concatenate(_bn1.GetParameterGradients(), _conv1x1.GetParameterGradients()),
+            Vector<T>.Concatenate(_bn2.GetParameterGradients(), _conv3x3.GetParameterGradients()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _bn1.ClearGradients(); _conv1x1.ClearGradients(); _bn2.ClearGradients(); _conv3x3.ClearGradients();
+    }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
@@ -247,7 +265,7 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                 ? grad.Data.Span[i]
                 : NumOps.Zero;
         }
-        return new Tensor<T>(grad.Shape, new Vector<T>(result));
+        return new Tensor<T>(grad.Shape.ToArray(), new Vector<T>(result));
     }
 
     public override void UpdateParameters(T learningRate)

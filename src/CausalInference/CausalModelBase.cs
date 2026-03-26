@@ -3,6 +3,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using Newtonsoft.Json;
@@ -31,6 +32,11 @@ namespace AiDotNet.CausalInference;
 /// </remarks>
 public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
 {
+    /// <summary>
+    /// Gets the hardware-accelerated computation engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// Numeric operations helper for generic math.
     /// </summary>
@@ -70,6 +76,12 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     /// Gets the total number of parameters in the model.
     /// </summary>
     public virtual int ParameterCount => NumFeatures;
+
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
 
     /// <summary>
     /// Gets whether JIT compilation is supported.
@@ -322,7 +334,6 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     /// <summary>
     /// Gets the model type.
     /// </summary>
-    public virtual ModelType GetModelType() => ModelType.None;
 
     /// <summary>
     /// Gets metadata about the model.
@@ -331,10 +342,9 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     {
         return new ModelMetadata<T>
         {
-            ModelType = GetModelType(),
             FeatureCount = NumFeatures,
             Complexity = NumFeatures,
-            Description = $"{GetModelType()} causal inference model with {NumFeatures} features",
+            Description = $"{GetType().Name} causal inference model with {NumFeatures} features",
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "IsFitted", IsFitted }

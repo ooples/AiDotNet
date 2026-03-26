@@ -36,6 +36,16 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// <b>Reference:</b> Wu et al., "Sonata and Concerto: Mamba for 3D Point Clouds", arXiv 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Sonata Mamba-based model for efficient 3D point cloud segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 6, outputSize: 40, networkType: NetworkType.Classification);
+/// var sonata = new Sonata&lt;float&gt;(architecture,
+///     numClasses: 40, modelSize: SonataModelSize.Base);
+/// Tensor&lt;float&gt; segmentation = sonata.Forward(pointCloudTensor);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -206,7 +216,7 @@ public class Sonata<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = _onnxSession.Run(inputs);
@@ -275,7 +285,6 @@ public class Sonata<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "Sonata" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

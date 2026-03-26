@@ -170,7 +170,6 @@ public class SoftSplat<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "SoftSplat-Native" : "SoftSplat-ONNX",
             Description = $"SoftSplat {_options.Variant} softmax splatting interpolation (Niklaus & Liu, CVPR 2020)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumGridNetLevels * _options.NumResBlocksPerRow
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

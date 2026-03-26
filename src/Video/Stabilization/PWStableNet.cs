@@ -27,6 +27,19 @@ namespace AiDotNet.Video.Stabilization;
 /// depth-dependent motion, with coarse-to-fine refinement of the warp field.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PWStableNet model for pixel-wise video stabilization
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new PWStableNetOptions();
+/// var pwStable = new PWStableNet&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var pwStableOnnx = new PWStableNet&lt;double&gt;(architecture, "pwstablenet_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -145,7 +158,6 @@ public class PWStableNet<T> : VideoStabilizationBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoStabilization,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "PWStableNet" },

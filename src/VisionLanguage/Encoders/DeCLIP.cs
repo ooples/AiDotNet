@@ -22,8 +22,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Supervision Exists Everywhere: A Data-Efficient Contrastive Language-Image Pre-training Paradigm" (Li et al., ICLR 2022)</item></list></para>
-/// <para><b>For Beginners:</b> DeCLIP is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> DeCLIP achieves CLIP-level performance with much less training
+/// data by extracting extra supervision from the data itself. It combines contrastive image-text
+/// matching with image self-supervision (SimSiam), text masked language modeling, and nearest-
+/// neighbor supervision — squeezing more learning from each image-text pair. Default values
+/// follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DeCLIP model for data-efficient contrastive learning
+/// // combining multiple self-supervised objectives for less data
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new DeCLIP&lt;double&gt;(architecture, "declip.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new DeCLIP&lt;double&gt;(architecture, new DeCLIPOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -53,7 +73,7 @@ public class DeCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageM
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "DeCLIP-Native" : "DeCLIP-ONNX", Description = "DeCLIP: Data-Efficient Contrastive Language-Image Pre-training (Li et al., ICLR 2022)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers }; m.AdditionalInfo["Architecture"] = "DeCLIP"; m.AdditionalInfo["ImageSelfSupervisedWeight"] = _options.ImageSelfSupervisedWeight.ToString(); m.AdditionalInfo["TextMLMWeight"] = _options.TextMLMWeight.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "DeCLIP-Native" : "DeCLIP-ONNX", Description = "DeCLIP: Data-Efficient Contrastive Language-Image Pre-training (Li et al., ICLR 2022)", FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers }; m.AdditionalInfo["Architecture"] = "DeCLIP"; m.AdditionalInfo["ImageSelfSupervisedWeight"] = _options.ImageSelfSupervisedWeight.ToString(); m.AdditionalInfo["TextMLMWeight"] = _options.TextMLMWeight.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ImageEncoderModelPath ?? string.Empty); writer.Write(_options.TextEncoderModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionEmbeddingDim); writer.Write(_options.TextEmbeddingDim); writer.Write(_options.ProjectionDim); writer.Write(_options.Temperature); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string ip = reader.ReadString(); if (!string.IsNullOrEmpty(ip)) _options.ImageEncoderModelPath = ip; string tp = reader.ReadString(); if (!string.IsNullOrEmpty(tp)) _options.TextEncoderModelPath = tp; _options.ImageSize = reader.ReadInt32(); _options.VisionEmbeddingDim = reader.ReadInt32(); _options.TextEmbeddingDim = reader.ReadInt32(); _options.ProjectionDim = reader.ReadInt32(); _options.Temperature = reader.ReadDouble(); if (!_useNativeMode && _options.ImageEncoderModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxImageEncoder = new OnnxModel<T>(p, _options.OnnxOptions); if (_options.TextEncoderModelPath is { } t2 && !string.IsNullOrEmpty(t2)) OnnxTextEncoder = new OnnxModel<T>(t2, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ImageEncoderModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new DeCLIP<T>(Architecture, mp, _options); return new DeCLIP<T>(Architecture, _options); }

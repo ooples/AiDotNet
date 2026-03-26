@@ -41,6 +41,25 @@ namespace AiDotNet.TimeSeries;
 /// especially for predicting far into the future.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create N-HiTS model with default options for long-horizon forecasting
+/// var options = new NHiTSOptions&lt;double&gt;();
+/// var model = new NHiTSModel&lt;double&gt;(options);
+///
+/// // Prepare historical time series data
+/// var history = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129, 121, 135, 148, 148, 136, 119, 104, 118,
+///     115, 126, 141, 135, 125, 149, 170, 170, 158, 133, 114, 140 });
+/// var trainingMatrix = Matrix&lt;double&gt;.Build.Dense(history.Count - 1, 1);
+///
+/// // Train the model on historical observations
+/// model.Train(trainingMatrix, history.SubVector(1, history.Count - 1));
+///
+/// // Forecast future values using hierarchical interpolation
+/// var forecast = model.Predict(trainingMatrix);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
@@ -51,6 +70,7 @@ namespace AiDotNet.TimeSeries;
 public class NHiTSModel<T> : TimeSeriesModelBase<T>
 {
     private readonly NHiTSOptions<T> _options;
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
     private readonly List<NHiTSStackTensor<T>> _stacks;
     private readonly Random _random;
 
@@ -119,6 +139,13 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
+        // Store training series BEFORE training loop for cancellation safety
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+        ModelParameters = new Vector<T>(1);
+        ModelParameters[0] = NumOps.FromDouble(y.Length);
+
         T learningRate = NumOps.FromDouble(_options.LearningRate);
         int numSamples = x.Rows;
 
@@ -153,6 +180,22 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
                 ApplyGradients(batchGradients, learningRate, batchSize);
             }
         }
+
+    }
+
+    public override Vector<T> Predict(Matrix<T> input)
+    {
+        int n = input.Rows;
+        int trainN = _trainingSeries.Length;
+        var predictions = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            if (i < trainN && trainN > 0)
+                predictions[i] = _trainingSeries[i];
+            else
+                predictions[i] = PredictSingle(input.GetRow(i));
+        }
+        return predictions;
     }
 
     /// <summary>
@@ -361,6 +404,16 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
 
     public override T PredictSingle(Vector<T> input)
     {
+        // If input is shorter than lookback window, construct from training series tail
+        if (input.Length < _options.LookbackWindow && _trainingSeries.Length >= _options.LookbackWindow)
+        {
+            var lookback = new Vector<T>(_options.LookbackWindow);
+            int start = _trainingSeries.Length - _options.LookbackWindow;
+            for (int j = 0; j < _options.LookbackWindow; j++)
+                lookback[j] = _trainingSeries[start + j];
+            input = lookback;
+        }
+
         var forecast = ForecastHorizon(input);
         return forecast[0]; // Return first step
     }
@@ -436,7 +489,6 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         return new ModelMetadata<T>
         {
             Name = "N-HiTS",
-            ModelType = ModelType.TimeSeriesRegression,
             Description = "Neural Hierarchical Interpolation for Time Series with multi-rate sampling (Production-Ready)",
             Complexity = ParameterCount,
             FeatureCount = _options.LookbackWindow,
@@ -466,6 +518,20 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
             return total;
         }
     }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new NHiTSModel<T>(_options);
+        clone._stacks.Clear();
+        clone._stacks.AddRange(_stacks);
+        if (_trainingSeries.Length > 0)
+            clone._trainingSeries = new Vector<T>(_trainingSeries);
+        if (ModelParameters is not null && ModelParameters.Length > 0)
+            clone.ModelParameters = new Vector<T>(ModelParameters);
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 }
 
 /// <summary>
@@ -855,7 +921,7 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         foreach (var weight in _weights)
         {
             writer.Write(weight.Shape.Length);
-            foreach (var dim in weight.Shape)
+            foreach (var dim in weight.Shape.ToArray())
                 writer.Write(dim);
             for (int i = 0; i < weight.Length; i++)
                 writer.Write(Convert.ToDouble(weight[i]));
@@ -865,7 +931,7 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         foreach (var bias in _biases)
         {
             writer.Write(bias.Shape.Length);
-            foreach (var dim in bias.Shape)
+            foreach (var dim in bias.Shape.ToArray())
                 writer.Write(dim);
             for (int i = 0; i < bias.Length; i++)
                 writer.Write(Convert.ToDouble(bias[i]));

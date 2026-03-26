@@ -32,6 +32,29 @@ namespace AiDotNet.Regression;
 /// - Super Learner learns to use each when appropriate
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Super Learner ensemble combining multiple base models
+/// var baseModels = new IFullModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;[]
+/// {
+///     new RidgeRegression&lt;double&gt;(),
+///     new MultipleRegression&lt;double&gt;()
+/// };
+/// var model = new SuperLearner&lt;double&gt;(baseModels);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train with cross-validated optimal meta-learner
+/// model.Train(features, targets);
+///
+/// // Predict using the optimally weighted combination
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
@@ -241,12 +264,9 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
         var result = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
-            T combined = _metaIntercept;
-            for (int m = 0; m < numModels; m++)
-            {
-                combined = NumOps.Add(combined, NumOps.Multiply(basePredictions[i, m], _metaWeights[m]));
-            }
-            result[i] = combined;
+            var predRow = new Vector<T>(numModels);
+            for (int m = 0; m < numModels; m++) predRow[m] = basePredictions[i, m];
+            result[i] = NumOps.Add(_metaIntercept, Engine.DotProduct(predRow, _metaWeights));
         }
 
         return result;
@@ -391,13 +411,7 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     /// </summary>
     private IFullModel<T, Matrix<T>, Vector<T>> CloneModel(IFullModel<T, Matrix<T>, Vector<T>> model)
     {
-        // Serialize and deserialize to clone
-        byte[] data = model.Serialize();
-        var instance = Activator.CreateInstance(model.GetType())
-            ?? throw new InvalidOperationException($"Failed to create instance of {model.GetType().Name}");
-        var clone = (IFullModel<T, Matrix<T>, Vector<T>>)instance;
-        clone.Deserialize(data);
-        return clone;
+        return model.Clone();
     }
 
     /// <summary>
@@ -890,12 +904,6 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     }
 
     /// <inheritdoc/>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.SuperLearner;
-    }
-
-    /// <inheritdoc/>
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
         Train(x, y);
@@ -906,7 +914,6 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SuperLearner,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumBaseModels", _baseModels.Count },
@@ -915,6 +922,19 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
                 { "NumFeatures", _numFeatures }
             }
         };
+    }
+
+    /// <summary>
+    /// SuperLearner is an ensemble that doesn't support optimizer parameter injection.
+    /// </summary>
+    public override int ParameterCount => 0;
+
+    /// <summary>
+    /// Returns all features since the ensemble uses sub-models on all features.
+    /// </summary>
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        return Enumerable.Range(0, _numFeatures > 0 ? _numFeatures : 0);
     }
 
     /// <inheritdoc/>
@@ -1001,6 +1021,34 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
             }
         }
     }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        // Clone each base model
+        var clonedModels = new List<IFullModel<T, Matrix<T>, Vector<T>>>();
+        foreach (var model in _baseModels)
+            clonedModels.Add(model.Clone());
+
+        var clone = new SuperLearner<T>(clonedModels, _options, Regularization);
+        if (SupportVectors.Rows > 0)
+            clone.SupportVectors = SupportVectors.Clone();
+        if (Alphas.Length > 0)
+            clone.Alphas = new Vector<T>(Alphas);
+        clone.B = B;
+        clone._metaIntercept = _metaIntercept;
+        clone._numFeatures = _numFeatures;
+        if (_metaWeights is not null)
+            clone._metaWeights = new Vector<T>(_metaWeights);
+        if (_cvPerformance is not null)
+            clone._cvPerformance = new Vector<T>(_cvPerformance);
+        if (_predMeans is not null)
+            clone._predMeans = new Vector<T>(_predMeans);
+        if (_predStds is not null)
+            clone._predStds = new Vector<T>(_predStds);
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <inheritdoc/>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()

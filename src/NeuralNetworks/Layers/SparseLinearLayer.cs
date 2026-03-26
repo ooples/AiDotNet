@@ -1,5 +1,7 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
@@ -32,6 +34,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (float or double).</typeparam>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.Projection)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 0.5")]
 public class SparseLinearLayer<T> : LayerBase<T>
 {
     private readonly ISparseEngine _engine;
@@ -120,7 +125,8 @@ public class SparseLinearLayer<T> : LayerBase<T>
         int inputFeatures,
         int outputFeatures,
         double sparsity = 0.9,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [inputFeatures],
             [outputFeatures],
@@ -131,6 +137,7 @@ public class SparseLinearLayer<T> : LayerBase<T>
             throw new ArgumentException("Sparsity must be in [0, 1).", nameof(sparsity));
         }
 
+        InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
         InputFeatures = inputFeatures;
         OutputFeatures = outputFeatures;
         _sparsity = sparsity;
@@ -139,22 +146,22 @@ public class SparseLinearLayer<T> : LayerBase<T>
         _numOps = MathHelper.GetNumericOperations<T>();
 
         _biases = new Vector<T>(outputFeatures);
+        // Biases initialized to zero by default (standard practice for ReLU layers)
         _weights = InitializeSparseWeights();
     }
 
     /// <summary>
-    /// Initializes sparse weights using Xavier/Glorot initialization.
+    /// Initializes sparse weights using the layer's initialization strategy.
     /// </summary>
     private SparseTensor<T> InitializeSparseWeights()
     {
         var random = RandomHelper.CreateSeededRandom(42);
-        var scale = Math.Sqrt(2.0 / (InputFeatures + OutputFeatures));
 
         // Calculate number of non-zero weights
         int totalWeights = OutputFeatures * InputFeatures;
         int nonZeroCount = Math.Max(1, (int)(totalWeights * (1.0 - _sparsity)));
 
-        // Generate random indices
+        // Generate random non-zero positions
         var indices = new HashSet<(int row, int col)>();
         while (indices.Count < nonZeroCount)
         {
@@ -163,7 +170,11 @@ public class SparseLinearLayer<T> : LayerBase<T>
             indices.Add((row, col));
         }
 
-        // Convert to COO format
+        // Create a dense weight tensor initialized via the strategy, then extract sparse values
+        var denseWeights = new Tensor<T>([OutputFeatures, InputFeatures]);
+        InitializeLayerWeights(denseWeights, InputFeatures, OutputFeatures);
+
+        // Convert to COO format, keeping only the selected non-zero positions
         var rowIndices = new int[nonZeroCount];
         var colIndices = new int[nonZeroCount];
         var values = new T[nonZeroCount];
@@ -173,14 +184,8 @@ public class SparseLinearLayer<T> : LayerBase<T>
         {
             rowIndices[idx] = row;
             colIndices[idx] = col;
-            values[idx] = _numOps.FromDouble((random.NextDouble() - 0.5) * 2 * scale);
+            values[idx] = denseWeights[row, col];
             idx++;
-        }
-
-        // Initialize biases to zero
-        for (int i = 0; i < OutputFeatures; i++)
-        {
-            _biases[i] = _numOps.Zero;
         }
 
         return new SparseTensor<T>(OutputFeatures, InputFeatures, rowIndices, colIndices, values);
@@ -242,8 +247,8 @@ public class SparseLinearLayer<T> : LayerBase<T>
         // Sparse matrix multiplication
         var outputMatrix = _engine.SpMM(_weights, inputTransposed);
 
-        // Transpose back and add biases
-        var output = new Tensor<T>([batchSize, OutputFeatures]);
+        // Transpose back and add biases (output fully overwritten, safe to rent)
+        var output = TensorAllocator.Rent<T>([batchSize, OutputFeatures]);
         for (int b = 0; b < batchSize; b++)
         {
             for (int o = 0; o < OutputFeatures; o++)
@@ -285,7 +290,7 @@ public class SparseLinearLayer<T> : LayerBase<T>
         }
 
         // Apply activation derivative to get the true gradient (chain rule)
-        var delta = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
 
         bool wasSingleSample = delta.Rank == 1;
         int batchSize;
@@ -338,7 +343,7 @@ public class SparseLinearLayer<T> : LayerBase<T>
 
         // Compute input gradient using transpose of weights
         var transposedWeights = _engine.SparseTranspose(_weights);
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -463,9 +468,47 @@ public class SparseLinearLayer<T> : LayerBase<T>
         }
     }
 
+    /// <inheritdoc/>
+    public override Vector<T> GetParameterGradients()
+    {
+        // Match GetParameters layout: non-zero weights (CSR order) + biases
+        var gradients = new Vector<T>(ParameterCount);
+        int idx = 0;
+
+        if (_weightsGradient != null)
+        {
+            // Iterate non-zero positions in same CSR order as GetParameters
+            for (int nz = 0; nz < _weights.NonZeroCount; nz++)
+            {
+                int row = _weights.RowIndices[nz];
+                int col = _weights.ColumnIndices[nz];
+                gradients[idx++] = _weightsGradient[row, col];
+            }
+        }
+        else
+        {
+            idx += _weights.NonZeroCount;
+        }
+
+        if (_biasesGradient != null)
+        {
+            for (int o = 0; o < OutputFeatures; o++)
+                gradients[idx++] = _biasesGradient[o];
+        }
+
+        return gradients;
+    }
+
     /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _weightsGradient = null;
+        _biasesGradient = null;
+    }
+
     public override void ResetState()
     {
         _lastInput = null;
@@ -563,18 +606,10 @@ public class SparseLinearLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Transposes a matrix.
+    /// Transposes a matrix using O(1) stride-based view.
     /// </summary>
     private Matrix<T> TransposeMatrix(Matrix<T> matrix)
     {
-        var result = new Matrix<T>(matrix.Columns, matrix.Rows);
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                result[j, i] = matrix[i, j];
-            }
-        }
-        return result;
+        return matrix.Transpose();
     }
 }

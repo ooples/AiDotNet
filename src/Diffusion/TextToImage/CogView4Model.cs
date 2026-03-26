@@ -277,7 +277,7 @@ public class CogView4Model<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var predictorCount = _predictor.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != predictorCount + vaeCount)
         {
@@ -336,7 +336,6 @@ public class CogView4Model<T> : LatentDiffusionModelBase<T>
         {
             Name = "CogView-4",
             Version = "4.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Bilingual Chinese-English T2I with SiT architecture and relay diffusion",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

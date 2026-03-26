@@ -33,7 +33,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_Forecasting_HasCommonParams()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var searchSpace = space.GetSearchSpace(ModelType.PatchTST);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>));
 
         Assert.True(searchSpace.ContainsKey("LearningRate"));
         Assert.True(searchSpace.ContainsKey("HiddenSize"));
@@ -47,7 +47,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_PatchTST_HasPatchSpecificParams()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var searchSpace = space.GetSearchSpace(ModelType.PatchTST);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>));
 
         Assert.True(searchSpace.ContainsKey("PatchLength"));
         Assert.True(searchSpace.ContainsKey("NumAttentionHeads"));
@@ -63,7 +63,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_DeepAR_HasProbabilisticParams()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var searchSpace = space.GetSearchSpace(ModelType.DeepAR);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Neural.DeepAR<>));
 
         Assert.True(searchSpace.ContainsKey("NumSamples"));
         Assert.True(searchSpace.ContainsKey("LikelihoodType"));
@@ -78,7 +78,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_NBEATS_HasStackParams()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var searchSpace = space.GetSearchSpace(ModelType.NBEATS);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Neural.NBEATSFinance<>));
 
         Assert.True(searchSpace.ContainsKey("NumStacks"));
         Assert.True(searchSpace.ContainsKey("NumBlocksPerStack"));
@@ -92,7 +92,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_NeuralVaR_HasConfidenceLevel()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Risk);
-        var searchSpace = space.GetSearchSpace(ModelType.NeuralVaR);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Risk.NeuralVaR<>));
 
         Assert.True(searchSpace.ContainsKey("ConfidenceLevel"));
 
@@ -107,7 +107,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_TabNet_HasDecisionSteps()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Risk);
-        var searchSpace = space.GetSearchSpace(ModelType.TabNet);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Risk.TabNet<>));
 
         Assert.True(searchSpace.ContainsKey("NumDecisionSteps"));
         Assert.True(searchSpace.ContainsKey("RelaxationFactor"));
@@ -121,7 +121,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_TabTransformer_HasEmbeddingDim()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Risk);
-        var searchSpace = space.GetSearchSpace(ModelType.TabTransformer);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Risk.TabTransformer<>));
 
         Assert.True(searchSpace.ContainsKey("EmbeddingDim"));
         Assert.True(searchSpace.ContainsKey("NumAttentionHeads"));
@@ -135,7 +135,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_TFT_HasVariableSelection()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var searchSpace = space.GetSearchSpace(ModelType.TFT);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.TFT<>));
 
         Assert.True(searchSpace.ContainsKey("UseVariableSelection"));
         Assert.True(searchSpace.ContainsKey("NumAttentionHeads"));
@@ -145,7 +145,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_ITransformer_HasFeedForwardDim()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var searchSpace = space.GetSearchSpace(ModelType.ITransformer);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.ITransformer<>));
 
         Assert.True(searchSpace.ContainsKey("FeedForwardDim"));
         Assert.True(searchSpace.ContainsKey("NumAttentionHeads"));
@@ -159,7 +159,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_Forecasting_LearningRate_UsesLogScale()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var searchSpace = space.GetSearchSpace(ModelType.PatchTST);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>));
 
         var lrRange = searchSpace["LearningRate"];
         Assert.True(lrRange.UseLogScale,
@@ -172,8 +172,8 @@ public class FinanceSearchSpaceIntegrationTests
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
 
-        var forecastLR = forecastSpace.GetSearchSpace(ModelType.PatchTST)["LearningRate"];
-        var riskLR = riskSpace.GetSearchSpace(ModelType.NeuralVaR)["LearningRate"];
+        var forecastLR = forecastSpace.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>))["LearningRate"];
+        var riskLR = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.NeuralVaR<>))["LearningRate"];
 
         Assert.True(ToDouble(riskLR.MaxValue) <= ToDouble(forecastLR.MaxValue),
             "Risk max LR should be <= forecast max LR");
@@ -183,8 +183,8 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_AllRanges_MinLessThanMax()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var allModelTypes = new[] { ModelType.PatchTST, ModelType.DeepAR, ModelType.NBEATS,
-                                     ModelType.TFT, ModelType.ITransformer };
+        var allModelTypes = new[] { typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>), typeof(AiDotNet.Finance.Forecasting.Neural.DeepAR<>), typeof(AiDotNet.Finance.Forecasting.Neural.NBEATSFinance<>),
+                                     typeof(AiDotNet.Finance.Forecasting.Transformers.TFT<>), typeof(AiDotNet.Finance.Forecasting.Transformers.ITransformer<>) };
 
         foreach (var modelType in allModelTypes)
         {
@@ -207,7 +207,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_DefaultValues_WithinRange()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var searchSpace = space.GetSearchSpace(ModelType.PatchTST);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>));
 
         foreach (var (name, range) in searchSpace)
         {
@@ -231,8 +231,8 @@ public class FinanceSearchSpaceIntegrationTests
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
 
-        var forecastDefault = forecastSpace.GetSearchSpace(ModelType.AutoML);
-        var riskDefault = riskSpace.GetSearchSpace(ModelType.AutoML);
+        var forecastDefault = forecastSpace.GetSearchSpace(typeof(AiDotNet.AutoML.AutoMLModelBase<,,>));
+        var riskDefault = riskSpace.GetSearchSpace(typeof(AiDotNet.AutoML.AutoMLModelBase<,,>));
 
         Assert.True(forecastDefault.ContainsKey("LearningRate"));
         Assert.True(forecastDefault.ContainsKey("Epochs"));
@@ -247,7 +247,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_DeepAR_NumSamples_IntegerRange()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var searchSpace = space.GetSearchSpace(ModelType.DeepAR);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Neural.DeepAR<>));
 
         var samplesRange = searchSpace["NumSamples"];
         Assert.Equal(ParameterType.Integer, samplesRange.Type);
@@ -260,7 +260,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_DeepAR_LikelihoodType_HasNegativeBinomial()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var searchSpace = space.GetSearchSpace(ModelType.DeepAR);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Neural.DeepAR<>));
 
         var likelihoodRange = searchSpace["LikelihoodType"];
         var values = likelihoodRange.CategoricalValues.Cast<string>().ToList();
@@ -273,7 +273,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_NBEATS_NumStacks_CorrectRange()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var searchSpace = space.GetSearchSpace(ModelType.NBEATS);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Neural.NBEATSFinance<>));
 
         var stackRange = searchSpace["NumStacks"];
         Assert.Equal(ParameterType.Integer, stackRange.Type);
@@ -286,7 +286,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_NBEATS_BlocksPerStack_CorrectRange()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var searchSpace = space.GetSearchSpace(ModelType.NBEATS);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Neural.NBEATSFinance<>));
 
         var blocksRange = searchSpace["NumBlocksPerStack"];
         Assert.Equal(ParameterType.Integer, blocksRange.Type);
@@ -298,7 +298,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_TabNet_RelaxationFactor_FloatRange()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Risk);
-        var searchSpace = space.GetSearchSpace(ModelType.TabNet);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Risk.TabNet<>));
 
         var relaxRange = searchSpace["RelaxationFactor"];
         Assert.Equal(ParameterType.Float, relaxRange.Type);
@@ -311,7 +311,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_TabTransformer_EmbeddingDim_DefaultIs32()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Risk);
-        var searchSpace = space.GetSearchSpace(ModelType.TabTransformer);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Risk.TabTransformer<>));
 
         var embRange = searchSpace["EmbeddingDim"];
         Assert.Equal(32.0, ToDouble(embRange.DefaultValue));
@@ -321,7 +321,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_PatchTST_AttentionHeads_CorrectRange()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var searchSpace = space.GetSearchSpace(ModelType.PatchTST);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>));
 
         var attnRange = searchSpace["NumAttentionHeads"];
         Assert.Equal(ParameterType.Integer, attnRange.Type);
@@ -334,7 +334,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_ITransformer_FeedForwardDim_DefaultIs256()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var searchSpace = space.GetSearchSpace(ModelType.ITransformer);
+        var searchSpace = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.ITransformer<>));
 
         var ffRange = searchSpace["FeedForwardDim"];
         Assert.Equal(256.0, ToDouble(ffRange.DefaultValue));
@@ -346,8 +346,8 @@ public class FinanceSearchSpaceIntegrationTests
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
 
-        var forecastHidden = forecastSpace.GetSearchSpace(ModelType.PatchTST)["HiddenSize"];
-        var riskHidden = riskSpace.GetSearchSpace(ModelType.NeuralVaR)["HiddenSize"];
+        var forecastHidden = forecastSpace.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>))["HiddenSize"];
+        var riskHidden = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.NeuralVaR<>))["HiddenSize"];
 
         Assert.True(ToDouble(riskHidden.MaxValue) <= ToDouble(forecastHidden.MaxValue),
             "Risk HiddenSize max should be <= forecast HiddenSize max");
@@ -359,8 +359,8 @@ public class FinanceSearchSpaceIntegrationTests
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
 
-        var forecastLayers = forecastSpace.GetSearchSpace(ModelType.PatchTST)["NumLayers"];
-        var riskLayers = riskSpace.GetSearchSpace(ModelType.NeuralVaR)["NumLayers"];
+        var forecastLayers = forecastSpace.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>))["NumLayers"];
+        var riskLayers = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.NeuralVaR<>))["NumLayers"];
 
         Assert.True(ToDouble(riskLayers.MaxValue) <= ToDouble(forecastLayers.MaxValue),
             "Risk NumLayers max should be <= forecast NumLayers max");
@@ -370,7 +370,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_Risk_LearningRate_AlsoUsesLogScale()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
-        var riskLR = riskSpace.GetSearchSpace(ModelType.NeuralVaR)["LearningRate"];
+        var riskLR = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.NeuralVaR<>))["LearningRate"];
 
         Assert.True(riskLR.UseLogScale,
             "Risk learning rate should also use log scale");
@@ -380,7 +380,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_Tabular_DropoutRate_MaxIs0_4()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
-        var tabNetDropout = riskSpace.GetSearchSpace(ModelType.TabNet)["DropoutRate"];
+        var tabNetDropout = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.TabNet<>))["DropoutRate"];
 
         Assert.Equal(0.4, ToDouble(tabNetDropout.MaxValue));
     }
@@ -389,7 +389,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_Forecasting_DropoutRate_MaxIs0_5()
     {
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var forecastDropout = forecastSpace.GetSearchSpace(ModelType.PatchTST)["DropoutRate"];
+        var forecastDropout = forecastSpace.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>))["DropoutRate"];
 
         Assert.Equal(0.5, ToDouble(forecastDropout.MaxValue));
     }
@@ -398,7 +398,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_Tabular_BatchSize_DefaultIs64()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
-        var tabNetBatch = riskSpace.GetSearchSpace(ModelType.TabNet)["BatchSize"];
+        var tabNetBatch = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.TabNet<>))["BatchSize"];
 
         Assert.Equal(64.0, ToDouble(tabNetBatch.DefaultValue));
     }
@@ -407,7 +407,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_Forecasting_BatchSize_DefaultIs32()
     {
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var forecastBatch = forecastSpace.GetSearchSpace(ModelType.PatchTST)["BatchSize"];
+        var forecastBatch = forecastSpace.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>))["BatchSize"];
 
         Assert.Equal(32.0, ToDouble(forecastBatch.DefaultValue));
     }
@@ -416,7 +416,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_Forecasting_Epochs_MaxIs500()
     {
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var epochs = forecastSpace.GetSearchSpace(ModelType.PatchTST)["Epochs"];
+        var epochs = forecastSpace.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>))["Epochs"];
 
         Assert.Equal(500.0, ToDouble(epochs.MaxValue));
     }
@@ -425,7 +425,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_Risk_Epochs_MaxIs300()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
-        var epochs = riskSpace.GetSearchSpace(ModelType.NeuralVaR)["Epochs"];
+        var epochs = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.NeuralVaR<>))["Epochs"];
 
         Assert.Equal(300.0, ToDouble(epochs.MaxValue));
     }
@@ -434,7 +434,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_Tabular_Epochs_MaxIs200()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
-        var epochs = riskSpace.GetSearchSpace(ModelType.TabNet)["Epochs"];
+        var epochs = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.TabNet<>))["Epochs"];
 
         Assert.Equal(200.0, ToDouble(epochs.MaxValue));
     }
@@ -443,7 +443,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_AllRiskModels_DefaultValues_WithinRange()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
-        var riskModels = new[] { ModelType.NeuralVaR, ModelType.TabNet, ModelType.TabTransformer };
+        var riskModels = new[] { typeof(AiDotNet.Finance.Risk.NeuralVaR<>), typeof(AiDotNet.Finance.Risk.TabNet<>), typeof(AiDotNet.Finance.Risk.TabTransformer<>) };
 
         foreach (var modelType in riskModels)
         {
@@ -468,7 +468,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_AllRiskModels_MinLessThanMax()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
-        var riskModels = new[] { ModelType.NeuralVaR, ModelType.TabNet, ModelType.TabTransformer };
+        var riskModels = new[] { typeof(AiDotNet.Finance.Risk.NeuralVaR<>), typeof(AiDotNet.Finance.Risk.TabNet<>), typeof(AiDotNet.Finance.Risk.TabTransformer<>) };
 
         foreach (var modelType in riskModels)
         {
@@ -491,7 +491,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_Forecasting_HiddenSize_DefaultIs128()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var hidden = space.GetSearchSpace(ModelType.PatchTST)["HiddenSize"];
+        var hidden = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>))["HiddenSize"];
 
         Assert.Equal(128.0, ToDouble(hidden.DefaultValue));
     }
@@ -500,7 +500,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_Risk_HiddenSize_DefaultIs64()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Risk);
-        var hidden = space.GetSearchSpace(ModelType.NeuralVaR)["HiddenSize"];
+        var hidden = space.GetSearchSpace(typeof(AiDotNet.Finance.Risk.NeuralVaR<>))["HiddenSize"];
 
         Assert.Equal(64.0, ToDouble(hidden.DefaultValue));
     }
@@ -509,7 +509,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_TFT_UseVariableSelection_DefaultIsTrue()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var varSel = space.GetSearchSpace(ModelType.TFT)["UseVariableSelection"];
+        var varSel = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.TFT<>))["UseVariableSelection"];
 
         Assert.Equal(ParameterType.Boolean, varSel.Type);
         Assert.Equal(true, varSel.DefaultValue);
@@ -519,7 +519,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_NBEATS_UseInterpretableBasis_DefaultIsTrue()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var basis = space.GetSearchSpace(ModelType.NBEATS)["UseInterpretableBasis"];
+        var basis = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Neural.NBEATSFinance<>))["UseInterpretableBasis"];
 
         Assert.Equal(true, basis.DefaultValue);
     }
@@ -529,7 +529,7 @@ public class FinanceSearchSpaceIntegrationTests
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
 
-        var patchTST1 = space.GetSearchSpace(ModelType.PatchTST);
+        var patchTST1 = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>));
 
         // Modifying one should not affect the other
         patchTST1["LearningRate"] = new ParameterRange
@@ -540,7 +540,7 @@ public class FinanceSearchSpaceIntegrationTests
             DefaultValue = 0.5
         };
 
-        var patchTST3 = space.GetSearchSpace(ModelType.PatchTST);
+        var patchTST3 = space.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>));
         // Should get fresh default, not the modified one
         Assert.Equal(0.001, ToDouble(patchTST3["LearningRate"].DefaultValue));
     }
@@ -549,7 +549,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_Tabular_LearningRate_MaxIs0_05()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
-        var tabNetLR = riskSpace.GetSearchSpace(ModelType.TabNet)["LearningRate"];
+        var tabNetLR = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.TabNet<>))["LearningRate"];
 
         Assert.Equal(0.05, ToDouble(tabNetLR.MaxValue));
     }
@@ -558,7 +558,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void SearchSpace_ConfidenceLevel_StrictRange_NoOverflow()
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
-        var confRange = riskSpace.GetSearchSpace(ModelType.NeuralVaR)["ConfidenceLevel"];
+        var confRange = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.NeuralVaR<>))["ConfidenceLevel"];
 
         Assert.True(ToDouble(confRange.MinValue) > 0.0);
         Assert.True(ToDouble(confRange.MaxValue) < 1.0);
@@ -576,7 +576,7 @@ public class FinanceSearchSpaceIntegrationTests
         foreach (var domain in domains)
         {
             var space = new FinancialSearchSpace(domain);
-            var searchSpace = space.GetSearchSpace(ModelType.AutoML);
+            var searchSpace = space.GetSearchSpace(typeof(AiDotNet.AutoML.AutoMLModelBase<,,>));
             Assert.NotNull(searchSpace);
             Assert.NotEmpty(searchSpace);
         }
@@ -586,7 +586,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void FinancialDomain_Forecasting_CustomModel_HasCommonParams()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
-        var defaultSpace = space.GetSearchSpace(ModelType.AutoML);
+        var defaultSpace = space.GetSearchSpace(typeof(AiDotNet.AutoML.AutoMLModelBase<,,>));
 
         Assert.True(defaultSpace.ContainsKey("LearningRate"));
         Assert.True(defaultSpace.ContainsKey("HiddenSize"));
@@ -600,7 +600,7 @@ public class FinanceSearchSpaceIntegrationTests
     public void FinancialDomain_Risk_CustomModel_HasRiskParams()
     {
         var space = new FinancialSearchSpace(FinancialDomain.Risk);
-        var defaultSpace = space.GetSearchSpace(ModelType.AutoML);
+        var defaultSpace = space.GetSearchSpace(typeof(AiDotNet.AutoML.AutoMLModelBase<,,>));
 
         Assert.True(defaultSpace.ContainsKey("LearningRate"));
         Assert.True(defaultSpace.ContainsKey("HiddenSize"));
@@ -2028,14 +2028,14 @@ public class FinanceSearchSpaceIntegrationTests
     {
         var allModels = new[]
         {
-            (FinancialDomain.Forecasting, ModelType.PatchTST),
-            (FinancialDomain.Forecasting, ModelType.ITransformer),
-            (FinancialDomain.Forecasting, ModelType.DeepAR),
-            (FinancialDomain.Forecasting, ModelType.NBEATS),
-            (FinancialDomain.Forecasting, ModelType.TFT),
-            (FinancialDomain.Risk, ModelType.NeuralVaR),
-            (FinancialDomain.Risk, ModelType.TabNet),
-            (FinancialDomain.Risk, ModelType.TabTransformer)
+            (FinancialDomain.Forecasting, typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>)),
+            (FinancialDomain.Forecasting, typeof(AiDotNet.Finance.Forecasting.Transformers.ITransformer<>)),
+            (FinancialDomain.Forecasting, typeof(AiDotNet.Finance.Forecasting.Neural.DeepAR<>)),
+            (FinancialDomain.Forecasting, typeof(AiDotNet.Finance.Forecasting.Neural.NBEATSFinance<>)),
+            (FinancialDomain.Forecasting, typeof(AiDotNet.Finance.Forecasting.Transformers.TFT<>)),
+            (FinancialDomain.Risk, typeof(AiDotNet.Finance.Risk.NeuralVaR<>)),
+            (FinancialDomain.Risk, typeof(AiDotNet.Finance.Risk.TabNet<>)),
+            (FinancialDomain.Risk, typeof(AiDotNet.Finance.Risk.TabTransformer<>))
         };
 
         foreach (var (domain, modelType) in allModels)
@@ -2053,8 +2053,8 @@ public class FinanceSearchSpaceIntegrationTests
     [Fact]
     public void CrossDomain_SearchSpace_AllForecastingModels_HaveCommonParams()
     {
-        var forecastModels = new[] { ModelType.PatchTST, ModelType.ITransformer,
-            ModelType.DeepAR, ModelType.NBEATS, ModelType.TFT };
+        var forecastModels = new[] { typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>), typeof(AiDotNet.Finance.Forecasting.Transformers.ITransformer<>),
+            typeof(AiDotNet.Finance.Forecasting.Neural.DeepAR<>), typeof(AiDotNet.Finance.Forecasting.Neural.NBEATSFinance<>), typeof(AiDotNet.Finance.Forecasting.Transformers.TFT<>) };
 
         var space = new FinancialSearchSpace(FinancialDomain.Forecasting);
 
@@ -2112,10 +2112,10 @@ public class FinanceSearchSpaceIntegrationTests
         var forecastSpace = new FinancialSearchSpace(FinancialDomain.Forecasting);
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
 
-        var patchTST = forecastSpace.GetSearchSpace(ModelType.PatchTST);
+        var patchTST = forecastSpace.GetSearchSpace(typeof(AiDotNet.Finance.Forecasting.Transformers.PatchTST<>));
         Assert.True(patchTST.ContainsKey("PatchLength"));
 
-        var neuralVaR = riskSpace.GetSearchSpace(ModelType.NeuralVaR);
+        var neuralVaR = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.NeuralVaR<>));
         Assert.True(neuralVaR.ContainsKey("ConfidenceLevel"));
         Assert.False(neuralVaR.ContainsKey("PatchLength"),
             "Risk model should not have forecasting-specific PatchLength");
@@ -2126,8 +2126,8 @@ public class FinanceSearchSpaceIntegrationTests
     {
         var riskSpace = new FinancialSearchSpace(FinancialDomain.Risk);
 
-        var tabNet = riskSpace.GetSearchSpace(ModelType.TabNet);
-        var tabTransformer = riskSpace.GetSearchSpace(ModelType.TabTransformer);
+        var tabNet = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.TabNet<>));
+        var tabTransformer = riskSpace.GetSearchSpace(typeof(AiDotNet.Finance.Risk.TabTransformer<>));
 
         Assert.Equal(ToDouble(tabNet["LearningRate"].MinValue), ToDouble(tabTransformer["LearningRate"].MinValue));
         Assert.Equal(ToDouble(tabNet["LearningRate"].MaxValue), ToDouble(tabTransformer["LearningRate"].MaxValue));

@@ -1,4 +1,6 @@
-﻿using AiDotNet.Autodiff;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -29,6 +31,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Pooling)]
+[LayerTask(LayerTask.DownSampling)]
+[LayerTask(LayerTask.VolumetricProcessing)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "new[] { 1, 4, 4, 4 }, 2, 2")]
 public class MaxPool3DLayer<T> : LayerBase<T>
 {
     #region Properties
@@ -211,7 +217,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Rank;
 
         Tensor<T> batchedInput;
@@ -285,7 +291,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
 
         IGpuTensor<T> input5D;
         bool addedBatch = false;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         if (rank == 4)
@@ -306,7 +312,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
             input5D = input.CreateView(0, new[] { flatBatch, input.Shape[rank - 4], input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
-        _gpuInputShape = input5D.Shape;
+        _gpuInputShape = input5D.Shape.ToArray();
         _addedBatchDimension = addedBatch;
 
         var poolSizeArr = new[] { PoolSize, PoolSize, PoolSize };
@@ -423,7 +429,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
         {
             batchedGradient = outputGradient;
             inputShape = _lastInput.Shape.Length == 5
-                ? _lastInput.Shape
+                ? _lastInput.Shape.ToArray()
                 : new[] { 1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2], _lastInput.Shape[3] };
         }
         else if (rank == 4)
@@ -453,7 +459,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
             [Stride, Stride, Stride]);
 
         // Restore to original input shape
-        return inputGrad.Reshape(_lastInput.Shape);
+        return inputGrad.Reshape(_lastInput.Shape.ToArray());
     }
 
     #endregion

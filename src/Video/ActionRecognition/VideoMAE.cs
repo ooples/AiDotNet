@@ -42,6 +42,20 @@ namespace AiDotNet.Video.ActionRecognition;
 /// NeurIPS 2022.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VideoMAE model for action recognition on Kinetics-400
+/// var videoMAE = new VideoMAE&lt;double&gt;();
+///
+/// // Or configure with a custom architecture and parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3,
+///     outputSize: 400);
+/// var model = new VideoMAE&lt;double&gt;(architecture, numClasses: 400, numFrames: 16);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -351,7 +365,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
 
         // Compute loss gradient using the configured loss function
         var gradientVector = LossFunction.CalculateDerivative(predicted.ToVector(), expectedOutput.ToVector());
-        var lossGradient = new Tensor<T>(predicted.Shape, gradientVector);
+        var lossGradient = new Tensor<T>(predicted.Shape.ToArray(), gradientVector);
 
         BackwardPass(lossGradient);
 
@@ -456,7 +470,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         for (int i = 0; i < input.Length; i++)
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };
 
         using var results = _onnxSession.Run(inputs);
@@ -785,7 +799,6 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoActionRecognition,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

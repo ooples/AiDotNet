@@ -16,7 +16,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Graph;
 
@@ -66,6 +66,21 @@ namespace AiDotNet.Finance.Graph;
 /// https://arxiv.org/abs/2005.11650
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for multivariate time series with auto-discovered graph (100 variables, 24-step forecast)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 60, inputWidth: 100, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode: automatically discovers inter-variable relationships
+/// var model = new MTGNN&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained MTGNN model
+/// var onnxModel = new MTGNN&lt;double&gt;(architecture, "mtgnn_forecast.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.GraphAnalysis)]
 [ModelCategory(ModelCategory.GraphNetwork)]
@@ -581,7 +596,7 @@ public class MTGNN<T> : ForecastingModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape));
+        Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -654,7 +669,6 @@ public class MTGNN<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "MTGNN" },
@@ -1005,7 +1019,7 @@ public class MTGNN<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape)
+        foreach (var dim in input.Shape.ToArray())
         {
             totalSize *= dim;
         }
@@ -1092,7 +1106,7 @@ public class MTGNN<T> : ForecastingModelBase<T>
             (currentPower, previousPower) = (previousPower, currentPower);
         }
 
-        return new Tensor<T>(nodeFeatures.Shape, new Vector<T>(result));
+        return new Tensor<T>(nodeFeatures.Shape.ToArray(), new Vector<T>(result));
     }
 
     #endregion
@@ -1204,7 +1218,7 @@ public class MTGNN<T> : ForecastingModelBase<T>
             perturbed[i] = NumOps.FromDouble(val + noise);
         }
 
-        return new Tensor<T>(input.Shape, new Vector<T>(perturbed));
+        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(perturbed));
     }
 
     #endregion

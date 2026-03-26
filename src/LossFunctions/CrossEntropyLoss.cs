@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.LossFunctions;
@@ -23,6 +25,9 @@ namespace AiDotNet.LossFunctions;
 /// in the output layer for multi-class classification problems.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Classification)]
+[LossTask(LossTask.MultiClass)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = false, RequiresProbabilityInputs = true, TestInputFormat = LossTestInputFormat.ProbabilityDistribution, ExpectedOutput = OutputType.Probabilities)]
 public class CrossEntropyLoss<T> : LossFunctionBase<T>
 {
     /// <summary>
@@ -117,7 +122,7 @@ public class CrossEntropyLoss<T> : LossFunctionBase<T>
         backend.CrossEntropyBackward(predicted.Buffer, actual.Buffer, gradientBuffer, batchSize, numClasses);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape, GpuTensorRole.Gradient);
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape.ToArray(), GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

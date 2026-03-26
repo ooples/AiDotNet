@@ -1,5 +1,6 @@
 using AiDotNet.Audio.Features;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Audio.MusicAnalysis;
 
@@ -27,6 +28,11 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// </remarks>
 public abstract class MusicAnalysisBase<T>
 {
+    /// <summary>
+    /// Gets the hardware-accelerated computation engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// Operations for the numeric type T.
     /// </summary>

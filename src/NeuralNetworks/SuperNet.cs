@@ -10,6 +10,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Validation;
 
 namespace AiDotNet.NeuralNetworks
@@ -20,18 +21,30 @@ namespace AiDotNet.NeuralNetworks
     /// and network weights simultaneously.
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A SuperNet is a "network of all possible networks." It
+    /// contains every candidate architecture within a single large network, with learnable
+    /// weights that determine which operations are most important. During architecture search,
+    /// the SuperNet trains these weights using gradient descent, and the final architecture
+    /// is derived by selecting the operations with the highest weights. This is the core
+    /// mechanism behind DARTS-style neural architecture search.</para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
+    /// var superNet = new SuperNet&lt;float&gt;(searchSpace, numNodes: 4, inputSize: 784, outputSize: 10);
+    /// superNet.ForwardPass(inputTensor);
+    /// var architecture = superNet.DeriveArchitecture();
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.General)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelTask(ModelTask.Classification)]
     [ModelTask(ModelTask.Regression)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-    public class SuperNet<T> : IFullModel<T, Tensor<T>, Tensor<T>>
+    public class SuperNet<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     {
-        /// <summary>
-        /// Provides numeric operations for type T.
-        /// </summary>
-        protected readonly INumericOperations<T> NumOps;
         private readonly SearchSpaceBase<T> _searchSpace;
         private readonly int _numNodes;
         private readonly int _numOperations;
@@ -62,9 +75,9 @@ namespace AiDotNet.NeuralNetworks
         /// </summary>
         private readonly ILossFunction<T> _defaultLossFunction;
 
-        public ModelType Type => ModelType.NeuralNetwork;
+
         public string[] FeatureNames { get; set; } = Array.Empty<string>();
-        public int ParameterCount => _weights.Values.Sum(w => w.Length) +
+        public override int ParameterCount => _weights.Values.Sum(w => w.Length) +
                                       _architectureParams.Sum(a => a.Rows * a.Columns);
 
         /// <summary>
@@ -76,7 +89,7 @@ namespace AiDotNet.NeuralNetworks
         /// which is used for computing both architecture and weight gradients.
         /// </para>
         /// </remarks>
-        public ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
+        public override ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
         /// <summary>
         /// Initializes a new SuperNet for differentiable architecture search.
@@ -86,7 +99,6 @@ namespace AiDotNet.NeuralNetworks
         /// <param name="lossFunction">Optional loss function to use for training. If null, uses Mean Squared Error (MSE) for neural architecture search.</param>
         public SuperNet(SearchSpaceBase<T> searchSpace, int numNodes = 4, ILossFunction<T>? lossFunction = null)
         {
-            NumOps = MathHelper.GetNumericOperations<T>();
             _searchSpace = searchSpace;
             _numNodes = numNodes;
             _numOperations = searchSpace.Operations?.Count ?? 5; // Default operations: identity, conv3x3, conv5x5, maxpool, avgpool
@@ -124,11 +136,11 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Forward pass through the SuperNet with mixed operations
         /// </summary>
-        public Tensor<T> Predict(Tensor<T> input)
+        public override Tensor<T> Predict(Tensor<T> input)
         {
             // Handle 1D input by reshaping to 2D [1, features]
             bool was1D = input.Shape.Length == 1;
-            int[] originalShape = input.Shape;
+            int[] originalShape = input.Shape.ToArray();
             if (was1D)
             {
                 input = input.Reshape([1, input.Shape[0]]);
@@ -152,7 +164,7 @@ namespace AiDotNet.NeuralNetworks
             // Process each node
             for (int nodeIdx = 0; nodeIdx < _numNodes; nodeIdx++)
             {
-                var nodeOutput = new Tensor<T>(input.Shape);
+                var nodeOutput = new Tensor<T>(input.Shape.ToArray());
                 var alpha = _architectureParams[nodeIdx];
 
                 // Apply softmax to architecture parameters for this node
@@ -202,7 +214,7 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Training is handled externally by alternating architecture and weight updates
         /// </summary>
-        public void Train(Tensor<T> input, Tensor<T> expectedOutput)
+        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
         {
             throw new NotSupportedException(
                 "SuperNet training is handled through alternating optimization. " +
@@ -419,7 +431,7 @@ namespace AiDotNet.NeuralNetworks
         /// In DARTS, architecture parameters are optimized separately on validation data.
         /// </para>
         /// </remarks>
-        public Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
+        public override Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
         {
             if (input == null)
                 throw new ArgumentNullException(nameof(input));
@@ -476,7 +488,7 @@ namespace AiDotNet.NeuralNetworks
         /// architecture and weight parameters.
         /// </para>
         /// </remarks>
-        public void ApplyGradients(Vector<T> gradients, T learningRate)
+        public override void ApplyGradients(Vector<T> gradients, T learningRate)
         {
             if (gradients == null)
                 throw new ArgumentNullException(nameof(gradients));
@@ -596,7 +608,7 @@ namespace AiDotNet.NeuralNetworks
         {
             // Handle 1D input by reshaping to 2D [1, features]
             bool was1D = input.Shape.Length == 1;
-            int[] originalShape = input.Shape;
+            int[] originalShape = input.Shape.ToArray();
             if (was1D)
             {
                 input = input.Reshape([1, input.Shape[0]]);
@@ -624,7 +636,7 @@ namespace AiDotNet.NeuralNetworks
                 }
             }
 
-            var output = new Tensor<T>(input.Shape);
+            var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
             var weight = _weights[weightKey];
 
             // Apply operation (simplified) using proper 2D tensor indexing
@@ -738,7 +750,7 @@ namespace AiDotNet.NeuralNetworks
         }
 
         // IFullModel implementation
-        public Vector<T> GetParameters()
+        public override Vector<T> GetParameters()
         {
             var allParams = new List<T>();
 
@@ -760,7 +772,7 @@ namespace AiDotNet.NeuralNetworks
             return new Vector<T>(allParams.ToArray());
         }
 
-        public void SetParameters(Vector<T> parameters)
+        public override void SetParameters(Vector<T> parameters)
         {
             int idx = 0;
 
@@ -780,18 +792,17 @@ namespace AiDotNet.NeuralNetworks
             }
         }
 
-        public IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+        public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
         {
             var clone = (SuperNet<T>)Clone();
             clone.SetParameters(parameters);
             return clone;
         }
 
-        public ModelMetadata<T> GetModelMetadata()
+        public override ModelMetadata<T> GetModelMetadata()
         {
             return new ModelMetadata<T>
             {
-                ModelType = ModelType.NeuralNetwork,
                 Description = "Differentiable Architecture Search SuperNet",
                 FeatureCount = _inputSize,
                 Complexity = _numNodes,
@@ -804,7 +815,7 @@ namespace AiDotNet.NeuralNetworks
             };
         }
 
-        public void SaveModel(string filePath)
+        public override void SaveModel(string filePath)
         {
             Helpers.ModelPersistenceGuard.EnforceBeforeSave();
 
@@ -859,7 +870,7 @@ namespace AiDotNet.NeuralNetworks
                 }
             }
         }
-        public void LoadModel(string filePath)
+        public override void LoadModel(string filePath)
         {
             Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
 
@@ -937,7 +948,7 @@ namespace AiDotNet.NeuralNetworks
                 _weightGradients[key] = new Vector<T>(length);
             }
         }
-        public byte[] Serialize()
+        public override byte[] Serialize()
         {
             using var ms = new System.IO.MemoryStream();
             using var writer = new System.IO.BinaryWriter(ms);
@@ -976,7 +987,7 @@ namespace AiDotNet.NeuralNetworks
 
             return ms.ToArray();
         }
-        public void Deserialize(byte[] data)
+        public override void Deserialize(byte[] data)
         {
             if (data == null)
                 throw new ArgumentNullException(nameof(data), "The data parameter passed to Deserialize cannot be null.");
@@ -1038,17 +1049,17 @@ namespace AiDotNet.NeuralNetworks
             }
         }
 
-        public Dictionary<string, T> GetFeatureImportance() => new Dictionary<string, T>();
-        public IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Range(0, _inputSize);
-        public bool IsFeatureUsed(int featureIndex) => featureIndex >= 0 && featureIndex < _inputSize;
-        public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) { }
+        public override Dictionary<string, T> GetFeatureImportance() => new Dictionary<string, T>();
+        public override IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Range(0, _inputSize);
+        public override bool IsFeatureUsed(int featureIndex) => featureIndex >= 0 && featureIndex < _inputSize;
+        public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices) { }
 
-        public IFullModel<T, Tensor<T>, Tensor<T>> Clone()
+        public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
         {
             return new SuperNet<T>(_searchSpace, _numNodes);
         }
 
-        public IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+        public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
         #region IInterpretableModel Implementation
 
@@ -1437,7 +1448,7 @@ namespace AiDotNet.NeuralNetworks
         /// </remarks>
         /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
         /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
-        public virtual void SaveState(Stream stream)
+        public override void SaveState(Stream stream)
         {
             if (stream == null)
                 throw new ArgumentNullException(nameof(stream));
@@ -1493,7 +1504,7 @@ namespace AiDotNet.NeuralNetworks
         /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
         /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
         /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data.</exception>
-        public virtual void LoadState(Stream stream)
+        public override void LoadState(Stream stream)
         {
             if (stream == null)
                 throw new ArgumentNullException(nameof(stream));
@@ -1570,7 +1581,7 @@ namespace AiDotNet.NeuralNetworks
         /// a simpler, discrete architecture that uses only the best operations.
         /// </para>
         /// </remarks>
-        public bool SupportsJitCompilation => _weights.Count > 0;
+        public override bool SupportsJitCompilation => _weights.Count > 0;
 
         /// <summary>
         /// Exports the model's computation graph for JIT compilation.
@@ -1600,7 +1611,7 @@ namespace AiDotNet.NeuralNetworks
         /// or export after search completes to get the final continuous relaxation.
         /// </para>
         /// </remarks>
-        public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+        public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
         {
             if (_weights.Count == 0)
             {

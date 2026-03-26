@@ -2103,6 +2103,7 @@ public class DistributedTrainingIntegrationTests
         }
 
         public int ParameterCount => _parameterCount;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
 
         public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
 
@@ -2166,7 +2167,6 @@ public class DistributedTrainingIntegrationTests
             return new ModelMetadata<double>
             {
                 Name = "MockDistributedModel",
-                ModelType = ModelType.NeuralNetwork,
                 TrainingDate = DateTimeOffset.UtcNow,
                 FeatureCount = _parameterCount
             };
@@ -2278,6 +2278,8 @@ public class DistributedTrainingIntegrationTests
         {
             return Clone();
         }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     #endregion

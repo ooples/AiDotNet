@@ -1,6 +1,7 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.Tensors.Engines;
 using Newtonsoft.Json;
 
 namespace AiDotNet.CheckpointManagement;
@@ -24,6 +25,11 @@ namespace AiDotNet.CheckpointManagement;
 /// <typeparam name="TOutput">The output data type for models.</typeparam>
 public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointManager<T, TInput, TOutput>
 {
+    /// <summary>
+    /// Gets the hardware-accelerated computation engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// The directory where checkpoints are stored.
     /// </summary>

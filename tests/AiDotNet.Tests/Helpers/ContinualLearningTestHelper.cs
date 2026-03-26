@@ -256,7 +256,7 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
             {
                 inputGradData[i] = _ops.Zero;
             }
-            return new Tensor<T>(_lastInput.Shape, inputGradData);
+            return new Tensor<T>(_lastInput.Shape.ToArray(), inputGradData);
         }
 
         return outputGradients;
@@ -343,6 +343,7 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
     }
 
     public int ParameterCount => _numParameters;
+    public bool SupportsParameterInitialization => ParameterCount > 0;
 
     public IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {
@@ -420,6 +421,8 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
     }
 
     public bool SupportsJitCompilation => false;
+
+    public Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 }
 
 /// <summary>

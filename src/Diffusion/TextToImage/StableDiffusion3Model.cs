@@ -300,7 +300,7 @@ public class StableDiffusion3Model<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var mmditCount = _mmdit.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != mmditCount + vaeCount)
         {
@@ -383,7 +383,6 @@ public class StableDiffusion3Model<T> : LatentDiffusionModelBase<T>
         {
             Name = $"Stable Diffusion {variantName}",
             Version = variantName,
-            ModelType = ModelType.NeuralNetwork,
             Description = $"Stable Diffusion {variantName} with MMDiT architecture, rectified flow, and triple text encoders",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -40,6 +41,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Residual)]
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 8, 1, 8, 8")]
 public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     private readonly ConvolutionalLayer<T>? _expandConv;
@@ -68,7 +74,34 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
+    public override int ParameterCount =>
+        (_expandConv?.ParameterCount ?? 0) + (_expandBn?.ParameterCount ?? 0) +
+        _dwConv.ParameterCount + _dwBn.ParameterCount +
+        (_se?.ParameterCount ?? 0) +
+        _projectConv.ParameterCount + _projectBn.ParameterCount;
     public override bool SupportsTraining => true;
+
+    public override Vector<T> GetParameterGradients()
+    {
+        var grads = new List<T>();
+        if (_expandConv != null) grads.AddRange(_expandConv.GetParameterGradients().ToArray());
+        if (_expandBn != null) grads.AddRange(_expandBn.GetParameterGradients().ToArray());
+        grads.AddRange(_dwConv.GetParameterGradients().ToArray());
+        grads.AddRange(_dwBn.GetParameterGradients().ToArray());
+        if (_se != null) grads.AddRange(_se.GetParameterGradients().ToArray());
+        grads.AddRange(_projectConv.GetParameterGradients().ToArray());
+        grads.AddRange(_projectBn.GetParameterGradients().ToArray());
+        return new Vector<T>([.. grads]);
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _expandConv?.ClearGradients(); _expandBn?.ClearGradients();
+        _dwConv.ClearGradients(); _dwBn.ClearGradients();
+        _se?.ClearGradients();
+        _projectConv.ClearGradients(); _projectBn.ClearGradients();
+    }
 
     /// <summary>
     /// Gets a value indicating whether this layer has a GPU implementation.

@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// PointLLM (OpenRobot Lab, 2024) empowers large language models to understand colored 3D
+/// point clouds. It encodes point cloud spatial coordinates and color features through a
+/// point cloud backbone, projects them into the LLM's token space, and enables the model
+/// to reason about 3D object shapes, colors, and spatial relationships through natural language.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "PointLLM: Empowering Large Language Models to Understand Point Clouds (OpenRobot Lab, 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> PointLLM is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> PointLLM is a vision-language model that enables LLMs to
+/// understand and reason about 3D point cloud data. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PointLLM model for understanding colored 3D point clouds
+/// // with LLM-based reasoning over point cloud spatial features
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new PointLLM&lt;double&gt;(architecture, "pointllm.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new PointLLM&lt;double&gt;(architecture, new PointLLMOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.ThreeD)]
@@ -198,7 +222,7 @@ public class PointLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageMode
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "PointLLM-Native" : "PointLLM-ONNX", Description = "PointLLM: LLM understanding of colored 3D point clouds.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "PointLLM-Native" : "PointLLM-ONNX", Description = "PointLLM: LLM understanding of colored 3D point clouds.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "PointLLM";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

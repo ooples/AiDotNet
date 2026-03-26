@@ -34,6 +34,14 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: "FlowMap: Learning to Generate High-Quality Samples with a Single Step", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 1 };
+/// var model = new FlowMapModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -141,7 +149,7 @@ public class FlowMapModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "FlowMap", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "FlowMap", Version = "1.0",
             Description = "Direct transport map learning for true one-step generation from flow-matching models",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

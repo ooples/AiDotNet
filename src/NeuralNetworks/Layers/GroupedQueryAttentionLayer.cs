@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -33,6 +35,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.AttentionComputation)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 4, 2")]
 internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _numHeads;
@@ -140,7 +146,8 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
         int embeddingDimension,
         int numHeads,
         int numKVHeads,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, embeddingDimension],
             [sequenceLength, embeddingDimension],
@@ -173,6 +180,7 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
         _outputWeights = new Tensor<T>([numHeads * _headDimension, embeddingDimension]);
         _outputBias = new Tensor<T>([embeddingDimension]);
 
+        InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
         InitializeParameters();
     }
 
@@ -208,31 +216,17 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
 
     private void InitializeParameters()
     {
-        // Xavier initialization
-        InitializeTensor(_queryWeights);
-        InitializeTensor(_keyWeights);
-        InitializeTensor(_valueWeights);
-        InitializeTensor(_outputWeights);
-        _outputBias.Fill(NumOps.Zero);
-    }
-
-    private void InitializeTensor(Tensor<T> tensor)
-    {
-        int fanIn = tensor.Shape[0];
-        int fanOut = tensor.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = NumOps.Multiply(
-                NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-        }
+        InitializeLayerWeights(_queryWeights, _queryWeights.Shape[0], _queryWeights.Shape[1]);
+        InitializeLayerWeights(_keyWeights, _keyWeights.Shape[0], _keyWeights.Shape[1]);
+        InitializeLayerWeights(_valueWeights, _valueWeights.Shape[0], _valueWeights.Shape[1]);
+        InitializeLayerWeights(_outputWeights, _outputWeights.Shape[0], _outputWeights.Shape[1]);
+        InitializeLayerBiases(_outputBias);
     }
 
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -385,7 +379,7 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
         T scale = NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
         T negInf = NumOps.MinValue;
 
-        var output = new Tensor<T>(new[] { batchSize, numHeads, seqLenQ, headDim });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, numHeads, seqLenQ, headDim });
         attentionWeightsOut = new Tensor<T>(new[] { batchSize, numHeads, seqLenQ, seqLenKV });
 
         for (int b = 0; b < batchSize; b++)
@@ -466,7 +460,7 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
             : outputGradient.Reshape(batchSize, seqLength, _embeddingDimension);
 
         // Apply activation derivative
-        var activationGrad = ApplyActivationDerivative(_lastOutput, grad3D);
+        var activationGrad = ApplyActivationDerivativeFromOutput(_lastOutput, grad3D);
 
         // 1. Output bias gradient: sum over batch and sequence
         _outputBiasGradient = activationGrad.Sum([0, 1]);
@@ -614,6 +608,39 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
         }
 
         return parameters;
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        var gradTensors = new[] { _queryWeightsGradient, _keyWeightsGradient, _valueWeightsGradient, _outputWeightsGradient, _outputBiasGradient };
+        var weightTensors = new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _outputBias };
+        int totalParams = weightTensors.Sum(w => w.Length);
+        var result = new Vector<T>(totalParams);
+        int index = 0;
+        for (int g = 0; g < gradTensors.Length; g++)
+        {
+            var grad = gradTensors[g];
+            int len = weightTensors[g].Length;
+            if (grad != null)
+            {
+                for (int i = 0; i < len; i++)
+                    result[index++] = grad[i];
+            }
+            else
+            {
+                index += len;
+            }
+        }
+        return result;
+    }
+
+    public override void ClearGradients()
+    {
+        _queryWeightsGradient = null;
+        _keyWeightsGradient = null;
+        _valueWeightsGradient = null;
+        _outputWeightsGradient = null;
+        _outputBiasGradient = null;
     }
 
     /// <inheritdoc />

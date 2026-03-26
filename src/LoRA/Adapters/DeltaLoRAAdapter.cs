@@ -237,7 +237,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> loraOutput = _loraLayer.Forward(input);
 
         // Compute delta contribution: delta_weights @ input * delta_scaling
-        Tensor<T> deltaOutput = new Tensor<T>(baseOutput.Shape);
+        Tensor<T> deltaOutput = new Tensor<T>(baseOutput.Shape.ToArray());
 
         // For each output dimension
         for (int i = 0; i < _deltaWeights.Rows; i++)
@@ -253,7 +253,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Combine all three outputs
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape);
+        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
         for (int i = 0; i < baseOutput.Length; i++)
         {
             result[i] = NumOps.Add(NumOps.Add(baseOutput[i], loraOutput[i]), deltaOutput[i]);
@@ -310,7 +310,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Compute input gradient contribution from delta weights
-        Tensor<T> deltaInputGrad = new Tensor<T>(_lastInput.Shape);
+        Tensor<T> deltaInputGrad = new Tensor<T>(_lastInput.Shape.ToArray());
         for (int j = 0; j < _deltaWeights.Columns; j++)
         {
             T sum = NumOps.Zero;
@@ -331,7 +331,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
 
         // Combine all input gradients
-        Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape);
+        Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape.ToArray());
         for (int i = 0; i < loraInputGrad.Length; i++)
         {
             inputGrad[i] = NumOps.Add(

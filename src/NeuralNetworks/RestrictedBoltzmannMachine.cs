@@ -35,6 +35,14 @@ namespace AiDotNet.NeuralNetworks;
 /// new data samples similar to the training data.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new RestrictedBoltzmannMachineOptions { VisibleSize = 784, HiddenSize = 500 };
+/// var model = new RestrictedBoltzmannMachine&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -421,13 +429,20 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // Initialize biases to zero and weights to small random values
+        // Xavier initialization: N(0, sqrt(2 / (visibleSize + hiddenSize)))
+        // Standard U(-0.05, 0.05) is too narrow for 128+ units — sigmoid
+        // output becomes indistinguishable for different input magnitudes.
+        double scale = Math.Sqrt(2.0 / (VisibleSize + HiddenSize));
         for (int i = 0; i < VisibleSize; i++)
         {
             _visibleBiases[i] = NumOps.Zero;
             for (int j = 0; j < HiddenSize; j++)
             {
-                _weights[i, j] = NumOps.FromDouble(Random.NextDouble() * 0.1 - 0.05);
+                // Box-Muller for Gaussian
+                double u1 = 1.0 - Random.NextDouble();
+                double u2 = Random.NextDouble();
+                double gaussian = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                _weights[i, j] = NumOps.FromDouble(gaussian * scale);
             }
         }
 
@@ -494,7 +509,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             }
             else
             {
-                throw new ArgumentException($"Visible layer shape {string.Join(",", visibleLayer.Shape)} is incompatible with weights shape [{_weights.Rows},{_weights.Columns}]");
+                throw new ArgumentException($"Visible layer shape {string.Join(",", visibleLayer.Shape.ToArray())} is incompatible with weights shape [{_weights.Rows},{_weights.Columns}]");
             }
         }
         else
@@ -502,15 +517,20 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             throw new ArgumentException($"Visible layer must be 1D or 2D, got {visibleLayer.Rank}D");
         }
 
-        var hiddenActivations = _weights.Multiply(visibleMatrix).Add(_hiddenBiases.ToColumnMatrix());
+        // Use Engine for GPU/CPU accelerated matrix multiplication
+        var weightsTensor = Tensor<T>.FromMatrix(_weights);
+        var visibleTensor = Tensor<T>.FromMatrix(visibleMatrix);
+        var product = Engine.TensorMatMul(weightsTensor, visibleTensor);
+        var biasTensor = Tensor<T>.FromMatrix(_hiddenBiases.ToColumnMatrix());
+        var hiddenTensor = Engine.TensorAdd(product, biasTensor);
 
         if (_vectorActivation != null)
         {
-            return _vectorActivation.Activate(Tensor<T>.FromRowMatrix(hiddenActivations));
+            return _vectorActivation.Activate(hiddenTensor);
         }
         else if (_scalarActivation != null)
         {
-            return Tensor<T>.FromRowMatrix(hiddenActivations.Transform((x, _, _) => _scalarActivation.Activate(x)));
+            return hiddenTensor.Transform((x, _) => _scalarActivation.Activate(x));
         }
         else
         {
@@ -636,7 +656,9 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // For RBMs, "prediction" is typically extracting the hidden layer representation
+        // For RBMs, "prediction" is typically extracting the hidden layer representation.
+        // RBMs operate on [0,1] valued inputs (Bernoulli visible units).
+        // Normalize input to [0,1] range to prevent sigmoid saturation.
 
         // Ensure input has the right shape
         if (input.Shape.Length != 2 || input.Shape[1] != VisibleSize)
@@ -652,6 +674,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
 
             input = reshapedInput;
         }
+
 
         // Get hidden layer activations
         return GetHiddenLayerActivation(input);
@@ -680,7 +703,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<T> SampleBinaryStates(Tensor<T> activations)
     {
-        var result = new Tensor<T>(activations.Shape);
+        var result = TensorAllocator.Rent<T>(activations.Shape.ToArray());
         var random = RandomHelper.CreateSecureRandom();
 
         for (int i = 0; i < activations.Length; i++)
@@ -752,7 +775,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             }
             else
             {
-                throw new ArgumentException($"Hidden layer shape {string.Join(",", hiddenLayer.Shape)} is incompatible with hidden size {hiddenSize}");
+                throw new ArgumentException($"Hidden layer shape {string.Join(",", hiddenLayer.Shape.ToArray())} is incompatible with hidden size {hiddenSize}");
             }
         }
         else
@@ -760,16 +783,21 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             throw new ArgumentException($"Hidden layer must be 1D or 2D, got {hiddenLayer.Rank}D");
         }
 
-        // We need to transpose the weights matrix for the reverse direction
-        var visibleActivations = _weights.Transpose().Multiply(hiddenMatrix).Add(_visibleBiases.ToColumnMatrix());
+        // Use Engine for GPU/CPU accelerated reverse propagation: W^T * hidden + bias
+        var weightsTensor = Tensor<T>.FromMatrix(_weights);
+        var weightsTransposed = Engine.TensorTranspose(weightsTensor);
+        var hiddenTensor = Tensor<T>.FromMatrix(hiddenMatrix);
+        var product = Engine.TensorMatMul(weightsTransposed, hiddenTensor);
+        var biasTensor = Tensor<T>.FromMatrix(_visibleBiases.ToColumnMatrix());
+        var visibleTensor = Engine.TensorAdd(product, biasTensor);
 
         if (_vectorActivation != null)
         {
-            return _vectorActivation.Activate(Tensor<T>.FromRowMatrix(visibleActivations));
+            return _vectorActivation.Activate(visibleTensor);
         }
         else if (_scalarActivation != null)
         {
-            return Tensor<T>.FromRowMatrix(visibleActivations.Transform((x, _, _) => _scalarActivation.Activate(x)));
+            return visibleTensor.Transform((x, _) => _scalarActivation.Activate(x));
         }
         else
         {
@@ -878,12 +906,20 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             // Accumulate updates
             weightUpdates = weightUpdates.Add(sampleWeightUpdates);
 
+            // Helper to access tensor value regardless of orientation
+            T GetVal(Tensor<T> t, int idx)
+            {
+                if (t.Rank == 1) return t[idx];
+                if (t.Shape[0] == 1) return t[0, idx];
+                return t[idx, 0];
+            }
+
             // Update visible bias (visible data - visible reconstruction)
             for (int i = 0; i < VisibleSize; i++)
             {
                 visibleBiasUpdates[i] = NumOps.Add(
                     visibleBiasUpdates[i],
-                    NumOps.Subtract(visibleSample[0, i], visibleReconstruction[0, i])
+                    NumOps.Subtract(GetVal(visibleSample, i), GetVal(visibleReconstruction, i))
                 );
             }
 
@@ -892,7 +928,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             {
                 hiddenBiasUpdates[j] = NumOps.Add(
                     hiddenBiasUpdates[j],
-                    NumOps.Subtract(hiddenActivations[0, j], hiddenReactivations[0, j])
+                    NumOps.Subtract(GetVal(hiddenActivations, j), GetVal(hiddenReactivations, j))
                 );
             }
         }
@@ -938,11 +974,20 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     {
         var associations = new Matrix<T>(HiddenSize, VisibleSize);
 
+        // Handle both [1, size] and [size, 1] tensor orientations
+        T GetValue(Tensor<T> t, int idx)
+        {
+            if (t.Rank == 1) return t[idx];
+            if (t.Shape[0] == 1) return t[0, idx]; // [1, size]
+            return t[idx, 0]; // [size, 1]
+        }
+
         for (int i = 0; i < HiddenSize; i++)
         {
+            T h = GetValue(hidden, i);
             for (int j = 0; j < VisibleSize; j++)
             {
-                associations[i, j] = NumOps.Multiply(hidden[0, i], visible[0, j]);
+                associations[i, j] = NumOps.Multiply(h, GetValue(visible, j));
             }
         }
 
@@ -1046,11 +1091,19 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
             // Reconstruct visible layer
             var visibleReconstruction = GetVisibleLayerActivation(hiddenActivations);
 
+            // Helper for tensor access regardless of orientation
+            T GetReconVal(int idx)
+            {
+                if (visibleReconstruction.Rank == 1) return visibleReconstruction[idx];
+                if (visibleReconstruction.Shape[0] == 1) return visibleReconstruction[0, idx];
+                return visibleReconstruction[idx, 0];
+            }
+
             // Compute mean squared error
             T sampleError = NumOps.Zero;
             for (int i = 0; i < VisibleSize; i++)
             {
-                T diff = NumOps.Subtract(visibleSample[0, i], visibleReconstruction[0, i]);
+                T diff = NumOps.Subtract(visibleSample[0, i], GetReconVal(i));
                 sampleError = NumOps.Add(sampleError, NumOps.Multiply(diff, diff));
             }
 
@@ -1099,7 +1152,6 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.RestrictedBoltzmannMachine,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "VisibleSize", VisibleSize },
@@ -1335,6 +1387,18 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
         }
 
         return hiddenActivations;
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>
+        {
+            ["Input"] = input,
+            ["HiddenActivation"] = GetHiddenLayerActivation(input),
+            ["Output"] = Predict(input)
+        };
+        return activations;
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()

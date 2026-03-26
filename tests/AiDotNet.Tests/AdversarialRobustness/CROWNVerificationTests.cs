@@ -1,4 +1,5 @@
 using AiDotNet.AdversarialRobustness.CertifiedRobustness;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -673,6 +674,7 @@ public class CROWNVerificationTests
     /// <summary>
     /// Simple mock full model for testing.
     /// </summary>
+    [ModelMetadataExempt]
     private class MockFullModel : IFullModel<double, Vector<double>, Vector<double>>
     {
         private readonly int _inputDim;
@@ -718,17 +720,21 @@ public class CROWNVerificationTests
         public void SetParameters(Vector<double> parameters) { }
         public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters) => new MockFullModel(_inputDim, _outputDim);
         public int ParameterCount => _inputDim * _outputDim;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
         public IEnumerable<int> GetActiveFeatureIndices() => _activeFeatures;
         public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) => _activeFeatures = featureIndices.ToList();
         public bool IsFeatureUsed(int featureIndex) => _activeFeatures.Contains(featureIndex);
         public Dictionary<string, double> GetFeatureImportance() => Enumerable.Range(0, _inputDim).ToDictionary(i => $"Feature{i}", i => 1.0 / _inputDim);
         public bool SupportsJitCompilation => false;
         public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes) => throw new NotSupportedException();
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     /// <summary>
     /// Mock model with configurable margin between class scores.
     /// </summary>
+    [ModelMetadataExempt]
     private class MockFullModelWithMargin : IFullModel<double, Vector<double>, Vector<double>>
     {
         private readonly int _inputDim;
@@ -774,12 +780,15 @@ public class CROWNVerificationTests
         public void SetParameters(Vector<double> parameters) { }
         public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters) => new MockFullModelWithMargin(_inputDim, _outputDim, _margin);
         public int ParameterCount => _inputDim * _outputDim;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
         public IEnumerable<int> GetActiveFeatureIndices() => _activeFeatures;
         public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) => _activeFeatures = featureIndices.ToList();
         public bool IsFeatureUsed(int featureIndex) => _activeFeatures.Contains(featureIndex);
         public Dictionary<string, double> GetFeatureImportance() => Enumerable.Range(0, _inputDim).ToDictionary(i => $"Feature{i}", i => 1.0 / _inputDim);
         public bool SupportsJitCompilation => false;
         public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes) => throw new NotSupportedException();
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     /// <summary>
@@ -829,12 +838,15 @@ public class CROWNVerificationTests
         public void SetParameters(Vector<float> parameters) { }
         public IFullModel<float, Vector<float>, Vector<float>> WithParameters(Vector<float> parameters) => new MockFullModelFloat(_inputDim, _outputDim);
         public int ParameterCount => _inputDim * _outputDim;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
         public IEnumerable<int> GetActiveFeatureIndices() => _activeFeatures;
         public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) => _activeFeatures = featureIndices.ToList();
         public bool IsFeatureUsed(int featureIndex) => _activeFeatures.Contains(featureIndex);
         public Dictionary<string, float> GetFeatureImportance() => Enumerable.Range(0, _inputDim).ToDictionary(i => $"Feature{i}", i => 1.0f / _inputDim);
         public bool SupportsJitCompilation => false;
         public ComputationNode<float> ExportComputationGraph(List<ComputationNode<float>> inputNodes) => throw new NotSupportedException();
+
+    public Vector<float> SanitizeParameters(Vector<float> parameters) => parameters;
     }
 
     #endregion

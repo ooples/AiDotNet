@@ -899,18 +899,7 @@ public class OnlineLearningDeepMathIntegrationTests
 
     #region Model Type Tests
 
-    [Fact]
-    public void ModelType_CorrectForEachModel()
-    {
-        Assert.Equal(AiDotNet.Enums.ModelType.OnlineSGDRegressor,
-            new OnlineSGDRegressor<double>().GetModelType());
-        Assert.Equal(AiDotNet.Enums.ModelType.OnlineSGDClassifier,
-            new OnlineSGDClassifier<double>().GetModelType());
-        Assert.Equal(AiDotNet.Enums.ModelType.OnlinePassiveAggressiveRegressor,
-            new OnlinePassiveAggressiveRegressor<double>().GetModelType());
-        Assert.Equal(AiDotNet.Enums.ModelType.OnlinePassiveAggressiveClassifier,
-            new OnlinePassiveAggressiveClassifier<double>().GetModelType());
-    }
+    // ModelType enum was removed — model identity is now determined via System.Type
 
     #endregion
 

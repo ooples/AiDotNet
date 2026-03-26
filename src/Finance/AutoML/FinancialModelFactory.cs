@@ -57,39 +57,27 @@ internal sealed class FinancialModelFactory<T>
     /// then this method builds that model for training and evaluation.
     /// </para>
     /// </remarks>
-    public IFullModel<T, Tensor<T>, Tensor<T>> Create(ModelType modelType, IReadOnlyDictionary<string, object> parameters)
+    public IFullModel<T, Tensor<T>, Tensor<T>> Create(Type modelType, IReadOnlyDictionary<string, object> parameters)
     {
-        return modelType switch
-        {
-            ModelType.PatchTST => new PatchTST<T>(_architecture),
-            ModelType.ITransformer => new ITransformer<T>(_architecture),
-            ModelType.DeepAR => CreateWithOptions(
-                (DeepAROptions<T> options) => new DeepAR<T>(_architecture, options),
-                new DeepAROptions<T>(),
-                parameters),
-            ModelType.NBEATS => CreateWithOptions(
-                (NBEATSModelOptions<T> options) => new NBEATSFinance<T>(_architecture, options),
-                new NBEATSModelOptions<T>(),
-                parameters),
-            ModelType.TFT => CreateWithOptions(
-                (TemporalFusionTransformerOptions<T> options) => new TFT<T>(_architecture, options),
-                new TemporalFusionTransformerOptions<T>(),
-                parameters),
-            ModelType.NeuralVaR => CreateWithOptions(
-                (NeuralVaROptions<T> options) => new NeuralVaR<T>(_architecture, options),
-                new NeuralVaROptions<T>(),
-                parameters),
-            ModelType.TabNet => CreateWithOptions(
-                (TabNetOptions<T> options) => new TabNet<T>(_architecture, options),
-                new TabNetOptions<T>(),
-                parameters),
-            ModelType.TabTransformer => CreateWithOptions(
-                (TabTransformerOptions<T> options) => new TabTransformer<T>(_architecture, options),
-                new TabTransformerOptions<T>(),
-                parameters),
-            _ => throw new NotSupportedException(
-                $"Finance AutoML does not support model type '{modelType}'.")
-        };
+        var lookupType = modelType.IsGenericType ? modelType.GetGenericTypeDefinition() : modelType;
+
+        if (lookupType == typeof(PatchTST<>)) return new PatchTST<T>(_architecture);
+        if (lookupType == typeof(ITransformer<>)) return new ITransformer<T>(_architecture);
+        if (lookupType == typeof(DeepAR<>)) return CreateWithOptions(
+            (DeepAROptions<T> options) => new DeepAR<T>(_architecture, options), new DeepAROptions<T>(), parameters);
+        if (lookupType == typeof(NBEATSFinance<>)) return CreateWithOptions(
+            (NBEATSModelOptions<T> options) => new NBEATSFinance<T>(_architecture, options), new NBEATSModelOptions<T>(), parameters);
+        if (lookupType == typeof(TFT<>)) return CreateWithOptions(
+            (TemporalFusionTransformerOptions<T> options) => new TFT<T>(_architecture, options), new TemporalFusionTransformerOptions<T>(), parameters);
+        if (lookupType == typeof(NeuralVaR<>)) return CreateWithOptions(
+            (NeuralVaROptions<T> options) => new NeuralVaR<T>(_architecture, options), new NeuralVaROptions<T>(), parameters);
+        if (lookupType == typeof(TabNet<>)) return CreateWithOptions(
+            (TabNetOptions<T> options) => new TabNet<T>(_architecture, options), new TabNetOptions<T>(), parameters);
+        if (lookupType == typeof(TabTransformer<>)) return CreateWithOptions(
+            (TabTransformerOptions<T> options) => new TabTransformer<T>(_architecture, options), new TabTransformerOptions<T>(), parameters);
+
+        throw new NotSupportedException(
+            $"Finance AutoML does not support model type '{modelType.Name}'.");
     }
 
     /// <summary>

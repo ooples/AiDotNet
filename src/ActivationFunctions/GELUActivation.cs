@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
@@ -26,6 +28,10 @@ namespace AiDotNet.ActivationFunctions;
 /// older activation functions in many deep learning tasks.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationTask(ActivationTask.TransformerFFN)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.High)]
 public class GELUActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>
@@ -58,7 +64,12 @@ public class GELUActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Activate(T input)
     {
-        // GELU(x) = 0.5 * x * (1 + tanh(sqrt(2/p) * (x + 0.044715 * x^3)))
+        // GELU(x) = 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x^3)))
+        // For large |x|: GELU(x) ≈ x (x > 0) or ≈ 0 (x < 0)
+        double xd = Convert.ToDouble(input);
+        if (xd > 10.0) return input; // tanh → 1, so 0.5 * x * 2 = x
+        if (xd < -10.0) return NumOps.Zero; // tanh → -1, so 0.5 * x * 0 = 0
+
         T sqrt2OverPi = NumOps.Sqrt(NumOps.FromDouble(2.0 / Math.PI));
         T x3 = NumOps.Multiply(NumOps.Multiply(input, input), input);
         T inner = NumOps.Add(input, NumOps.Multiply(NumOps.FromDouble(0.044715), x3));
@@ -141,7 +152,7 @@ public class GELUActivation<T> : ActivationFunctionBase<T>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
         // Use the tensor-level derivative computation
-        Tensor<T> output = new Tensor<T>(input.Shape);
+        Tensor<T> output = new Tensor<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             output[i] = Derivative(input[i]);

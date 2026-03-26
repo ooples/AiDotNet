@@ -267,7 +267,7 @@ public class ImageTensor<T>
     public ImageTensor<T> Clone()
     {
         // Create a copy of the tensor data
-        var clonedData = new Tensor<T>((int[])_data.Shape.Clone());
+        var clonedData = new Tensor<T>((int[])_data.Shape.ToArray().Clone());
         for (int i = 0; i < _data.Length; i++)
         {
             clonedData[i] = _data[i];
@@ -419,7 +419,7 @@ public class ImageTensor<T>
     /// <returns>The dimensions array.</returns>
     public int[] GetDimensions()
     {
-        return (int[])_data.Shape.Clone();
+        return (int[])_data.Shape.ToArray().Clone();
     }
 
     /// <summary>
@@ -427,7 +427,7 @@ public class ImageTensor<T>
     /// </summary>
     private void ParseDimensions()
     {
-        var dims = _data.Shape;
+        var dims = _data.Shape.ToArray();
 
         switch (ChannelOrder)
         {
@@ -484,7 +484,7 @@ public class ImageTensor<T>
     /// </summary>
     private static void TransposeData(Tensor<T> source, Tensor<T> target, ChannelOrder sourceOrder, ChannelOrder targetOrder)
     {
-        var sourceDims = source.Shape;
+        var sourceDims = source.Shape.ToArray();
         int height, width, channels, batchSize;
 
         // Parse source dimensions

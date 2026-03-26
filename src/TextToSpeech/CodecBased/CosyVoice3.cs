@@ -22,6 +22,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// multi-scale flow matching decoder to produce natural-sounding speech in multiple languages
 /// without needing training data for each target speaker.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a CosyVoice 3 model for zero-shot multilingual TTS
+/// // with enhanced semantic tokens and multi-scale flow matching
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new CosyVoice3&lt;double&gt;(architecture, "cosyvoice3.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new CosyVoice3&lt;double&gt;(architecture, new CosyVoice3Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -218,7 +234,6 @@ public class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
         {
             Name = _useNativeMode ? "CosyVoice3-Native" : "CosyVoice3-ONNX",
             Description = "CosyVoice 3: Zero-Shot Multilingual TTS (Alibaba DAMO, 2025)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.LLMDim
         };
     }

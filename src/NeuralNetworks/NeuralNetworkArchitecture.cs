@@ -677,7 +677,8 @@ public class NeuralNetworkArchitecture<T>
     {
         if (Layers == null || Layers.Count == 0)
         {
-            return GetInputShape(); // If no layers, output shape is the same as input shape
+            // Use OutputSize, not InputShape — they differ for most networks
+            return [OutputSize];
         }
 
         return Layers[Layers.Count - 1].GetOutputShape();

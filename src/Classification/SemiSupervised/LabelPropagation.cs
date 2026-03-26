@@ -33,6 +33,31 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// can be captured through a graph structure.
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
+/// <example>
+/// <code>
+/// // Create label propagation for semi-supervised learning
+/// var options = new LabelPropagationOptions&lt;double&gt;();
+/// var classifier = new LabelPropagation&lt;double&gt;(options);
+///
+/// // Prepare data: some labeled (-1 means unlabeled), some not
+/// var features = new Matrix&lt;double&gt;(6, 2);
+/// features[0, 0] = 1.0; features[0, 1] = 1.1;
+/// features[1, 0] = 1.2; features[1, 1] = 0.9;
+/// features[2, 0] = 0.8; features[2, 1] = 1.0;
+/// features[3, 0] = 5.0; features[3, 1] = 5.1;
+/// features[4, 0] = 5.2; features[4, 1] = 4.9;
+/// features[5, 0] = 4.8; features[5, 1] = 5.0;
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, -1, -1, 1, -1, -1 });
+///
+/// // Propagate labels through similarity graph to unlabeled samples
+/// classifier.Train(features, labels);
+///
+/// // Predict labels for all samples including previously unlabeled
+/// var prediction = classifier.Predict(features);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelCategory(ModelCategory.Kernel)]
@@ -1003,6 +1028,10 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
         }
 
         clone._numLabeled = _numLabeled;
+        clone.NumFeatures = NumFeatures;
+        clone.NumClasses = NumClasses;
+        clone.ClassLabels = ClassLabels?.Clone();
+        clone.TaskType = TaskType;
 
         return clone;
     }
@@ -1010,21 +1039,6 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     #endregion
 
     #region Abstract Method Implementations
-
-    /// <summary>
-    /// Gets the model type identifier.
-    /// </summary>
-    /// <returns>The ModelType enum value for Label Propagation.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This identifies what kind of model this is within the
-    /// AiDotNet library's type system.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.LabelPropagation;
-    }
 
     /// <summary>
     /// Gets all learnable parameters of the model as a single vector.

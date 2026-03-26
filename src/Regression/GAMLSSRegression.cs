@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Distributions;
 using AiDotNet.Enums;
@@ -38,6 +39,25 @@ namespace AiDotNet.Regression;
 /// for location, scale and shape". Applied Statistics, 54, 507-554.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GAMLSS model for distributional regression
+/// var options = new GAMLSSRegressionOptions&lt;double&gt;();
+/// var model = new GAMLSSRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train to model location, scale, and shape parameters
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample (full distributional prediction)
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -116,10 +136,29 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     }
 
     /// <inheritdoc/>
+    /// <summary>Y standardization for scale-invariant training.</summary>
+    private double _yMean;
+    private double _yStd = 1.0;
+
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
         _numFeatures = x.Columns;
         int n = x.Rows;
+
+        // Standardize y for scale-invariant training
+        double yMean = 0;
+        for (int i = 0; i < n; i++) yMean += NumOps.ToDouble(y[i]);
+        yMean /= n;
+        double yVar = 0;
+        for (int i = 0; i < n; i++) { double d = NumOps.ToDouble(y[i]) - yMean; yVar += d * d; }
+        double yStd = Math.Sqrt(yVar / n);
+        if (yStd < 1e-10) yStd = 1.0;
+        _yMean = yMean;
+        _yStd = yStd;
+        var yStandardized = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+            yStandardized[i] = NumOps.FromDouble((NumOps.ToDouble(y[i]) - yMean) / yStd);
+        y = yStandardized;
 
         // Initialize parameters
         InitializeParameters(y);
@@ -186,7 +225,13 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int i = 0; i < input.Rows; i++)
         {
-            predictions[i] = distributions[i].Mean;
+            // Denormalize: prediction = standardized_mean * yStd + yMean
+            double mean = NumOps.ToDouble(distributions[i].Mean);
+            double pred = mean * _yStd + _yMean;
+            // Guard against NaN/Infinity from degenerate data (e.g., collinear features)
+            if (double.IsNaN(pred) || double.IsInfinity(pred))
+                pred = _yMean;
+            predictions[i] = NumOps.FromDouble(pred);
         }
 
         return predictions;
@@ -496,10 +541,7 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         if (coefficients != null)
         {
-            for (int j = 0; j < _numFeatures; j++)
-            {
-                val = NumOps.Add(val, NumOps.Multiply(coefficients[j], sample[j]));
-            }
+            val = NumOps.Add(val, Engine.DotProduct(coefficients, sample));
         }
 
         if (useExpLink)
@@ -536,16 +578,23 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private IParametricDistribution<T> CreateDistribution(T location, T scale, T shape)
     {
+        // Clamp variance to a minimum positive value to prevent exceptions from collinear/degenerate data
+        T minVariance = NumOps.FromDouble(1e-10);
+        T variance = NumOps.Multiply(scale, scale);
+        double varianceD = NumOps.ToDouble(variance);
+        if (double.IsNaN(varianceD) || double.IsInfinity(varianceD) || varianceD <= 0)
+            variance = minVariance;
+
         return _options.DistributionFamily switch
         {
-            GAMLSSDistributionFamily.Normal => new NormalDistribution<T>(location, NumOps.Multiply(scale, scale)),
-            GAMLSSDistributionFamily.Laplace => new LaplaceDistribution<T>(location, scale),
-            GAMLSSDistributionFamily.StudentT => new StudentTDistribution<T>(location, scale, shape),
+            GAMLSSDistributionFamily.Normal => new NormalDistribution<T>(location, variance),
+            GAMLSSDistributionFamily.Laplace => new LaplaceDistribution<T>(location, NumOps.LessThanOrEquals(scale, NumOps.Zero) ? NumOps.FromDouble(1e-5) : scale),
+            GAMLSSDistributionFamily.StudentT => new StudentTDistribution<T>(location, NumOps.LessThanOrEquals(scale, NumOps.Zero) ? NumOps.FromDouble(1e-5) : scale, shape),
             GAMLSSDistributionFamily.Gamma => new GammaDistribution<T>(shape, NumOps.Divide(shape, location)),
-            GAMLSSDistributionFamily.LogNormal => new LogNormalDistribution<T>(location, NumOps.Multiply(scale, scale)),
+            GAMLSSDistributionFamily.LogNormal => new LogNormalDistribution<T>(location, variance),
             GAMLSSDistributionFamily.Poisson => new PoissonDistribution<T>(location),
             GAMLSSDistributionFamily.NegativeBinomial => new NegativeBinomialDistribution<T>(location, shape),
-            _ => new NormalDistribution<T>(location, NumOps.Multiply(scale, scale))
+            _ => new NormalDistribution<T>(location, variance)
         };
     }
 
@@ -665,7 +714,6 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GAMLSS,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "DistributionFamily", _options.DistributionFamily.ToString() },
@@ -692,6 +740,10 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         writer.Write((int)_options.LocationModelType);
         writer.Write((int)_options.ScaleModelType);
         writer.Write((int)_options.ShapeModelType);
+
+        // Y standardization
+        writer.Write(_yMean);
+        writer.Write(_yStd);
 
         // State
         writer.Write(_numFeatures);
@@ -736,6 +788,10 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _options.ScaleModelType = (GAMLSSModelType)reader.ReadInt32();
         _options.ShapeModelType = (GAMLSSModelType)reader.ReadInt32();
 
+        // Y standardization
+        _yMean = reader.ReadDouble();
+        _yStd = reader.ReadDouble();
+
         // State
         _numFeatures = reader.ReadInt32();
         _locationIntercept = NumOps.FromDouble(reader.ReadDouble());
@@ -766,5 +822,16 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         return new GAMLSSRegression<T>(_options, Regularization);
+    }
+
+    /// <summary>
+    /// Creates a deep copy via serialization to preserve private coefficient state.
+    /// </summary>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new GAMLSSRegression<T>(_options, Regularization);
+        var data = Serialize();
+        clone.Deserialize(data);
+        return clone;
     }
 }

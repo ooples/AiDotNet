@@ -97,7 +97,7 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
     /// </para>
     /// </remarks>
     protected async Task<double> ExecuteTrialAsync(
-        ModelType modelType,
+        Type modelType,
         Dictionary<string, object> trialParameters,
         TInput trainInputs,
         TOutput trainTargets,
@@ -201,7 +201,7 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
     /// </para>
     /// </remarks>
     private async Task<(IFullModel<T, TInput, TOutput> Model, double Score)> ExecuteTrialWithCrossValidationAsync(
-        ModelType modelType,
+        Type modelType,
         Dictionary<string, object> trialParameters,
         TInput trainInputs,
         TOutput trainTargets,
@@ -401,7 +401,7 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
             lock (_lock)
             {
                 candidates = _trialHistory
-                    .Where(t => t.Success && t.Parameters.ContainsKey("ModelType"))
+                    .Where(t => t.Success && t.Parameters.ContainsKey(ModelTypeKey))
                     .Select(t => t.Clone())
                     .ToList();
             }
@@ -440,7 +440,7 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
                     break;
                 }
 
-                if (!trial.Parameters.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not ModelType modelType)
+                if (!trial.Parameters.TryGetValue(ModelTypeKey, out var modelTypeObj) || modelTypeObj is not Type modelType)
                 {
                     continue;
                 }
@@ -558,13 +558,13 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
     /// <summary>
     /// Picks a model type uniformly from the configured candidate list.
     /// </summary>
-    protected ModelType PickCandidateModelType()
+    protected Type? PickCandidateModelType()
     {
         lock (_lock)
         {
             if (_candidateModels.Count == 0)
             {
-                return ModelType.None;
+                return null;
             }
 
             return _candidateModels[_random.Next(_candidateModels.Count)];

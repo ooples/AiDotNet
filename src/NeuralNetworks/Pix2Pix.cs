@@ -37,6 +37,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Adversarial Networks" (2017)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new Pix2PixOptions { ImageSize = 256, InputChannels = 3, OutputChannels = 3 };
+/// var model = new Pix2Pix&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 3, 256, 256 });
+/// var translated = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Generative)]
@@ -322,7 +330,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         int genOutputSize = newFakeImages.Length;
         int discInputTotalSize = discInputGradients.Length;
 
-        var combinedGradients = new Tensor<T>(newFakeImages.Shape);
+        var combinedGradients = new Tensor<T>(newFakeImages.Shape.ToArray());
 
         // Combine adversarial and L1 gradients
         for (int b = 0; b < batchSize; b++)
@@ -465,7 +473,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         int[] outputShape = images1.Shape.Length == 4
             ? new int[] { batchSize, height, width, totalChannels }
             : new int[] { batchSize, height * width, totalChannels };
-        var result = new Tensor<T>(outputShape);
+        var result = TensorAllocator.Rent<T>(outputShape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -517,12 +525,12 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     private Tensor<T> ConcatenateFlattenedImages(Tensor<T> images1, Tensor<T> images2)
     {
         int batchSize = images1.Shape[0];
-        int totalSize1 = images1.Shape.Aggregate(1, (a, b) => a * b);
-        int totalSize2 = images2.Shape.Aggregate(1, (a, b) => a * b);
+        int totalSize1 = images1.Length;
+        int totalSize2 = images2.Length;
         int size1 = totalSize1 / batchSize;
         int size2 = totalSize2 / batchSize;
 
-        var result = new Tensor<T>(new int[] { batchSize, size1 + size2 });
+        var result = TensorAllocator.Rent<T>(new int[] { batchSize, size1 + size2 });
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -545,7 +553,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     private T CalculateL1Loss(Tensor<T> predictions, Tensor<T> targets)
     {
         T totalLoss = NumOps.Zero;
-        int count = predictions.Shape.Aggregate(1, (a, b) => a * b);
+        int count = predictions.Length;
 
         for (int i = 0; i < count; i++)
         {
@@ -562,8 +570,8 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> CalculateL1Gradients(Tensor<T> predictions, Tensor<T> targets)
     {
-        var gradients = new Tensor<T>(predictions.Shape);
-        int count = predictions.Shape.Aggregate(1, (a, b) => a * b);
+        var gradients = new Tensor<T>(predictions.Shape.ToArray());
+        int count = predictions.Length;
         T scale = NumOps.FromDouble(_l1Lambda / count);
 
         for (int i = 0; i < count; i++)
@@ -718,7 +726,6 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.Pix2Pix,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "GeneratorParameters", Generator.GetParameterCount() },

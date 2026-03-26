@@ -45,7 +45,7 @@ public class MultiFidelityAutoMLIntegrationTests
 
         var autoML = new MultiFidelityAutoML<double, Matrix<double>, Vector<double>>(random: RandomHelper.CreateSeededRandom(123), options: options);
         autoML.TrialLimit = 9;
-        autoML.SetCandidateModels(new List<ModelType> { ModelType.MultipleRegression });
+        autoML.SetCandidateModels(new List<Type> { typeof(AiDotNet.Regression.MultipleRegression<>) });
 
         // Act
         IFullModel<double, Matrix<double>, Vector<double>> best =

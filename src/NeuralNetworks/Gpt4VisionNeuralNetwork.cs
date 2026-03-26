@@ -27,6 +27,12 @@ namespace AiDotNet.NeuralNetworks;
 /// This implementation provides a vision-language model that can understand images and generate
 /// text responses, similar to GPT-4V, LLaVA, or other vision-language models.
 /// </para>
+/// <para><b>For Beginners:</b> GPT-4 Vision combines a visual understanding system with a
+/// language model, letting you ask questions about images and receive natural language answers.
+/// It first processes an image through a vision encoder (extracting features like objects,
+/// text, and spatial relationships), then feeds those features into a language model that
+/// generates human-readable responses. This enables tasks like describing images, reading
+/// text in photos, and answering visual questions.</para>
 /// <para><b>Architecture Overview:</b>
 /// 1. Vision Encoder: ViT-based encoder to extract visual features
 /// 2. Vision-Language Projector: Maps visual features to LLM embedding space
@@ -34,6 +40,14 @@ namespace AiDotNet.NeuralNetworks;
 /// 4. Multi-modal Attention: Allows text to attend to visual features
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new Gpt4VisionOptions { ImageSize = 336, MaxTextLength = 512 };
+/// var model = new Gpt4VisionNeuralNetwork&lt;float&gt;(options);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 336, 336 });
+/// var output = model.Predict(image);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Multimodal)]
@@ -1400,7 +1414,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
     private Tensor<T> ApplyGELU(Tensor<T> x)
     {
-        var result = Tensor<T>.CreateDefault(x.Shape, NumOps.Zero);
+        var result = Tensor<T>.CreateDefault(x.Shape.ToArray(), NumOps.Zero);
         for (int i = 0; i < x.Length; i++)
         {
             double val = NumOps.ToDouble(x[i]);
@@ -1462,7 +1476,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
             return tensor;
         }
 
-        var normalized = Tensor<T>.CreateDefault(tensor.Shape, NumOps.Zero);
+        var normalized = Tensor<T>.CreateDefault(tensor.Shape.ToArray(), NumOps.Zero);
         for (int i = 0; i < tensor.Shape[0]; i++)
         {
             for (int j = 0; j < tensor.Shape[1]; j++)
@@ -1687,7 +1701,6 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         return new ModelMetadata<T>
         {
             Name = "Gpt4VisionNeuralNetwork",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _embeddingDimension,
             Complexity = _visionEncoderLayers.Count + _languageModelLayers.Count + _crossAttentionLayers.Count,
             Description = "GPT-4V style vision-language model combining vision encoding with language generation",

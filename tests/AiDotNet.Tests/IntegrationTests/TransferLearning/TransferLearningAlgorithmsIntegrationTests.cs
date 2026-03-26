@@ -463,6 +463,7 @@ public class TransferLearningAlgorithmsIntegrationTests
         }
 
         public int ParameterCount => _featureCount;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
 
         public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
         {
@@ -554,6 +555,8 @@ public class TransferLearningAlgorithmsIntegrationTests
         {
             throw new NotSupportedException("Mock model does not support JIT compilation");
         }
+
+    public Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
     }
 
     #endregion

@@ -138,8 +138,8 @@ public class Kinetics400DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
     {
         var features = LoadedFeatures ?? throw new InvalidOperationException("Features not loaded.");
         var labels = LoadedLabels ?? throw new InvalidOperationException("Labels not loaded.");
-        var newFeatShape = (int[])features.Shape.Clone(); newFeatShape[0] = indices.Length;
-        var newLabelShape = (int[])labels.Shape.Clone(); newLabelShape[0] = indices.Length;
+        var newFeatShape = (int[])features.Shape.ToArray().Clone(); newFeatShape[0] = indices.Length;
+        var newLabelShape = (int[])labels.Shape.ToArray().Clone(); newLabelShape[0] = indices.Length;
         var batchFeatures = new Tensor<T>(newFeatShape);
         var batchLabels = new Tensor<T>(newLabelShape);
         for (int i = 0; i < indices.Length; i++)
@@ -172,8 +172,8 @@ public class Kinetics400DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
 
     private static InMemoryDataLoader<T, Tensor<T>, Tensor<T>> CreateSplitLoader(Tensor<T> features, Tensor<T> labels, int[] indices)
     {
-        var newFeatShape = (int[])features.Shape.Clone(); newFeatShape[0] = indices.Length;
-        var newLabelShape = (int[])labels.Shape.Clone(); newLabelShape[0] = indices.Length;
+        var newFeatShape = (int[])features.Shape.ToArray().Clone(); newFeatShape[0] = indices.Length;
+        var newLabelShape = (int[])labels.Shape.ToArray().Clone(); newLabelShape[0] = indices.Length;
         var batchF = new Tensor<T>(newFeatShape);
         var batchL = new Tensor<T>(newLabelShape);
         for (int i = 0; i < indices.Length; i++)

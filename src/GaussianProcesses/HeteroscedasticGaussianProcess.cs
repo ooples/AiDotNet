@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.GaussianProcesses;
 
@@ -107,6 +108,7 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
     /// Number of EM iterations for joint optimization.
     /// </summary>
     private readonly int _maxIterations;
+    private double _yMean;
 
     /// <summary>
     /// Convergence tolerance for EM algorithm.
@@ -231,30 +233,66 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
             throw new ArgumentException("Number of rows in X must match length of y.");
 
         _X = X;
-        _y = y;
         int n = X.Rows;
 
-        // Initialize noise latent values to prior mean
+        // Center y by subtracting the mean. GP assumes zero-mean prior,
+        // so large y offsets cause poor conditioning. Mean is added back in Predict.
+        double yMeanForCentering = 0;
+        for (int i = 0; i < n; i++) yMeanForCentering += _numOps.ToDouble(y[i]);
+        yMeanForCentering /= n;
+        _yMean = yMeanForCentering;
+
+        _y = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+            _y[i] = _numOps.FromDouble(_numOps.ToDouble(y[i]) - _yMean);
+
+        // Initialize noise latent values by estimating from data variance.
+        // Using the prior mean (log(0.1)) is too large for low-noise data and causes
+        // under-fitting in the first EM iteration that's hard to recover from.
+        // Instead, estimate initial noise from the target variance as a fraction.
+        double yMean = 0;
+        for (int i = 0; i < n; i++) yMean += _numOps.ToDouble(y[i]);
+        yMean /= n;
+        double yVar = 0;
+        for (int i = 0; i < n; i++) { double d = _numOps.ToDouble(y[i]) - yMean; yVar += d * d; }
+        yVar /= n;
+        // Start with noise = 0.01% of target variance. A small initial noise lets the
+        // mean GP fit tightly in the first EM iteration, then the E-step adjusts noise
+        // upward where the data actually has high variance. Starting too large causes
+        // under-fitting that the EM algorithm struggles to recover from.
+        double initialNoiseLog = Math.Log(Math.Max(yVar * 0.0001, 1e-10));
+
         _noiseLatentValues = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
-            _noiseLatentValues[i] = _numOps.FromDouble(_noisePriorMean);
+            _noiseLatentValues[i] = _numOps.FromDouble(initialNoiseLog);
         }
 
         // Initialize noise variances
         _noiseVariances = new Vector<T>(n);
         UpdateNoiseVariances();
 
-        // EM-style optimization
+        // Phase 1: Fit initial mean GP with constant small noise to get good residuals.
+        // This breaks the EM feedback loop where high initial noise → under-fit mean GP →
+        // large residuals → noise GP estimates even higher noise.
+        for (int i = 0; i < n; i++)
+        {
+            _noiseVariances[i] = _numOps.FromDouble(_jitter);
+        }
+        FitMeanGP();
+
+        // Phase 2: EM refinement — alternate between fitting mean GP and updating noise.
+        // The noise variance for each point is estimated from the GP residuals using a
+        // secondary noise GP. This implements the Goldberg et al. (1998) algorithm.
         double prevLoss = double.MaxValue;
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // M-step: Update mean GP with current noise estimates
-            FitMeanGP();
-
             // E-step: Update noise estimates given current mean GP
             UpdateNoiseLatentValues();
             UpdateNoiseVariances();
+
+            // M-step: Re-fit mean GP with updated noise
+            FitMeanGP();
 
             // Check convergence
             double loss = ComputeNegativeLogLikelihood();
@@ -331,12 +369,71 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
             }
         }
 
+        // Adaptive jitter for numerical stability — same approach as StandardGaussianProcess.
+        // Without this, the heteroscedastic noise on the diagonal can make the matrix
+        // ill-conditioned, causing Cholesky to produce NaN or large alpha values.
+        AddAdaptiveJitter(K);
+
         // Cholesky decomposition
         _L = CholeskyDecomposition(K);
 
-        // Solve L * z = y for z, then L^T * alpha = z for alpha
-        var z = SolveLowerTriangular(_L, _y);
-        _alpha = SolveUpperTriangular(Transpose(_L), z);
+        // Solve K * alpha = y using the properly-conditioned matrix
+        _alpha = MatrixSolutionHelper.SolveLinearSystem(K, _y, Enums.MatrixDecompositionType.Cholesky);
+    }
+
+    /// <summary>
+    /// Adds adaptive jitter to make the matrix well-conditioned for Cholesky decomposition.
+    /// Mirrors StandardGaussianProcess.AddJitter — tries increasing jitter until
+    /// the condition number is acceptable.
+    /// </summary>
+    private void AddAdaptiveJitter(Matrix<T> K)
+    {
+        double jitterValue = 1e-6;
+        const double maxJitter = 1e-1;
+
+        while (jitterValue <= maxJitter)
+        {
+            var jitter = _numOps.FromDouble(jitterValue);
+            for (int i = 0; i < K.Rows; i++)
+                K[i, i] = _numOps.Add(K[i, i], jitter);
+
+            try
+            {
+                var chol = new CholeskyDecomposition<T>(K);
+
+                double minDiag = double.MaxValue;
+                double maxDiag = 0;
+                bool hasNaN = false;
+                for (int i = 0; i < chol.L.Rows; i++)
+                {
+                    double d = _numOps.ToDouble(chol.L[i, i]);
+                    if (double.IsNaN(d) || double.IsInfinity(d) || d <= 0)
+                    {
+                        hasNaN = true;
+                        break;
+                    }
+                    minDiag = Math.Min(minDiag, d);
+                    maxDiag = Math.Max(maxDiag, d);
+                }
+
+                if (!hasNaN && minDiag > 0 && maxDiag / minDiag < 1e8)
+                    return;
+
+                for (int i = 0; i < K.Rows; i++)
+                    K[i, i] = _numOps.Subtract(K[i, i], jitter);
+                jitterValue *= 10;
+            }
+            catch (ArgumentException)
+            {
+                for (int i = 0; i < K.Rows; i++)
+                    K[i, i] = _numOps.Subtract(K[i, i], jitter);
+                jitterValue *= 10;
+            }
+        }
+
+        var maxJitterT = _numOps.FromDouble(maxJitter);
+        for (int i = 0; i < K.Rows; i++)
+            K[i, i] = _numOps.Add(K[i, i], maxJitterT);
     }
 
     /// <summary>
@@ -398,8 +495,8 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
         for (int i = 0; i < n; i++)
         {
             double r2 = residuals[i] * residuals[i];
-            // Use prior mean as floor to prevent -inf
-            double logR2 = Math.Max(Math.Log(r2 + 1e-10), _noisePriorMean - 3);
+            // Floor at log(1e-10) = -23 to prevent -inf while allowing very low noise
+            double logR2 = Math.Max(Math.Log(r2 + 1e-15), -23.0);
             logResidualsSq[i] = _numOps.FromDouble(logR2);
         }
 
@@ -419,8 +516,10 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
                 double kval = _numOps.ToDouble(_noiseKernel.Calculate(xi, xj));
                 newLatent += kval * _numOps.ToDouble(alpha_noise[j]);
             }
-            // Blend with prior
-            newLatent = 0.7 * newLatent + 0.3 * _noisePriorMean;
+            // Clamp to prevent extreme values but don't blend with prior
+            // (prior blending prevents convergence to the true noise level)
+            newLatent = Math.Max(newLatent, _noisePriorMean - 10);
+            newLatent = Math.Min(newLatent, _noisePriorMean + 10);
             _noiseLatentValues[i] = _numOps.FromDouble(newLatent);
         }
     }
@@ -529,8 +628,8 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
                 kStarNoise[j] = _noiseKernel.Calculate(xNew, xj);
             }
 
-            // Mean prediction: k_*^T * alpha
-            double predMean = 0;
+            // Mean prediction: k_*^T * alpha + yMean (add back centered mean)
+            double predMean = _yMean;
             for (int j = 0; j < n; j++)
             {
                 predMean += _numOps.ToDouble(kStar[j]) * _numOps.ToDouble(_alpha[j]);
@@ -579,9 +678,13 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
             XNew[0, j] = x[j];
         }
 
-        var (means, predVars, noiseVars) = Predict(XNew);
-        double totalVar = _numOps.ToDouble(predVars[0]) + _numOps.ToDouble(noiseVars[0]);
-        return (means[0], _numOps.FromDouble(totalVar));
+        var (means, predVars, _) = Predict(XNew);
+        // Return PREDICTIVE (epistemic) variance only, not total variance.
+        // The IGaussianProcess interface variance represents model uncertainty about the
+        // function value, not observation noise. Epistemic variance should be low near
+        // training data and high far away (posterior contraction property).
+        // Use Predict(Matrix) to get both predictive and noise variances separately.
+        return (means[0], predVars[0]);
     }
 
     /// <summary>

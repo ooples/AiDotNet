@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -51,6 +52,9 @@ public enum EmbeddingInputMode
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Embedding)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "100, 16")]
 public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmbedding<T>
 {
     /// <summary>
@@ -407,7 +411,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int embeddingDim = _embeddingTensor.Shape[1];
         int vocabularySize = _embeddingTensor.Shape[0];
@@ -551,7 +555,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
         if (IsTrainingMode)
         {
             _lastInput = inputTensor;
-            _originalInputShape = inputTensor.Shape;
+            _originalInputShape = inputTensor.Shape.ToArray();
         }
 
         // Detect if input is continuous
@@ -593,7 +597,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
             if (IsTrainingMode)
             {
                 _lastInputGpu = gpuEngine.UploadToGpu(input2D, GpuTensorRole.Intermediate);
-                _lastInputGpuShape = inputTensor.Shape;
+                _lastInputGpuShape = inputTensor.Shape.ToArray();
             }
 
             // Perform GPU matrix multiplication: [totalSamples, inputFeatures] @ [inputFeatures, embeddingDim]
@@ -628,7 +632,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
         if (IsTrainingMode)
         {
             _lastIndicesForGpu = flatIndices;
-            _lastInputGpuShape = inputTensor.Shape;
+            _lastInputGpuShape = inputTensor.Shape.ToArray();
         }
 
         // Perform GPU embedding lookup - keeps result on GPU
@@ -737,9 +741,11 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
 
         int inputFeatures = _projectionWeights.Shape[0];
         int embeddingDim = _projectionWeights.Shape[1];
-        int totalSamples = _lastInput.Length / inputFeatures;
+        int totalSamples = outputGradient.Length / embeddingDim;
 
-        var input2D = _lastInput.Reshape([totalSamples, inputFeatures]);
+        var input2D = _lastInput.Length == inputFeatures
+            ? _lastInput.Reshape([1, inputFeatures])
+            : _lastInput.Reshape([_lastInput.Length / inputFeatures, inputFeatures]);
         var grad2D = outputGradient.Reshape([totalSamples, embeddingDim]);
 
         var input2DTransposed = Engine.TensorTranspose(input2D);
@@ -788,7 +794,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
         _embeddingGradient = embeddingNode.Gradient;
 
         // Return zero gradient for input (indices are not differentiable)
-        return new Tensor<T>(_lastInput.Shape);
+        return new Tensor<T>(_lastInput.Shape.ToArray());
     }
 
     /// <summary>
@@ -1201,6 +1207,37 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
     /// working data used during computation.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        int embeddingParamCount = _embeddingTensor.Shape[0] * _embeddingTensor.Shape[1];
+
+        // In continuous (projection) mode: _embeddingGradient is null, _projectionWeightsGradient holds gradients
+        if (_embeddingGradient == null && _projectionWeightsGradient != null && _projectionWeights != null)
+        {
+            // Return zeros for embedding params + actual projection gradients
+            var embZeros = new Vector<T>(embeddingParamCount);
+            var projGrad = new Vector<T>(_projectionWeightsGradient.ToArray());
+            return Vector<T>.Concatenate(embZeros, projGrad);
+        }
+
+        // Both null: no backward has been run yet, return all-zero vector
+        if (_embeddingGradient == null)
+            return new Vector<T>(ParameterCount);
+
+        // Discrete embedding mode: return embedding gradients (+ projection if present)
+        var embGrad = new Vector<T>(_embeddingGradient.ToArray());
+        if (_projectionWeightsGradient == null || _projectionWeights == null)
+            return embGrad;
+        return Vector<T>.Concatenate(embGrad, new Vector<T>(_projectionWeightsGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _embeddingGradient = null;
+        _projectionWeightsGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

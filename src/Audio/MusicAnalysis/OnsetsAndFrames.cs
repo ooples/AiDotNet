@@ -257,7 +257,6 @@ public class OnsetsAndFrames<T> : AudioNeuralNetworkBase<T>, IMusicTranscriber<T
         {
             Name = _useNativeMode ? "OnsetsAndFrames-Native" : "OnsetsAndFrames-ONNX",
             Description = "Onsets and Frames piano transcription (Hawthorne et al., 2018, Magenta)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumLstmLayers
         };
         m.AdditionalInfo["NumMidiNotes"] = _options.NumMidiNotes.ToString();

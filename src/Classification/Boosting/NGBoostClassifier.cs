@@ -35,6 +35,33 @@ namespace AiDotNet.Classification.Boosting;
 /// Prediction" (2019). https://arxiv.org/abs/1910.03225
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
+/// <example>
+/// <code>
+/// // Create NGBoost classifier for well-calibrated probabilistic predictions
+/// var options = new NGBoostClassifierOptions&lt;double&gt;();
+/// var classifier = new NGBoostClassifier&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features
+/// var features = new Matrix&lt;double&gt;(6, 2);
+/// features[0, 0] = 1.0; features[0, 1] = 1.1;
+/// features[1, 0] = 1.2; features[1, 1] = 0.9;
+/// features[2, 0] = 0.8; features[2, 1] = 1.0;
+/// features[3, 0] = 5.0; features[3, 1] = 5.1;
+/// features[4, 0] = 5.2; features[4, 1] = 4.9;
+/// features[5, 0] = 4.8; features[5, 1] = 5.0;
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
+///
+/// // Train using natural gradient boosting for calibrated probabilities
+/// classifier.Train(features, labels);
+///
+/// // Predict with calibrated probability estimates
+/// var newSample = new Matrix&lt;double&gt;(1, 2);
+/// newSample[0, 0] = 1.1; newSample[0, 1] = 1.0;
+/// var prediction = classifier.Predict(newSample);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
@@ -94,7 +121,6 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.NGBoostClassifier;
 
     /// <summary>
     /// Trains the NGBoost classifier using natural gradient boosting.
@@ -538,7 +564,6 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NGBoostClassifier,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfIterations", _trees.Count },

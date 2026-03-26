@@ -199,8 +199,8 @@ public class IPAdapterFaceIDModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
+        var vaeCount = _vae.GetParameters().Length;
         if (parameters.Length != unetCount + vaeCount)
             throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         var unetParams = new Vector<T>(unetCount);
@@ -243,7 +243,7 @@ public class IPAdapterFaceIDModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "IP-Adapter FaceID", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "IP-Adapter FaceID", Version = "1.0",
             Description = "IP-Adapter FaceID face-specific identity preservation with ArcFace embeddings",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

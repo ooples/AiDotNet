@@ -27,6 +27,19 @@ namespace AiDotNet.Finance.Volatility;
 /// This helps the model focus on recent shocks or patterns when predicting volatility.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Realized Volatility Transformer for attention-based forecasting
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 90, inputWidth: 1, inputDepth: 1, outputSize: 5);
+/// var model = new RealizedVolatilityTransformer&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for realized volatility prediction
+/// var onnxModel = new RealizedVolatilityTransformer&lt;double&gt;(architecture, "realizedvol.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
@@ -240,7 +253,7 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
     {
         SetTrainingMode(true);
         var outputGradient = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        var currentGrad = Tensor<T>.FromVector(outputGradient, output.Shape);
+        var currentGrad = Tensor<T>.FromVector(outputGradient, output.Shape.ToArray());
 
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
@@ -278,7 +291,6 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelType", "RealizedVolatilityTransformer" },

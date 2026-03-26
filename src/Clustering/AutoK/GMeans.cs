@@ -42,6 +42,14 @@ namespace AiDotNet.Clustering.AutoK;
 /// This works well when true clusters are roughly Gaussian.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new GMeansOptions&lt;double&gt;();
+/// var gMeans = new GMeans&lt;double&gt;(options);
+/// gMeans.Train(dataMatrix);
+/// Vector<double> labels = gMeans.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -66,7 +74,6 @@ public class GMeans<T> : ClusteringBase<T>
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -414,12 +421,19 @@ public class GMeans<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
+        if (ClusterCenters is not null && x.Columns != ClusterCenters.Columns)
+            throw new ArgumentException(
+                $"Input has {x.Columns} features but model was trained with {ClusterCenters.Columns} features.");
+
         var labels = new Vector<T>(x.Rows);
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        int d = x.Columns;
+        var pointArr = new T[d];
+        var centerArr = new T[d];
 
         for (int i = 0; i < x.Rows; i++)
         {
-            var point = GetRow(x, i);
+            for (int j = 0; j < d; j++) pointArr[j] = x[i, j];
             T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
@@ -427,8 +441,8 @@ public class GMeans<T> : ClusteringBase<T>
             {
                 for (int c = 0; c < NumClusters; c++)
                 {
-                    var center = GetRow(ClusterCenters, c);
-                    T dist = metric.Compute(point, center);
+                    for (int j = 0; j < d; j++) centerArr[j] = ClusterCenters[c, j];
+                    T dist = metric.ComputeInline(pointArr, centerArr, d);
 
                     if (NumOps.LessThan(dist, minDist))
                     {

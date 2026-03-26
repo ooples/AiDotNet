@@ -44,6 +44,7 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
     }
 
     public int ParameterCount => _parameters.Length;
+    public bool SupportsParameterInitialization => ParameterCount > 0;
 
     public IFullModel<double, Tensor<double>, Tensor<double>> WithParameters(Vector<double> parameters)
     {
@@ -178,4 +179,6 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
         }
         return gradients;
     }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
 }

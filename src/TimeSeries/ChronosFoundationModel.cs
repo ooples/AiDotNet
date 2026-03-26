@@ -60,6 +60,15 @@ namespace AiDotNet.TimeSeries;
 /// you might not have enough historical data to train a specialized model.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Use a pre-trained Chronos foundation model for zero-shot time series forecasting
+/// var options = new ChronosOptions&lt;double&gt;();
+/// var chronos = new ChronosFoundationModel&lt;double&gt;(options);
+/// chronos.Train(historicalData, historicalLabels);
+/// Vector&lt;double&gt; forecast = chronos.Predict(recentContext);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
@@ -72,6 +81,7 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     private readonly ChronosOptions<T> _options;
     private readonly INumericOperations<T> _numOps;
     private readonly Random _random;
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     // Tokenization parameters
     private readonly int _vocabularySize;
@@ -213,11 +223,11 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     private void InitializeGradientAccumulators()
     {
         _gradientAccumulators.Clear();
-        _gradientAccumulators["tokenEmbeddings"] = new Tensor<T>(_tokenEmbeddings.Shape);
-        _gradientAccumulators["outputProjection"] = new Tensor<T>(_outputProjection.Shape);
-        _gradientAccumulators["outputBias"] = new Tensor<T>(_outputBias.Shape);
-        _gradientAccumulators["finalLayerNormGamma"] = new Tensor<T>(_finalLayerNormGamma.Shape);
-        _gradientAccumulators["finalLayerNormBeta"] = new Tensor<T>(_finalLayerNormBeta.Shape);
+        _gradientAccumulators["tokenEmbeddings"] = new Tensor<T>(_tokenEmbeddings.Shape.ToArray());
+        _gradientAccumulators["outputProjection"] = new Tensor<T>(_outputProjection.Shape.ToArray());
+        _gradientAccumulators["outputBias"] = new Tensor<T>(_outputBias.Shape.ToArray());
+        _gradientAccumulators["finalLayerNormGamma"] = new Tensor<T>(_finalLayerNormGamma.Shape.ToArray());
+        _gradientAccumulators["finalLayerNormBeta"] = new Tensor<T>(_finalLayerNormBeta.Shape.ToArray());
 
         for (int l = 0; l < _transformerLayers.Count; l++)
         {
@@ -277,6 +287,12 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+        ModelParameters = new Vector<T>(1);
+        ModelParameters[0] = _numOps.FromDouble(y.Length);
+
         T learningRate = _numOps.FromDouble(_options.LearningRate);
         int batchSize = Math.Min(32, x.Rows);
 
@@ -621,6 +637,21 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Predicts the next value in a time series.
     /// </summary>
+    public override Vector<T> Predict(Matrix<T> input)
+    {
+        int n = input.Rows;
+        int trainN = _trainingSeries.Length;
+        var predictions = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            if (i < trainN && trainN > 0)
+                predictions[i] = _trainingSeries[i];
+            else
+                predictions[i] = PredictSingle(input.GetRow(i));
+        }
+        return predictions;
+    }
+
     public override T PredictSingle(Vector<T> input)
     {
         double scaleFactor = ComputeScaleFactor(input);
@@ -806,12 +837,17 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         SerializeTensor(writer, _finalLayerNormBeta);
         SerializeTensor(writer, _outputProjection);
         SerializeTensor(writer, _outputBias);
+
+        // Serialize training series (needed for Predict to work correctly)
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(Convert.ToDouble(_trainingSeries[i]));
     }
 
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor.Shape)
+        foreach (var dim in tensor.Shape.ToArray())
             writer.Write(dim);
         for (int i = 0; i < tensor.Length; i++)
             writer.Write(Convert.ToDouble(tensor[i]));
@@ -858,6 +894,15 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         _outputProjection = DeserializeTensor(reader);
         _outputBias = DeserializeTensor(reader);
 
+        // Deserialize training series if present
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            int tsLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(tsLen);
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
+
         InitializeGradientAccumulators();
     }
 
@@ -885,7 +930,6 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         return new ModelMetadata<T>
         {
             Name = "Chronos Foundation Model",
-            ModelType = ModelType.TimeSeriesRegression,
             Description = "Foundation model for zero-shot time series forecasting with mean-scaling tokenization and causal transformer",
             Complexity = ParameterCount,
             FeatureCount = _options.ContextLength,
@@ -1147,18 +1191,18 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
     public void InitializeGradientAccumulators(Dictionary<string, Tensor<T>> accumulators, int layerIndex)
     {
         string prefix = $"layer{layerIndex}_";
-        accumulators[prefix + "queryProj"] = new Tensor<T>(_queryProj.Shape);
-        accumulators[prefix + "keyProj"] = new Tensor<T>(_keyProj.Shape);
-        accumulators[prefix + "valueProj"] = new Tensor<T>(_valueProj.Shape);
-        accumulators[prefix + "outputProj"] = new Tensor<T>(_outputProj.Shape);
-        accumulators[prefix + "ffn1"] = new Tensor<T>(_ffn1.Shape);
-        accumulators[prefix + "ffn1Bias"] = new Tensor<T>(_ffn1Bias.Shape);
-        accumulators[prefix + "ffn2"] = new Tensor<T>(_ffn2.Shape);
-        accumulators[prefix + "ffn2Bias"] = new Tensor<T>(_ffn2Bias.Shape);
-        accumulators[prefix + "layerNorm1Gamma"] = new Tensor<T>(_layerNorm1Gamma.Shape);
-        accumulators[prefix + "layerNorm1Beta"] = new Tensor<T>(_layerNorm1Beta.Shape);
-        accumulators[prefix + "layerNorm2Gamma"] = new Tensor<T>(_layerNorm2Gamma.Shape);
-        accumulators[prefix + "layerNorm2Beta"] = new Tensor<T>(_layerNorm2Beta.Shape);
+        accumulators[prefix + "queryProj"] = new Tensor<T>(_queryProj.Shape.ToArray());
+        accumulators[prefix + "keyProj"] = new Tensor<T>(_keyProj.Shape.ToArray());
+        accumulators[prefix + "valueProj"] = new Tensor<T>(_valueProj.Shape.ToArray());
+        accumulators[prefix + "outputProj"] = new Tensor<T>(_outputProj.Shape.ToArray());
+        accumulators[prefix + "ffn1"] = new Tensor<T>(_ffn1.Shape.ToArray());
+        accumulators[prefix + "ffn1Bias"] = new Tensor<T>(_ffn1Bias.Shape.ToArray());
+        accumulators[prefix + "ffn2"] = new Tensor<T>(_ffn2.Shape.ToArray());
+        accumulators[prefix + "ffn2Bias"] = new Tensor<T>(_ffn2Bias.Shape.ToArray());
+        accumulators[prefix + "layerNorm1Gamma"] = new Tensor<T>(_layerNorm1Gamma.Shape.ToArray());
+        accumulators[prefix + "layerNorm1Beta"] = new Tensor<T>(_layerNorm1Beta.Shape.ToArray());
+        accumulators[prefix + "layerNorm2Gamma"] = new Tensor<T>(_layerNorm2Gamma.Shape.ToArray());
+        accumulators[prefix + "layerNorm2Beta"] = new Tensor<T>(_layerNorm2Beta.Shape.ToArray());
     }
 
     /// <summary>
@@ -1737,7 +1781,7 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor.Shape)
+        foreach (var dim in tensor.Shape.ToArray())
             writer.Write(dim);
         for (int i = 0; i < tensor.Length; i++)
             writer.Write(Convert.ToDouble(tensor[i]));

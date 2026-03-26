@@ -257,7 +257,6 @@ public class EnCodec<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         {
             Name = _useNativeMode ? "EnCodec-Native" : "EnCodec-ONNX",
             Description = $"EnCodec neural audio codec at {_options.SampleRate / 1000} kHz (Defossez et al., 2022, Meta)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = 1,
             Complexity = _options.EncoderChannels.Length
         };
         m.AdditionalInfo["NumQuantizers"] = _options.NumQuantizers.ToString();

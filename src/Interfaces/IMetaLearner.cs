@@ -89,7 +89,7 @@ namespace AiDotNet.Interfaces;
 /// // 4. Deployment: Adapt to new task with 5 examples
 /// var newTask = dataLoader.GetNextTask();
 /// var adaptResult = metaLearner.AdaptAndEvaluate(newTask);
-/// Console.WriteLine($"New Task Accuracy: {adaptResult.QueryAccuracy:P2}");
+/// // Result is available in the returned value
 /// </code>
 /// </example>
 public interface IMetaLearner<T, TInput, TOutput>

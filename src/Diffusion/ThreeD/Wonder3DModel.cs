@@ -222,8 +222,8 @@ public class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
+        var vaeCount = _vae.GetParameters().Length;
         if (parameters.Length != unetCount + vaeCount)
             throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         var unetParams = new Vector<T>(unetCount);
@@ -266,7 +266,7 @@ public class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "Wonder3D", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Wonder3D", Version = "1.0",
             Description = "Wonder3D cross-domain multi-view 3D generation with RGB and normal maps",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

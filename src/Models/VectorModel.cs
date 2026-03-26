@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Interpretability.Explainers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Validation;
@@ -38,8 +40,26 @@ namespace AiDotNet.Models;
 /// making it a good starting point for many problems.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a linear model with 3 feature coefficients
+/// var coefficients = new Vector&lt;double&gt;(new double[] { 50000, 100, 20000 });
+/// var model = new VectorModel&lt;double&gt;(coefficients);
+///
+/// // Predict house price: 3 bedrooms, 1500 sqft, 2 bathrooms
+/// var input = new Matrix&lt;double&gt;(1, 3);
+/// input[0, 0] = 3; input[0, 1] = 1500; input[0, 2] = 2;
+/// Vector&lt;double&gt; prediction = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretableModel<T>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Linear)]
+[ModelCategory(ModelCategory.Interpretable)]
+[ModelTask(ModelTask.Regression)]
+[ModelComplexity(ModelComplexity.Low)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretableModel<T>
 {
     /// <summary>
     /// Gets the vector of coefficients used by the model.
@@ -67,24 +87,6 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// </para>
     /// </remarks>
     public Vector<T> Coefficients { get; }
-
-    /// <summary>
-    /// The numeric operations provider used for mathematical operations on type T.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field provides access to basic mathematical operations for the generic type T,
-    /// allowing the class to perform calculations regardless of the specific numeric type.
-    /// </para>
-    /// <para><b>For Beginners:</b> This provides a way to do math with different number types.
-    /// 
-    /// Since the model can work with different types of numbers (float, double, etc.),
-    /// we need a way to perform math operations like addition and multiplication
-    /// without knowing exactly what number type we're using. This helper provides
-    /// those operations in a consistent way regardless of the number type.
-    /// </para>
-    /// </remarks>
-    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
     /// Cached feature importance to avoid recreating on every GetModelMetadata() call.
@@ -140,7 +142,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// which is the standard loss function for regression problems.
     /// </para>
     /// </remarks>
-    public ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
+    public override ILossFunction<T> DefaultLossFunction => _defaultLossFunction;
 
     /// <summary>
     /// Gets the number of features used by the model.
@@ -194,7 +196,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// that aim to reduce model complexity.
     /// </para>
     /// </remarks>
-    public int Complexity => Coefficients.Count(c => !_numOps.Equals(c, _numOps.Zero));
+    public int Complexity => Coefficients.Count(c => !NumOps.Equals(c, NumOps.Zero));
 
     /// <summary>
     /// Gets the number of trainable parameters in the model.
@@ -213,7 +215,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// - The parameter count equals the number of features
     /// </para>
     /// </remarks>
-    public int ParameterCount => Coefficients.Length;
+    public override int ParameterCount => Coefficients.Length;
 
     /// <summary>
     /// Determines whether a specific feature is used by the model.
@@ -243,7 +245,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// - Understanding the model's behavior
     /// </para>
     /// </remarks>
-    public bool IsFeatureUsed(int featureIndex)
+    public override bool IsFeatureUsed(int featureIndex)
     {
         if (featureIndex < 0 || featureIndex >= FeatureCount)
         {
@@ -251,7 +253,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
                 $"Feature index must be between 0 and {FeatureCount - 1}");
         }
 
-        return !_numOps.Equals(Coefficients[featureIndex], _numOps.Zero);
+        return !NumOps.Equals(Coefficients[featureIndex], NumOps.Zero);
     }
 
     /// <summary>
@@ -277,7 +279,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// - Analysis: understand which coefficients need the most adjustment
     /// </para>
     /// </remarks>
-    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         if (input == null)
             throw new ArgumentNullException(nameof(input));
@@ -297,17 +299,17 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         var predictionGradient = loss.CalculateDerivative(predictions, target);
 
         // Compute gradient w.r.t. coefficients: ∂L/∂coefficients = (1/n) * X^T * ∂L/∂y_pred
+        // Pre-extract columns from input for Engine.DotProduct
         var gradients = new Vector<T>(Coefficients.Length);
         for (int j = 0; j < Coefficients.Length; j++)
         {
-            T sum = _numOps.Zero;
+            var col = new Vector<T>(input.Rows);
             for (int i = 0; i < input.Rows; i++)
             {
-                // gradient[j] += input[i,j] * predictionGradient[i]
-                sum = _numOps.Add(sum, _numOps.Multiply(input[i, j], predictionGradient[i]));
+                col[i] = input[i, j];
             }
-            // Average over all samples
-            gradients[j] = _numOps.Divide(sum, _numOps.FromDouble(input.Rows));
+            // gradient[j] = (1/n) * X[:,j] · predictionGradient
+            gradients[j] = NumOps.Divide(Engine.DotProduct(col, predictionGradient), NumOps.FromDouble(input.Rows));
         }
 
         return gradients;
@@ -332,7 +334,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// to ensure all machines keep their models synchronized.
     /// </para>
     /// </remarks>
-    public void ApplyGradients(Vector<T> gradients, T learningRate)
+    public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         if (gradients == null)
             throw new ArgumentNullException(nameof(gradients));
@@ -346,8 +348,8 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         // Apply gradient descent: coefficients = coefficients - learningRate * gradients
         for (int i = 0; i < Coefficients.Length; i++)
         {
-            T update = _numOps.Multiply(learningRate, gradients[i]);
-            Coefficients[i] = _numOps.Subtract(Coefficients[i], update);
+            T update = NumOps.Multiply(learningRate, gradients[i]);
+            Coefficients[i] = NumOps.Subtract(Coefficients[i], update);
         }
 
         // Invalidate cached feature importance since coefficients changed
@@ -393,13 +395,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
             throw new ArgumentException($"Input vector length ({input.Length}) must match coefficients length ({Coefficients.Length}).", nameof(input));
         }
 
-        T result = _numOps.Zero;
-        for (int i = 0; i < input.Length; i++)
-        {
-            result = _numOps.Add(result, _numOps.Multiply(Coefficients[i], input[i]));
-        }
-
-        return result;
+        return Engine.DotProduct(Coefficients, input);
     }
 
     /// <summary>
@@ -573,7 +569,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// - Visualizing or reporting on the model
     /// </para>
     /// </remarks>
-    public ModelMetadata<T> GetModelMetadata()
+    public override ModelMetadata<T> GetModelMetadata()
     {
         if (Coefficients.Length == 0)
         {
@@ -586,7 +582,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         T max = Coefficients.Max();
         T min = Coefficients.Min();
 
-        int nonZeroCount = Coefficients.Count(c => !_numOps.Equals(c, _numOps.Zero));
+        int nonZeroCount = Coefficients.Count(c => !NumOps.Equals(c, NumOps.Zero));
 
         return new ModelMetadata<T>
         {
@@ -635,7 +631,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// The resulting byte array can be converted back to a model using Deserialize.
     /// </para>
     /// </remarks>
-    public byte[] Serialize()
+    public override byte[] Serialize()
     {
         ModelPersistenceGuard.EnforceBeforeSerialize();
         using MemoryStream ms = new MemoryStream();
@@ -690,7 +686,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// creating a new model, which is different from most other methods in this class.
     /// </para>
     /// </remarks>
-    public void Deserialize(byte[] data)
+    public override void Deserialize(byte[] data)
     {
         ModelPersistenceGuard.EnforceBeforeDeserialize();
         if (data == null)
@@ -723,7 +719,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
             // Read each coefficient
             for (int i = 0; i < length; i++)
             {
-                Coefficients[i] = _numOps.FromDouble(reader.ReadDouble());
+                Coefficients[i] = NumOps.FromDouble(reader.ReadDouble());
             }
 
             // Invalidate cached feature importance
@@ -755,7 +751,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// For example: model.SaveModel("my_model.bin");
     /// </para>
     /// </remarks>
-    public void SaveModel(string filePath)
+    public override void SaveModel(string filePath)
     {
         Helpers.ModelPersistenceGuard.EnforceBeforeSave();
 
@@ -807,7 +803,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// For example: model.LoadModel("my_model.bin");
     /// </para>
     /// </remarks>
-    public void LoadModel(string filePath)
+    public override void LoadModel(string filePath)
     {
         Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
 
@@ -866,7 +862,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// This is the main method you'll use to train the model on your dataset.
     /// </para>
     /// </remarks>
-    public void Train(Matrix<T> input, Vector<T> expectedOutput)
+    public override void Train(Matrix<T> input, Vector<T> expectedOutput)
     {
         if (input == null)
         {
@@ -903,7 +899,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// This is the main method you'll use to make predictions once your model is trained.
     /// </para>
     /// </remarks>
-    public Vector<T> Predict(Matrix<T> input)
+    public override Vector<T> Predict(Matrix<T> input)
     {
         if (input == null)
         {
@@ -935,7 +931,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// - Implementing optimization algorithms
     /// </para>
     /// </remarks>
-    public Vector<T> GetParameters()
+    public override Vector<T> GetParameters()
     {
         // Create a copy of the coefficients vector to avoid external modification
         Vector<T> parameters = new Vector<T>(Coefficients.Length);
@@ -970,7 +966,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// - Implementing learning algorithms
     /// </para>
     /// </remarks>
-    public void SetParameters(Vector<T> parameters)
+    public override void SetParameters(Vector<T> parameters)
     {
         if (parameters == null)
         {
@@ -1020,7 +1016,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// give the best predictions or modify weights to simplify the model.
     /// </para>
     /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         if (parameters == null)
         {
@@ -1057,11 +1053,11 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// - Simplifying the model by focusing only on important features
     /// </para>
     /// </remarks>
-    public IEnumerable<int> GetActiveFeatureIndices()
+    public override IEnumerable<int> GetActiveFeatureIndices()
     {
         for (int i = 0; i < Coefficients.Length; i++)
         {
-            if (!_numOps.Equals(Coefficients[i], _numOps.Zero))
+            if (!NumOps.Equals(Coefficients[i], NumOps.Zero))
             {
                 yield return i;
             }
@@ -1094,7 +1090,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// For example, you might copy a model before mutating it to preserve the original.
     /// </para>
     /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
         // Create a new coefficients vector with the same values
         Vector<T> clonedCoefficients = new Vector<T>(Coefficients.Length);
@@ -1107,30 +1103,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         return new VectorModel<T>(clonedCoefficients);
     }
 
-    /// <summary>
-    /// Creates a shallow copy of this model.
-    /// </summary>
-    /// <returns>A new instance with the same coefficients.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a shallow copy of the model. For VectorModel, this is equivalent to DeepCopy because
-    /// the only state that needs to be copied is the Coefficients vector.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method creates a duplicate of the model.
-    /// 
-    /// For the VectorModel:
-    /// - Clone and DeepCopy do the same thing
-    /// - Both create a new model with a copy of the coefficients
-    /// 
-    /// The Clone method is provided for compatibility with the IFullModel interface.
-    /// </para>
-    /// </remarks>
-    public IFullModel<T, Matrix<T>, Vector<T>> Clone()
-    {
-        return DeepCopy();
-    }
-
-    public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+    public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
         if (featureIndices == null)
             throw new ArgumentNullException(nameof(featureIndices));
@@ -1154,7 +1127,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
             if (!indices.Contains(i))
             {
                 // Zero out the coefficient for inactive features
-                Coefficients[i] = _numOps.Zero;
+                Coefficients[i] = NumOps.Zero;
             }
         }
 
@@ -1185,7 +1158,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// - Model interpretation and explanation
     /// </para>
     /// </remarks>
-    public Dictionary<string, T> GetFeatureImportance()
+    public override Dictionary<string, T> GetFeatureImportance()
     {
         if (_cachedFeatureImportance != null)
         {
@@ -1195,7 +1168,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         var importance = new Dictionary<string, T>();
         for (int i = 0; i < Coefficients.Length; i++)
         {
-            importance.Add($"Feature_{i}", _numOps.Abs(Coefficients[i]));
+            importance.Add($"Feature_{i}", NumOps.Abs(Coefficients[i]));
         }
         _cachedFeatureImportance = importance;
         return new Dictionary<string, T>(importance);
@@ -1291,15 +1264,15 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
 
             // Generate grid values for the feature
             // Using a range from -1 to 1 as a default since we don't have training data
-            T minVal = _numOps.FromDouble(-1.0);
-            T maxVal = _numOps.FromDouble(1.0);
+            T minVal = NumOps.FromDouble(-1.0);
+            T maxVal = NumOps.FromDouble(1.0);
 
             Vector<T> gridVals = new Vector<T>(gridResolution);
             for (int i = 0; i < gridResolution; i++)
             {
-                T ratio = _numOps.FromDouble((double)i / (gridResolution - 1));
-                T range = _numOps.Subtract(maxVal, minVal);
-                gridVals[i] = _numOps.Add(minVal, _numOps.Multiply(range, ratio));
+                T ratio = NumOps.FromDouble((double)i / (gridResolution - 1));
+                T range = NumOps.Subtract(maxVal, minVal);
+                gridVals[i] = NumOps.Add(minVal, NumOps.Multiply(range, ratio));
             }
 
             gridValues[featureIdx] = gridVals;
@@ -1308,7 +1281,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
             Vector<T> pdValues = new Vector<T>(gridResolution);
             for (int i = 0; i < gridResolution; i++)
             {
-                pdValues[i] = _numOps.Multiply(Coefficients[featureIdx], gridVals[i]);
+                pdValues[i] = NumOps.Multiply(Coefficients[featureIdx], gridVals[i]);
             }
 
             pdpMatrix.Add(pdValues);
@@ -1323,15 +1296,15 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
             var grids = new List<Vector<T>>();
             foreach (int featureIdx in featureIndices)
             {
-                T minVal = _numOps.FromDouble(-1.0);
-                T maxVal = _numOps.FromDouble(1.0);
+                T minVal = NumOps.FromDouble(-1.0);
+                T maxVal = NumOps.FromDouble(1.0);
 
                 Vector<T> gridVals = new Vector<T>(gridResolution);
                 for (int i = 0; i < gridResolution; i++)
                 {
-                    T ratio = _numOps.FromDouble((double)i / (gridResolution - 1));
-                    T range = _numOps.Subtract(maxVal, minVal);
-                    gridVals[i] = _numOps.Add(minVal, _numOps.Multiply(range, ratio));
+                    T ratio = NumOps.FromDouble((double)i / (gridResolution - 1));
+                    T range = NumOps.Subtract(maxVal, minVal);
+                    gridVals[i] = NumOps.Add(minVal, NumOps.Multiply(range, ratio));
                 }
 
                 gridValues[featureIdx] = gridVals;
@@ -1399,11 +1372,11 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         if (depth == featureIndices.Length)
         {
             // Compute PD value for this combination
-            T pdValue = _numOps.Zero;
+            T pdValue = NumOps.Zero;
             for (int i = 0; i < featureIndices.Length; i++)
             {
                 int featureIdx = featureIndices[i];
-                pdValue = _numOps.Add(pdValue, _numOps.Multiply(Coefficients[featureIdx], currentPoint[i]));
+                pdValue = NumOps.Add(pdValue, NumOps.Multiply(Coefficients[featureIdx], currentPoint[i]));
             }
             pdValues[pointIdx++] = pdValue;
             return;
@@ -1624,7 +1597,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
         Tensor<T> input,
         int targetClass = -1)
     {
-        int[] inputShape = input.Shape;
+        int[] inputShape = input.Shape.ToArray();
         int[] featureMapShape = new[] { inputShape[0], 1, 1, 1 };
         return InterpretableModelHelper.GetGradCAMAsync(
             this, _enabledMethods, input, inputShape, featureMapShape, targetClass);
@@ -1661,7 +1634,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// </remarks>
     /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
     /// <exception cref="IOException">Thrown when there's an error writing to the stream.</exception>
-    public virtual void SaveState(Stream stream)
+    public override void SaveState(Stream stream)
     {
         if (stream == null)
             throw new ArgumentNullException(nameof(stream));
@@ -1717,7 +1690,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// <exception cref="ArgumentNullException">Thrown when stream is null.</exception>
     /// <exception cref="IOException">Thrown when there's an error reading from the stream.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the stream contains invalid or incompatible data.</exception>
-    public virtual void LoadState(Stream stream)
+    public override void LoadState(Stream stream)
     {
         if (stream == null)
             throw new ArgumentNullException(nameof(stream));
@@ -1778,7 +1751,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// - Production deployments
     /// </para>
     /// </remarks>
-    public bool SupportsJitCompilation => true;
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Exports the linear regression model as a computation graph for JIT compilation.
@@ -1807,7 +1780,7 @@ public class VectorModel<T> : IFullModel<T, Matrix<T>, Vector<T>>, IInterpretabl
     /// - Provide 5-10x faster predictions
     /// </para>
     /// </remarks>
-    public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
         if (inputNodes == null)
             throw new ArgumentNullException(nameof(inputNodes));

@@ -48,7 +48,7 @@ namespace AiDotNet.Document.PixelToSequence;
 /// <code>
 /// var donut = new Donut&lt;float&gt;(architecture);
 /// var result = donut.ParseDocument(documentImage, "invoice");
-/// Console.WriteLine(result.ParsedContent);
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// <para>
@@ -1026,7 +1026,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape);
+        var normalized = new Tensor<T>(image.Shape.ToArray());
 
         // Donut uses different normalization than standard ImageNet
         double[] means = [0.5, 0.5, 0.5];
@@ -1075,7 +1075,6 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         return new ModelMetadata<T>
         {
             Name = "Donut",
-            ModelType = ModelType.NeuralNetwork,
             Description = "OCR-free Document Understanding Transformer with Swin-B encoder (ECCV 2022)",
             FeatureCount = encoderOutputDim,
             Complexity = totalEncoderLayers + _numDecoderLayers,

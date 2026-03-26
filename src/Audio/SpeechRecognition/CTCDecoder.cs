@@ -40,7 +40,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 80, outputSize: 34);
 /// var model = new CTCDecoder&lt;float&gt;(arch, "ctc_decoder.onnx");
 /// var result = model.Transcribe(audioWaveform);
-/// Console.WriteLine(result.Text);
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>
@@ -211,7 +211,6 @@ public class CTCDecoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Name = _useNativeMode ? "CTCDecoder-Native" : "CTCDecoder-ONNX",
             Description = $"CTC decoder {_options.Variant} ASR model (Graves et al., 2006)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;
         m.AdditionalInfo["EncoderDim"] = _options.EncoderDim.ToString();

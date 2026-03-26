@@ -137,7 +137,7 @@ public class ColumnEmbedding<T>
             totalBatchElements *= featureEmbeddings.Shape[i];
         }
 
-        var output = new Tensor<T>(featureEmbeddings.Shape);
+        var output = new Tensor<T>(featureEmbeddings.Shape.ToArray());
         int stride = numCols * embDim;
 
         for (int b = 0; b < totalBatchElements; b++)

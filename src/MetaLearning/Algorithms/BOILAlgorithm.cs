@@ -810,10 +810,7 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     private T ComputeL2Penalty(Vector<T> bodyParams)
     {
         T sum = NumOps.Zero;
-        for (int i = 0; i < bodyParams.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Multiply(bodyParams[i], bodyParams[i]));
-        }
+        sum = NumOps.Add(sum, Engine.DotProduct(bodyParams, bodyParams));
         return NumOps.Multiply(NumOps.FromDouble(0.5), sum);
     }
 

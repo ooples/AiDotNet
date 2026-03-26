@@ -35,6 +35,14 @@ namespace AiDotNet.Clustering.Spectral;
 /// - You care about connectivity, not just distance
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new SpectralOptions&lt;double&gt;();
+/// var spectralClustering = new SpectralClustering&lt;double&gt;(options);
+/// spectralClustering.Train(dataMatrix);
+/// Vector&lt;double&gt;? labels = spectralClustering.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -72,7 +80,6 @@ public class SpectralClustering<T> : ClusteringBase<T>
     public T[,]? AffinityMatrix => _affinityMatrix;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -131,6 +138,7 @@ public class SpectralClustering<T> : ClusteringBase<T>
         // Compute cluster centers in original space
         ComputeClusterCenters(x);
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 
@@ -168,18 +176,53 @@ public class SpectralClustering<T> : ClusteringBase<T>
         var affinity = new T[n, n];
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
-        // Compute gamma if not specified
-        T gamma = NumOps.FromDouble(_options.Gamma ?? 1.0 / x.Columns);
+        // Compute gamma if not specified. Use 1/(n_features * Var(X)) following
+        // scikit-learn's "scale" convention. The naive 1/n_features doesn't account for
+        // data scale, causing the RBF kernel to collapse when features are large.
+        double gammaValue;
+        if (_options.Gamma.HasValue)
+        {
+            gammaValue = _options.Gamma.Value;
+        }
+        else
+        {
+            double totalVar = 0;
+            for (int j = 0; j < x.Columns; j++)
+            {
+                double mean = 0;
+                for (int i2 = 0; i2 < n; i2++)
+                    mean += NumOps.ToDouble(x[i2, j]);
+                mean /= n;
+
+                double featureVar = 0;
+                for (int i2 = 0; i2 < n; i2++)
+                {
+                    double diff = NumOps.ToDouble(x[i2, j]) - mean;
+                    featureVar += diff * diff;
+                }
+                totalVar += featureVar / n;
+            }
+            gammaValue = totalVar > 1e-10 ? 1.0 / totalVar : 1.0 / x.Columns;
+        }
+        T gamma = NumOps.FromDouble(gammaValue);
+        int d = x.Columns;
+
+        // Cache rows as arrays for allocation-free distance
+        var rowArrays = new T[n][];
+        for (int i = 0; i < n; i++)
+        {
+            rowArrays[i] = new T[d];
+            for (int c = 0; c < d; c++)
+                rowArrays[i][c] = x[i, c];
+        }
 
         for (int i = 0; i < n; i++)
         {
-            affinity[i, i] = NumOps.One; // Self-similarity
-            var pointI = GetRow(x, i);
+            affinity[i, i] = NumOps.One;
 
             for (int j = i + 1; j < n; j++)
             {
-                var pointJ = GetRow(x, j);
-                T dist = metric.Compute(pointI, pointJ);
+                T dist = metric.ComputeInline(rowArrays[i], rowArrays[j], d);
                 T distSq = NumOps.Multiply(dist, dist);
 
                 T similarity = NumOps.Exp(NumOps.Negate(NumOps.Multiply(gamma, distSq)));
@@ -202,16 +245,23 @@ public class SpectralClustering<T> : ClusteringBase<T>
             for (int j = 0; j < n; j++)
                 affinity[i, j] = NumOps.Zero;
 
-        // Compute all pairwise distances
+        // Compute all pairwise distances with allocation-free inline metric
+        int d2 = x.Columns;
+        var nnRowArrays = new T[n][];
+        for (int i = 0; i < n; i++)
+        {
+            nnRowArrays[i] = new T[d2];
+            for (int c = 0; c < d2; c++)
+                nnRowArrays[i][c] = x[i, c];
+        }
+
         var distances = new T[n, n];
         for (int i = 0; i < n; i++)
         {
-            var pointI = GetRow(x, i);
             distances[i, i] = NumOps.Zero;
             for (int j = i + 1; j < n; j++)
             {
-                var pointJ = GetRow(x, j);
-                T dist = metric.Compute(pointI, pointJ);
+                T dist = metric.ComputeInline(nnRowArrays[i], nnRowArrays[j], d2);
                 distances[i, j] = dist;
                 distances[j, i] = dist;
             }
@@ -346,59 +396,68 @@ public class SpectralClustering<T> : ClusteringBase<T>
         // Find eigenvectors corresponding to smallest eigenvalues
         for (int vec = 0; vec < k; vec++)
         {
-            var v = new T[n];
+            var v = new Vector<T>(n);
             for (int j = 0; j < n; j++)
             {
                 v[j] = vectors[vec, j];
             }
 
-            // Normalize
-            T norm = NumOps.Zero;
-            for (int j = 0; j < n; j++)
-            {
-                norm = NumOps.Add(norm, NumOps.Multiply(v[j], v[j]));
-            }
-            norm = NumOps.Sqrt(norm);
+            // Normalize using Engine
+            T norm = NumOps.Sqrt(Engine.DotProduct(v, v));
             for (int j = 0; j < n; j++)
             {
                 v[j] = NumOps.Divide(v[j], norm);
             }
 
-            // Power iteration
-            for (int iter = 0; iter < 100; iter++)
+            // Shifted power iteration: use (σI - L) to find smallest eigenvalues
+            // as largest eigenvalues of the shifted matrix.
+            // σ = trace(L)/n + 1 is a safe upper bound for Laplacian eigenvalues.
+            double sigma = 0;
+            for (int j = 0; j < n; j++)
+                sigma += NumOps.ToDouble(laplacian[j, j]);
+            sigma = sigma / n + 1.0;
+
+            for (int iter = 0; iter < 300; iter++)
             {
-                var newV = MultiplyMatrixVector(laplacian, v, n);
-
-                // Orthogonalize against previous eigenvectors
-                for (int prev = 0; prev < vec; prev++)
-                {
-                    T dot = NumOps.Zero;
-                    for (int j = 0; j < n; j++)
-                    {
-                        dot = NumOps.Add(dot, NumOps.Multiply(newV[j], eigenvectors[j, prev]));
-                    }
-                    for (int j = 0; j < n; j++)
-                    {
-                        newV[j] = NumOps.Subtract(newV[j], NumOps.Multiply(dot, eigenvectors[j, prev]));
-                    }
-                }
-
-                // Normalize
-                norm = NumOps.Zero;
+                // Compute (σI - L) * v instead of L * v
+                var lv = MultiplyMatrixVector(laplacian, v, n);
+                var newV = new Vector<T>(n);
                 for (int j = 0; j < n; j++)
+                    newV[j] = NumOps.Subtract(NumOps.Multiply(NumOps.FromDouble(sigma), v[j]), lv[j]);
+
+                // Orthogonalize against previous eigenvectors (two passes for numerical stability)
+                for (int pass = 0; pass < 2; pass++)
                 {
-                    norm = NumOps.Add(norm, NumOps.Multiply(newV[j], newV[j]));
+                    for (int prev = 0; prev < vec; prev++)
+                    {
+                        var eigCol = new Vector<T>(n);
+                        for (int j = 0; j < n; j++) eigCol[j] = eigenvectors[j, prev];
+                        T dot = Engine.DotProduct(newV, eigCol);
+                        for (int j = 0; j < n; j++)
+                        {
+                            newV[j] = NumOps.Subtract(newV[j], NumOps.Multiply(dot, eigenvectors[j, prev]));
+                        }
+                    }
                 }
+
+                // Normalize using Engine
+                norm = NumOps.Sqrt(Engine.DotProduct(newV, newV));
                 if (NumOps.LessThan(norm, epsilon))
                 {
                     norm = epsilon;
                 }
-                norm = NumOps.Sqrt(norm);
 
+                // Check convergence: ||v_new - v_old|| < tolerance
+                double changeSq = 0;
                 for (int j = 0; j < n; j++)
                 {
-                    v[j] = NumOps.Divide(newV[j], norm);
+                    T newVal = NumOps.Divide(newV[j], norm);
+                    double diff = NumOps.ToDouble(NumOps.Subtract(newVal, v[j]));
+                    changeSq += diff * diff;
+                    v[j] = newVal;
                 }
+
+                if (changeSq < 1e-12) break;
             }
 
             // Store eigenvector
@@ -411,16 +470,14 @@ public class SpectralClustering<T> : ClusteringBase<T>
         return eigenvectors;
     }
 
-    private T[] MultiplyMatrixVector(T[,] matrix, T[] vector, int n)
+    private Vector<T> MultiplyMatrixVector(T[,] matrix, Vector<T> vector, int n)
     {
-        var result = new T[n];
+        var result = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
-            result[i] = NumOps.Zero;
-            for (int j = 0; j < n; j++)
-            {
-                result[i] = NumOps.Add(result[i], NumOps.Multiply(matrix[i, j], vector[j]));
-            }
+            var row = new Vector<T>(n);
+            for (int j = 0; j < n; j++) row[j] = matrix[i, j];
+            result[i] = Engine.DotProduct(row, vector);
         }
         return result;
     }
@@ -549,10 +606,13 @@ public class SpectralClustering<T> : ClusteringBase<T>
 
         var labels = new Vector<T>(x.Rows);
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        int dims = x.Columns;
+        var pointArr = new T[dims];
+        var centerArr = new T[dims];
 
         for (int i = 0; i < x.Rows; i++)
         {
-            var point = GetRow(x, i);
+            for (int j = 0; j < dims; j++) pointArr[j] = x[i, j];
             T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
@@ -560,8 +620,8 @@ public class SpectralClustering<T> : ClusteringBase<T>
             {
                 for (int k = 0; k < NumClusters; k++)
                 {
-                    var center = GetRow(ClusterCenters, k);
-                    T dist = metric.Compute(point, center);
+                    for (int j = 0; j < dims; j++) centerArr[j] = ClusterCenters[k, j];
+                    T dist = metric.ComputeInline(pointArr, centerArr, dims);
 
                     if (NumOps.LessThan(dist, minDist))
                     {

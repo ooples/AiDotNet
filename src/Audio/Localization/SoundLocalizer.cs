@@ -36,7 +36,7 @@ namespace AiDotNet.Audio.Localization;
 /// var audioChannels = new[] { LoadAudio("mic1.wav"), LoadAudio("mic2.wav") };
 /// var result = localizer.Localize(audioChannels);
 ///
-/// Console.WriteLine($"Sound from {result.AzimuthDegrees:F1} degrees");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

@@ -218,8 +218,8 @@ public class MeshyModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
+        var vaeCount = _vae.GetParameters().Length;
         if (parameters.Length != unetCount + vaeCount)
             throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         var unetParams = new Vector<T>(unetCount);
@@ -262,7 +262,7 @@ public class MeshyModel<T> : ThreeDDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "Meshy", Version = "4.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Meshy", Version = "4.0",
             Description = "Meshy production-grade 3D generation with PBR texturing",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
