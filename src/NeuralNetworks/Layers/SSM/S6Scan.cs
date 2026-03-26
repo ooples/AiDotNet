@@ -131,18 +131,19 @@ public static class S6Scan<T>
             var x_t_3D = Engine.TensorExpandDims(x_t, 2);          // [batch, innerDim, 1]
 
             // Discretize: A_bar = exp(delta * A) where A = -exp(A_log)
-            var deltaA = Engine.TensorBroadcastMultiply(delta_t_3D, negA3D);  // [batch, innerDim, stateDim]
-            var A_bar = Engine.TensorExp(deltaA);                              // [batch, innerDim, stateDim]
+            // Clone broadcast results to ensure contiguous memory layout
+            var deltaA = Engine.TensorBroadcastMultiply(delta_t_3D, negA3D).Clone();
+            var A_bar = Engine.TensorExp(deltaA).Clone();
 
             // B_bar * x = delta * B * x (Euler discretization for B)
-            var deltaB = Engine.TensorBroadcastMultiply(delta_t_3D, B_t_3D);  // [batch, innerDim, stateDim]
-            var Bbar_x = Engine.TensorBroadcastMultiply(deltaB, x_t_3D);      // [batch, innerDim, stateDim]
+            var deltaB = Engine.TensorBroadcastMultiply(delta_t_3D, B_t_3D).Clone();
+            var Bbar_x = Engine.TensorBroadcastMultiply(deltaB, x_t_3D).Clone();
 
             // State update: h = A_bar * h + B_bar * x (all Engine tensor ops)
             h = Engine.TensorAdd(Engine.TensorMultiply(A_bar, h), Bbar_x);
 
             // Output: y_t = sum_n(C * h) + D * x (Engine reduction + broadcast)
-            var Ch = Engine.TensorBroadcastMultiply(C_t_3D, h);                // [batch, innerDim, stateDim]
+            var Ch = Engine.TensorBroadcastMultiply(C_t_3D, h).Clone();
             var y_t = Engine.ReduceSum(Ch, new int[] { 2 });                   // [batch, innerDim]
             var Dx = Engine.TensorBroadcastMultiply(D2D, x_t);                // [batch, innerDim]
             y_t = Engine.TensorAdd(y_t, Dx);
@@ -235,31 +236,41 @@ public static class S6Scan<T>
             // dX from D skip: dX_t = D * dOut_t
             var dX_t = Engine.TensorBroadcastMultiply(D2D, dOut_t);
 
-            // Gradient from output: dh += C * dOut
+            // Gradient from output: dh += C * dOut — clone for contiguous layout
             dh = Engine.TensorAdd(dh,
-                Engine.TensorBroadcastMultiply(C_t_3D, dOut_t_3D));
+                Engine.TensorBroadcastMultiply(C_t_3D, dOut_t_3D).Clone());
 
             // dC[b,n] = sum_d(h_t[b,d,n] * dOut[b,d])
             var h_dOut = Engine.TensorBroadcastMultiply(h_t, dOut_t_3D);
             var dC_t = Engine.ReduceSum(h_dOut, new int[] { 1 });  // [batch, stateDim]
 
-            // Compute A_bar for this timestep
-            var deltaA = Engine.TensorBroadcastMultiply(delta_t_3D, negA3D);
-            var A_bar = Engine.TensorExp(deltaA);
+            // Compute A_bar for this timestep — clone broadcast results for contiguous layout
+            var deltaA = Engine.TensorBroadcastMultiply(delta_t_3D, negA3D).Clone();
+            var A_bar = Engine.TensorExp(deltaA).Clone();
 
             // Gradient through state equation: h = A_bar * h_prev + delta * B * x
             var d_A_bar = Engine.TensorMultiply(dh, h_prev);
 
             // d_delta from A_bar: sum_n(d_A_bar * A_bar * A) -> [batch, innerDim]
             var dAbar_Abar_A = Engine.TensorBroadcastMultiply(
-                Engine.TensorMultiply(d_A_bar, A_bar), negA3D);
+                Engine.TensorMultiply(d_A_bar, A_bar), negA3D).Clone();
             var d_delta_from_A = Engine.ReduceSum(dAbar_Abar_A, new int[] { 2 });
 
-            // d_A_log accumulation
-            var dAbar_Abar = Engine.TensorMultiply(d_A_bar, A_bar);
-            var d_A_log_full = Engine.TensorMultiply(dAbar_Abar, deltaA);
-            var d_A_log_t = Engine.ReduceSum(d_A_log_full, new int[] { 0 });
-            dALog = Engine.TensorAdd(dALog, d_A_log_t);
+            // d_A_log accumulation — use explicit loops to avoid 3D tensor operation issues
+            for (int bi = 0; bi < batchSize; bi++)
+            {
+                for (int di = 0; di < innerDimension; di++)
+                {
+                    for (int ni = 0; ni < stateDimension; ni++)
+                    {
+                        T dAb = d_A_bar[new[] { bi, di, ni }];
+                        T Ab = A_bar[new[] { bi, di, ni }];
+                        T dA = deltaA[new[] { bi, di, ni }];
+                        T contrib = NumOps.Multiply(NumOps.Multiply(dAb, Ab), dA);
+                        dALog[new[] { di, ni }] = NumOps.Add(dALog[new[] { di, ni }], contrib);
+                    }
+                }
+            }
 
             // d_delta from B*x: sum_n(dh * B * x) -> [batch, innerDim]
             var B_x = Engine.TensorBroadcastMultiply(B_t_3D, x_t_3D);
@@ -272,10 +283,10 @@ public static class S6Scan<T>
             var delta_x = Engine.TensorMultiply(delta_t, x_t);
             var delta_x_3D = Engine.TensorExpandDims(delta_x, 2);
             var d_B_t = Engine.ReduceSum(
-                Engine.TensorBroadcastMultiply(dh, delta_x_3D), new int[] { 1 });
+                Engine.TensorBroadcastMultiply(dh, delta_x_3D).Clone(), new int[] { 1 });
 
             // d_x from state: sum_n(dh * delta * B) -> [batch, innerDim]
-            var delta_B = Engine.TensorBroadcastMultiply(delta_t_3D, B_t_3D);
+            var delta_B = Engine.TensorBroadcastMultiply(delta_t_3D, B_t_3D).Clone();
             var d_x_from_state = Engine.ReduceSum(
                 Engine.TensorMultiply(dh, delta_B), new int[] { 2 });
 

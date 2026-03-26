@@ -575,9 +575,9 @@ internal class MambaBlock<T> : LayerBase<T>
                 int srcT = t - k;  // causal: only current and past positions
                 if (srcT >= 0)
                 {
-                    var x_src = input.GetSliceAlongDimension(srcT, 1);  // [batch, innerDim]
+                    var x_src = input.GetSliceAlongDimension(srcT, 1).Clone();
                     result_t = Engine.TensorAdd(result_t,
-                        Engine.TensorBroadcastMultiply(x_src, weightSlices[k]));
+                        Engine.TensorBroadcastMultiply(x_src, weightSlices[k]).Clone());
                 }
             }
 
@@ -630,7 +630,7 @@ internal class MambaBlock<T> : LayerBase<T>
                     weightGradSlices[k] = Engine.TensorAdd(weightGradSlices[k], wGradContrib);
 
                     // Input gradient: dInput[srcT] += weights[:, k] * dOut[t]
-                    var dInputContrib = Engine.TensorBroadcastMultiply(dOut_t, weightSlices[k]);
+                    var dInputContrib = Engine.TensorBroadcastMultiply(dOut_t, weightSlices[k]).Clone();
                     var dInput_srcT = dInput.GetSliceAlongDimension(srcT, 1);
                     dInput_srcT = Engine.TensorAdd(dInput_srcT, dInputContrib);
                     dInput.SetSlice(1, srcT, dInput_srcT);
