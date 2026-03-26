@@ -32,7 +32,7 @@ public abstract class AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, Vector<T>
     /// <summary>
     /// Provides hardware-accelerated tensor/vector operations (SIMD, GPU when available).
     /// </summary>
-    protected IEngine Engine => AiDotNetEngine.Current;
+    protected new IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// The contamination parameter representing the expected proportion of anomalies in the data.

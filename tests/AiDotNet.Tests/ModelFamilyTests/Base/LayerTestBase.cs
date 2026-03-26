@@ -185,7 +185,7 @@ public abstract class LayerTestBase
     /// Adding a new enum value automatically tests ALL layers with the new strategy.
     /// </summary>
     public static IEnumerable<object[]> LossStrategyValues =>
-        Enum.GetValues<GradientCheckLossStrategy>().Select(s => new object[] { s });
+        ((GradientCheckLossStrategy[])Enum.GetValues(typeof(GradientCheckLossStrategy))).Select(s => new object[] { s });
 
     /// <summary>
     /// All scalar-compatible activation functions, auto-discovered via reflection.
