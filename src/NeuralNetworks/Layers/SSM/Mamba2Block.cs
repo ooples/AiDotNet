@@ -450,7 +450,7 @@ public class Mamba2Block<T> : LayerBase<T>
         Tensor<T> x, Tensor<T> delta, Tensor<T> b, Tensor<T> c,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
+        var output = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
 
         // Pre-compute A = -exp(A_log) per head: [numHeads]
         var negAPerHead = new T[_numHeads];
@@ -601,7 +601,13 @@ public class Mamba2Block<T> : LayerBase<T>
 
         // Step 8 backward: output projection
         var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
-        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
+        // Explicit loop — Engine.ReduceSum with multi-axis [0,1] on 3D has a bug
+        _outputProjectionBiasGradient = new Tensor<T>(new[] { _modelDimension });
+        for (int bi = 0; bi < batchSize; bi++)
+            for (int t = 0; t < seqLen; t++)
+                for (int d = 0; d < _modelDimension; d++)
+                    _outputProjectionBiasGradient[d] = NumOps.Add(
+                        _outputProjectionBiasGradient[d], activationGrad[new[] { bi, t, d }]);
 
         var gatedFlat = _lastGatedOutput.Reshape(batchSize * seqLen, _innerDimension);
         _outputProjectionWeightsGradient = Engine.TensorMatMul(
@@ -683,7 +689,12 @@ public class Mamba2Block<T> : LayerBase<T>
         var dDeltaSoftplus = Engine.TensorMultiply(dDelta, softplusDerivative);
 
         var dDeltaFlat = dDeltaSoftplus.Reshape(batchSize * seqLen, _numHeads);
-        _dtProjectionBiasGradient = Engine.ReduceSum(dDeltaSoftplus, new int[] { 0, 1 });
+        _dtProjectionBiasGradient = new Tensor<T>(new[] { _numHeads });
+        for (int bi = 0; bi < batchSize; bi++)
+            for (int t = 0; t < seqLen; t++)
+                for (int d = 0; d < _numHeads; d++)
+                    _dtProjectionBiasGradient[d] = NumOps.Add(
+                        _dtProjectionBiasGradient[d], dDeltaSoftplus[new[] { bi, t, d }]);
 
         var siluFlat = _lastSiluOutput.Reshape(batchSize * seqLen, _innerDimension);
         _dtProjectionWeightsGradient = Engine.TensorMatMul(
@@ -717,7 +728,12 @@ public class Mamba2Block<T> : LayerBase<T>
         var dProjected = ConcatenateTensors(dXBranch, dZBranch, 2);
         var dProjectedFlat = dProjected.Reshape(batchSize * seqLen, _innerDimension * 2);
 
-        _inputProjectionBiasGradient = Engine.ReduceSum(dProjected, new int[] { 0, 1 });
+        _inputProjectionBiasGradient = new Tensor<T>(new[] { _innerDimension * 2 });
+        for (int bi = 0; bi < batchSize; bi++)
+            for (int t = 0; t < seqLen; t++)
+                for (int d = 0; d < _innerDimension * 2; d++)
+                    _inputProjectionBiasGradient[d] = NumOps.Add(
+                        _inputProjectionBiasGradient[d], dProjected[new[] { bi, t, d }]);
 
         var input2D = _lastInput.Reshape(batchSize * seqLen, _modelDimension);
         _inputProjectionWeightsGradient = Engine.TensorMatMul(
@@ -756,6 +772,40 @@ public class Mamba2Block<T> : LayerBase<T>
         for (int h = 0; h < _numHeads; h++)
             negAPerHead[h] = NumOps.Negate(NumOps.FromDouble(Math.Exp(NumOps.ToDouble(_aLog[h]))));
 
+        // Per Mamba paper: recompute states during backward for numerical consistency
+        var recomputedStates = new Tensor<T>[seqLen + 1];
+        var h_recomp = new Tensor<T>(new[] { batchSize, _innerDimension, _stateDimension });
+        recomputedStates[0] = h_recomp.Clone();
+        for (int t = 0; t < seqLen; t++)
+        {
+            var x_fwd = x.GetSliceAlongDimension(t, 1);
+            var delta_fwd = delta.GetSliceAlongDimension(t, 1);
+            var B_fwd = b.GetSliceAlongDimension(t, 1);
+            for (int hi = 0; hi < _numHeads; hi++)
+            {
+                int dimStart = hi * _headDimension;
+                T negA = negAPerHead[hi];
+                for (int bi = 0; bi < batchSize; bi++)
+                {
+                    T dt = delta_fwd[new[] { bi, hi }];
+                    T aBar = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Multiply(dt, negA))));
+                    for (int di = 0; di < _headDimension; di++)
+                    {
+                        int flatD = dimStart + di;
+                        T xv = x_fwd[new[] { bi, flatD }];
+                        for (int n = 0; n < _stateDimension; n++)
+                        {
+                            T bv = B_fwd[new[] { bi, n }];
+                            h_recomp[new[] { bi, flatD, n }] = NumOps.Add(
+                                NumOps.Multiply(aBar, h_recomp[new[] { bi, flatD, n }]),
+                                NumOps.Multiply(NumOps.Multiply(dt, bv), xv));
+                        }
+                    }
+                }
+            }
+            recomputedStates[t + 1] = h_recomp.Clone();
+        }
+
         // Running dh: [batch, innerDim, stateDim]
         var dh = new Tensor<T>(new[] { batchSize, _innerDimension, _stateDimension });
 
@@ -766,8 +816,8 @@ public class Mamba2Block<T> : LayerBase<T>
             var B_t = b.GetSliceAlongDimension(t, 1);
             var C_t = c.GetSliceAlongDimension(t, 1);
             var dOut_t = dOutput.GetSliceAlongDimension(t, 1);
-            var h_t = hiddenStates.GetSliceAlongDimension(t + 1, 1);
-            var h_prev = hiddenStates.GetSliceAlongDimension(t, 1);
+            var h_t = recomputedStates[t + 1];
+            var h_prev = recomputedStates[t];
 
             for (int hi = 0; hi < _numHeads; hi++)
             {
@@ -887,50 +937,43 @@ public class Mamba2Block<T> : LayerBase<T>
         return output;
     }
 
+    /// <summary>
+    /// Backward pass for depthwise causal Conv1D using explicit per-element computation.
+    /// </summary>
     private Tensor<T> DepthwiseConv1DBackward(
         Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
-        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
+        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
         _convBiasGradient = new Tensor<T>(new[] { _innerDimension });
+        _convWeightsGradient = new Tensor<T>(new[] { _innerDimension, _convKernelSize });
 
-        var weightGradSlices = new Tensor<T>[_convKernelSize];
-        for (int k = 0; k < _convKernelSize; k++)
-            weightGradSlices[k] = new Tensor<T>(new[] { _innerDimension });
-
-        var weightSlices = new Tensor<T>[_convKernelSize];
-        for (int k = 0; k < _convKernelSize; k++)
+        for (int bi = 0; bi < batchSize; bi++)
         {
-            weightSlices[k] = _convWeights.GetSliceAlongDimension(k, 1)
-                .Reshape(1, _innerDimension);
-        }
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            var dOut_t = dOutput.GetSliceAlongDimension(t, 1);
-            var biasGradContrib = Engine.ReduceSum(dOut_t, new int[] { 0 });
-            _convBiasGradient = Engine.TensorAdd(_convBiasGradient, biasGradContrib);
-
-            for (int k = 0; k < _convKernelSize; k++)
+            for (int t = 0; t < seqLen; t++)
             {
-                int srcT = t - k;
-                if (srcT >= 0)
+                for (int d = 0; d < _innerDimension; d++)
                 {
-                    var x_src = input.GetSliceAlongDimension(srcT, 1);
-                    var wGradContrib = Engine.ReduceSum(
-                        Engine.TensorMultiply(x_src, dOut_t), new int[] { 0 });
-                    weightGradSlices[k] = Engine.TensorAdd(weightGradSlices[k], wGradContrib);
+                    T dOutVal = dOutput[new[] { bi, t, d }];
+                    _convBiasGradient[d] = NumOps.Add(_convBiasGradient[d], dOutVal);
 
-                    var dInputContrib = Engine.TensorBroadcastMultiply(dOut_t, weightSlices[k]);
-                    var dInput_srcT = dInput.GetSliceAlongDimension(srcT, 1);
-                    dInput_srcT = Engine.TensorAdd(dInput_srcT, dInputContrib);
-                    dInput.SetSlice(1, srcT, dInput_srcT);
+                    for (int k = 0; k < _convKernelSize; k++)
+                    {
+                        int srcT = t - k;
+                        if (srcT >= 0)
+                        {
+                            T w = _convWeights[new[] { d, k }];
+                            T xVal = input[new[] { bi, srcT, d }];
+                            dInput[new[] { bi, srcT, d }] = NumOps.Add(
+                                dInput[new[] { bi, srcT, d }],
+                                NumOps.Multiply(w, dOutVal));
+                            _convWeightsGradient[new[] { d, k }] = NumOps.Add(
+                                _convWeightsGradient[new[] { d, k }],
+                                NumOps.Multiply(xVal, dOutVal));
+                        }
+                    }
                 }
             }
         }
-
-        _convWeightsGradient = new Tensor<T>(new[] { _innerDimension, _convKernelSize });
-        for (int k = 0; k < _convKernelSize; k++)
-            _convWeightsGradient.SetSlice(1, k, weightGradSlices[k]);
 
         return dInput;
     }
