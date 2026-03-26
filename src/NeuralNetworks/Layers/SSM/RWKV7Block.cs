@@ -131,6 +131,7 @@ public class RWKV7Block<T> : LayerBase<T>
     private Tensor<T>? _cachedChannelRGate;   // [batch, seqLen, modelDim] sigmoid(W_r * rInput)
     private Tensor<T>? _cachedChannelSiLU;    // [batch, seqLen, ffnDim] SiLU(W_k * kInput)
     private Tensor<T>? _cachedChannelVProj;   // [batch, seqLen, modelDim] W_v * SiLU(k)
+    private Tensor<T>? _cachedChannelKProj;   // [batch, seqLen, ffnDim] W_k * kInput (pre-SiLU)
 
     // ============ Gradients ============
 
@@ -435,12 +436,12 @@ public class RWKV7Block<T> : LayerBase<T>
             var bBias2D = _bBias.Reshape(1, _modelDimension);
             bProj = Engine.TensorBroadcastAdd(bProj, bBias2D);
 
-            // Cache for backward
-            allR.SetSlice(1, t, r);
-            allK.SetSlice(1, t, k);
-            allV.SetSlice(1, t, v);
-            allA.SetSlice(1, t, aProj);
-            allB.SetSlice(1, t, bProj);
+            // Cache for backward — use explicit copy to avoid SetSlice position bugs
+            SafeSetSlice(allR, t, r, batchSize, _modelDimension);
+            SafeSetSlice(allK, t, k, batchSize, _modelDimension);
+            SafeSetSlice(allV, t, v, batchSize, _modelDimension);
+            SafeSetSlice(allA, t, aProj, batchSize, _modelDimension);
+            SafeSetSlice(allB, t, bProj, batchSize, _modelDimension);
 
             // WKV-7 kernel per head
             var wkvOutput = new Tensor<T>(new[] { batchSize, _modelDimension });
@@ -502,16 +503,16 @@ public class RWKV7Block<T> : LayerBase<T>
                 }
             }
 
-            // Cache pre-gate and gated values for backward
-            allWkvGated.SetSlice(1, t, wkvOutput);
+            // Cache for backward
+            SafeSetSlice(allWkvGated, t, wkvOutput, batchSize, _modelDimension);
 
             // Group normalization on WKV output (per head)
             var normedWkv = ApplyGroupNorm(wkvOutput, batchSize);
-            allWkv.SetSlice(1, t, normedWkv);
+            SafeSetSlice(allWkv, t, normedWkv, batchSize, _modelDimension);
 
             // Output projection
             var y_t = Engine.TensorMatMul(normedWkv, _outputWeights);
-            output.SetSlice(1, t, y_t);
+            SafeSetSlice(output, t, y_t, batchSize, _modelDimension);
 
             xPrev = x_t;
         }
@@ -546,6 +547,7 @@ public class RWKV7Block<T> : LayerBase<T>
         var allRGate = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
         var allSiLU = new Tensor<T>(new[] { batchSize, seqLen, _ffnDimension });
         var allVProj = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var allKProj = new Tensor<T>(new[] { batchSize, seqLen, _ffnDimension });
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -594,12 +596,13 @@ public class RWKV7Block<T> : LayerBase<T>
 
             // output = sigmoid(r) * v
             var y_t = Engine.TensorMultiply(rGate, vProj);
-            output.SetSlice(1, t, y_t);
+            SafeSetSlice(output, t, y_t, batchSize, _modelDimension);
 
             // Cache for backward
-            allRGate.SetSlice(1, t, rGate);
-            allSiLU.SetSlice(1, t, kSiLU);
-            allVProj.SetSlice(1, t, vProj);
+            SafeSetSlice(allRGate, t, rGate, batchSize, _modelDimension);
+            SafeSetSliceDim(allSiLU, t, kSiLU, batchSize, _ffnDimension);
+            SafeSetSlice(allVProj, t, vProj, batchSize, _modelDimension);
+            SafeSetSliceDim(allKProj, t, kProj, batchSize, _ffnDimension);
 
             xPrev = x_t;
         }
@@ -607,6 +610,7 @@ public class RWKV7Block<T> : LayerBase<T>
         _cachedChannelRGate = allRGate;
         _cachedChannelSiLU = allSiLU;
         _cachedChannelVProj = allVProj;
+        _cachedChannelKProj = allKProj;
         _prevChannelToken = xPrev;
 
         return output;
@@ -687,27 +691,88 @@ public class RWKV7Block<T> : LayerBase<T>
 
         // === Channel mixing backward ===
         // Forward: output = afterTimeMix + channelMixOut
-        // Both paths get the full gradient
+        //          channelMixOut = ChannelMixing(LayerNorm2(afterTimeMix))
+        // Both paths (residual + channelMix) get the full upstream gradient
         var dChannelMixOut = grad3D;
-        var dAfterTimeMix = grad3D;
+        var dAfterTimeMix = grad3D; // residual path contribution
 
-        if (_lastNormed2 != null && _lastChannelMixOutput != null)
+        if (_lastNormed2 != null && _lastChannelMixOutput != null && _lastAfterTimeMix != null)
         {
             // Accumulate channel mixing weight gradients
             AccumulateChannelMixGradients(dChannelMixOut, _lastNormed2, batchSize, seqLen);
 
-            // Backward through channel mixing to get gradient for afterTimeMix via LN2 path
-            // ChannelMixing input gradient (approximate — pass through residual for input gradient)
-            // Channel mix weight gradients are already accumulated above
-        }
+            // Compute gradient flowing back THROUGH channel mixing to normed2 input
+            // output_t = rGate * vProj, where rGate = sigmoid(W_r @ rInput), vProj = W_v @ SiLU(W_k @ kInput)
+            // rInput = channelMixR * x + (1-channelMixR) * xPrev
+            // kInput = channelMixK * x + (1-channelMixK) * xPrev
+            var dNormed2 = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+            if (_cachedChannelRGate is null || _cachedChannelSiLU is null || _cachedChannelVProj is null || _cachedChannelKProj is null)
+            {
+                dNormed2 = dChannelMixOut; // fallback
+            }
+            else
+            for (int t = 0; t < seqLen; t++)
+            {
+                var dOut_t = dChannelMixOut.GetSliceAlongDimension(t, 1).Clone();
+                var rGate_t = _cachedChannelRGate.GetSliceAlongDimension(t, 1).Clone();
+                var siLU_t = _cachedChannelSiLU.GetSliceAlongDimension(t, 1).Clone();
+                var vProj_t = _cachedChannelVProj.GetSliceAlongDimension(t, 1).Clone();
 
-        // LayerNorm2 backward is handled implicitly through the residual connection
-        // (gradient flows through the residual path, accumulating norm parameter gradients)
-        // Accumulate LN2 gamma/beta gradients
-        if (_lastAfterTimeMix != null)
-        {
+                // dRGate = dOut * vProj, dVProj = dOut * rGate
+                var dVProj = Engine.TensorMultiply(dOut_t, rGate_t);
+                var dRGate = Engine.TensorMultiply(dOut_t, vProj_t);
+
+                // dKSiLU = dVProj @ W_v^T
+                var dKSiLU = Engine.TensorMatMul(dVProj, _channelValueWeights.Transpose(new[] { 1, 0 }));
+
+                // dRProj = dRGate * sigmoid'(rProj) = dRGate * rGate * (1-rGate)
+                var ones = Tensor<T>.CreateDefault(rGate_t.Shape.ToArray(), NumOps.One);
+                var sigDeriv = Engine.TensorMultiply(rGate_t, Engine.TensorSubtract(ones, rGate_t));
+                var dRProj = Engine.TensorMultiply(dRGate, sigDeriv);
+
+                // dRInput = dRProj @ W_r^T → dX_from_r = dRInput * channelMixR
+                var dRInput = Engine.TensorMatMul(dRProj, _channelReceptanceWeights.Transpose(new[] { 1, 0 }));
+
+                // dKProj = dKSiLU * SiLU'(kProj) where SiLU'(x) = sigmoid(x) + x*sigmoid(x)*(1-sigmoid(x))
+                var kProj_t = _cachedChannelKProj.GetSliceAlongDimension(t, 1).Clone();
+                var dKProj = new Tensor<T>(new[] { batchSize, _ffnDimension });
+                for (int bi = 0; bi < batchSize; bi++)
+                {
+                    for (int fd = 0; fd < _ffnDimension; fd++)
+                    {
+                        double x = NumOps.ToDouble(kProj_t[new[] { bi, fd }]);
+                        double sig = 1.0 / (1.0 + Math.Exp(-x));
+                        double siluDeriv = sig + x * sig * (1.0 - sig);
+                        dKProj[new[] { bi, fd }] = NumOps.Multiply(
+                            dKSiLU[new[] { bi, fd }], NumOps.FromDouble(siluDeriv));
+                    }
+                }
+                // dKInput = dKProj @ W_k^T
+                var dKInput = Engine.TensorMatMul(dKProj, _channelKeyWeights.Transpose(new[] { 1, 0 }));
+
+                // dNormed2[t] = dRInput * channelMixR + dKInput * channelMixK
+                for (int bi = 0; bi < batchSize; bi++)
+                {
+                    for (int d = 0; d < _modelDimension; d++)
+                    {
+                        T fromR = NumOps.Multiply(dRInput[new[] { bi, d }], _channelMixR[d]);
+                        T fromK = NumOps.Multiply(dKInput[new[] { bi, d }], _channelMixK[d]);
+                        dNormed2[new[] { bi, t, d }] = NumOps.Add(fromR, fromK);
+                    }
+                }
+            }
+
+            // LayerNorm2 backward: dAfterTimeMix += LN2.backward(dNormed2)
+            // This is the MISSING gradient path that was causing 5-40% errors
+            var dAfterTimeMixFromLN2 = LayerNormBackward(dNormed2, _lastAfterTimeMix,
+                _normGamma2, batchSize, seqLen);
+
+            // Accumulate LN2 gamma/beta gradients
             AccumulateLayerNormGradients(dChannelMixOut, _lastAfterTimeMix, _normGamma2,
                 ref _normGamma2Grad, ref _normBeta2Grad, batchSize, seqLen);
+
+            // Total gradient for afterTimeMix = residual + LN2 path
+            dAfterTimeMix = Engine.TensorAdd(dAfterTimeMix, dAfterTimeMixFromLN2);
         }
 
         // === Time mixing backward ===
@@ -724,7 +789,7 @@ public class RWKV7Block<T> : LayerBase<T>
         }
 
         // Accumulate LN1 gamma/beta gradients
-        AccumulateLayerNormGradients(dAfterTimeMix, _lastInput, _normGamma1,
+        AccumulateLayerNormGradients(dTimeMixOut, _lastInput, _normGamma1,
             ref _normGamma1Grad, ref _normBeta1Grad, batchSize, seqLen);
 
         if (_originalInputShape != null && _originalInputShape.Length == 2)
@@ -1006,6 +1071,84 @@ public class RWKV7Block<T> : LayerBase<T>
     /// Accumulates gradients for LayerNorm gamma and beta parameters.
     /// LayerNorm: output = gamma * (input - mean) / std + beta
     /// </summary>
+    /// <summary>
+    /// Copies a 2D slice [batch, dim] into a 3D tensor [batch, seqLen, dim] at time position t.
+    /// Uses explicit per-element copy to avoid SetSlice position bugs.
+    /// </summary>
+    private static void SafeSetSlice(Tensor<T> dest, int t, Tensor<T> slice, int batch, int dim)
+    {
+        for (int bi = 0; bi < batch; bi++)
+            for (int d = 0; d < dim; d++)
+                dest[new[] { bi, t, d }] = slice[new[] { bi, d }];
+    }
+
+    private static void SafeSetSliceDim(Tensor<T> dest, int t, Tensor<T> slice, int batch, int dim)
+    {
+        for (int bi = 0; bi < batch; bi++)
+            for (int d = 0; d < dim; d++)
+                dest[new[] { bi, t, d }] = slice[new[] { bi, d }];
+    }
+
+    /// <summary>
+    /// LayerNorm backward: returns gradient w.r.t. input.
+    /// Forward: output = gamma * (x - mean) / std + beta
+    /// Backward: dx = (gamma*dy - normalized*mean(gamma*dy*normalized)) / std (per the LN paper)
+    /// </summary>
+    private Tensor<T> LayerNormBackward(Tensor<T> dOutput, Tensor<T> input,
+        Tensor<T> gamma, int batchSize, int seqLen)
+    {
+        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        T eps = NumOps.FromDouble(1e-6);
+        T invDim = NumOps.FromDouble(1.0 / _modelDimension);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int t = 0; t < seqLen; t++)
+            {
+                T mean = NumOps.Zero;
+                for (int d = 0; d < _modelDimension; d++)
+                    mean = NumOps.Add(mean, input[new[] { b, t, d }]);
+                mean = NumOps.Multiply(mean, invDim);
+
+                T variance = NumOps.Zero;
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    T diff = NumOps.Subtract(input[new[] { b, t, d }], mean);
+                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+                }
+                variance = NumOps.Multiply(variance, invDim);
+                T stdInv = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(variance, eps)));
+
+                // Compute normalized and the correction term
+                var normalized = new T[_modelDimension];
+                T dotProduct = NumOps.Zero;
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    normalized[d] = NumOps.Multiply(NumOps.Subtract(input[new[] { b, t, d }], mean), stdInv);
+                    dotProduct = NumOps.Add(dotProduct,
+                        NumOps.Multiply(NumOps.Multiply(gamma[d], dOutput[new[] { b, t, d }]), normalized[d]));
+                }
+                T meanDot = NumOps.Multiply(dotProduct, invDim);
+
+                // Compute sum of gamma * dy for the mean subtraction correction
+                T sumGammaDy = NumOps.Zero;
+                for (int d = 0; d < _modelDimension; d++)
+                    sumGammaDy = NumOps.Add(sumGammaDy, NumOps.Multiply(gamma[d], dOutput[new[] { b, t, d }]));
+                T meanGammaDy = NumOps.Multiply(sumGammaDy, invDim);
+
+                for (int d = 0; d < _modelDimension; d++)
+                {
+                    T gammaDy = NumOps.Multiply(gamma[d], dOutput[new[] { b, t, d }]);
+                    T correction = NumOps.Multiply(normalized[d], meanDot);
+                    dInput[new[] { b, t, d }] = NumOps.Multiply(
+                        NumOps.Subtract(NumOps.Subtract(gammaDy, meanGammaDy), correction), stdInv);
+                }
+            }
+        }
+
+        return dInput;
+    }
+
     private void AccumulateLayerNormGradients(Tensor<T> dOutput, Tensor<T> input,
         Tensor<T> gamma, ref Tensor<T>? gammaGrad, ref Tensor<T>? betaGrad,
         int batchSize, int seqLen)
