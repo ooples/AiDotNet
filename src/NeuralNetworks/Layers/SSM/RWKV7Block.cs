@@ -57,7 +57,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerCategory(LayerCategory.StateSpaceModel)]
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 2")]
 public class RWKV7Block<T> : LayerBase<T>
 {
     // Configuration

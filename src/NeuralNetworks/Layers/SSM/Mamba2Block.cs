@@ -54,7 +54,7 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 [LayerCategory(LayerCategory.StateSpaceModel)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
-[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 4, 2")]
 public class Mamba2Block<T> : LayerBase<T>
 {
     // Configuration
