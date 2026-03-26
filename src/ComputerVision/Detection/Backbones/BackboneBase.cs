@@ -1,4 +1,6 @@
 using System.IO;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Detection.Backbones;
@@ -20,17 +22,9 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 /// - EfficientNet: Scalable and efficient convolutional network
 /// </para>
 /// </remarks>
-public abstract class BackboneBase<T>
+public abstract class BackboneBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
-    /// <summary>
-    /// Provides access to the hardware-accelerated tensor engine.
-    /// </summary>
-    protected IEngine Engine => AiDotNetEngine.Current;
-
-    /// <summary>
-    /// Numeric operations for type T.
-    /// </summary>
-    protected readonly INumericOperations<T> NumOps;
+    // Engine and NumOps inherited from ModelBase
 
     /// <summary>
     /// Whether the backbone is in training mode.
@@ -71,7 +65,6 @@ public abstract class BackboneBase<T>
     /// </summary>
     protected BackboneBase()
     {
-        NumOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         IsTrainingMode = false;
         IsFrozen = false;
     }
@@ -166,6 +159,43 @@ public abstract class BackboneBase<T>
                 nameof(input));
         }
     }
+
+    #region ModelBase Overrides
+
+    /// <summary>
+    /// Predicts by running feature extraction and returning the first feature map.
+    /// </summary>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        var features = ExtractFeatures(input);
+        return features.Count > 0 ? features[0] : new Tensor<T>(new[] { 1, 0 });
+    }
+
+    /// <inheritdoc />
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+
+    /// <inheritdoc />
+    public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters() => new Vector<T>(0);
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters) { }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+    {
+        var copy = DeepCopy();
+        copy.SetParameters(parameters);
+        return copy;
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+        => (BackboneBase<T>)MemberwiseClone();
+
+    #endregion
 }
 
 /// <summary>
