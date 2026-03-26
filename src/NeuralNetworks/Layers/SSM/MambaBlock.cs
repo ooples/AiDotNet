@@ -466,7 +466,6 @@ internal class MambaBlock<T> : LayerBase<T>
 
         var dGated = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
             .Reshape(batchSize, seqLength, _innerDimension);
-
         // Step 7 backward: output gating y = scan_output * SiLU(z) via Engine
         var zGate = Engine.Swish(_lastZBranch);
         var dScanOutput = Engine.TensorMultiply(dGated, zGate);

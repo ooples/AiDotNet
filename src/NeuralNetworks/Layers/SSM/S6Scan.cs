@@ -118,11 +118,11 @@ public static class S6Scan<T>
         // Time loop - only sequential dependency
         for (int t = 0; t < seqLen; t++)
         {
-            // Extract slices for this timestep
-            var x_t = x.GetSliceAlongDimension(t, 1);         // [batch, innerDim]
-            var delta_t = delta.GetSliceAlongDimension(t, 1);  // [batch, innerDim]
-            var B_t = b.GetSliceAlongDimension(t, 1);          // [batch, stateDim]
-            var C_t = c.GetSliceAlongDimension(t, 1);          // [batch, stateDim]
+            // Extract slices for this timestep — clone to ensure contiguous memory
+            var x_t = x.GetSliceAlongDimension(t, 1).Clone();         // [batch, innerDim]
+            var delta_t = delta.GetSliceAlongDimension(t, 1).Clone();  // [batch, innerDim]
+            var B_t = b.GetSliceAlongDimension(t, 1).Clone();          // [batch, stateDim]
+            var C_t = c.GetSliceAlongDimension(t, 1).Clone();          // [batch, stateDim]
 
             // Expand dimensions for broadcasting to [batch, innerDim, stateDim]
             var delta_t_3D = Engine.TensorExpandDims(delta_t, 2);  // [batch, innerDim, 1]
@@ -210,14 +210,16 @@ public static class S6Scan<T>
         // Backward scan: process from t = seqLen-1 to 0
         for (int t = seqLen - 1; t >= 0; t--)
         {
-            // Extract cached values for this timestep
-            var x_t = x.GetSliceAlongDimension(t, 1);          // [batch, innerDim]
-            var delta_t = delta.GetSliceAlongDimension(t, 1);  // [batch, innerDim]
-            var B_t = b.GetSliceAlongDimension(t, 1);          // [batch, stateDim]
-            var C_t = c.GetSliceAlongDimension(t, 1);          // [batch, stateDim]
-            var dOut_t = dOutput.GetSliceAlongDimension(t, 1); // [batch, innerDim]
-            var h_t = hiddenStates.GetSliceAlongDimension(t + 1, 1);  // [batch, innerDim, stateDim]
-            var h_prev = hiddenStates.GetSliceAlongDimension(t, 1);   // [batch, innerDim, stateDim]
+            // Extract cached values for this timestep.
+            // Clone after slicing to ensure contiguous memory layout — non-contiguous views
+            // from GetSliceAlongDimension cause wrong results in ExpandDims/BroadcastMultiply.
+            var x_t = x.GetSliceAlongDimension(t, 1).Clone();          // [batch, innerDim]
+            var delta_t = delta.GetSliceAlongDimension(t, 1).Clone();  // [batch, innerDim]
+            var B_t = b.GetSliceAlongDimension(t, 1).Clone();          // [batch, stateDim]
+            var C_t = c.GetSliceAlongDimension(t, 1).Clone();          // [batch, stateDim]
+            var dOut_t = dOutput.GetSliceAlongDimension(t, 1).Clone(); // [batch, innerDim]
+            var h_t = hiddenStates.GetSliceAlongDimension(t + 1, 1).Clone();  // [batch, innerDim, stateDim]
+            var h_prev = hiddenStates.GetSliceAlongDimension(t, 1).Clone();   // [batch, innerDim, stateDim]
 
             // Expand for broadcasting to [batch, innerDim, stateDim]
             var delta_t_3D = Engine.TensorExpandDims(delta_t, 2);  // [batch, innerDim, 1]
