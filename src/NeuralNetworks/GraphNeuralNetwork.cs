@@ -372,14 +372,9 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         }
         else
         {
-            // Graph networks need per-node activation, not global softmax.
-            // Filter out trailing SoftmaxActivation.
-            foreach (var layer in LayerHelper<T>.CreateDefaultGNNLayers(Architecture))
-            {
-                if (layer is ActivationLayer<T>)
-                    continue;
-                Layers.Add(layer);
-            }
+            // Per Kipf & Welling 2017, GCN uses softmax output + cross-entropy loss.
+            // The default layers include softmax which is needed for the loss to work correctly.
+            Layers.AddRange(LayerHelper<T>.CreateDefaultGNNLayers(Architecture));
         }
     }
 
@@ -763,10 +758,15 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         if (_autoAdjacencyMatrix != null && _autoAdjacencyMatrix.Shape[0] == numNodes)
             return _autoAdjacencyMatrix;
 
+        // Create fully-connected adjacency with symmetric normalization per Kipf & Welling 2017.
+        // Â = D^(-1/2) · (A + I) · D^(-1/2) where D is the degree matrix of A + I.
+        // For a fully-connected graph with self-loops, every node has degree = numNodes,
+        // so D^(-1/2) = 1/sqrt(numNodes) * I, giving Â[i,j] = 1/numNodes.
         var adj = new Tensor<T>([numNodes, numNodes]);
+        T normalizedWeight = NumOps.FromDouble(1.0 / numNodes);
         for (int i = 0; i < numNodes; i++)
             for (int j = 0; j < numNodes; j++)
-                adj[i, j] = NumOps.One;
+                adj[i, j] = normalizedWeight;
 
         _autoAdjacencyMatrix = adj;
         return adj;
@@ -854,8 +854,11 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         // Clip gradients to prevent exploding gradients
         parameterGradients = ClipGradient(parameterGradients);
 
-        // Reuse optimizer across Train calls to preserve Adam momentum state
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Reuse optimizer across Train calls to preserve Adam momentum state.
+        // Use lower learning rate (0.0005) for GNNs — graph convolution aggregates
+        // neighbor features which amplifies gradient magnitudes.
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.0001 });
 
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
@@ -927,7 +930,8 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         parameterGradients = ClipGradient(parameterGradients);
 
         // Reuse optimizer across calls to preserve Adam momentum state
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.0001 });
 
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
