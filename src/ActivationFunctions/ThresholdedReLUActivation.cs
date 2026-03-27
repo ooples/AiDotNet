@@ -27,7 +27,7 @@ namespace AiDotNet.ActivationFunctions;
 /// </remarks>
 [ActivationCategory(ActivationCategory.General)]
 [ActivationTask(ActivationTask.HiddenLayer)]
-[ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = false, IsDifferentiable = false, Cost = ComputeCost.Low)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, IsDifferentiable = false, Cost = ComputeCost.Low)]
 public class ThresholdedReLUActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>
