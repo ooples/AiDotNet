@@ -10,4 +10,7 @@ public class KMeansTests : ClusteringModelTestBase
 {
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
         => new KMeans<double>(new KMeansOptions<double> { NumClusters = NumClusters });
+
+    protected override IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
+        => new KMeans<double>(new KMeansOptions<double> { NumClusters = 1 });
 }

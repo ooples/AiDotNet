@@ -461,11 +461,19 @@ public abstract class ClusteringModelTestBase
     // (almost) all points to the same cluster.
     // =====================================================
 
+    /// <summary>
+    /// Creates a model configured for single-cluster detection. For k-based models
+    /// (KMeans, MiniBatchKMeans), this should return the model with k=1.
+    /// Default: returns the standard model (correct for auto-k algorithms like DBSCAN, MeanShift).
+    /// </summary>
+    protected virtual IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
+        => CreateModel();
+
     [Fact]
     public void SingleClusterData_ShouldAssignSameCluster()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
-        var model = CreateModel();
+        var model = CreateSingleClusterModel();
 
         // All points clustered tightly around one center
         var x = new Matrix<double>(TrainSamples, Features);
