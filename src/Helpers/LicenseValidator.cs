@@ -70,8 +70,10 @@ internal sealed class LicenseValidator
     /// <returns>A <see cref="LicenseValidationResult"/> describing the current key status.</returns>
     public LicenseValidationResult Validate()
     {
-        // Offline-only mode: when ServerUrl is explicitly set to empty string
-        if (_licenseKey.ServerUrl is not null && _licenseKey.ServerUrl.Trim().Length == 0)
+        // Offline mode: when no server URL is configured (null) or explicitly empty.
+        // Null means the user hasn't configured a license server, so we validate
+        // offline and return Active for well-formed keys.
+        if (_licenseKey.ServerUrl is null || _licenseKey.ServerUrl.Trim().Length == 0)
         {
             var offlineResult = ValidateOffline();
             lock (_cacheLock)
@@ -367,8 +369,8 @@ internal sealed class LicenseValidator
     public async System.Threading.Tasks.Task<LicenseValidationResult> ValidateAsync(
         System.Threading.CancellationToken cancellationToken = default)
     {
-        // Offline-only mode: when ServerUrl is explicitly set to empty string
-        if (_licenseKey.ServerUrl is not null && _licenseKey.ServerUrl.Trim().Length == 0)
+        // Offline mode: when no server URL is configured (null) or explicitly empty
+        if (_licenseKey.ServerUrl is null || _licenseKey.ServerUrl.Trim().Length == 0)
         {
             var offlineResult = ValidateOffline();
             lock (_cacheLock) { _cached = offlineResult; }

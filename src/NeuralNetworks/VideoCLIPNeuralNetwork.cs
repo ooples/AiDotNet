@@ -96,6 +96,9 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     private ILayer<T>? _textProjection;
     private ILayer<T>? _captionHead;
 
+    // Gradient checkpointing: cached frames from the last forward pass for backward recomputation
+    private List<Tensor<T>>? _cachedTrainingFrames;
+
     #endregion
 
     #region Shared Fields
@@ -116,7 +119,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     private readonly int _vocabularySize;
     private readonly int _numFrames;
     private readonly double _frameRate;
-    private readonly string _temporalAggregation;
+    private readonly TemporalAggregationType _temporalAggregation;
 
     #endregion
 
@@ -142,7 +145,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     public double FrameRate => _frameRate;
 
     /// <inheritdoc/>
-    public string TemporalAggregation => _temporalAggregation;
+    public TemporalAggregationType TemporalAggregation => _temporalAggregation;
 
     #endregion
 
@@ -158,7 +161,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         ITokenizer tokenizer,
         int numFrames = 8,
         double frameRate = 1.0,
-        string temporalAggregation = "temporal_transformer",
+        TemporalAggregationType temporalAggregation = TemporalAggregationType.TemporalTransformer,
         int embeddingDimension = 512,
         int maxSequenceLength = 77,
         int imageSize = 224,
@@ -239,7 +242,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         int numHeads = 12,
         int numFrames = 8,
         double frameRate = 1.0,
-        string temporalAggregation = "temporal_transformer",
+        TemporalAggregationType temporalAggregation = TemporalAggregationType.TemporalTransformer,
         ITokenizer? tokenizer = null,
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
@@ -1070,6 +1073,12 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         // Sample frames if too many
         var sampledFrames = SampleFrames(frames, _numFrames);
 
+        // Cache frames for gradient checkpointing during backward
+        if (IsTrainingMode)
+        {
+            _cachedTrainingFrames = sampledFrames;
+        }
+
         // Encode each frame
         var frameFeatures = new List<Tensor<T>>();
         foreach (var frame in sampledFrames)
@@ -1475,7 +1484,12 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     }
 
     /// <summary>
-    /// Backward pass through video encoder layers.
+    /// Backward pass reversing the forward encode pipeline:
+    /// loss gradient [embeddingDim]
+    ///   → video projection backward [visionHiddenDim]
+    ///   → mean-pool backward → replicate to [numFrames, visionHiddenDim]
+    ///   → temporal encoder backward [numFrames, visionHiddenDim]
+    ///   → frame encoder backward (per cached frame shape)
     /// </summary>
     public Tensor<T> Backward(Tensor<T> gradient)
     {
@@ -1486,16 +1500,75 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
 
         var currentGradient = gradient;
 
-        // Backward through temporal encoder layers in reverse order
+        // 1. Backward through video projection (embeddingDim → visionHiddenDim)
+        if (_videoProjection is not null)
+        {
+            // Reshape to [1, embeddingDim] for the projection layer
+            if (currentGradient.Rank == 1)
+            {
+                var grad2D = Tensor<T>.CreateDefault([1, currentGradient.Shape[0]], NumOps.Zero);
+                for (int i = 0; i < currentGradient.Shape[0]; i++)
+                    grad2D[0, i] = currentGradient[i];
+                currentGradient = grad2D;
+            }
+            currentGradient = _videoProjection.Backward(currentGradient);
+            // Now [1, visionHiddenDim]
+        }
+
+        // 2. Mean-pool backward: distribute gradient equally across all frames.
+        // Forward did mean(axis=0) over [numFrames, dim] → [dim].
+        // Backward: replicate gradient to [numFrames, dim] and scale by 1/numFrames.
+        int featureDim = currentGradient.Rank == 2 ? currentGradient.Shape[1] : currentGradient.Shape[0];
+        int numFrames = _numFrames;
+        var temporalGradient = Tensor<T>.CreateDefault([numFrames, featureDim], NumOps.Zero);
+        T invN = NumOps.FromDouble(1.0 / numFrames);
+        for (int f = 0; f < numFrames; f++)
+        {
+            for (int d = 0; d < featureDim; d++)
+            {
+                T val = currentGradient.Rank == 2 ? currentGradient[0, d] : currentGradient[d];
+                temporalGradient[f, d] = NumOps.Multiply(val, invN);
+            }
+        }
+
+        // 3. Backward through temporal encoder layers in reverse order
+        currentGradient = temporalGradient;
         for (int i = _temporalEncoderLayers.Count - 1; i >= 0; i--)
         {
             currentGradient = _temporalEncoderLayers[i].Backward(currentGradient);
         }
 
-        // Backward through frame encoder layers
-        for (int i = _frameEncoderLayers.Count - 1; i >= 0; i--)
+        // 4. Frame encoder backward via gradient checkpointing.
+        // The shared frame encoder was called once per frame during forward, so only the
+        // last frame's activations are cached. Re-run forward per frame to restore cached
+        // state, then backward with that frame's gradient from the temporal encoder output.
+        if (_cachedTrainingFrames is not null && _patchEmbedding is not null &&
+            _visionClsToken is not null && _visionPositionalEmbeddings is not null)
         {
-            currentGradient = _frameEncoderLayers[i].Backward(currentGradient);
+            int numPatches = (_imageSize / _patchSize) * (_imageSize / _patchSize);
+            int seqLen = numPatches + 1; // +1 for CLS token
+
+            for (int f = 0; f < Math.Min(numFrames, _cachedTrainingFrames.Count); f++)
+            {
+                // Re-run forward to restore layer cached activations for this frame
+                var patches = _patchEmbedding.Forward(_cachedTrainingFrames[f]);
+                var withCls = PrependClsToken(patches, _visionClsToken);
+                var positioned = AddPositionalEmbeddings(withCls, _visionPositionalEmbeddings);
+                var current = positioned;
+                foreach (var layer in _frameEncoderLayers)
+                    current = layer.Forward(current);
+
+                // Build frame gradient: only CLS token (row 0) carries gradient, rest is zero
+                // since forward extracted only current[0, :] as the frame representation
+                var frameGrad = Tensor<T>.CreateDefault([seqLen, _visionHiddenDim], NumOps.Zero);
+                for (int d = 0; d < _visionHiddenDim; d++)
+                    frameGrad[0, d] = currentGradient[f, d];
+
+                // Backward through frame encoder layers
+                var grad = frameGrad;
+                for (int i = _frameEncoderLayers.Count - 1; i >= 0; i--)
+                    grad = _frameEncoderLayers[i].Backward(grad);
+            }
         }
 
         return currentGradient;
@@ -1556,8 +1629,20 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         var gradient = Tensor<T>.FromVector(lossGradient);
 
         Backward(gradient);
-        var currentParams = GetParameters();
-        UpdateParameters(currentParams);
+
+        // Update parameters using the optimizer's gradient-based update
+        if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gradOptimizer)
+        {
+            gradOptimizer.UpdateParameters(Layers);
+        }
+        else
+        {
+            // Fallback: use per-layer learning rate update
+            foreach (var layer in Layers)
+            {
+                layer.UpdateParameters(NumOps.FromDouble(0.001));
+            }
+        }
 
         SetTrainingMode(false);
     }
@@ -1789,7 +1874,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
                 { "MaxSequenceLength", _maxSequenceLength },
                 { "NumFrames", _numFrames },
                 { "FrameRate", _frameRate },
-                { "TemporalAggregation", _temporalAggregation },
+                { "TemporalAggregation", _temporalAggregation.ToString() },
                 { "VisionHiddenDim", _visionHiddenDim },
                 { "TextHiddenDim", _textHiddenDim },
                 { "NumFrameEncoderLayers", _numFrameEncoderLayers },
@@ -1818,14 +1903,20 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         writer.Write(_vocabularySize);
         writer.Write(_numFrames);
         writer.Write(_frameRate);
-        writer.Write(_temporalAggregation);
+        writer.Write((int)_temporalAggregation);
         writer.Write(_useNativeMode);
+
+        // Serialize positional embeddings and CLS token
+        SerializeMatrix(writer, _visionClsToken);
+        SerializeMatrix(writer, _visionPositionalEmbeddings);
+        SerializeMatrix(writer, _temporalPositionalEmbeddings);
+        SerializeMatrix(writer, _textPositionalEmbeddings);
     }
 
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadInt32(); // embeddingDim
+        _ = reader.ReadInt32(); // embeddingDim (already set by CreateNewInstance)
         _ = reader.ReadInt32(); // maxSeqLen
         _ = reader.ReadInt32(); // imageSize
         _ = reader.ReadInt32(); // visionHiddenDim
@@ -1838,8 +1929,70 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         _ = reader.ReadInt32(); // vocabularySize
         _ = reader.ReadInt32(); // numFrames
         _ = reader.ReadDouble(); // frameRate
-        _ = reader.ReadString(); // temporalAggregation
+        _ = reader.ReadInt32(); // temporalAggregation (enum)
         _ = reader.ReadBoolean(); // useNativeMode
+
+        // Restore positional embeddings and CLS token
+        _visionClsToken = DeserializeMatrix(reader);
+        _visionPositionalEmbeddings = DeserializeMatrix(reader);
+        _temporalPositionalEmbeddings = DeserializeMatrix(reader);
+        _textPositionalEmbeddings = DeserializeMatrix(reader);
+
+        // Re-distribute deserialized layers to internal sub-lists.
+        // Base class Deserialize() cleared and recreated all layers, so the internal
+        // references (_patchEmbedding, _frameEncoderLayers, etc.) are now stale.
+        _frameEncoderLayers.Clear();
+        _temporalEncoderLayers.Clear();
+        _textEncoderLayers.Clear();
+        _projectionLayers.Clear();
+
+        int idx = 0;
+        _patchEmbedding = Layers[idx++];
+
+        for (int i = 0; i < _numFrameEncoderLayers; i++)
+            _frameEncoderLayers.Add(Layers[idx++]);
+
+        for (int i = 0; i < _numTemporalLayers; i++)
+            _temporalEncoderLayers.Add(Layers[idx++]);
+
+        _videoProjection = Layers[idx++];
+        _textTokenEmbedding = Layers[idx++];
+
+        for (int i = 0; i < _numTextLayers; i++)
+            _textEncoderLayers.Add(Layers[idx++]);
+
+        _textProjection = Layers[idx++];
+        _captionHead = Layers[idx++];
+    }
+
+    private static void SerializeMatrix(BinaryWriter writer, Matrix<T>? matrix)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        if (matrix is null)
+        {
+            writer.Write(0);
+            writer.Write(0);
+            return;
+        }
+        writer.Write(matrix.Rows);
+        writer.Write(matrix.Columns);
+        for (int r = 0; r < matrix.Rows; r++)
+            for (int c = 0; c < matrix.Columns; c++)
+                writer.Write(ops.ToDouble(matrix[r, c]));
+    }
+
+    private static Matrix<T>? DeserializeMatrix(BinaryReader reader)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        int rows = reader.ReadInt32();
+        int cols = reader.ReadInt32();
+        if (rows == 0 && cols == 0)
+            return null;
+        var matrix = Matrix<T>.CreateDefault(rows, cols, ops.Zero);
+        for (int r = 0; r < rows; r++)
+            for (int c = 0; c < cols; c++)
+                matrix[r, c] = ops.FromDouble(reader.ReadDouble());
+        return matrix;
     }
 
     /// <inheritdoc/>

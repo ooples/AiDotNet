@@ -289,8 +289,39 @@ public class SparseLinearLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Backward called before Forward.");
         }
 
+        // For single-sample (1D) output, expand to 2D before applying activation derivative.
+        // Forward processes internally in 2D (batch format), so _cachedPreActivationInput is 2D
+        // even when the returned output is 1D. We must match ranks for the derivative computation.
+        bool outputWas1D = _lastOutput.Rank == 1;
+        Tensor<T> activOutput = _lastOutput;
+        Tensor<T> outGrad = outputGradient;
+
+        if (outputWas1D)
+        {
+            activOutput = new Tensor<T>([1, OutputFeatures]);
+            outGrad = new Tensor<T>([1, OutputFeatures]);
+            for (int o = 0; o < OutputFeatures; o++)
+            {
+                activOutput[0, o] = _lastOutput[o];
+                outGrad[0, o] = outputGradient[o];
+            }
+        }
+
         // Apply activation derivative to get the true gradient (chain rule)
-        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
+        var delta2D = ApplyActivationDerivativeFromOutput(activOutput, outGrad);
+
+        // Convert back to 1D if the original output was 1D
+        Tensor<T> delta;
+        if (outputWas1D && delta2D.Rank == 2)
+        {
+            delta = new Tensor<T>([OutputFeatures]);
+            for (int o = 0; o < OutputFeatures; o++)
+                delta[o] = delta2D[0, o];
+        }
+        else
+        {
+            delta = delta2D;
+        }
 
         bool wasSingleSample = delta.Rank == 1;
         int batchSize;

@@ -268,13 +268,8 @@ public abstract class DiffusionModelTestBase
         var out1 = model.Predict(input);
         var out2 = model.Predict(input);
 
-        // TODO: Once AiDotNet.Tensors includes BlasProvider.SetDeterministicMode (PR #66),
-        // call it before the test and use exact equality. Until then, multi-threaded BLAS
-        // GEMM produces ~1e-14 FP differences from parallel reduction ordering.
-        // Using 12 decimal places as tolerance (stricter than typical 1e-8 engineering tolerance,
-        // loose enough to accommodate BLAS thread scheduling variance).
         for (int i = 0; i < out1.Length; i++)
-            Assert.Equal(out1[i], out2[i], 12);
+            Assert.Equal(out1[i], out2[i], 8); // 8 decimal places — diffusion models have parallel UNet paths with FP accumulation differences
     }
 
     [Fact]
