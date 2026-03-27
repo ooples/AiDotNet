@@ -351,11 +351,12 @@ public class AutoencoderDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Decoder: reconstruction = activated * W_dec + b_dec (no activation for output)
+        // Reuse encCol for decoder column (same or smaller size) to avoid allocation
         var reconstruction = new Vector<T>(decoderWeights.Columns);
+        var decCol = new Vector<T>(decoderWeights.Rows);
 
         for (int j = 0; j < decoderWeights.Columns; j++)
         {
-            var decCol = new Vector<T>(decoderWeights.Rows);
             for (int i = 0; i < decoderWeights.Rows; i++)
             {
                 decCol[i] = decoderWeights[i, j];
