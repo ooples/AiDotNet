@@ -2139,9 +2139,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (!layer.SupportsBackpropagation || layer.UsesSurrogateGradient)
             sb.AppendLine("    protected override bool ExpectsNonZeroGradients => false;");
 
-        // Override ExpectsDifferentOutputForConstantInputs for normalizing layers
+        // Override ExpectsDifferentOutputForDifferentInputs for normalizing layers
         if (layer.NormalizesInput)
-            sb.AppendLine("    protected override bool ExpectsDifferentOutputForConstantInputs => false;");
+            sb.AppendLine("    protected override bool ExpectsDifferentOutputForDifferentInputs => false;");
 
         sb.AppendLine("}");
 
