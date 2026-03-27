@@ -15,5 +15,9 @@ public class SeededKMeansTests : ClusteringModelTestBase
         });
 
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
-        => new SeededKMeans<double>(new AiDotNet.Clustering.Options.SeededKMeansOptions<double> { NumClusters = 1 });
+        => new SeededKMeans<double>(new AiDotNet.Clustering.Options.SeededKMeansOptions<double>
+        {
+            NumClusters = 1,
+            Seed = 42
+        });
 }

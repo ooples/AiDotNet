@@ -15,5 +15,9 @@ public class SpectralClusteringTests : ClusteringModelTestBase
         });
 
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
-        => new SpectralClustering<double>(new AiDotNet.Clustering.Options.SpectralOptions<double> { NumClusters = 1 });
+        => new SpectralClustering<double>(new AiDotNet.Clustering.Options.SpectralOptions<double>
+        {
+            NumClusters = 1,
+            Seed = 42
+        });
 }

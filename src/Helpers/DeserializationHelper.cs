@@ -150,6 +150,13 @@ public static class DeserializationHelper
             // PatchEmbeddingLayer(int imageHeight, int imageWidth, int channels, int patchSize, int embeddingDim)
             // Input shape: [channels, imageHeight, imageWidth]
             // Output shape: [numPatches, embeddingDim]
+            if (inputShape.Length < 3)
+                throw new InvalidOperationException(
+                    $"PatchEmbeddingLayer requires input shape [channels, height, width] but got {inputShape.Length} dimensions.");
+            if (outputShape.Length < 2)
+                throw new InvalidOperationException(
+                    $"PatchEmbeddingLayer requires output shape [numPatches, embeddingDim] but got {outputShape.Length} dimensions.");
+
             int channels = inputShape[0];
             int imageHeight = inputShape[1];
             int imageWidth = inputShape[2];

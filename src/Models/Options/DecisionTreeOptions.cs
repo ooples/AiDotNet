@@ -45,7 +45,7 @@ public class DecisionTreeOptions : ModelOptions
     /// Gets or sets the minimum number of samples required in each leaf node after a split.
     /// </summary>
     /// <value>
-    /// The minimum number of samples per leaf, defaulting to 5.
+    /// The minimum number of samples per leaf, defaulting to 1.
     /// </value>
     /// <remarks>
     /// <para><b>For Beginners:</b> This prevents the tree from creating splits that isolate very few samples

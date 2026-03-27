@@ -119,7 +119,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     private readonly int _vocabularySize;
     private readonly int _numFrames;
     private readonly double _frameRate;
-    private readonly TemporalAggregationType _temporalAggregation;
+    private TemporalAggregationType _temporalAggregation;
 
     #endregion
 
@@ -1564,10 +1564,11 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
                 for (int d = 0; d < _visionHiddenDim; d++)
                     frameGrad[0, d] = currentGradient[f, d];
 
-                // Backward through frame encoder layers
+                // Backward through frame encoder layers then patch embedding
                 var grad = frameGrad;
                 for (int i = _frameEncoderLayers.Count - 1; i >= 0; i--)
                     grad = _frameEncoderLayers[i].Backward(grad);
+                _patchEmbedding.Backward(grad);
             }
         }
 
@@ -1637,11 +1638,9 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         }
         else
         {
-            // Fallback: use per-layer learning rate update
-            foreach (var layer in Layers)
-            {
-                layer.UpdateParameters(NumOps.FromDouble(0.001));
-            }
+            throw new InvalidOperationException(
+                $"Optimizer type '{_optimizer.GetType().Name}' does not implement IGradientBasedOptimizer. " +
+                "VideoCLIP training requires a gradient-based optimizer (e.g., AdamOptimizer).");
         }
 
         SetTrainingMode(false);
@@ -1929,7 +1928,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         _ = reader.ReadInt32(); // vocabularySize
         _ = reader.ReadInt32(); // numFrames
         _ = reader.ReadDouble(); // frameRate
-        _ = reader.ReadInt32(); // temporalAggregation (enum)
+        _temporalAggregation = (TemporalAggregationType)reader.ReadInt32();
         _ = reader.ReadBoolean(); // useNativeMode
 
         // Restore positional embeddings and CLS token

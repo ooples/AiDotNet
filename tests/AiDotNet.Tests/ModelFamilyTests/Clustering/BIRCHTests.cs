@@ -15,5 +15,9 @@ public class BIRCHTests : ClusteringModelTestBase
         });
 
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
-        => new BIRCH<double>(new AiDotNet.Clustering.Options.BIRCHOptions<double> { NumClusters = 1 });
+        => new BIRCH<double>(new AiDotNet.Clustering.Options.BIRCHOptions<double>
+        {
+            NumClusters = 1,
+            Threshold = 5.0
+        });
 }

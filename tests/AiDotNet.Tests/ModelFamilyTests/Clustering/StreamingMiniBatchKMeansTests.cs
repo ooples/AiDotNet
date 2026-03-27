@@ -16,5 +16,10 @@ public class StreamingMiniBatchKMeansTests : ClusteringModelTestBase
         });
 
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
-        => new MiniBatchKMeans<double>(new AiDotNet.Clustering.Options.MiniBatchKMeansOptions<double> { NumClusters = 1 });
+        => new MiniBatchKMeans<double>(new AiDotNet.Clustering.Options.MiniBatchKMeansOptions<double>
+        {
+            NumClusters = 1,
+            BatchSize = 30,
+            Seed = 42
+        });
 }

@@ -1,6 +1,6 @@
 # Model Family Test Progress
 
-## Completed — All Invariants Pass
+## Test Coverage by Category
 | Category | Pass Rate | Notes |
 |---|---|---|
 | ActivationFunctions | 260/260 (100%) | Fixed in other PR |

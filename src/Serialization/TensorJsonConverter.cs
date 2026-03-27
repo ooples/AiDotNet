@@ -86,7 +86,16 @@ namespace AiDotNet.Serialization
                 var shapeToArray = shapeObj.GetType().GetMethod("ToArray");
                 if (shapeToArray != null)
                 {
-                    shape = (int[])shapeToArray.Invoke(shapeObj, null)!;
+                    var result = shapeToArray.Invoke(shapeObj, null);
+                    if (result is int[] intArray)
+                    {
+                        shape = intArray;
+                    }
+                    else
+                    {
+                        throw new JsonSerializationException(
+                            $"Cannot serialize tensor: Shape.ToArray() returned '{result?.GetType().Name ?? "null"}' instead of int[].");
+                    }
                 }
                 else
                 {

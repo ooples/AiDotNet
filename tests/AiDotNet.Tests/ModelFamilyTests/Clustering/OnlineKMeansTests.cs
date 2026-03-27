@@ -18,5 +18,12 @@ public class OnlineKMeansTests : ClusteringModelTestBase
         });
 
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
-        => new OnlineKMeans<double>(new AiDotNet.Clustering.Options.OnlineKMeansOptions<double> { NumClusters = 1 });
+        => new OnlineKMeans<double>(new AiDotNet.Clustering.Options.OnlineKMeansOptions<double>
+        {
+            NumClusters = 1,
+            LearningRate = 0.2,
+            DecayLearningRate = false,
+            MaxIterations = 10,
+            Seed = 42
+        });
 }

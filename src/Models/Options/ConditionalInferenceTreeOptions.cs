@@ -25,6 +25,18 @@ public class ConditionalInferenceTreeOptions : DecisionTreeOptions
         MinSamplesLeaf = 5;
     }
 
+    public ConditionalInferenceTreeOptions(ConditionalInferenceTreeOptions other) : base()
+    {
+        Guard.NotNull(other);
+        SignificanceLevel = other.SignificanceLevel;
+        StatisticalTest = other.StatisticalTest;
+        MaxDegreeOfParallelism = other.MaxDegreeOfParallelism;
+        MinSamplesLeaf = other.MinSamplesLeaf;
+        MinSamplesSplit = other.MinSamplesSplit;
+        MaxDepth = other.MaxDepth;
+        Seed = other.Seed;
+    }
+
     /// <summary>
     /// Gets or sets the statistical significance level used for hypothesis testing when selecting split variables.
     /// </summary>

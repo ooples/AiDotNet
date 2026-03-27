@@ -16,5 +16,10 @@ public class CLARANSTests : ClusteringModelTestBase
         });
 
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
-        => new CLARANS<double>(new AiDotNet.Clustering.Options.CLARANSOptions<double> { NumClusters = 1 });
+        => new CLARANS<double>(new AiDotNet.Clustering.Options.CLARANSOptions<double>
+        {
+            NumClusters = 1,
+            NumLocal = 5,
+            Seed = 42
+        });
 }

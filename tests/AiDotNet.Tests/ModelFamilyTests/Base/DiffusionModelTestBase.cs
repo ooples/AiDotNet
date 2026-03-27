@@ -269,7 +269,7 @@ public abstract class DiffusionModelTestBase
         var out2 = model.Predict(input);
 
         for (int i = 0; i < out1.Length; i++)
-            Assert.Equal(out1[i], out2[i], 8); // 8 decimal places — diffusion models have parallel UNet paths with FP accumulation differences
+            Assert.Equal(out1[i], out2[i], 12); // Tensors 0.16.0 deterministic BLAS — exact match expected
     }
 
     [Fact]
