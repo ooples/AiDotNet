@@ -159,6 +159,13 @@ public abstract class DistillationStrategyTestBase
     public void ComputeGradient_MatchesNumericalGradient()
     {
         var strategy = CreateStrategy();
+
+        // Use a reasonable temperature for gradient checking — very low temperatures
+        // (e.g., 0.07 for contrastive methods) make the softmax extremely sharp and
+        // finite-difference gradient checking unreliable with standard epsilon.
+        if (strategy.Temperature < 0.5)
+            strategy.Temperature = 3.0;
+
         var student = CreateStudentOutput();
         var teacher = CreateTeacherOutput();
         double epsilon = 1e-5;

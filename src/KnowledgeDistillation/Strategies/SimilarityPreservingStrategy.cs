@@ -134,15 +134,31 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
 
         if (_similarityWeight > 0)
         {
-            var similarityGradient = ComputeSimilarityGradient(studentEmbeddings, teacherEmbeddings);
+            // Similarity gradient is w.r.t. softmax outputs (embeddings).
+            // Must apply softmax Jacobian to convert to gradient w.r.t. logits.
+            var simGradEmbedding = ComputeSimilarityGradient(studentEmbeddings, teacherEmbeddings);
 
             for (int r = 0; r < batchSize; r++)
             {
-                for (int c = 0; c < outputDim; c++)
+                // Apply softmax Jacobian: ∂L/∂z_k = Σ_m (∂L/∂p_m) * p_m * (δ_{mk} - p_k) / T
+                var p = studentEmbeddings[r]; // softmax output
+                for (int k = 0; k < outputDim; k++)
                 {
-                    var standardGrad = NumOps.Multiply(gradientBatch[r, c], NumOps.FromDouble(1.0 - _similarityWeight));
-                    var simGrad = NumOps.Multiply(similarityGradient[r, c], NumOps.FromDouble(_similarityWeight));
-                    gradientBatch[r, c] = NumOps.Add(standardGrad, simGrad);
+                    double dLdz_k = 0;
+                    double p_k = Convert.ToDouble(p[k]);
+                    for (int m = 0; m < outputDim; m++)
+                    {
+                        double dLdp_m = Convert.ToDouble(simGradEmbedding[r, m]);
+                        double p_m = Convert.ToDouble(p[m]);
+                        double jacobian = p_m * ((m == k ? 1.0 : 0.0) - p_k);
+                        dLdz_k += dLdp_m * jacobian;
+                    }
+                    // Divide by T because softmax input is z/T
+                    dLdz_k /= Temperature;
+
+                    var standardGrad = NumOps.Multiply(gradientBatch[r, k], NumOps.FromDouble(1.0 - _similarityWeight));
+                    var simGrad = NumOps.Multiply(NumOps.FromDouble(dLdz_k), NumOps.FromDouble(_similarityWeight));
+                    gradientBatch[r, k] = NumOps.Add(standardGrad, simGrad);
                 }
             }
         }
