@@ -306,15 +306,14 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
 
                 for (int bi = 0; bi < batchSize; bi++)
                 {
-                    T iVal = iGate[new[] { bi, dimStart }];  // Use head-level gate
+                    // iGate is already exp(raw) from line 275 — don't double-apply exp
+                    T iVal = iGate[new[] { bi, dimStart }];
                     T fVal = fGate[new[] { bi, dimStart }];
                     T oVal = oGate[new[] { bi, dimStart }];
 
-                    // Clamp input gate pre-activation before exp to prevent overflow
-                    // exp(20) ≈ 4.85e8 which is safe; exp(>88) overflows float
-                    double iRaw = NumOps.ToDouble(iVal);
-                    double iClampedExp = Math.Exp(Math.Min(iRaw, 20.0));
-                    iVal = NumOps.FromDouble(iClampedExp);
+                    // Clamp exp gate to prevent overflow (already exp'd, just clamp the value)
+                    double iDouble = NumOps.ToDouble(iVal);
+                    if (iDouble > 4.85e8) iVal = NumOps.FromDouble(4.85e8); // exp(20) limit
 
                     // Matrix cell update: C = f * C + i * (v outer k)
                     for (int di = 0; di < _headDimension; di++)

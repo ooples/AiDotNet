@@ -1125,6 +1125,32 @@ public class S4DLayer<T> : LayerBase<T>
             dX.SetSlice(1, t, dX_t);
         }
 
+        // Convert dAbar to dA using chain rule for complex exponential
+        // aBar = exp(dt * A) where A = aReal + i*aImag
+        // d(loss)/d(aReal) = dt * Re(dAbar_conj * aBar) = dt * (dAbr * abr + dAbi * abi)
+        // d(loss)/d(aImag) = dt * Im(dAbar_conj * aBar) = dt * (dAbr * abi - dAbi * abr)
+        // where dAbar_conj means we conjugate the gradient to match Wirtinger derivative
+        var dAr_converted = new Tensor<T>(new[] { _innerDimension, _stateDimension });
+        var dAi_converted = new Tensor<T>(new[] { _innerDimension, _stateDimension });
+        for (int d = 0; d < _innerDimension; d++)
+        {
+            double dt = NumOps.ToDouble(delta[d]);
+            for (int n = 0; n < _stateDimension; n++)
+            {
+                double dAbr = NumOps.ToDouble(_aRealGradient[new[] { d, n }]);
+                double dAbi = NumOps.ToDouble(_aImagGradient[new[] { d, n }]);
+                double abr = NumOps.ToDouble(aBarReal[new[] { d, n }]);
+                double abi = NumOps.ToDouble(aBarImag[new[] { d, n }]);
+
+                // Real-valued gradient for real parameters through complex exponential
+                // dA = dt * Re(conj(dAbar) * aBar) for real part
+                dAr_converted[new[] { d, n }] = NumOps.FromDouble(dt * (dAbr * abr + dAbi * abi));
+                dAi_converted[new[] { d, n }] = NumOps.FromDouble(dt * (-dAbr * abi + dAbi * abr));
+            }
+        }
+        _aRealGradient = dAr_converted;
+        _aImagGradient = dAi_converted;
+
         return dX;
     }
 
