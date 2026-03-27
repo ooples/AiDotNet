@@ -204,30 +204,16 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
 
         if (!hasEdges)
         {
-            // No edges survived thresholding — use covariance-based fallback.
-            // Only add edges with STRONG signal to avoid false adjacencies.
-            // Use a higher threshold (0.3) for the fallback to be conservative.
-            double fallbackThreshold = Math.Max(threshold, 0.3);
-            var cov = ComputeCovarianceMatrix(data);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-                    double varI = NumOps.ToDouble(cov[i, i]);
-                    if (varI < 1e-10) continue;
-                    double covIJ = NumOps.ToDouble(cov[i, j]);
-                    double weight = covIJ / varI;
-                    if (Math.Abs(weight) < fallbackThreshold) continue;
-
-                    double varJ = NumOps.ToDouble(cov[j, j]);
-                    double reverseWeight = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
-                    // Direction: prefer variable with higher variance-explained ratio.
-                    // Use strict > to avoid creating both directions for ties.
-                    if (Math.Abs(weight) > reverseWeight)
-                        result[i, j] = NumOps.FromDouble(weight);
-                    else if (Math.Abs(Math.Abs(weight) - reverseWeight) < 1e-10 && i < j)
-                        result[i, j] = NumOps.FromDouble(weight);
-                }
+            // No edges survived — run NOTEARSLinear as a robust fallback.
+            // This is better than covariance-based heuristics because it properly
+            // handles indirect correlations and enforces acyclicity.
+            var fallbackAlgo = new NOTEARSLinear<T>(new Models.Options.CausalDiscoveryOptions
+            {
+                EdgeThreshold = threshold,
+                MaxIterations = 50
+            });
+            var fallbackGraph = fallbackAlgo.DiscoverStructure(data);
+            result = fallbackGraph.AdjacencyMatrix;
         }
 
         return result;

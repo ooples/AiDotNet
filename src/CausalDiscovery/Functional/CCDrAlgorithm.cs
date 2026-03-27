@@ -94,12 +94,25 @@ public class CCDrAlgorithm<T> : FunctionalBase<T>
         // Initialize weight matrix W = 0
         var W = new Matrix<T>(d, d);
 
+        // Order targets by DECREASING predictability (most dependent first).
+        // This prevents the algorithm from adding reverse edges first
+        // (e.g., adding X1→X0 before X0→X1 just because j=0 is processed first).
+        var targetOrder = Enumerable.Range(0, d)
+            .OrderByDescending(j =>
+            {
+                double sumAbsCorr = 0;
+                for (int k = 0; k < d; k++)
+                    if (k != j) sumAbsCorr += Math.Abs(NumOps.ToDouble(S[j, k]));
+                return sumAbsCorr;
+            })
+            .ToArray();
+
         // Coordinate descent
         for (int iter = 0; iter < _maxIterations; iter++)
         {
             bool changed = false;
 
-            for (int j = 0; j < d; j++)
+            foreach (int j in targetOrder)
             {
                 for (int i = 0; i < d; i++)
                 {

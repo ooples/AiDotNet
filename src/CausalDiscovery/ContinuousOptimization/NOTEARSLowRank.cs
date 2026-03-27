@@ -93,7 +93,7 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
         // Choose rank
         int rank = Math.Min(d, _maxRank);
 
-        // Initialize low-rank factors A, B (d x rank)
+        // Initialize low-rank factors with small random values.
         var A = new Matrix<T>(d, rank);
         var B = new Matrix<T>(d, rank);
         T initScale = NumOps.FromDouble(0.01);
