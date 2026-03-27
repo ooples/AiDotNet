@@ -26,12 +26,7 @@ public abstract class DistillationStrategyTestBase
     /// <summary>Whether identical inputs produce exactly zero loss.</summary>
     protected virtual bool ZeroLossForIdentical => true;
 
-    /// <summary>
-    /// Whether the gradient is exact (true for most strategies) or approximate
-    /// (false for adaptive strategies where temperature depends on input —
-    /// the gradient treats T as constant, but the numerical check sees the full effect).
-    /// </summary>
-    protected virtual bool HasExactGradient => true;
+    // All strategies must pass the numerical gradient check — no exceptions.
 
     /// <summary>Creates teacher output logits matrix [batch, classes].</summary>
     protected virtual Matrix<double> CreateTeacherOutput()
@@ -165,23 +160,13 @@ public abstract class DistillationStrategyTestBase
     [Fact]
     public void ComputeGradient_MatchesNumericalGradient()
     {
-        if (!HasExactGradient) return;
-
         var strategy = CreateStrategy();
 
-        // Adaptive/curriculum: temperature depends on input, gradient treats T as constant
-        // Relational: batch-level pairwise loss creates cross-sample gradient interactions
-        // Both produce approximate gradients that don't match exact numerical derivatives.
-        if (strategy is AiDotNet.KnowledgeDistillation.Strategies.AdaptiveDistillationStrategyBase<double>)
-            return;
-        if (strategy is AiDotNet.KnowledgeDistillation.Strategies.CurriculumDistillationStrategyBase<double>)
-            return;
-        if (strategy is AiDotNet.KnowledgeDistillation.Strategies.RelationalDistillationStrategy<double>)
-            return;
-
-        // Use a reasonable temperature for gradient checking — very low temperatures
-        // (e.g., 0.07 for contrastive methods) make the softmax extremely sharp and
-        // finite-difference gradient checking unreliable with standard epsilon.
+        // For gradient checking, set temperature to a value where finite-difference
+        // is numerically reliable. Very low T (e.g. 0.07) makes softmax near-one-hot
+        // so epsilon=1e-5 perturbations don't change the output measurably.
+        // This doesn't weaken the test — it tests the same gradient formula at a
+        // temperature where both analytical and numerical methods are accurate.
         if (strategy.Temperature < 0.5)
             strategy.Temperature = 3.0;
 

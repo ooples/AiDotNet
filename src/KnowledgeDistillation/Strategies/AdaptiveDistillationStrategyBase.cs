@@ -177,7 +177,7 @@ public abstract class AdaptiveDistillationStrategyBase<T>
             // Compute adaptive temperature for this sample
             double adaptiveTemp = ComputeAdaptiveTemperature(studentOutput, teacherOutput);
 
-            // Soft gradient with adaptive temperature
+            // Soft gradient with adaptive temperature (∂L/∂z at constant T)
             var studentSoft = DistillationHelper<T>.Softmax(studentOutput, adaptiveTemp);
             var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, adaptiveTemp);
 
@@ -187,17 +187,60 @@ public abstract class AdaptiveDistillationStrategyBase<T>
                 gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(adaptiveTemp));
             }
 
+            // Chain rule through adaptive temperature: ∂L/∂T × ∂T/∂z_k
+            // Both ∂L/∂T and ∂T/∂z_k are computed numerically so this works
+            // correctly for ALL subclass temperature mappings (accuracy, entropy,
+            // confidence) without assuming any specific formula.
+            double eps = 1e-5;
+
+            // ∂L/∂T: perturb temperature
+            var studentSoftPlus = DistillationHelper<T>.Softmax(studentOutput, adaptiveTemp + eps);
+            var teacherSoftPlus = DistillationHelper<T>.Softmax(teacherOutput, adaptiveTemp + eps);
+            var studentSoftMinus = DistillationHelper<T>.Softmax(studentOutput, adaptiveTemp - eps);
+            var teacherSoftMinus = DistillationHelper<T>.Softmax(teacherOutput, adaptiveTemp - eps);
+
+            T lossPlus = NumOps.Multiply(
+                DistillationHelper<T>.KLDivergence(teacherSoftPlus, studentSoftPlus),
+                NumOps.FromDouble((adaptiveTemp + eps) * (adaptiveTemp + eps)));
+            T lossMinus = NumOps.Multiply(
+                DistillationHelper<T>.KLDivergence(teacherSoftMinus, studentSoftMinus),
+                NumOps.FromDouble((adaptiveTemp - eps) * (adaptiveTemp - eps)));
+            double dLdT = (NumOps.ToDouble(lossPlus) - NumOps.ToDouble(lossMinus)) / (2 * eps);
+
+            // ∂T/∂z_k: perturb each logit and measure temperature change
+            for (int k = 0; k < n; k++)
+            {
+                var perturbedPlus = new Vector<T>(n);
+                var perturbedMinus = new Vector<T>(n);
+                for (int i = 0; i < n; i++)
+                {
+                    perturbedPlus[i] = studentOutput[i];
+                    perturbedMinus[i] = studentOutput[i];
+                }
+                perturbedPlus[k] = NumOps.Add(perturbedPlus[k], NumOps.FromDouble(eps));
+                perturbedMinus[k] = NumOps.Subtract(perturbedMinus[k], NumOps.FromDouble(eps));
+
+                double tPlus = ComputeAdaptiveTemperature(perturbedPlus, teacherOutput);
+                double tMinus = ComputeAdaptiveTemperature(perturbedMinus, teacherOutput);
+                double dTdzk = (tPlus - tMinus) / (2 * eps);
+
+                double tempGrad = dLdT * dTdzk;
+                gradient[k] = NumOps.Add(gradient[k], NumOps.FromDouble(tempGrad));
+            }
+
             // Add hard gradient if labels provided
             if (trueLabels != null)
             {
-                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, temperature: 1.0);
+                var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
+                T alphaT = NumOps.FromDouble(Alpha);
+                T oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
 
                 for (int i = 0; i < n; i++)
                 {
-                    var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
-                    var alphaWeighted = NumOps.Multiply(hardGrad, NumOps.FromDouble(Alpha));
-                    var softWeighted = NumOps.Multiply(gradient[i], NumOps.FromDouble(1.0 - Alpha));
-                    gradient[i] = NumOps.Add(alphaWeighted, softWeighted);
+                    T hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
+                    gradient[i] = NumOps.Add(
+                        NumOps.Multiply(alphaT, hardGrad),
+                        NumOps.Multiply(oneMinusAlpha, gradient[i]));
                 }
             }
 
