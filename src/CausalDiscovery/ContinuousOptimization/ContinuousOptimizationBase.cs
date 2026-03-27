@@ -83,15 +83,16 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
         int d = X.Columns;
 
         // Residual R = X - X @ W using Engine.DotProduct for each row-column product
+        // Pre-allocate reusable vectors to avoid per-iteration allocations
         var R = new Matrix<T>(n, d);
+        var xRow = new Vector<T>(d);
+        var wCol = new Vector<T>(d);
         for (int i = 0; i < n; i++)
         {
-            var xRow = new Vector<T>(d);
             for (int k = 0; k < d; k++) xRow[k] = X[i, k];
 
             for (int j = 0; j < d; j++)
             {
-                var wCol = new Vector<T>(d);
                 for (int k = 0; k < d; k++) wCol[k] = W[k, j];
                 R[i, j] = NumOps.Subtract(X[i, j], Engine.DotProduct(xRow, wCol));
             }
@@ -108,16 +109,17 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
         loss *= 0.5 / n;
 
         // Gradient = -(1/n) * X^T @ R using Engine.DotProduct for column products
+        // Pre-allocate reusable column vectors
         T nT = NumOps.FromDouble(n);
         var grad = new Matrix<T>(d, d);
+        var xColK = new Vector<T>(n);
+        var rColJ = new Vector<T>(n);
         for (int k = 0; k < d; k++)
         {
-            var xColK = new Vector<T>(n);
             for (int i = 0; i < n; i++) xColK[i] = X[i, k];
 
             for (int j = 0; j < d; j++)
             {
-                var rColJ = new Vector<T>(n);
                 for (int i = 0; i < n; i++) rColJ[i] = R[i, j];
                 grad[k, j] = NumOps.Negate(NumOps.Divide(Engine.DotProduct(xColK, rColJ), nT));
             }
