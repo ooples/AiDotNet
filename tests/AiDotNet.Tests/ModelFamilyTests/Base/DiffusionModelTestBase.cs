@@ -269,7 +269,7 @@ public abstract class DiffusionModelTestBase
         var out2 = model.Predict(input);
 
         for (int i = 0; i < out1.Length; i++)
-            Assert.Equal(out1[i], out2[i]);
+            Assert.Equal(out1[i], out2[i], 10); // 10 decimal places — allows FP rounding from SIMD/thread scheduling
     }
 
     [Fact]
