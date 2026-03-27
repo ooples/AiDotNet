@@ -97,20 +97,48 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
         // Choose rank
         int rank = Math.Min(d, _maxRank);
 
-        // Initialize low-rank factors so W = A*B^T ≈ 0 (matching NOTEARS reference
-        // which initializes W=0). For low-rank, we use small random values scaled by
-        // the user-configurable InitScale. The L-BFGS optimizer then builds up edges.
+        // Initialize low-rank factors using spectral initialization from OLS.
+        // Standard NOTEARS uses W=0, but for low-rank W=A*B^T, zero init creates
+        // a saddle point where gradients vanish (∂L/∂A = ∂L/∂W * B = 0 when B=0).
+        // Solution: A = I (identity, for r≤d), B = scale * OLS^T (transposed regression weights).
+        // This gives W = A*B^T = I * (scale * OLS^T)^T = scale * OLS, avoiding the saddle point
+        // while starting near a meaningful solution.
+        var cov = ComputeCovarianceMatrix(X);
         var A = new Matrix<T>(d, rank);
         var B = new Matrix<T>(d, rank);
         T initScale = NumOps.FromDouble(_initScale);
         var rng = _seed.HasValue
             ? Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed.Value)
             : Tensors.Helpers.RandomHelper.CreateSecureRandom();
+
         for (int i = 0; i < d; i++)
             for (int r = 0; r < rank; r++)
             {
-                A[i, r] = NumOps.Multiply(initScale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-                B[i, r] = NumOps.Multiply(initScale, NumOps.FromDouble(rng.NextDouble() - 0.5));
+                if (r < d)
+                {
+                    // A: identity for first d components (preserves direction)
+                    A[i, r] = (r == i) ? NumOps.One : NumOps.Zero;
+                    // B: scaled OLS weights transposed (OLS[r,i] = cov[r,i]/var[r])
+                    if (r != i)
+                    {
+                        T varR = cov[r, r];
+                        T olsW = NumOps.GreaterThan(varR, NumOps.FromDouble(1e-10))
+                            ? NumOps.Multiply(NumOps.Divide(cov[r, i], varR), initScale)
+                            : NumOps.Zero;
+                        B[i, r] = olsW;
+                    }
+                    else
+                    {
+                        B[i, r] = NumOps.Zero; // No self-edge
+                    }
+                }
+                else
+                {
+                    // Extra rank components beyond d: small noise
+                    T noise = NumOps.FromDouble(0.001 * (rng.NextDouble() - 0.5));
+                    A[i, r] = noise;
+                    B[i, r] = noise;
+                }
             }
 
         // Augmented Lagrangian with L-BFGS inner solver (per NOTEARS reference)
