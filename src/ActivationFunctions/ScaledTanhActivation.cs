@@ -37,6 +37,12 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     /// <summary>
     /// The steepness parameter that controls how quickly the function transitions between -1 and 1.
     /// </summary>
+    /// <summary>
+    /// Saturation threshold: |beta*x| above this value, tanh ≈ ±1.
+    /// Prevents exp() overflow while maintaining numerical precision.
+    /// </summary>
+    private const double SaturationThreshold = 20.0;
+
     private readonly T _beta;
 
     /// <summary>
@@ -92,9 +98,9 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
         // For large positive ßx: exp(-ßx) → 0, result → 1
         // For large negative ßx: exp(-ßx) → ∞, result → -1
         double betaX = NumOps.ToDouble(NumOps.Multiply(_beta, input));
-        if (betaX > 20.0)
+        if (betaX > SaturationThreshold)
             return NumOps.One;
-        if (betaX < -20.0)
+        if (betaX < -SaturationThreshold)
             return NumOps.Negate(NumOps.One);
 
         T negBetaX = NumOps.Negate(NumOps.Multiply(_beta, input));
