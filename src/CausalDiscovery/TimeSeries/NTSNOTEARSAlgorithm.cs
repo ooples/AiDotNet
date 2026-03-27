@@ -365,7 +365,7 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
         if (!hasEdges)
         {
             // Covariance-based fallback for deterministic data
-            var cov = ComputeCovarianceMatrix(segData);
+            var cov = ComputeCovarianceMatrix(stdData);
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
                 {

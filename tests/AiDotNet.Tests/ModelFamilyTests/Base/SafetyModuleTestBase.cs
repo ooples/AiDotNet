@@ -21,6 +21,32 @@ public abstract class SafetyModuleTestBase
     /// <summary>Whether the module is expected to produce findings for random/noisy content.</summary>
     protected virtual bool ProducesFindings => true;
 
+    /// <summary>
+    /// Whether this module requires external resources (model files, etc.) to be ready.
+    /// Override to return true for modules that cannot be ready in a test environment.
+    /// Tests will be skipped (not silently passed) for such modules.
+    /// </summary>
+    protected virtual bool RequiresExternalResources => false;
+
+    /// <summary>
+    /// Asserts that the module is ready, or throws a descriptive exception.
+    /// Modules that require external resources will cause a skip-like failure with a clear message.
+    /// </summary>
+    private ISafetyModule<double> CreateAndAssertReady()
+    {
+        var module = CreateModule();
+        if (RequiresExternalResources && !module.IsReady)
+        {
+            // Throw SkipException if available, otherwise use a clear assertion message
+            Assert.Fail($"Module '{module.ModuleName}' requires external resources and is not ready. " +
+                "Override RequiresExternalResources => true and ensure the module is properly configured for testing.");
+        }
+        Assert.True(module.IsReady,
+            $"Module '{module.ModuleName}' reports IsReady=false. " +
+            "Either configure the module for testing or override RequiresExternalResources => true.");
+        return module;
+    }
+
     /// <summary>Creates test content vector with benign content.</summary>
     protected virtual Vector<double> CreateSafeContent()
     {
@@ -57,8 +83,7 @@ public abstract class SafetyModuleTestBase
     [Fact]
     public void Evaluate_ReturnsNonNullList()
     {
-        var module = CreateModule();
-        if (!module.IsReady) return;
+        var module = CreateAndAssertReady();
 
         var findings = module.Evaluate(CreateSafeContent());
         Assert.NotNull(findings);
@@ -73,10 +98,15 @@ public abstract class SafetyModuleTestBase
     [Fact]
     public void Evaluate_ConfidencesAreInUnitInterval()
     {
-        var module = CreateModule();
-        if (!module.IsReady) return;
+        var module = CreateAndAssertReady();
 
         var findings = module.Evaluate(CreateRandomContent());
+
+        // When module claims to produce findings, ensure we actually test some
+        if (ProducesFindings)
+        {
+            Assert.NotEmpty(findings);
+        }
 
         foreach (var finding in findings)
         {
@@ -93,10 +123,11 @@ public abstract class SafetyModuleTestBase
     [Fact]
     public void Evaluate_FindingDescriptionsAreNonNull()
     {
-        var module = CreateModule();
-        if (!module.IsReady) return;
+        var module = CreateAndAssertReady();
 
-        foreach (var finding in module.Evaluate(CreateRandomContent()))
+        var findings = module.Evaluate(CreateRandomContent());
+
+        foreach (var finding in findings)
             Assert.NotNull(finding.Description);
     }
 
@@ -104,8 +135,7 @@ public abstract class SafetyModuleTestBase
     [Fact]
     public void Evaluate_FindingsReferenceSourceModule()
     {
-        var module = CreateModule();
-        if (!module.IsReady) return;
+        var module = CreateAndAssertReady();
 
         foreach (var finding in module.Evaluate(CreateRandomContent()))
         {
@@ -123,16 +153,17 @@ public abstract class SafetyModuleTestBase
     [Fact]
     public void Evaluate_HighConfidenceFindings_HaveAppropiateSeverity()
     {
-        var module = CreateModule();
-        if (!module.IsReady) return;
+        var module = CreateAndAssertReady();
 
         var findings = module.Evaluate(CreateRandomContent());
+
+        // Need at least 2 findings with distinct confidence ranges to test ordering
         if (findings.Count < 2) return;
 
-        // Check that high-confidence findings don't have lower severity than low-confidence ones
         var highConf = findings.Where(f => f.Confidence > 0.8).ToList();
         var lowConf = findings.Where(f => f.Confidence < 0.3).ToList();
 
+        // Only assert if both confidence ranges have findings
         if (highConf.Count == 0 || lowConf.Count == 0) return;
 
         int highMaxSeverity = highConf.Max(f => (int)f.Severity);
@@ -152,8 +183,7 @@ public abstract class SafetyModuleTestBase
     [Fact]
     public void Evaluate_IsDeterministic()
     {
-        var module = CreateModule();
-        if (!module.IsReady) return;
+        var module = CreateAndAssertReady();
 
         var content = CreateSafeContent();
         var findings1 = module.Evaluate(content);
@@ -176,8 +206,8 @@ public abstract class SafetyModuleTestBase
     [Fact]
     public void Evaluate_IsSensitiveToContent()
     {
-        var module = CreateModule();
-        if (!module.IsReady || !ProducesFindings) return;
+        var module = CreateAndAssertReady();
+        if (!ProducesFindings) return;
 
         // Create two very different content vectors
         var content1 = CreateSafeContent();
@@ -228,8 +258,7 @@ public abstract class SafetyModuleTestBase
     [Fact]
     public void Evaluate_EmptyContent_DoesNotCrash()
     {
-        var module = CreateModule();
-        if (!module.IsReady) return;
+        var module = CreateAndAssertReady();
 
         try
         {
@@ -238,7 +267,7 @@ public abstract class SafetyModuleTestBase
         }
         catch (ArgumentException)
         {
-            // Rejecting empty input is acceptable
+            // Rejecting empty input is acceptable — this is a valid behavior
         }
     }
 
@@ -246,8 +275,7 @@ public abstract class SafetyModuleTestBase
     [Fact]
     public void Evaluate_LargeContent_ProducesValidResults()
     {
-        var module = CreateModule();
-        if (!module.IsReady) return;
+        var module = CreateAndAssertReady();
 
         var largeContent = new Vector<double>(1000);
         var rng = new Random(42);
@@ -264,12 +292,11 @@ public abstract class SafetyModuleTestBase
         }
     }
 
-    // INVARIANT 12: Repeated content (constant vector) should not cause numerical issues
+    // INVARIANT 12: Constant content should not cause numerical issues
     [Fact]
     public void Evaluate_ConstantContent_DoesNotProduceNaN()
     {
-        var module = CreateModule();
-        if (!module.IsReady) return;
+        var module = CreateAndAssertReady();
 
         var constant = new Vector<double>(ContentSize);
         for (int i = 0; i < ContentSize; i++)
@@ -278,11 +305,14 @@ public abstract class SafetyModuleTestBase
         try
         {
             var findings = module.Evaluate(constant);
+            Assert.NotNull(findings);
             foreach (var finding in findings)
             {
                 Assert.False(double.IsNaN(finding.Confidence),
                     "Constant input produced NaN confidence. " +
                     "Module should handle degenerate inputs without numerical failure.");
+                Assert.True(finding.Confidence >= 0.0 && finding.Confidence <= 1.0,
+                    $"Constant input produced out-of-range confidence: {finding.Confidence}.");
             }
         }
         catch (ArgumentException)

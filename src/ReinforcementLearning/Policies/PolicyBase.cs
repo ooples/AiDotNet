@@ -139,7 +139,24 @@ namespace AiDotNet.ReinforcementLearning.Policies
         }
 
         /// <inheritdoc />
-        public override void SetParameters(Vector<T> parameters) { }
+        public override void SetParameters(Vector<T> parameters)
+        {
+            var networks = GetNetworks();
+            if (networks.Count == 0)
+                return;
+
+            int offset = 0;
+            foreach (var network in networks)
+            {
+                var currentParams = network.GetParameters();
+                int count = currentParams.Length;
+                var segment = new Vector<T>(count);
+                for (int i = 0; i < count; i++)
+                    segment[i] = parameters[offset + i];
+                network.SetParameters(segment);
+                offset += count;
+            }
+        }
 
         /// <inheritdoc />
         public override IFullModel<T, Vector<T>, Vector<T>> WithParameters(Vector<T> parameters)

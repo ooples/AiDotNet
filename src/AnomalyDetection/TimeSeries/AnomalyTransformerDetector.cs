@@ -1067,11 +1067,13 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         int ffDim = W1.Columns;
 
         var output = new Matrix<T>(seqLen, _modelDim);
+        // Pre-allocate reusable vectors outside the loop
+        var h = new Vector<T>(ffDim);
+        var wCol = new Vector<T>(ffDim);
 
         for (int t = 0; t < seqLen; t++)
         {
             // First layer with ReLU
-            var h = new Vector<T>(ffDim);
             for (int j = 0; j < ffDim; j++)
             {
                 T sum = b1[j];
@@ -1080,15 +1082,15 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                     sum = NumOps.Add(sum, NumOps.Multiply(x[t, i], W1[i, j]));
                 }
                 // ReLU
-                double val = NumOps.ToDouble(sum);
-                h[j] = NumOps.FromDouble(Math.Max(0, val));
+                h[j] = NumOps.FromDouble(Math.Max(0, NumOps.ToDouble(sum)));
             }
 
             // Second layer with residual connection
             for (int j = 0; j < _modelDim; j++)
             {
                 T sum = b2[j];
-                { var wc0 = new Vector<T>(ffDim); for (int ii = 0; ii < ffDim; ii++) wc0[ii] = W2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h, wc0)); }
+                for (int ii = 0; ii < ffDim; ii++) wCol[ii] = W2[ii, j];
+                sum = NumOps.Add(sum, Engine.DotProduct(h, wCol));
                 // Residual connection
                 output[t, j] = NumOps.Add(sum, x[t, j]);
             }

@@ -168,7 +168,7 @@ public class RelationModule<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     #region ModelBase Overrides
 
     /// <inheritdoc />
-    public override Tensor<T> Predict(Tensor<T> input) => input;
+    public override Tensor<T> Predict(Tensor<T> input) => Forward(input);
 
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }

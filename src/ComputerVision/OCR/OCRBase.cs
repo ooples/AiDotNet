@@ -494,8 +494,9 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// </summary>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        var result = Recognize(input);
-        // Return input as-is since OCR output is text, not tensor
+        // Run OCR recognition; result is text-based (OCRResult<T>), not tensor-based.
+        // Discard return since Predict must return a Tensor per IFullModel contract.
+        _ = Recognize(input);
         return input;
     }
 
