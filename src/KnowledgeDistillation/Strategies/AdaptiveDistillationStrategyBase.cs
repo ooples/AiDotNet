@@ -184,7 +184,7 @@ public abstract class AdaptiveDistillationStrategyBase<T>
             for (int i = 0; i < n; i++)
             {
                 var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(adaptiveTemp * adaptiveTemp));
+                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(adaptiveTemp));
             }
 
             // Add hard gradient if labels provided
@@ -207,6 +207,12 @@ public abstract class AdaptiveDistillationStrategyBase<T>
                 batchGradient[r, c] = gradient[c];
             }
         }
+
+        // Average gradients over the batch
+        T oneOverBatch = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
+        for (int r2 = 0; r2 < batchSize; r2++)
+            for (int c = 0; c < outputDim; c++)
+                batchGradient[r2, c] = NumOps.Multiply(batchGradient[r2, c], oneOverBatch);
 
         return batchGradient;
     }
