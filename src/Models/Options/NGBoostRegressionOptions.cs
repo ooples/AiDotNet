@@ -64,7 +64,7 @@ public class NGBoostRegressionOptions : DecisionTreeOptions
     /// Gets or sets the minimum number of samples required to be at a leaf node.
     /// </summary>
     /// <value>Default is 1.</value>
-    public int MinSamplesLeaf { get; set; } = 1;
+    // MinSamplesLeaf inherited from DecisionTreeOptions (default=1), matching NGBoost paper (Duan 2020)
 
     /// <summary>
     /// Gets or sets the subsampling ratio for each iteration.

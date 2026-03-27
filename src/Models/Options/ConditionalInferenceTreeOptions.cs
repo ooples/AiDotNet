@@ -18,6 +18,13 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class ConditionalInferenceTreeOptions : DecisionTreeOptions
 {
+    public ConditionalInferenceTreeOptions()
+    {
+        // Per Hothorn et al. 2006: conditional inference trees need a higher MinSamplesLeaf
+        // to prevent degenerate single-sample splits that exhaust tree depth on the strongest feature.
+        MinSamplesLeaf = 5;
+    }
+
     /// <summary>
     /// Gets or sets the statistical significance level used for hypothesis testing when selecting split variables.
     /// </summary>

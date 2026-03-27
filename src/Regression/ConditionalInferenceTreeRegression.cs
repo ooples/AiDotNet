@@ -372,7 +372,9 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
                 .ToList();
             var rightIndices = Enumerable.Range(0, y.Length).Except(leftIndices).ToList();
 
-            if (leftIndices.Count == 0 || rightIndices.Count == 0)
+            // Enforce MinSamplesLeaf: prevent degenerate single-sample splits
+            // that exhaust tree depth on the strongest feature (Hothorn 2006 §3.2)
+            if (leftIndices.Count < _options.MinSamplesLeaf || rightIndices.Count < _options.MinSamplesLeaf)
             {
                 continue;
             }

@@ -42,6 +42,22 @@ public class DecisionTreeOptions : ModelOptions
     public int MinSamplesSplit { get; set; } = 2;
 
     /// <summary>
+    /// Gets or sets the minimum number of samples required in each leaf node after a split.
+    /// </summary>
+    /// <value>
+    /// The minimum number of samples per leaf, defaulting to 5.
+    /// </value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This prevents the tree from creating splits that isolate very few samples
+    /// into a leaf. Without this, a tree can degenerate into single-sample splits that always pick the
+    /// same feature (the one with the largest range) instead of exploring weaker features.</para>
+    /// <para><b>Industry Standard:</b> scikit-learn defaults to 1 for regression trees, but conditional
+    /// inference trees (Hothorn 2006) recommend higher values (5-20) to ensure statistical validity
+    /// of the permutation test in each node.</para>
+    /// </remarks>
+    public int MinSamplesLeaf { get; set; } = 1;
+
+    /// <summary>
     /// Gets or sets the fraction of features to consider when looking for the best split.
     /// </summary>
     /// <value>
