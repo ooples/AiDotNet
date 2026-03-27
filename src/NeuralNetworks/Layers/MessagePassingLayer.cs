@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -67,6 +69,10 @@ public delegate Vector<T> UpdateFunction<T>(Vector<T> nodeFeatures, Vector<T> ag
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Graph)]
+[LayerTask(LayerTask.GraphProcessing)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
 public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly int _inputFeatures;
@@ -226,6 +232,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private IGpuBuffer? _gpuResetBiasGradient;
 
     /// <inheritdoc/>
+    public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -361,10 +368,10 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
         // Create random tensor using Engine operations
-        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape);
+        var randomTensor = Tensor<T>.CreateRandom(tensor.Shape.ToArray());
 
         // Shift to [-0.5, 0.5] range: randomTensor - 0.5
-        var halfTensor = new Tensor<T>(tensor.Shape);
+        var halfTensor = new Tensor<T>(tensor.Shape.ToArray());
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
 
@@ -455,7 +462,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         if (edgeFeatures.Shape.Length != 3)
         {
             throw new ArgumentException(
-                $"Edge features must be a 3D tensor [batch, numEdgeSlots, edgeFeatureDim], but got shape [{string.Join(", ", edgeFeatures.Shape)}].");
+                $"Edge features must be a 3D tensor [batch, numEdgeSlots, edgeFeatureDim], but got shape [{string.Join(", ", edgeFeatures.Shape.ToArray())}].");
         }
         _edgeFeatures = edgeFeatures;
     }
@@ -484,7 +491,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: need at least 2D for [nodes, features] or 3D for [batch, nodes, features]
@@ -594,10 +601,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                     for (int h = 0; h < _messageFeatures; h++)
                     {
                         T sum = _messageBias2[h];
-                        for (int k = 0; k < _messageFeatures; k++)
-                        {
-                            sum = NumOps.Add(sum, NumOps.Multiply(hidden[k], _messageWeights2[k, h]));
-                        }
+                        { var _w0 = new Vector<T>(_messageFeatures); for (int _i = 0; _i < _messageFeatures; _i++) _w0[_i] = _messageWeights2[_i, h]; sum = NumOps.Add(sum, Engine.DotProduct(hidden, _w0)); }
                         _lastMessages[b, i, j, h] = sum;
                     }
                 }
@@ -629,9 +633,10 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         // Step 3: Update node features (GRU-style update)
-        var output = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
-        _lastResetGate = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
-        _lastUpdateGate = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
+        // Rent tensors (all fully overwritten in forward pass)
+        var output = TensorAllocator.Rent<T>([batchSize, numNodes, _outputFeatures]);
+        _lastResetGate = TensorAllocator.Rent<T>([batchSize, numNodes, _outputFeatures]);
+        _lastUpdateGate = TensorAllocator.Rent<T>([batchSize, numNodes, _outputFeatures]);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -737,20 +742,20 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             throw new InvalidOperationException("Forward pass gate state incomplete.");
         }
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
 
         // Initialize gradients
-        _messageWeights1Gradient = new Tensor<T>(_messageWeights1.Shape);
-        _messageWeights2Gradient = new Tensor<T>(_messageWeights2.Shape);
+        _messageWeights1Gradient = new Tensor<T>(_messageWeights1.Shape.ToArray());
+        _messageWeights2Gradient = new Tensor<T>(_messageWeights2.Shape.ToArray());
         _messageBias1Gradient = new Tensor<T>([_messageFeatures]);
         _messageBias2Gradient = new Tensor<T>([_messageFeatures]);
-        _updateWeightsGradient = new Tensor<T>(_updateWeights.Shape);
-        _updateMessageWeightsGradient = new Tensor<T>(_updateMessageWeights.Shape);
+        _updateWeightsGradient = new Tensor<T>(_updateWeights.Shape.ToArray());
+        _updateMessageWeightsGradient = new Tensor<T>(_updateMessageWeights.Shape.ToArray());
         _updateBiasGradient = new Tensor<T>([_outputFeatures]);
-        _resetWeightsGradient = new Tensor<T>(_resetWeights.Shape);
-        _resetMessageWeightsGradient = new Tensor<T>(_resetMessageWeights.Shape);
+        _resetWeightsGradient = new Tensor<T>(_resetWeights.Shape.ToArray());
+        _resetMessageWeightsGradient = new Tensor<T>(_resetMessageWeights.Shape.ToArray());
         _resetBiasGradient = new Tensor<T>([_outputFeatures]);
 
         _messageWeights1Gradient.Fill(NumOps.Zero);
@@ -764,7 +769,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _resetMessageWeightsGradient.Fill(NumOps.Zero);
         _resetBiasGradient.Fill(NumOps.Zero);
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
         inputGradient.Fill(NumOps.Zero);
 
         // Gradient through aggregated messages
@@ -1083,6 +1088,46 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     }
 
     /// <inheritdoc/>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gMsgWeights1 = _messageWeights1Gradient != null ? new Vector<T>(_messageWeights1Gradient.ToArray()) : new Vector<T>(_messageWeights1.Length);
+        var gMsgWeights2 = _messageWeights2Gradient != null ? new Vector<T>(_messageWeights2Gradient.ToArray()) : new Vector<T>(_messageWeights2.Length);
+        var gMsgBias1 = _messageBias1Gradient != null ? new Vector<T>(_messageBias1Gradient.ToArray()) : new Vector<T>(_messageBias1.Length);
+        var gMsgBias2 = _messageBias2Gradient != null ? new Vector<T>(_messageBias2Gradient.ToArray()) : new Vector<T>(_messageBias2.Length);
+        var gUpdateWeights = _updateWeightsGradient != null ? new Vector<T>(_updateWeightsGradient.ToArray()) : new Vector<T>(_updateWeights.Length);
+        var gUpdateMsgWeights = _updateMessageWeightsGradient != null ? new Vector<T>(_updateMessageWeightsGradient.ToArray()) : new Vector<T>(_updateMessageWeights.Length);
+        var gUpdateBias = _updateBiasGradient != null ? new Vector<T>(_updateBiasGradient.ToArray()) : new Vector<T>(_updateBias.Length);
+        var gResetWeights = _resetWeightsGradient != null ? new Vector<T>(_resetWeightsGradient.ToArray()) : new Vector<T>(_resetWeights.Length);
+        var gResetMsgWeights = _resetMessageWeightsGradient != null ? new Vector<T>(_resetMessageWeightsGradient.ToArray()) : new Vector<T>(_resetMessageWeights.Length);
+        var gResetBias = _resetBiasGradient != null ? new Vector<T>(_resetBiasGradient.ToArray()) : new Vector<T>(_resetBias.Length);
+
+        var parts = new List<Vector<T>> { gMsgWeights1, gMsgWeights2, gMsgBias1, gMsgBias2, gUpdateWeights, gUpdateMsgWeights, gUpdateBias, gResetWeights, gResetMsgWeights, gResetBias };
+
+        if (_edgeWeights != null)
+        {
+            parts.Add(_edgeWeightsGradient != null ? new Vector<T>(_edgeWeightsGradient.ToArray()) : new Vector<T>(_edgeWeights.Length));
+        }
+
+        return Vector<T>.Concatenate(parts.ToArray());
+    }
+
+    /// <inheritdoc/>
+    public override void ClearGradients()
+    {
+        _messageWeights1Gradient = null;
+        _messageWeights2Gradient = null;
+        _messageBias1Gradient = null;
+        _messageBias2Gradient = null;
+        _updateWeightsGradient = null;
+        _updateMessageWeightsGradient = null;
+        _updateBiasGradient = null;
+        _resetWeightsGradient = null;
+        _resetMessageWeightsGradient = null;
+        _resetBiasGradient = null;
+        _edgeWeightsGradient = null;
+    }
+
+    /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
         var tensors = GetParameterTensors();
@@ -1104,7 +1149,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 array[i] = parameters[index++];
             }
 
-            var newTensor = new Tensor<T>(tensor.Shape);
+            var newTensor = new Tensor<T>(tensor.Shape.ToArray());
             for (int i = 0; i < array.Length; i++)
             {
                 newTensor[i] = array[i];
@@ -1205,7 +1250,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
         var input = inputs[0];
-        if (input.Shape == null || input.Shape.Length < 2)
+        if (input.Shape.ToArray() == null || input.Shape.Length < 2)
             throw new ArgumentException("Input must be at least 2D [numNodes, inputFeatures].");
 
         if (_adjacencyMatrix == null)
@@ -2090,7 +2135,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Output: h' = (1 - z) * h + z * candidate
         // Create ones tensor for (1 - z) computation
         var onesConst = TensorOperations<T>.Constant(
-            Tensor<T>.CreateOnes(updateGate.Value.Shape), "ones");
+            Tensor<T>.CreateOnes(updateGate.Value.Shape.ToArray()), "ones");
         var oneMinusZ = TensorOperations<T>.Subtract(onesConst, updateGate);
 
         var output = TensorOperations<T>.Add(

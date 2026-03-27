@@ -17,10 +17,41 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// VILA (NVIDIA, 2024) investigates pre-training strategies for vision-language models and
+/// demonstrates that pre-training with interleaved image-text data (where images and text
+/// alternate naturally, like web pages) significantly improves in-context learning capabilities.
+/// The model shows that unfreezing the language model during pre-training and using interleaved
+/// data together produce strong few-shot learning performance, where the model can learn new
+/// tasks from just a few examples shown in the prompt.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "VILA: On Pre-training for Visual Language Models" (NVIDIA, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> VILA is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> VILA from NVIDIA explores what makes pre-training work best
+/// for vision-language models. Its key finding is that training with interleaved image-text
+/// data — where images and text alternate naturally like on a web page — gives the model
+/// much better in-context learning abilities. This means you can show VILA a few examples
+/// of a new task in the prompt (like "here are 3 examples of product descriptions from
+/// product photos") and it will learn to do that task without any fine-tuning. It also
+/// found that keeping the language model unfrozen during pre-training is essential for
+/// this capability. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VILA model for in-context visual learning
+/// // pre-trained with interleaved image-text data
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new VILA&lt;double&gt;(architecture, "vila.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new VILA&lt;double&gt;(architecture, new VILAOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -90,7 +121,7 @@ public class VILA<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "VILA-Native" : "VILA-ONNX", Description = "VILA: VLM pre-trained with interleaved image-text data for enhanced in-context learning.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "VILA-Native" : "VILA-ONNX", Description = "VILA: VLM pre-trained with interleaved image-text data for enhanced in-context learning.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "VILA";
         m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

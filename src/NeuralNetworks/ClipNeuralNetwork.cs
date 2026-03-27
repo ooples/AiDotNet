@@ -19,6 +19,21 @@ namespace AiDotNet.NeuralNetworks;
 /// and images into a shared embedding space, enabling cross-modal similarity and zero-shot classification.
 /// </summary>
 /// <typeparam name="T">The numeric type used for computations (typically float or double).</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> CLIP learns to connect images and text by training on millions
+/// of image-caption pairs from the internet. It creates a shared space where similar images
+/// and text descriptions are close together. This enables powerful capabilities like zero-shot
+/// image classification (categorizing images without specific training), image search using
+/// text queries, and measuring how well an image matches a description.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new ClipOptions { ImageSize = 224, EmbeddingDim = 512 };
+/// var model = new ClipNeuralNetwork&lt;float&gt;(options);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 224, 224 });
+/// var embedding = model.Predict(image);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Multimodal)]
@@ -180,7 +195,6 @@ public class ClipNeuralNetwork<T> : NeuralNetworkBase<T>, IMultimodalEmbedding<T
         return new ModelMetadata<T>
         {
             Name = "ClipNeuralNetwork",
-            ModelType = ModelType.Transformer,
             FeatureCount = 3 * _imageSize * _imageSize,
             Complexity = _embeddingDimension * _maxSequenceLength,
             Description = $"CLIP multimodal embedding model with {_embeddingDimension}-dimensional embeddings",

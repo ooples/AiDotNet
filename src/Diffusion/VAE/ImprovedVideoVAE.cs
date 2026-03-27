@@ -31,6 +31,13 @@ namespace AiDotNet.Diffusion.VAE;
 /// Reference: Improved upon CogVideoX VAE architecture with motion-aware encoding, 2024-2025
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var vae = new ImprovedVideoVAE&lt;float&gt;(inputChannels: 3, latentChannels: 4, numFrames: 16);
+/// var video = Tensor&lt;float&gt;.Random(new[] { 1, 3, 16, 256, 256 });
+/// var latent = vae.Encode(video);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.FeatureExtraction)]
@@ -178,7 +185,7 @@ public class ImprovedVideoVAE<T> : VAEModelBase<T>
         // Split into mean and log-variance
         int halfLength = x.AsSpan().Length / 2;
         var meanShape = new int[x.Shape.Length];
-        Array.Copy(x.Shape, meanShape, x.Shape.Length);
+        Array.Copy(x.Shape.ToArray(), meanShape, x.Shape.Length);
         if (meanShape.Length > 1)
             meanShape[meanShape.Length - 3] = _latentChannels;
 
@@ -226,7 +233,7 @@ public class ImprovedVideoVAE<T> : VAEModelBase<T>
             int groupEnd = Math.Min(i + _temporalDownsample, latents.Count);
             int groupSize = groupEnd - i;
 
-            var avg = new Tensor<T>(latents[i].Shape);
+            var avg = new Tensor<T>(latents[i].Shape.ToArray());
             var avgSpan = avg.AsWritableSpan();
             var scale = NumOps.FromDouble(1.0 / groupSize);
 

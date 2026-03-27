@@ -36,6 +36,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Reference: Odena et al., "Conditional Image Synthesis with Auxiliary Classifier GANs" (2017)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new ACGANOptions { LatentSize = 100, NumClasses = 10 };
+/// var model = new ACGAN&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.Generative)]
@@ -232,14 +240,14 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         if (realLabels.Shape.Length != 2 || realLabels.Shape[1] != _numClasses)
         {
             throw new ArgumentException(
-                $"realLabels must be [batch,{_numClasses}], got [{string.Join(",", realLabels.Shape)}].",
+                $"realLabels must be [batch,{_numClasses}], got [{string.Join(",", realLabels.Shape.ToArray())}].",
                 nameof(realLabels));
         }
 
         if (fakeLabels.Shape.Length != 2 || fakeLabels.Shape[1] != _numClasses)
         {
             throw new ArgumentException(
-                $"fakeLabels must be [batch,{_numClasses}], got [{string.Join(",", fakeLabels.Shape)}].",
+                $"fakeLabels must be [batch,{_numClasses}], got [{string.Join(",", fakeLabels.Shape.ToArray())}].",
                 nameof(fakeLabels));
         }
 
@@ -434,7 +442,7 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         bool isReal,
         int batchSize)
     {
-        var gradients = new Tensor<T>(discOutput.Shape);
+        var gradients = new Tensor<T>(discOutput.Shape.ToArray());
         T authTarget = isReal ? NumOps.One : NumOps.Zero;
         T epsilon = NumOps.FromDouble(1e-10);
         T batchSizeT = NumOps.FromDouble(batchSize);
@@ -717,7 +725,6 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.AuxiliaryClassifierGAN,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "GeneratorParameters", Generator.GetParameterCount() },

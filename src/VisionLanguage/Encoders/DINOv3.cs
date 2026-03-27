@@ -21,8 +21,29 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "DINOv3: Self-Supervised Vision at Scale" (Meta, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> DINOv3 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> DINOv3 from Meta scales self-supervised vision training to
+/// 7 billion parameters on 1.7 billion images, outperforming even contrastive models like
+/// SigLIP 2 on most vision benchmarks. It uses improved training recipes with SwiGLU feed-
+/// forward networks and enhanced data augmentation, producing the strongest open-source
+/// self-supervised vision encoder available. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DINOv3 model for 7B-scale self-supervised visual features
+/// // outperforming SigLIP 2 on most vision benchmarks
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new DINOv3&lt;double&gt;(architecture, "dinov3.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new DINOv3&lt;double&gt;(architecture, new DINOv3Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
@@ -50,7 +71,7 @@ public class DINOv3<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "DINOv3-Native" : "DINOv3-ONNX", Description = "DINOv3: Self-Supervised Vision at Scale (Meta, 2025)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.EmbeddingDim, Complexity = _options.NumLayers }; m.AdditionalInfo["Architecture"] = "DINOv3"; m.AdditionalInfo["UseSwiGLU"] = _options.UseSwiGLU.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "DINOv3-Native" : "DINOv3-ONNX", Description = "DINOv3: Self-Supervised Vision at Scale (Meta, 2025)", FeatureCount = _options.EmbeddingDim, Complexity = _options.NumLayers }; m.AdditionalInfo["Architecture"] = "DINOv3"; m.AdditionalInfo["UseSwiGLU"] = _options.UseSwiGLU.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.EmbeddingDim); writer.Write(_options.NumLayers); writer.Write(_options.NumHeads); writer.Write(_options.NumRegisterTokens); writer.Write(_options.UseSwiGLU); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.EmbeddingDim = reader.ReadInt32(); _options.NumLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.NumRegisterTokens = reader.ReadInt32(); _options.UseSwiGLU = reader.ReadBoolean(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new DINOv3<T>(Architecture, mp, _options); return new DINOv3<T>(Architecture, _options); }

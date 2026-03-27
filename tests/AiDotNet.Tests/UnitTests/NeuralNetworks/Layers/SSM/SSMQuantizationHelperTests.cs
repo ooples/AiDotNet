@@ -117,7 +117,7 @@ public class SSMQuantizationHelperTests
         var input = CreateRandomTensor(new[] { 1, seqLen, modelDim });
         var output = block.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -197,7 +197,7 @@ public class SSMQuantizationHelperTests
         Assert.True(compressed.HasConvBuffer(0));
 
         var retrievedBuf = compressed.GetConvBuffer(0)!;
-        Assert.Equal(convBuf.Shape, retrievedBuf.Shape);
+        Assert.Equal(convBuf.Shape.ToArray(), retrievedBuf.Shape.ToArray());
     }
 
     [Fact]
@@ -322,7 +322,7 @@ public class SSMQuantizationHelperTests
         // Layer should still work after quantization
         var input = CreateRandomTensor(new[] { 1, 4, 32 });
         var output = layer.Forward(input);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -336,7 +336,7 @@ public class SSMQuantizationHelperTests
 
         var input = CreateRandomDoubleTensor(new[] { 1, 4, 32 });
         var output = block.Forward(input);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaNDouble(output));
     }
 

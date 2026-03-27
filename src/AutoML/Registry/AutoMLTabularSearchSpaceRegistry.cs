@@ -1,4 +1,4 @@
-using AiDotNet.Enums;
+using AiDotNet.Regression;
 
 namespace AiDotNet.AutoML.Registry;
 
@@ -16,380 +16,385 @@ namespace AiDotNet.AutoML.Registry;
 /// </remarks>
 internal static class AutoMLTabularSearchSpaceRegistry
 {
-    public static Dictionary<string, ParameterRange> GetDefaultSearchSpace(ModelType modelType)
+    private static readonly Dictionary<Type, Func<Dictionary<string, ParameterRange>>> _spaces = new()
     {
-        return modelType switch
+        [typeof(PolynomialRegression<>)] = () => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
         {
-            ModelType.PolynomialRegression => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+            ["Degree"] = new ParameterRange
             {
-                ["Degree"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 1,
-                    MaxValue = 6,
-                    Step = 1,
-                    DefaultValue = 2
-                }
-            },
+                Type = ParameterType.Integer,
+                MinValue = 1,
+                MaxValue = 6,
+                Step = 1,
+                DefaultValue = 2
+            }
+        },
 
-            ModelType.LogisticRegression => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+        [typeof(LogisticRegression<>)] = () => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+        {
+            ["MaxIterations"] = new ParameterRange
             {
-                ["MaxIterations"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 100,
-                    MaxValue = 5000,
-                    Step = 100,
-                    DefaultValue = 1000
-                },
-                ["LearningRate"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 1e-4,
-                    MaxValue = 0.1,
-                    UseLogScale = true,
-                    DefaultValue = 0.01
-                },
-                ["Tolerance"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 1e-6,
-                    MaxValue = 1e-2,
-                    UseLogScale = true,
-                    DefaultValue = 1e-4
-                }
+                Type = ParameterType.Integer,
+                MinValue = 100,
+                MaxValue = 5000,
+                Step = 100,
+                DefaultValue = 1000
             },
-
-            ModelType.MultinomialLogisticRegression => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+            ["LearningRate"] = new ParameterRange
             {
-                ["MaxIterations"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 100,
-                    MaxValue = 5000,
-                    Step = 100,
-                    DefaultValue = 1000
-                },
-                ["LearningRate"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 1e-4,
-                    MaxValue = 0.1,
-                    UseLogScale = true,
-                    DefaultValue = 0.01
-                },
-                ["Tolerance"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 1e-6,
-                    MaxValue = 1e-2,
-                    UseLogScale = true,
-                    DefaultValue = 1e-4
-                }
+                Type = ParameterType.Float,
+                MinValue = 1e-4,
+                MaxValue = 0.1,
+                UseLogScale = true,
+                DefaultValue = 0.01
             },
-
-            ModelType.RandomForest => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+            ["Tolerance"] = new ParameterRange
             {
-                ["NumberOfTrees"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 50,
-                    MaxValue = 500,
-                    Step = 10,
-                    DefaultValue = 100
-                },
-                ["MaxDepth"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 2,
-                    MaxValue = 50,
-                    Step = 1,
-                    DefaultValue = 10
-                },
-                ["MinSamplesSplit"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 2,
-                    MaxValue = 50,
-                    Step = 1,
-                    DefaultValue = 2
-                },
-                ["MaxFeatures"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 0.2,
-                    MaxValue = 1.0,
-                    Step = 0.05,
-                    DefaultValue = 1.0
-                }
-            },
+                Type = ParameterType.Float,
+                MinValue = 1e-6,
+                MaxValue = 1e-2,
+                UseLogScale = true,
+                DefaultValue = 1e-4
+            }
+        },
 
-            ModelType.DecisionTree => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+        [typeof(MultinomialLogisticRegression<>)] = () => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+        {
+            ["MaxIterations"] = new ParameterRange
             {
-                ["MaxDepth"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 2,
-                    MaxValue = 50,
-                    Step = 1,
-                    DefaultValue = 10
-                },
-                ["MinSamplesSplit"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 2,
-                    MaxValue = 50,
-                    Step = 1,
-                    DefaultValue = 2
-                },
-                ["MaxFeatures"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 0.2,
-                    MaxValue = 1.0,
-                    Step = 0.05,
-                    DefaultValue = 1.0
-                },
-                ["UseSoftTree"] = new ParameterRange
-                {
-                    Type = ParameterType.Boolean,
-                    DefaultValue = false
-                },
-                ["SoftTreeTemperature"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 0.1,
-                    MaxValue = 10.0,
-                    UseLogScale = true,
-                    DefaultValue = 1.0
-                }
+                Type = ParameterType.Integer,
+                MinValue = 100,
+                MaxValue = 5000,
+                Step = 100,
+                DefaultValue = 1000
             },
-
-            ModelType.ExtremelyRandomizedTrees => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+            ["LearningRate"] = new ParameterRange
             {
-                ["NumberOfTrees"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 50,
-                    MaxValue = 500,
-                    Step = 10,
-                    DefaultValue = 100
-                },
-                ["MaxDepth"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 2,
-                    MaxValue = 50,
-                    Step = 1,
-                    DefaultValue = 10
-                },
-                ["MinSamplesSplit"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 2,
-                    MaxValue = 50,
-                    Step = 1,
-                    DefaultValue = 2
-                },
-                ["MaxFeatures"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 0.2,
-                    MaxValue = 1.0,
-                    Step = 0.05,
-                    DefaultValue = 1.0
-                }
+                Type = ParameterType.Float,
+                MinValue = 1e-4,
+                MaxValue = 0.1,
+                UseLogScale = true,
+                DefaultValue = 0.01
             },
-
-            ModelType.AdaBoostR2 => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+            ["Tolerance"] = new ParameterRange
             {
-                ["NumberOfEstimators"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 25,
-                    MaxValue = 300,
-                    Step = 5,
-                    DefaultValue = 50
-                },
-                ["MaxDepth"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 1,
-                    MaxValue = 10,
-                    Step = 1,
-                    DefaultValue = 3
-                },
-                ["MinSamplesSplit"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 2,
-                    MaxValue = 50,
-                    Step = 1,
-                    DefaultValue = 2
-                }
-            },
+                Type = ParameterType.Float,
+                MinValue = 1e-6,
+                MaxValue = 1e-2,
+                UseLogScale = true,
+                DefaultValue = 1e-4
+            }
+        },
 
-            ModelType.QuantileRegressionForests => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+        [typeof(RandomForestRegression<>)] = () => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+        {
+            ["NumberOfTrees"] = new ParameterRange
             {
-                ["NumberOfTrees"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 50,
-                    MaxValue = 500,
-                    Step = 10,
-                    DefaultValue = 100
-                },
-                ["MaxDepth"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 2,
-                    MaxValue = 50,
-                    Step = 1,
-                    DefaultValue = 10
-                },
-                ["MinSamplesSplit"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 2,
-                    MaxValue = 50,
-                    Step = 1,
-                    DefaultValue = 2
-                },
-                ["MaxFeatures"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 0.2,
-                    MaxValue = 1.0,
-                    Step = 0.05,
-                    DefaultValue = 1.0
-                }
+                Type = ParameterType.Integer,
+                MinValue = 50,
+                MaxValue = 500,
+                Step = 10,
+                DefaultValue = 100
             },
-
-            ModelType.GradientBoosting => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+            ["MaxDepth"] = new ParameterRange
             {
-                ["NumberOfTrees"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 50,
-                    MaxValue = 500,
-                    Step = 10,
-                    DefaultValue = 100
-                },
-                ["LearningRate"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 0.01,
-                    MaxValue = 0.3,
-                    UseLogScale = true,
-                    DefaultValue = 0.1
-                },
-                ["SubsampleRatio"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 0.5,
-                    MaxValue = 1.0,
-                    Step = 0.05,
-                    DefaultValue = 1.0
-                },
-                ["MaxDepth"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 2,
-                    MaxValue = 20,
-                    Step = 1,
-                    DefaultValue = 10
-                }
+                Type = ParameterType.Integer,
+                MinValue = 2,
+                MaxValue = 50,
+                Step = 1,
+                DefaultValue = 10
             },
-
-            ModelType.KNearestNeighbors => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+            ["MinSamplesSplit"] = new ParameterRange
             {
-                ["K"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 1,
-                    MaxValue = 50,
-                    Step = 1,
-                    DefaultValue = 5
-                }
+                Type = ParameterType.Integer,
+                MinValue = 2,
+                MaxValue = 50,
+                Step = 1,
+                DefaultValue = 2
             },
-
-            ModelType.SupportVectorRegression => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+            ["MaxFeatures"] = new ParameterRange
             {
-                ["C"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 0.1,
-                    MaxValue = 100.0,
-                    UseLogScale = true,
-                    DefaultValue = 1.0
-                },
-                ["Epsilon"] = new ParameterRange
-                {
-                    Type = ParameterType.Float,
-                    MinValue = 0.001,
-                    MaxValue = 1.0,
-                    UseLogScale = true,
-                    DefaultValue = 0.1
-                }
-            },
+                Type = ParameterType.Float,
+                MinValue = 0.2,
+                MaxValue = 1.0,
+                Step = 0.05,
+                DefaultValue = 1.0
+            }
+        },
 
-            ModelType.TimeSeriesRegression => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+        [typeof(DecisionTreeRegression<>)] = () => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+        {
+            ["MaxDepth"] = new ParameterRange
             {
-                // ARIMA defaults (P/D/Q) with conservative bounds suitable for v1.
-                ["P"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 0,
-                    MaxValue = 5,
-                    Step = 1,
-                    DefaultValue = 1
-                },
-                ["D"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 0,
-                    MaxValue = 2,
-                    Step = 1,
-                    DefaultValue = 1
-                },
-                ["Q"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 0,
-                    MaxValue = 5,
-                    Step = 1,
-                    DefaultValue = 1
-                },
-                // Shared time-series regression knobs.
-                ["LagOrder"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 1,
-                    MaxValue = 12,
-                    Step = 1,
-                    DefaultValue = 1
-                },
-                ["IncludeTrend"] = new ParameterRange
-                {
-                    Type = ParameterType.Boolean,
-                    DefaultValue = true
-                },
-                ["SeasonalPeriod"] = new ParameterRange
-                {
-                    Type = ParameterType.Integer,
-                    MinValue = 0,
-                    MaxValue = 24,
-                    Step = 1,
-                    DefaultValue = 0
-                },
-                ["AutocorrelationCorrection"] = new ParameterRange
-                {
-                    Type = ParameterType.Boolean,
-                    DefaultValue = true
-                }
+                Type = ParameterType.Integer,
+                MinValue = 2,
+                MaxValue = 50,
+                Step = 1,
+                DefaultValue = 10
             },
+            ["MinSamplesSplit"] = new ParameterRange
+            {
+                Type = ParameterType.Integer,
+                MinValue = 2,
+                MaxValue = 50,
+                Step = 1,
+                DefaultValue = 2
+            },
+            ["MaxFeatures"] = new ParameterRange
+            {
+                Type = ParameterType.Float,
+                MinValue = 0.2,
+                MaxValue = 1.0,
+                Step = 0.05,
+                DefaultValue = 1.0
+            },
+            ["UseSoftTree"] = new ParameterRange
+            {
+                Type = ParameterType.Boolean,
+                DefaultValue = false
+            },
+            ["SoftTreeTemperature"] = new ParameterRange
+            {
+                Type = ParameterType.Float,
+                MinValue = 0.1,
+                MaxValue = 10.0,
+                UseLogScale = true,
+                DefaultValue = 1.0
+            }
+        },
 
-            _ => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
-        };
+        [typeof(ExtremelyRandomizedTreesRegression<>)] = () => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+        {
+            ["NumberOfTrees"] = new ParameterRange
+            {
+                Type = ParameterType.Integer,
+                MinValue = 50,
+                MaxValue = 500,
+                Step = 10,
+                DefaultValue = 100
+            },
+            ["MaxDepth"] = new ParameterRange
+            {
+                Type = ParameterType.Integer,
+                MinValue = 2,
+                MaxValue = 50,
+                Step = 1,
+                DefaultValue = 10
+            },
+            ["MinSamplesSplit"] = new ParameterRange
+            {
+                Type = ParameterType.Integer,
+                MinValue = 2,
+                MaxValue = 50,
+                Step = 1,
+                DefaultValue = 2
+            },
+            ["MaxFeatures"] = new ParameterRange
+            {
+                Type = ParameterType.Float,
+                MinValue = 0.2,
+                MaxValue = 1.0,
+                Step = 0.05,
+                DefaultValue = 1.0
+            }
+        },
+
+        [typeof(AdaBoostR2Regression<>)] = () => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+        {
+            ["NumberOfEstimators"] = new ParameterRange
+            {
+                Type = ParameterType.Integer,
+                MinValue = 25,
+                MaxValue = 300,
+                Step = 5,
+                DefaultValue = 50
+            },
+            ["MaxDepth"] = new ParameterRange
+            {
+                Type = ParameterType.Integer,
+                MinValue = 1,
+                MaxValue = 10,
+                Step = 1,
+                DefaultValue = 3
+            },
+            ["MinSamplesSplit"] = new ParameterRange
+            {
+                Type = ParameterType.Integer,
+                MinValue = 2,
+                MaxValue = 50,
+                Step = 1,
+                DefaultValue = 2
+            }
+        },
+
+        [typeof(QuantileRegressionForests<>)] = () => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+        {
+            ["NumberOfTrees"] = new ParameterRange
+            {
+                Type = ParameterType.Integer,
+                MinValue = 50,
+                MaxValue = 500,
+                Step = 10,
+                DefaultValue = 100
+            },
+            ["MaxDepth"] = new ParameterRange
+            {
+                Type = ParameterType.Integer,
+                MinValue = 2,
+                MaxValue = 50,
+                Step = 1,
+                DefaultValue = 10
+            },
+            ["MinSamplesSplit"] = new ParameterRange
+            {
+                Type = ParameterType.Integer,
+                MinValue = 2,
+                MaxValue = 50,
+                Step = 1,
+                DefaultValue = 2
+            },
+            ["MaxFeatures"] = new ParameterRange
+            {
+                Type = ParameterType.Float,
+                MinValue = 0.2,
+                MaxValue = 1.0,
+                Step = 0.05,
+                DefaultValue = 1.0
+            }
+        },
+
+        [typeof(GradientBoostingRegression<>)] = () => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+        {
+            ["NumberOfTrees"] = new ParameterRange
+            {
+                Type = ParameterType.Integer,
+                MinValue = 50,
+                MaxValue = 500,
+                Step = 10,
+                DefaultValue = 100
+            },
+            ["LearningRate"] = new ParameterRange
+            {
+                Type = ParameterType.Float,
+                MinValue = 0.01,
+                MaxValue = 0.3,
+                UseLogScale = true,
+                DefaultValue = 0.1
+            },
+            ["SubsampleRatio"] = new ParameterRange
+            {
+                Type = ParameterType.Float,
+                MinValue = 0.5,
+                MaxValue = 1.0,
+                Step = 0.05,
+                DefaultValue = 1.0
+            },
+            ["MaxDepth"] = new ParameterRange
+            {
+                Type = ParameterType.Integer,
+                MinValue = 2,
+                MaxValue = 20,
+                Step = 1,
+                DefaultValue = 10
+            }
+        },
+
+        [typeof(KNearestNeighborsRegression<>)] = () => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+        {
+            ["K"] = new ParameterRange
+            {
+                Type = ParameterType.Integer,
+                MinValue = 1,
+                MaxValue = 50,
+                Step = 1,
+                DefaultValue = 5
+            }
+        },
+
+        [typeof(SupportVectorRegression<>)] = () => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+        {
+            ["C"] = new ParameterRange
+            {
+                Type = ParameterType.Float,
+                MinValue = 0.1,
+                MaxValue = 100.0,
+                UseLogScale = true,
+                DefaultValue = 1.0
+            },
+            ["Epsilon"] = new ParameterRange
+            {
+                Type = ParameterType.Float,
+                MinValue = 0.001,
+                MaxValue = 1.0,
+                UseLogScale = true,
+                DefaultValue = 0.1
+            }
+        },
+
+        [typeof(TimeSeriesRegression<>)] = () => new Dictionary<string, ParameterRange>(StringComparer.Ordinal)
+        {
+            ["P"] = new ParameterRange
+            {
+                Type = ParameterType.Integer,
+                MinValue = 0,
+                MaxValue = 5,
+                Step = 1,
+                DefaultValue = 1
+            },
+            ["D"] = new ParameterRange
+            {
+                Type = ParameterType.Integer,
+                MinValue = 0,
+                MaxValue = 2,
+                Step = 1,
+                DefaultValue = 1
+            },
+            ["Q"] = new ParameterRange
+            {
+                Type = ParameterType.Integer,
+                MinValue = 0,
+                MaxValue = 5,
+                Step = 1,
+                DefaultValue = 1
+            },
+            ["LagOrder"] = new ParameterRange
+            {
+                Type = ParameterType.Integer,
+                MinValue = 1,
+                MaxValue = 12,
+                Step = 1,
+                DefaultValue = 1
+            },
+            ["IncludeTrend"] = new ParameterRange
+            {
+                Type = ParameterType.Boolean,
+                DefaultValue = true
+            },
+            ["SeasonalPeriod"] = new ParameterRange
+            {
+                Type = ParameterType.Integer,
+                MinValue = 0,
+                MaxValue = 24,
+                Step = 1,
+                DefaultValue = 0
+            },
+            ["AutocorrelationCorrection"] = new ParameterRange
+            {
+                Type = ParameterType.Boolean,
+                DefaultValue = true
+            }
+        },
+    };
+
+    public static Dictionary<string, ParameterRange> GetDefaultSearchSpace(Type modelType)
+    {
+        var lookupType = modelType.IsGenericType ? modelType.GetGenericTypeDefinition() : modelType;
+
+        if (_spaces.TryGetValue(lookupType, out var factory))
+        {
+            return factory();
+        }
+
+        return new Dictionary<string, ParameterRange>(StringComparer.Ordinal);
     }
 }

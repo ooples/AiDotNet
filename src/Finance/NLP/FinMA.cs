@@ -18,6 +18,28 @@ namespace AiDotNet.Finance.NLP;
 /// FinMA (Financial Multi-Agent) neural network model for collaborative financial task solving.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> FinMA is a financial language model from the PIXIU project
+/// that can handle a wide range of financial tasks including sentiment analysis, named
+/// entity recognition in SEC filings, stock movement prediction, and financial question
+/// answering. It was instruction-tuned on 136K financial task examples, making it a
+/// versatile financial AI assistant.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for instruction-tuned financial multi-task model (2048 tokens)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 2048, inputWidth: 1, inputDepth: 1, outputSize: 32000);
+///
+/// // Training mode: multi-task financial LLM for sentiment, NER, and QA
+/// var model = new FinMA&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained FinMA model
+/// var onnxModel = new FinMA&lt;double&gt;(architecture, "finma.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -196,7 +218,7 @@ public class FinMA<T> : FinancialNLPModelBase<T>
     {
         SetTrainingMode(true);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(grad, output.Shape));
+        Backward(Tensor<T>.FromVector(grad, output.Shape.ToArray()));
         _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
     }

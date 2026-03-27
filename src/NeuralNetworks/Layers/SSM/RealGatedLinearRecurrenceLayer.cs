@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -46,6 +48,11 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerCategory(LayerCategory.Recurrent)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
 public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
 {
     // Configuration
@@ -143,12 +150,15 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         int sequenceLength,
         int modelDimension = 256,
         int recurrenceDimension = -1,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, modelDimension],
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         if (modelDimension <= 0)
             throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));
 
@@ -189,17 +199,13 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
 
     private void InitializeTensor(Tensor<T> tensor)
     {
-        int fanIn = tensor.Shape[0];
-        int fanOut = tensor.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
     }
 
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -278,7 +284,7 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         Tensor<T> x, Tensor<T> recGate, Tensor<T> inpGate,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _recurrenceDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _recurrenceDimension });
         var h = new Tensor<T>(new[] { batchSize, _recurrenceDimension });
         var allHidden = new Tensor<T>(new[] { batchSize, seqLen + 1, _recurrenceDimension });
         var allDecay = new Tensor<T>(new[] { batchSize, seqLen, _recurrenceDimension });
@@ -438,7 +444,7 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
             var dPFromV = Engine.TensorMatMul(dV, _valueProjectionWeights.Transpose([1, 0]));
 
             // Gate gradients through sigmoid: d/dx sig(x) = sig(x)*(1-sig(x))
-            var ones = new Tensor<T>(r_t.Shape);
+            var ones = new Tensor<T>(r_t.Shape.ToArray());
             for (int idx = 0; idx < ones.Length; idx++) ones[idx] = NumOps.One;
 
             var rSigDeriv = Engine.TensorMultiply(r_t, Engine.TensorSubtract(ones, r_t));
@@ -544,6 +550,32 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         _valueProjectionWeights, _decayParam,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
+            new Vector<T>(_recurrenceGateWeightsGradient!.ToArray()),
+            new Vector<T>(_recurrenceGateBiasGradient!.ToArray()),
+            new Vector<T>(_inputGateWeightsGradient!.ToArray()),
+            new Vector<T>(_inputGateBiasGradient!.ToArray()),
+            new Vector<T>(_valueProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_decayParamGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _inputProjectionWeightsGradient = null; _inputProjectionBiasGradient = null;
+        _recurrenceGateWeightsGradient = null; _recurrenceGateBiasGradient = null;
+        _inputGateWeightsGradient = null; _inputGateBiasGradient = null;
+        _valueProjectionWeightsGradient = null; _decayParamGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

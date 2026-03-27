@@ -38,6 +38,19 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// ECCV 2022.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a RIFE model for real-time video frame interpolation
+/// var rife = new RIFE&lt;double&gt;();
+///
+/// // Or configure with custom flow estimation parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 6, outputSize: 3);
+/// var model = new RIFE&lt;double&gt;(architecture, numFeatures: 64, numFlowBlocks: 8);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -403,7 +416,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
 
         // 2. Backward through flow blocks with gradient accumulation for flow
         var cachedFlow = _cachedFlow ?? throw new InvalidOperationException("Cached flow has not been initialized.");
-        var flowGradAccumulator = new Tensor<T>(cachedFlow.Shape);
+        var flowGradAccumulator = new Tensor<T>(cachedFlow.Shape.ToArray());
         var fusedGradient = gradient;
 
         for (int i = _flowBlocks.Count - 1; i >= 0; i--)
@@ -518,8 +531,8 @@ public class RIFE<T> : FrameInterpolationBase<T>
         int height = outputGrad.Shape[2];
         int width = outputGrad.Shape[3];
 
-        var frameGrad = new Tensor<T>(inputFrame.Shape);
-        var flowGrad = new Tensor<T>(flow.Shape);
+        var frameGrad = new Tensor<T>(inputFrame.Shape.ToArray());
+        var flowGrad = new Tensor<T>(flow.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -685,7 +698,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
         int height = encoderGrad.Shape[2];
         int width = encoderGrad.Shape[3];
 
-        var result = new Tensor<T>(encoderGrad.Shape);
+        var result = new Tensor<T>(encoderGrad.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -845,7 +858,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var result = new Tensor<T>(image.Shape);
+        var result = new Tensor<T>(image.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -1084,7 +1097,6 @@ public class RIFE<T> : FrameInterpolationBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.FrameInterpolation,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

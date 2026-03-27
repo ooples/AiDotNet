@@ -25,6 +25,19 @@ namespace AiDotNet.Video.Motion;
 /// MemFlow augments flow estimation with an explicit memory module that aggregates historical motion information for improved temporal consistency.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MemFlow model for memory-augmented optical flow estimation
+/// var memFlow = new MemFlow&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new MemFlow&lt;double&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -133,7 +146,7 @@ public class MemFlow<T> : OpticalFlowBase<T>
             throw new ArgumentException($"frame1 must be at least rank 3 [C,H,W], got rank {frame1.Rank}.", nameof(frame1));
         if (frame0.Shape[0] != frame1.Shape[0] || frame0.Shape[1] != frame1.Shape[1] || frame0.Shape[2] != frame1.Shape[2])
             throw new ArgumentException(
-                $"Frame shapes must match. frame0: [{string.Join(",", frame0.Shape)}], frame1: [{string.Join(",", frame1.Shape)}].",
+                $"Frame shapes must match. frame0: [{string.Join(",", frame0.Shape.ToArray())}], frame1: [{string.Join(",", frame1.Shape.ToArray())}].",
                 nameof(frame1));
         int height = frame0.Shape[1];
         int width = frame0.Shape[2];
@@ -174,10 +187,10 @@ public class MemFlow<T> : OpticalFlowBase<T>
         {
             if (output.Shape[d] != expectedOutput.Shape[d])
                 throw new ArgumentException(
-                    $"Shape mismatch at dimension {d}: model output [{string.Join(",", output.Shape)}] vs expected [{string.Join(",", expectedOutput.Shape)}].",
+                    $"Shape mismatch at dimension {d}: model output [{string.Join(",", output.Shape.ToArray())}] vs expected [{string.Join(",", expectedOutput.Shape.ToArray())}].",
                     nameof(expectedOutput));
         }
-        var gradient = new Tensor<T>(output.Shape);
+        var gradient = new Tensor<T>(output.Shape.ToArray());
         for (int i = 0; i < output.Length; i++)
         {
             gradient.Data.Span[i] = NumOps.Subtract(output.Data.Span[i], expectedOutput.Data.Span[i]);
@@ -236,7 +249,6 @@ public class MemFlow<T> : OpticalFlowBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "MemFlow" },

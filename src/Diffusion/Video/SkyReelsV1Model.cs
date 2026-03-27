@@ -35,6 +35,14 @@ namespace AiDotNet.Diffusion.Video;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 720, Width = 1280, NumInferenceSteps = 30 };
+/// var model = new SkyReelsV1Model&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 49, 90, 160 });
+/// var video = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -179,7 +187,6 @@ public class SkyReelsV1Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "SkyReelsV1",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "SkyReels V1 human-centric video generation model.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

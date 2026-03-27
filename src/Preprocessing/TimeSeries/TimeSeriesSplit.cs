@@ -234,8 +234,8 @@ public class TimeSeriesSplit
     ///         return CalculateMSE(predictions, test);
     ///     });
     ///
-    /// Console.WriteLine($"Mean Score: {scores.Average():F4}");
-    /// Console.WriteLine($"Std Dev: {StandardDeviation(scores):F4}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// </code>
     /// </example>
     public double[] CrossValidate<TData>(TData[] data, Func<TData[], TData[], double> evaluator)

@@ -325,7 +325,6 @@ public class CogVideoModel<T> : VideoDiffusionModelBase<T>
         {
             Name = $"CogVideoX-{_variant}",
             Version = _variant,
-            ModelType = ModelType.NeuralNetwork,
             Description = $"CogVideoX-{_variant} text-to-video model with 3D causal VAE and diffusion transformer",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

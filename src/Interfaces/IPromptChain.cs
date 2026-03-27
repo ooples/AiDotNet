@@ -176,8 +176,8 @@ public interface IPromptChain
 /// <code>
 /// var result = await chain.ExecuteAsync("Input...");
 ///
-/// Console.WriteLine($"Final: {result.FinalOutput}");
-/// Console.WriteLine($"Total time: {result.TotalDuration}ms");
+/// // Result is available in the returned value
+/// // Result is available in the returned value
 ///
 /// foreach (var step in result.StepResults)
 /// {

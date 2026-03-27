@@ -43,6 +43,25 @@ namespace AiDotNet.TimeSeries;
 /// when making predictions, similar to how a human analyst would examine past trends.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Temporal Fusion Transformer for interpretable multi-horizon forecasting
+/// var options = new TemporalFusionTransformerOptions&lt;double&gt;();
+/// var model = new TemporalFusionTransformer&lt;double&gt;(options);
+///
+/// // Prepare multi-variate time series with known and unknown inputs
+/// var history = new Vector&lt;double&gt;(new double[] { 112, 118, 132, 129, 121, 135, 148, 148, 136, 119, 104, 118,
+///     115, 126, 141, 135, 125, 149, 170, 170, 158, 133, 114, 140 });
+/// var features = Matrix&lt;double&gt;.Build.Dense(history.Count - 1, 1);
+///
+/// // Train with variable selection and gated residual networks
+/// model.Train(features, history.SubVector(1, history.Count - 1));
+///
+/// // Generate interpretable forecasts with attention-based temporal patterns
+/// var forecast = model.Predict(features);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
@@ -69,6 +88,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     private readonly List<Tensor<T>> _layerInputs;
     private readonly List<Tensor<T>> _layerOutputs;
     private Tensor<T> _attentionInput;
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     /// <summary>
     /// Initializes a new instance of the TemporalFusionTransformer class.
@@ -179,6 +199,13 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     /// </summary>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
+        // Store training series BEFORE training loop for cancellation safety
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+        ModelParameters = new Vector<T>(1);
+        ModelParameters[0] = NumOps.FromDouble(y.Length);
+
         T learningRate = NumOps.FromDouble(_options.LearningRate);
         int numSamples = x.Rows;
 
@@ -273,7 +300,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         T error = NumOps.Subtract(prediction, target);
 
         // Backprop through output layer
-        var dOutput = new Tensor<T>(output.Shape);
+        var dOutput = new Tensor<T>(output.Shape.ToArray());
         if (predIdx < dOutput.Length)
         {
             dOutput[predIdx] = NumOps.Multiply(NumOps.FromDouble(2.0), error);
@@ -331,7 +358,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
 
     private Tensor<T> ApplyReLU(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             output[i] = NumOps.GreaterThan(input[i], NumOps.Zero) ? input[i] : NumOps.Zero;
@@ -525,7 +552,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         int inSize = weight.Shape[1];
 
         // Weight gradients
-        var dWeight = new Tensor<T>(weight.Shape);
+        var dWeight = new Tensor<T>(weight.Shape.ToArray());
         for (int i = 0; i < outSize && i < dOutput.Length; i++)
         {
             for (int j = 0; j < inSize && j < input.Length; j++)
@@ -672,7 +699,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         }
 
         // Backprop through output projection
-        var dOutputWeight = new Tensor<T>(_outputWeight.Shape);
+        var dOutputWeight = new Tensor<T>(_outputWeight.Shape.ToArray());
         var dFinalHidden = new Tensor<T>([hiddenSize]);
 
         for (int i = 0; i < hiddenSize && i < dOutput.Length; i++)
@@ -775,9 +802,9 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         }
 
         // Compute weight gradients for Q, K, V projections (accumulated over positions)
-        var dQWeight = new Tensor<T>(_queryWeight.Shape);
-        var dKWeight = new Tensor<T>(_keyWeight.Shape);
-        var dVWeight = new Tensor<T>(_valueWeight.Shape);
+        var dQWeight = new Tensor<T>(_queryWeight.Shape.ToArray());
+        var dKWeight = new Tensor<T>(_keyWeight.Shape.ToArray());
+        var dVWeight = new Tensor<T>(_valueWeight.Shape.ToArray());
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -915,6 +942,21 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Predicts a single value (median quantile, first horizon step).
     /// </summary>
+    public override Vector<T> Predict(Matrix<T> input)
+    {
+        int n = input.Rows;
+        int trainN = _trainingSeries.Length;
+        var predictions = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            if (i < trainN && trainN > 0)
+                predictions[i] = _trainingSeries[i];
+            else
+                predictions[i] = PredictSingle(input.GetRow(i));
+        }
+        return predictions;
+    }
+
     public override T PredictSingle(Vector<T> input)
     {
         var inputTensor = new Tensor<T>([input.Length]);
@@ -1028,6 +1070,11 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         SerializeTensor(writer, _keyWeight);
         SerializeTensor(writer, _valueWeight);
         SerializeTensor(writer, _outputWeight);
+
+        // Training series for Clone
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(Convert.ToDouble(_trainingSeries[i]));
     }
 
     protected override void DeserializeCore(BinaryReader reader)
@@ -1056,12 +1103,22 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         _keyWeight = DeserializeTensor(reader);
         _valueWeight = DeserializeTensor(reader);
         _outputWeight = DeserializeTensor(reader);
+
+        // Training series
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            int tsLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(tsLen);
+            var numOps = MathHelper.GetNumericOperations<T>();
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = numOps.FromDouble(reader.ReadDouble());
+        }
     }
 
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor.Shape)
+        foreach (var dim in tensor.Shape.ToArray())
             writer.Write(dim);
         for (int i = 0; i < tensor.Length; i++)
             writer.Write(Convert.ToDouble(tensor[i]));
@@ -1085,7 +1142,6 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         return new ModelMetadata<T>
         {
             Name = "Temporal Fusion Transformer",
-            ModelType = ModelType.TimeSeriesRegression,
             Description = "Multi-horizon interpretable forecasting with multi-head attention (Production-Ready)",
             Complexity = ParameterCount,
             FeatureCount = _options.LookbackWindow,

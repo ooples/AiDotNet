@@ -244,7 +244,7 @@ public class BarkModel<T> : AudioDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "Bark", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Bark", Version = "1.0",
             Description = "Bark GPT-based text-to-audio generation with multi-lingual speech and sound effects",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

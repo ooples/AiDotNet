@@ -286,7 +286,6 @@ public class QuailVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
         {
             Name = _useNativeMode ? "QuailVAD-Native" : "QuailVAD-ONNX",
             Description = "Quail VAD lightweight on-device voice activity detection (2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.HiddenDim, Complexity = _options.NumCNNLayers
         };
         m.AdditionalInfo["FrameSizeMs"] = _options.FrameSizeMs.ToString();
         m.AdditionalInfo["RNNHiddenSize"] = _options.RNNHiddenSize.ToString();

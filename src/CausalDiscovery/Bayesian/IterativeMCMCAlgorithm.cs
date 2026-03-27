@@ -58,9 +58,11 @@ public class IterativeMCMCAlgorithm<T> : BayesianCausalBase<T>
     public IterativeMCMCAlgorithm(CausalDiscoveryOptions? options = null)
     {
         ApplyBayesianOptions(options);
-        if (NumSamples < 1)
-            NumSamples = 1000;
+        if (NumSamples < 100)
+            throw new ArgumentException("NumSamples must be at least 100 for MCMC convergence.");
         _maxParents = options?.MaxParents ?? 5;
+        if (_maxParents < 1)
+            throw new ArgumentException("MaxParents must be at least 1.");
         _numRestarts = 5;
     }
 

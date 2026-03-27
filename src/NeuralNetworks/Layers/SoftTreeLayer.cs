@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
@@ -23,6 +25,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+[LayerCategory(LayerCategory.Other)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, 2")]
 public class SoftTreeLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
@@ -63,6 +68,10 @@ public class SoftTreeLayer<T> : LayerBase<T>
     public override bool SupportsJitCompilation => false;  // Complex tree structure not easily JIT-compiled
 
     /// <inheritdoc/>
+    private Tensor<T>? _cachedRightProbs;
+    private Tensor<T>? _cachedNodeProbs;
+    private Tensor<T>? _cachedSplitLogits;
+
     public override int ParameterCount =>
         _splitWeights.Length + _splitBiases.Length + _leafValues.Length;
 
@@ -153,10 +162,14 @@ public class SoftTreeLayer<T> : LayerBase<T>
         var tempScale = NumOps.FromDouble(1.0 / _temperature);
         splitLogits = splitLogits.Multiply(tempScale);
 
+        // Cache split logits for backward
+        _cachedSplitLogits = splitLogits;
+
         // Apply sigmoid to get right-branch probabilities
         var rightProbs = Engine.Sigmoid(splitLogits);
+        _cachedRightProbs = rightProbs;
 
-        // Compute path probabilities to each leaf
+        // Compute path probabilities to each leaf (also caches nodeProbs)
         _pathProbabilities = ComputePathProbabilities(rightProbs, batchSize);
 
         // Weighted sum of leaf values: pathProbs @ leafValues
@@ -212,6 +225,7 @@ public class SoftTreeLayer<T> : LayerBase<T>
             }
         }
 
+        _cachedNodeProbs = nodeProbs;
         return pathProbs;
     }
 
@@ -230,9 +244,9 @@ public class SoftTreeLayer<T> : LayerBase<T>
         int batchSize = _lastInput.Shape[0];
 
         // Initialize gradients
-        _splitWeightsGrad = new Tensor<T>(_splitWeights.Shape);
-        _splitBiasesGrad = new Tensor<T>(_splitBiases.Shape);
-        _leafValuesGrad = new Tensor<T>(_leafValues.Shape);
+        _splitWeightsGrad = new Tensor<T>(_splitWeights.Shape.ToArray());
+        _splitBiasesGrad = new Tensor<T>(_splitBiases.Shape.ToArray());
+        _leafValuesGrad = new Tensor<T>(_leafValues.Shape.ToArray());
 
         // Gradient w.r.t. leaf values: pathProbs^T @ outputGradient
         // pathProbs: [batchSize, numLeaves], outputGradient: [batchSize, outputDim]
@@ -243,9 +257,68 @@ public class SoftTreeLayer<T> : LayerBase<T>
         var leafValuesT = Engine.TensorTranspose(_leafValues);
         var pathProbsGrad = Engine.TensorMatMul(outputGradient, leafValuesT);
 
-        // Backpropagate through tree structure to get gradients for split parameters
-        // This is a simplified implementation - full implementation would track all paths
-        var inputGrad = new Tensor<T>([batchSize, _inputDim]);
+        // Backpropagate pathProbsGrad through the tree to get dL/d(rightProbs)
+        // Each internal node n with rightProb r_n sends:
+        //   left child: nodeProb * (1-r_n), right child: nodeProb * r_n
+        // Gradient: dL/d(r_n) = sum over descendants of (dL/d(leafProb) * d(leafProb)/d(r_n))
+        var dRightProbs = new Tensor<T>([batchSize, _numInternalNodes]);
+        var dNodeProbs = new Tensor<T>(_cachedNodeProbs!.Shape.ToArray());
+
+        // Seed leaf gradients from pathProbsGrad
+        for (int b = 0; b < batchSize; b++)
+            for (int leaf = 0; leaf < _numLeaves; leaf++)
+                dNodeProbs[b * dNodeProbs.Shape[1] + _numInternalNodes + leaf] = pathProbsGrad[b * _numLeaves + leaf];
+
+        // Backprop through tree (reverse level order)
+        for (int node = _numInternalNodes - 1; node >= 0; node--)
+        {
+            int leftChild = 2 * node + 1;
+            int rightChild = 2 * node + 2;
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                T nodeProb = _cachedNodeProbs[b * _cachedNodeProbs.Shape[1] + node];
+                T rightP = _cachedRightProbs![b * _numInternalNodes + node];
+                T leftP = NumOps.Subtract(NumOps.One, rightP);
+
+                T dLeft = (leftChild < dNodeProbs.Shape[1]) ? dNodeProbs[b * dNodeProbs.Shape[1] + leftChild] : NumOps.Zero;
+                T dRight = (rightChild < dNodeProbs.Shape[1]) ? dNodeProbs[b * dNodeProbs.Shape[1] + rightChild] : NumOps.Zero;
+
+                // dL/d(rightProb_n) = dRight * nodeProb - dLeft * nodeProb
+                dRightProbs[b * _numInternalNodes + node] = NumOps.Multiply(nodeProb, NumOps.Subtract(dRight, dLeft));
+
+                // dL/d(nodeProb_n) += dLeft * leftP + dRight * rightP
+                // (propagate gradient to parent)
+                int parent = (node - 1) / 2;
+                if (node > 0)
+                {
+                    T dNode = NumOps.Add(NumOps.Multiply(dLeft, leftP), NumOps.Multiply(dRight, rightP));
+                    dNodeProbs[b * dNodeProbs.Shape[1] + node] = NumOps.Add(
+                        dNodeProbs[b * dNodeProbs.Shape[1] + node], dNode);
+                }
+            }
+        }
+
+        // dL/d(splitLogits) = dL/d(rightProbs) * sigmoid'(splitLogits) / temperature
+        // sigmoid'(x) = sigmoid(x) * (1 - sigmoid(x))
+        var sigmoidDeriv = new Tensor<T>([batchSize, _numInternalNodes]);
+        T invTemp = NumOps.FromDouble(1.0 / _temperature);
+        for (int i = 0; i < batchSize * _numInternalNodes; i++)
+        {
+            T s = _cachedRightProbs![i];
+            sigmoidDeriv[i] = NumOps.Multiply(NumOps.Multiply(s, NumOps.Subtract(NumOps.One, s)), invTemp);
+        }
+        var dSplitLogits = Engine.TensorMultiply(dRightProbs, sigmoidDeriv);
+
+        // dL/d(W_split) = input^T @ dSplitLogits  [inputDim, numInternalNodes]
+        var inputT = Engine.TensorTranspose(_lastInput);
+        _splitWeightsGrad = Engine.TensorTranspose(Engine.TensorMatMul(inputT, dSplitLogits));
+
+        // dL/d(b_split) = sum_batch(dSplitLogits)  [numInternalNodes]
+        _splitBiasesGrad = Engine.ReduceSum(dSplitLogits, new[] { 0 });
+
+        // Input gradient: dSplitLogits @ W_split  [batchSize, inputDim]
+        var inputGrad = Engine.TensorMatMul(dSplitLogits, _splitWeights);
 
         return inputGrad;
     }
@@ -349,6 +422,25 @@ public class SoftTreeLayer<T> : LayerBase<T>
         return gradients;
     }
 
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _splitWeightsGrad = null; _splitBiasesGrad = null; _leafValuesGrad = null;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
+        int idx = 0;
+        var swSpan = _splitWeights.Data.Span;
+        for (int i = 0; i < _splitWeights.Length; i++) swSpan[i] = parameters[idx++];
+        var sbSpan = _splitBiases.Data.Span;
+        for (int i = 0; i < _splitBiases.Length; i++) sbSpan[i] = parameters[idx++];
+        var lvSpan = _leafValues.Data.Span;
+        for (int i = 0; i < _leafValues.Length; i++) lvSpan[i] = parameters[idx++];
+    }
+
     /// <inheritdoc/>
     public override void ResetState()
     {
@@ -446,7 +538,7 @@ public class SoftTreeLayer<T> : LayerBase<T>
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor.Shape)
+        foreach (var dim in tensor.Shape.ToArray())
         {
             writer.Write(dim);
         }

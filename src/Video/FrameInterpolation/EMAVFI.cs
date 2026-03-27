@@ -181,7 +181,6 @@ public class EMAVFI<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "EMAVFI-Native" : "EMAVFI-ONNX",
             Description = $"EMA-VFI {_options.Variant} swin cross-attention frame interpolation (Zhang et al., CVPR 2023)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumSwinBlocks * _options.NumScales
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

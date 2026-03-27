@@ -123,33 +123,28 @@ public class EllipticEnvelopeDetector<T> : AnomalyDetectorBase<T>
         var scores = new Vector<T>(X.Rows);
         int d = X.Columns;
 
+        // Pre-allocate reusable vectors outside the loop
+        var diff = new Vector<T>(d);
+        var temp = new Vector<T>(d);
+        var precRow = new Vector<T>(d);
+        var location = _location ?? throw new InvalidOperationException("_location has not been initialized.");
+        var precMat = _precisionMatrix ?? throw new InvalidOperationException("_precisionMatrix has not been initialized.");
+
         for (int i = 0; i < X.Rows; i++)
         {
             // Compute Mahalanobis distance: sqrt((x - mu)' * Precision * (x - mu))
-            var diff = new Vector<T>(d);
             for (int j = 0; j < d; j++)
-            {
-                diff[j] = NumOps.Subtract(X[i, j], (_location ?? throw new InvalidOperationException("_location has not been initialized."))[j]);
-            }
+                diff[j] = NumOps.Subtract(X[i, j], location[j]);
 
             // temp = Precision * diff
-            var temp = new Vector<T>(d);
             for (int j = 0; j < d; j++)
             {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < d; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply((_precisionMatrix ?? throw new InvalidOperationException("_precisionMatrix has not been initialized."))[j, k], diff[k]));
-                }
-                temp[j] = sum;
+                for (int k = 0; k < d; k++) precRow[k] = precMat[j, k];
+                temp[j] = Engine.DotProduct(precRow, diff);
             }
 
             // distance^2 = diff' * temp
-            T distSquared = NumOps.Zero;
-            for (int j = 0; j < d; j++)
-            {
-                distSquared = NumOps.Add(distSquared, NumOps.Multiply(diff[j], temp[j]));
-            }
+            T distSquared = Engine.DotProduct(diff, temp);
 
             scores[i] = NumOps.Sqrt(distSquared);
         }
@@ -197,10 +192,7 @@ public class EllipticEnvelopeDetector<T> : AnomalyDetectorBase<T>
                 }
 
                 T distSquared = NumOps.Zero;
-                for (int j = 0; j < d; j++)
-                {
-                    distSquared = NumOps.Add(distSquared, NumOps.Multiply(diff[j], temp[j]));
-                }
+                distSquared = NumOps.Add(distSquared, Engine.DotProduct(diff, temp));
 
                 distances[i] = NumOps.ToDouble(distSquared);
             }
@@ -275,14 +267,14 @@ public class EllipticEnvelopeDetector<T> : AnomalyDetectorBase<T>
         {
             for (int j = i; j < d; j++)
             {
-                T sum = NumOps.Zero;
+                var centI = new Vector<T>(n);
+                var centJ = new Vector<T>(n);
                 for (int k = 0; k < n; k++)
                 {
-                    T diffI = NumOps.Subtract(X[k, i], mean[i]);
-                    T diffJ = NumOps.Subtract(X[k, j], mean[j]);
-                    sum = NumOps.Add(sum, NumOps.Multiply(diffI, diffJ));
+                    centI[k] = NumOps.Subtract(X[k, i], mean[i]);
+                    centJ[k] = NumOps.Subtract(X[k, j], mean[j]);
                 }
-                cov[i, j] = NumOps.Divide(sum, NumOps.FromDouble(n - 1));
+                cov[i, j] = NumOps.Divide(Engine.DotProduct(centI, centJ), NumOps.FromDouble(n - 1));
                 cov[j, i] = cov[i, j];
             }
         }

@@ -39,6 +39,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Li et al., "BrushEdit: All-In-One Image Inpainting and Editing", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new BrushEditModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var edited = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.ImageEditing)]
@@ -132,7 +140,7 @@ public class BrushEditModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "BrushEdit", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "BrushEdit", Version = "1.0",
             Description = "LLM-guided automatic mask generation with BrushNet dual-branch inpainting",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

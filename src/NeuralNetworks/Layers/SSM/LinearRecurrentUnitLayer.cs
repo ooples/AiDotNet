@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -71,6 +73,11 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerCategory(LayerCategory.Recurrent)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
 public class LinearRecurrentUnitLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
@@ -184,12 +191,15 @@ public class LinearRecurrentUnitLayer<T> : LayerBase<T>
         int sequenceLength,
         int modelDimension = 256,
         int stateDimension = 256,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, modelDimension],
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         if (sequenceLength <= 0)
             throw new ArgumentException($"Sequence length ({sequenceLength}) must be positive.", nameof(sequenceLength));
         if (modelDimension <= 0)
@@ -264,17 +274,13 @@ public class LinearRecurrentUnitLayer<T> : LayerBase<T>
 
     private void InitializeTensor2D(Tensor<T> tensor)
     {
-        int fanIn = tensor.Shape[0];
-        int fanOut = tensor.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
     }
 
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -342,7 +348,7 @@ public class LinearRecurrentUnitLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> DiagonalComplexRecurrence(Tensor<T> u, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // Compute lambda = exp(-exp(nu) + i*exp(theta))
         // |lambda| = exp(-exp(nu)), angle = exp(theta)
@@ -755,6 +761,30 @@ public class LinearRecurrentUnitLayer<T> : LayerBase<T>
         _inputProjectionWeights, _inputProjectionBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_nuGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_nuGradient!.ToArray()),
+            new Vector<T>(_thetaGradient!.ToArray()),
+            new Vector<T>(_bRealGradient!.ToArray()),
+            new Vector<T>(_bImagGradient!.ToArray()),
+            new Vector<T>(_cRealGradient!.ToArray()),
+            new Vector<T>(_cImagGradient!.ToArray()),
+            new Vector<T>(_dParamGradient!.ToArray()),
+            new Vector<T>(_inputProjectionWeightsGradient?.ToArray() ?? new T[_inputProjectionWeights.Length]),
+            new Vector<T>(_inputProjectionBiasGradient?.ToArray() ?? new T[_inputProjectionBias.Length]),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _nuGradient = null; _thetaGradient = null; _bRealGradient = null; _bImagGradient = null; _cRealGradient = null; _cImagGradient = null; _dParamGradient = null;
+        _inputProjectionWeightsGradient = null; _inputProjectionBiasGradient = null; _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

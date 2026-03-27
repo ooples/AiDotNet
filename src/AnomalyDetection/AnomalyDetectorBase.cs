@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AnomalyDetection;
@@ -27,6 +28,11 @@ public abstract class AnomalyDetectorBase<T> : IAnomalyDetector<T>
     /// Provides numeric operations for the generic type T.
     /// </summary>
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
+    /// Provides hardware-accelerated tensor/vector operations (SIMD, GPU when available).
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// The contamination parameter representing the expected proportion of anomalies in the data.

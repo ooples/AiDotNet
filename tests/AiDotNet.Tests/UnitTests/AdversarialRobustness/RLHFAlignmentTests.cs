@@ -993,7 +993,6 @@ public class RLHFAlignmentTests
             return new ModelMetadata<double>
             {
                 Name = "MockPredictiveModel",
-                ModelType = ModelType.NeuralNetwork
             };
         }
 

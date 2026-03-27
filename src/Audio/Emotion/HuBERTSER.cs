@@ -31,7 +31,7 @@ namespace AiDotNet.Audio.Emotion;
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 80, outputSize: 7);
 /// var model = new HuBERTSER&lt;float&gt;(arch, "hubert_ser.onnx");
 /// var result = model.RecognizeEmotion(speechAudio);
-/// Console.WriteLine($"Emotion: {result.Emotion}, Confidence: {result.Confidence}");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>
@@ -269,7 +269,6 @@ public class HuBERTSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         {
             Name = _useNativeMode ? "HuBERT-SER-Native" : "HuBERT-SER-ONNX",
             Description = $"HuBERT-{_options.Variant} Speech Emotion Recognition (Hsu et al., 2021)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumTransformerLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

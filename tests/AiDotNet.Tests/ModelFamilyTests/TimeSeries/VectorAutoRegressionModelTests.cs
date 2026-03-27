@@ -1,0 +1,16 @@
+using AiDotNet.Interfaces;
+using AiDotNet.TimeSeries;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tests.ModelFamilyTests.Base;
+
+namespace AiDotNet.Tests.ModelFamilyTests.TimeSeries;
+
+public class VectorAutoRegressionModelTests : TimeSeriesModelTestBase
+{
+    protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
+        => new VectorAutoRegressionModel<double>(new AiDotNet.Models.Options.VARModelOptions<double>
+        {
+            OutputDimension = 1,
+            Lag = 2
+        });
+}

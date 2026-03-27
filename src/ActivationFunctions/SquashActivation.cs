@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -27,6 +29,9 @@ namespace AiDotNet.ActivationFunctions;
 /// represents important features, and the length represents the probability that those features exist.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.CapsuleSquash)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = true, IsBounded = true, IsVectorActivation = true, Cost = ComputeCost.Medium)]
 public class SquashActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>
@@ -148,26 +153,32 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
         int n = input.Length;
         Matrix<T> jacobian = new Matrix<T>(n, n);
 
+        // Squash: y = a * x/||x|| where a = ||x||^2 / (1 + ||x||^2)
+        // Jacobian: dy_i/dx_j = a * (delta_ij - x_i*x_j/||x||^2) / ||x||
+        //                     + 2*x_i*x_j / ((1+||x||^2)^2 * ||x||)
+        T normInv = NumOps.GreaterThan(norm, NumOps.FromDouble(1e-10))
+            ? NumOps.Divide(NumOps.One, norm) : NumOps.Zero;
+        T normSqPlusOne = NumOps.Add(NumOps.One, normSquared);
+        T normSqPlusOneSq = NumOps.Multiply(normSqPlusOne, normSqPlusOne);
+
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < n; j++)
             {
-                if (i == j)
-                {
-                    T term1 = NumOps.Divide(scale, norm);
-                    T term2 = NumOps.Multiply(NumOps.FromDouble(2), NumOps.Multiply(input[i], input[i]));
-                    T term3 = NumOps.Multiply(NumOps.Add(NumOps.One, normSquared), norm);
-                    term2 = NumOps.Divide(term2, term3);
-                    jacobian[i, j] = NumOps.Subtract(term1, term2);
-                }
-                else
-                {
-                    T term = NumOps.Multiply(input[i], input[j]);
-                    term = NumOps.Multiply(NumOps.FromDouble(2), term);
-                    term = NumOps.Divide(term, NumOps.Multiply(NumOps.Add(NumOps.One, normSquared), norm));
-                    term = NumOps.Multiply(scale, term);
-                    jacobian[i, j] = term;
-                }
+                // Term 1: a * (delta_ij - x_i*x_j/||x||^2) / ||x||
+                T delta_ij = i == j ? NumOps.One : NumOps.Zero;
+                T xiXjOverNormSq = NumOps.GreaterThan(normSquared, NumOps.FromDouble(1e-20))
+                    ? NumOps.Divide(NumOps.Multiply(input[i], input[j]), normSquared)
+                    : NumOps.Zero;
+                T normPart = NumOps.Multiply(scale, NumOps.Multiply(
+                    NumOps.Subtract(delta_ij, xiXjOverNormSq), normInv));
+
+                // Term 2: 2*x_i*x_j / ((1+||x||^2)^2 * ||x||)
+                T daPart = NumOps.Multiply(NumOps.FromDouble(2),
+                    NumOps.Divide(NumOps.Multiply(input[i], input[j]),
+                        NumOps.Multiply(normSqPlusOneSq, norm)));
+
+                jacobian[i, j] = NumOps.Add(normPart, daPart);
             }
         }
 
@@ -196,7 +207,7 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        Tensor<T> output = new Tensor<T>(input.Shape);
+        Tensor<T> output = new Tensor<T>(input.Shape.ToArray());
 
         if (input.Shape.Length == 2)
         {
@@ -257,7 +268,7 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
 
             var flat = input.Reshape([totalVectors, vectorLength]);
             var flatOutput = Activate(flat);
-            output = flatOutput.Reshape(input.Shape);
+            output = flatOutput.Reshape(input.Shape.ToArray());
         }
 
         return output;

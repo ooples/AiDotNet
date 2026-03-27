@@ -40,6 +40,13 @@ namespace AiDotNet.ProgramSynthesis.Engines;
 /// Think of it as both a reader and a writer, not just a reader.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new CodeSynthesisArchitecture&lt;float&gt;(
+///     SynthesisType.Neural, ProgramLanguage.Python, CodeTask.Translation);
+/// var codeT5 = new CodeT5&lt;float&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Transformer)]

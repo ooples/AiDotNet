@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -40,6 +41,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Recurrent)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class RecurrentLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -303,7 +308,7 @@ public class RecurrentLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse leading dims for rank > 3
@@ -363,10 +368,9 @@ public class RecurrentLayer<T> : LayerBase<T>
                 nameof(input));
         }
 
-        var output = new Tensor<T>([sequenceLength, batchSize, hiddenSize]);
+        // Rent tensors to reduce GC pressure (output is fully overwritten, hidden needs zero init)
+        var output = TensorAllocator.Rent<T>([sequenceLength, batchSize, hiddenSize]);
         var hiddenState = new Tensor<T>([sequenceLength + 1, batchSize, hiddenSize]);
-
-        // Initialize the first hidden state with zeros (vectorized)
         hiddenState.Fill(NumOps.Zero);
 
         // Process sequence using tensor operations
@@ -447,7 +451,7 @@ public class RecurrentLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
         int rank = shape.Length;
         int hiddenSize = _inputWeights.Shape[0];
         int inputSize = _inputWeights.Shape[1];
@@ -623,9 +627,14 @@ public class RecurrentLayer<T> : LayerBase<T>
         // Normalize outputGradient to 3D to match Forward's any-rank handling
         var outGrad3D = outputGradient;
         int origRank = _originalInputShape?.Length ?? 3;
-        if (_originalInputShape != null && origRank == 2)
+        if (outputGradient.Rank == 1)
         {
-            // 2D output gradient -> add batch dim
+            // 1D gradient [hiddenSize] -> [1, 1, hiddenSize]
+            outGrad3D = outputGradient.Reshape([1, 1, outputGradient.Length]);
+        }
+        else if (outputGradient.Rank == 2)
+        {
+            // 2D gradient [seq, hidden] -> [seq, 1, hidden]
             outGrad3D = outputGradient.Reshape([outputGradient.Shape[0], 1, outputGradient.Shape[1]]);
         }
         else if (_originalInputShape != null && origRank > 3)
@@ -642,7 +651,7 @@ public class RecurrentLayer<T> : LayerBase<T>
         int inputSize = _lastInput.Shape[2];
         int hiddenSize = _inputWeights.Shape[0];
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
         var inputWeightsGrad = new Tensor<T>([hiddenSize, inputSize]);
         var hiddenWeightsGrad = new Tensor<T>([hiddenSize, hiddenSize]);
         var biasesGrad = new Tensor<T>([hiddenSize]);
@@ -744,9 +753,14 @@ public class RecurrentLayer<T> : LayerBase<T>
         // Normalize outputGradient to 3D to match Forward's any-rank handling
         var outGrad3D = outputGradient;
         int origRank = _originalInputShape?.Length ?? 3;
-        if (_originalInputShape != null && origRank == 2)
+        if (outputGradient.Rank == 1)
         {
-            // 2D output gradient -> add batch dim
+            // 1D gradient [hiddenSize] -> [1, 1, hiddenSize]
+            outGrad3D = outputGradient.Reshape([1, 1, outputGradient.Length]);
+        }
+        else if (outputGradient.Rank == 2)
+        {
+            // 2D gradient [seq, hidden] -> [seq, 1, hidden]
             outGrad3D = outputGradient.Reshape([outputGradient.Shape[0], 1, outputGradient.Shape[1]]);
         }
         else if (_originalInputShape != null && origRank > 3)
@@ -763,7 +777,7 @@ public class RecurrentLayer<T> : LayerBase<T>
         int inputSize = _lastInput.Shape[2];
         int hiddenSize = _inputWeights.Shape[0];
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
         var inputWeightsGrad = new Tensor<T>([hiddenSize, inputSize]);
         var hiddenWeightsGrad = new Tensor<T>([hiddenSize, hiddenSize]);
         var biasesGrad = new Tensor<T>([hiddenSize]);
@@ -989,19 +1003,19 @@ public class RecurrentLayer<T> : LayerBase<T>
 
             if (_inputWeightsVelocity == null)
             {
-                _inputWeightsVelocity = new Tensor<T>(_inputWeights.Shape);
+                _inputWeightsVelocity = new Tensor<T>(_inputWeights.Shape.ToArray());
                 _inputWeightsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_inputWeightsVelocity, PersistentTensorRole.OptimizerState);
             }
             if (_hiddenWeightsVelocity == null)
             {
-                _hiddenWeightsVelocity = new Tensor<T>(_hiddenWeights.Shape);
+                _hiddenWeightsVelocity = new Tensor<T>(_hiddenWeights.Shape.ToArray());
                 _hiddenWeightsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_hiddenWeightsVelocity, PersistentTensorRole.OptimizerState);
             }
             if (_biasesVelocity == null)
             {
-                _biasesVelocity = new Tensor<T>(_biases.Shape);
+                _biasesVelocity = new Tensor<T>(_biases.Shape.ToArray());
                 _biasesVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_biasesVelocity, PersistentTensorRole.OptimizerState);
             }
@@ -1121,19 +1135,32 @@ public class RecurrentLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
-        // VECTORIZED: Use Vector.Slice and Tensor.FromVector for parameter setting
-        var inputWeightsVec = parameters.Slice(0, inputWeightsSize);
-        var hiddenWeightsVec = parameters.Slice(inputWeightsSize, hiddenWeightsSize);
-        var biasesVec = parameters.Slice(inputWeightsSize + hiddenWeightsSize, _biases.Length);
+        // Create new tensors to ensure independence from cloned layers
+        int idx = 0;
+        _inputWeights = new Tensor<T>(_inputWeights.Shape.ToArray());
+        for (int i = 0; i < inputWeightsSize; i++)
+            _inputWeights[i] = parameters[idx++];
 
-        _inputWeights = Tensor<T>.FromVector(inputWeightsVec).Reshape(_inputWeights.Shape);
-        _hiddenWeights = Tensor<T>.FromVector(hiddenWeightsVec).Reshape(_hiddenWeights.Shape);
-        _biases = Tensor<T>.FromVector(biasesVec).Reshape(_biases.Shape);
+        _hiddenWeights = new Tensor<T>(_hiddenWeights.Shape.ToArray());
+        for (int i = 0; i < hiddenWeightsSize; i++)
+            _hiddenWeights[i] = parameters[idx++];
 
-        // Notify GPU that tensor data has changed
-        Engine.InvalidatePersistentTensor(_inputWeights);
-        Engine.InvalidatePersistentTensor(_hiddenWeights);
-        Engine.InvalidatePersistentTensor(_biases);
+        _biases = new Tensor<T>(_biases.Shape.ToArray());
+        for (int i = 0; i < _biases.Length; i++)
+            _biases[i] = parameters[idx++];
+
+        RegisterTrainableParameter(_inputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_hiddenWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+    }
+
+    /// <inheritdoc/>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["InputSize"] = _inputWeights.Shape[1].ToString();
+        metadata["HiddenSize"] = _inputWeights.Shape[0].ToString();
+        return metadata;
     }
 
     /// <summary>
@@ -1161,6 +1188,14 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// only the temporary state information.
     /// </para>
     /// </remarks>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _inputWeightsGradient = null;
+        _hiddenWeightsGradient = null;
+        _biasesGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
@@ -1274,15 +1309,15 @@ public class RecurrentLayer<T> : LayerBase<T>
         T half = NumOps.FromDouble(0.5);
 
         // Generate random input weights: (random - 0.5) * scale
-        var inputRandom = Tensor<T>.CreateRandom(_inputWeights.Length, 1).Reshape(_inputWeights.Shape);
-        var inputHalf = new Tensor<T>(_inputWeights.Shape);
+        var inputRandom = Tensor<T>.CreateRandom(_inputWeights.Length, 1).Reshape(_inputWeights.Shape.ToArray());
+        var inputHalf = new Tensor<T>(_inputWeights.Shape.ToArray());
         inputHalf.Fill(half);
         var inputCentered = Engine.TensorSubtract(inputRandom, inputHalf);
         _inputWeights = Engine.TensorMultiplyScalar(inputCentered, inputScale);
 
         // Generate random hidden weights: (random - 0.5) * scale
-        var hiddenRandom = Tensor<T>.CreateRandom(_hiddenWeights.Length, 1).Reshape(_hiddenWeights.Shape);
-        var hiddenHalf = new Tensor<T>(_hiddenWeights.Shape);
+        var hiddenRandom = Tensor<T>.CreateRandom(_hiddenWeights.Length, 1).Reshape(_hiddenWeights.Shape.ToArray());
+        var hiddenHalf = new Tensor<T>(_hiddenWeights.Shape.ToArray());
         hiddenHalf.Fill(half);
         var hiddenCentered = Engine.TensorSubtract(hiddenRandom, hiddenHalf);
         _hiddenWeights = Engine.TensorMultiplyScalar(hiddenCentered, hiddenScale);

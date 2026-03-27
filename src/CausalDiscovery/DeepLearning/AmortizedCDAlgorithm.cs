@@ -205,8 +205,7 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
         }
 
         // Final inference pass
-        var result = new Matrix<T>(d, d);
-        T threshold = NumOps.FromDouble(0.5);
+        var learnedP = new double[d, d];
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
@@ -223,20 +222,10 @@ public class AmortizedCDAlgorithm<T> : DeepCausalBase<T>
                     logit = NumOps.Add(logit, NumOps.Multiply(hid, W2[k, 0]));
                 }
 
-                double prob = Sigmoid(NumOps.ToDouble(logit));
-                if (prob > NumOps.ToDouble(threshold))
-                {
-                    T varI = cov[i, i];
-                    if (NumOps.GreaterThan(varI, eps))
-                    {
-                        T weight = NumOps.Divide(cov[i, j], varI);
-                        if (NumOps.GreaterThan(NumOps.Abs(weight), NumOps.FromDouble(0.1)))
-                            result[i, j] = weight;
-                    }
-                }
+                learnedP[i, j] = Sigmoid(NumOps.ToDouble(logit));
             }
 
-        return result;
+        return BuildFinalAdjacency(learnedP, cov, d);
     }
 
     private static double Sigmoid(double x) =>

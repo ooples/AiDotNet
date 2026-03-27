@@ -137,7 +137,7 @@ public class TensorPool<T> : IDisposable
                 UpdateMemoryUsage(-entry.SizeBytes);
                 Interlocked.Decrement(ref _totalPooledTensors);
 
-                if (entry.Tensor is not null && ShapeMatches(entry.Tensor.Shape, shape))
+                if (entry.Tensor is not null && ShapeMatches(entry.Tensor.Shape.ToArray(), shape))
                 {
                     ClearTensor(entry.Tensor);
                     return entry.Tensor;
@@ -172,7 +172,7 @@ public class TensorPool<T> : IDisposable
 
         ClearTensor(tensor);
 
-        var key = GetTensorPoolKey(tensor.Shape);
+        var key = GetTensorPoolKey(tensor.Shape.ToArray());
         var pool = _tensorPools.GetOrAdd(key, _ => new ConcurrentBag<TensorEntry>());
 
         if (pool.Count < _options.MaxItemsPerBucket)
@@ -308,8 +308,8 @@ public class TensorPool<T> : IDisposable
     /// <example>
     /// <code>
     /// var stats = pool.GetStatistics();
-    /// Console.WriteLine($"Pool utilization: {stats.MemoryUtilizationPercent:F1}%");
-    /// Console.WriteLine($"Tensors in pool: {stats.PooledTensorCount}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// </code>
     /// </example>
     public PoolStatistics GetStatistics()

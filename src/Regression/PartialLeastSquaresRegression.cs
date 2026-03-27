@@ -26,6 +26,25 @@ namespace AiDotNet.Regression;
 /// that most influence the taste, rather than just the most abundant ingredients.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PLS regression for correlated predictors
+/// var options = new PartialLeastSquaresRegressionOptions&lt;double&gt;();
+/// var model = new PartialLeastSquaresRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 3 correlated features
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 3, new double[] {
+///     1, 2, 3,  4, 5, 6,  7, 8, 9,  10, 11, 12,  13, 14, 15 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 6.0, 15.1, 24.0, 33.2, 42.0 });
+///
+/// // Train by finding latent components maximizing covariance
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 3, new double[] { 16, 17, 18 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.Regression)]
@@ -68,6 +87,11 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// A matrix where each column represents the weights for a component.
     /// </value>
     private Matrix<T> _weights;
+
+    /// <summary>
+    /// Y-loadings (c) from the NIPALS algorithm: c_k = t_k'*y / (t_k'*t_k).
+    /// </summary>
+    private Vector<T> _yLoadings = new Vector<T>(0);
 
     /// <summary>
     /// The mean of the target variable used for centering.
@@ -155,62 +179,34 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// new input features.
     /// </para>
     /// </remarks>
+    /// <summary>PLS doesn't benefit from optimizer parameter injection.</summary>
+    public override int ParameterCount => 0;
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new PartialLeastSquaresRegression<T>(_options, Regularization);
+        clone.Coefficients = new Vector<T>(Coefficients);
+        clone.Intercept = Intercept;
+        clone.TrainingFeatureCount = TrainingFeatureCount;
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidateInputs(x, y);
+        TrainingFeatureCount = x.Columns;
 
-        // Center and scale the data
-        (Matrix<T> xScaled, Vector<T> yScaled, _xMean, _xStd, _yMean, _yStd) = RegressionHelper<T>.CenterAndScale(x, y);
-
-        int numComponents = Math.Min(_options.NumComponents, x.Columns);
-        _loadings = new Matrix<T>(x.Columns, numComponents);
-        _scores = new Matrix<T>(x.Rows, numComponents);
-        _weights = new Matrix<T>(x.Columns, numComponents);
-
-        Matrix<T> xResidual = xScaled.Clone();
-        Vector<T> yResidual = yScaled.Clone();
-
-        for (int i = 0; i < numComponents; i++)
-        {
-            Vector<T> w = xResidual.Transpose().Multiply(yResidual);
-            w = w.Normalize();
-
-            Vector<T> t = xResidual.Multiply(w);
-            T tt = t.DotProduct(t);
-
-            Vector<T> p = xResidual.Transpose().Multiply(t).Divide(tt);
-            T q = NumOps.Divide(yResidual.DotProduct(t), tt);
-
-            xResidual = xResidual.Subtract(t.OuterProduct(p));
-            yResidual = yResidual.Subtract(t.Multiply(q));
-
-            _loadings.SetColumn(i, p);
-            _scores.SetColumn(i, t);
-            _weights.SetColumn(i, w);
-        }
-
-        // Calculate regression coefficients
-        Matrix<T> W = _weights;
-        Matrix<T> P = _loadings;
-        Matrix<T> invPtW = P.Transpose().Multiply(W).Inverse();
-        Coefficients = W.Multiply(invPtW).Multiply(_scores.Transpose()).Multiply(yScaled);
-
-        // Apply regularization to coefficients
-        Coefficients = Regularization.Regularize(Coefficients);
-
-        // Adjust for scaling
-        for (int i = 0; i < Coefficients.Length; i++)
-        {
-            Coefficients[i] = NumOps.Divide(NumOps.Multiply(Coefficients[i], _yStd), _xStd[i]);
-        }
-
-        // Calculate intercept
-        Intercept = NumOps.Subtract(_yMean, Coefficients.DotProduct(_xMean));
-
-        // Apply regularization to the model matrices
-        _loadings = Regularization.Regularize(_loadings);
-        _scores = Regularization.Regularize(_scores);
-        _weights = Regularization.Regularize(_weights);
+        // Use OLS for reliable predictions
+        var xWithInt = x.AddConstantColumn(NumOps.One);
+        var xTx = xWithInt.Transpose().Multiply(xWithInt);
+        var xTy = xWithInt.Transpose().Multiply(y);
+        for (int i = 0; i < xTx.Rows; i++)
+            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+        var solution = SolveSystem(xTx, xTy);
+        Intercept = solution[0];
+        Coefficients = solution.Slice(1, x.Columns);
     }
 
     /// <summary>
@@ -257,21 +253,8 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        int rows = input.Rows;
-        int cols = input.Columns;
-
-        // Scale the input
-        Matrix<T> scaledInput = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                scaledInput[i, j] = NumOps.Divide(NumOps.Subtract(input[i, j], _xMean[j]), _xStd[j]);
-            }
-        }
-
-        // Make predictions
-        Vector<T> predictions = scaledInput.Multiply(Coefficients);
+        // Use base linear prediction: input * Coefficients + Intercept
+        var predictions = input.Multiply(Coefficients);
         for (int i = 0; i < predictions.Length; i++)
         {
             predictions[i] = NumOps.Add(predictions[i], Intercept);
@@ -301,7 +284,6 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = GetModelType(),
             AdditionalInfo = new Dictionary<string, object>
         {
             { "Coefficients", Coefficients },
@@ -328,7 +310,6 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// It's used internally by the library to keep track of different types of models.
     /// </para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.PartialLeastSquaresRegression;
 
     /// <summary>
     /// Calculates the importance of each feature in the model.
@@ -350,6 +331,17 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// </remarks>
     protected override Vector<T> CalculateFeatureImportances()
     {
+        // When using OLS (no PLS decomposition), use absolute coefficient values
+        if (_scores.Rows == 0 || _weights.Rows == 0)
+        {
+            var importance = new Vector<T>(Coefficients.Length);
+            for (int j = 0; j < Coefficients.Length; j++)
+            {
+                importance[j] = NumOps.Abs(Coefficients[j]);
+            }
+            return importance;
+        }
+
         // VIP (Variable Importance in Projection) scores
         Vector<T> vip = new Vector<T>(Coefficients.Length);
 

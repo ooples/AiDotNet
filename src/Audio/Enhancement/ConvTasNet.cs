@@ -50,6 +50,23 @@ namespace AiDotNet.Audio.Enhancement;
 /// Magnitude Masking for Speech Separation.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Use AiModelBuilder facade for audio source separation
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 16000,
+///     outputSize: 16000);
+///
+/// var builder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new ConvTasNet&lt;float&gt;(architecture, "conv_tasnet.onnx", 8000, 2));
+///
+/// // Build and use the model through the facade
+/// var result = builder.Build(trainingData, trainingLabels);
+/// var prediction = result.Predict(mixedAudioTensor);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -327,7 +344,7 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
             {
                 result[i] = _numOps.Multiply(modelOutput.Data.Span[i], strengthT);
             }
-            return new Tensor<T>(result, modelOutput.Shape);
+            return new Tensor<T>(result, modelOutput.Shape.ToArray());
         }
         return modelOutput;
     }
@@ -1064,7 +1081,6 @@ public class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         {
             Name = "Conv-TasNet",
             Description = $"Time-domain audio separation network ({_numSources} sources)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = SampleRate,
             Complexity = _numBlocks * _numRepeats
         };

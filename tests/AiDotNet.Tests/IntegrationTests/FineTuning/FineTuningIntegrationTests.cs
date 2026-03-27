@@ -76,7 +76,6 @@ public class FineTuningIntegrationTests
         {
             return new ModelMetadata<double>
             {
-                ModelType = ModelType.NeuralNetwork
             };
         }
 
@@ -101,6 +100,7 @@ public class FineTuningIntegrationTests
         public Vector<double> GetParameters() => _weights;
         public void SetParameters(Vector<double> parameters) { _weights = parameters; }
         public int ParameterCount => _weights.Length;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
         public Vector<double> GetParameterGradients() => new Vector<double>(ParameterCount);
         public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters)
         {
@@ -168,6 +168,8 @@ public class FineTuningIntegrationTests
         {
             return new AiDotNet.Autodiff.ComputationNode<double>(new Tensor<double>(new[] { 1 }), false, null, null, "mock");
         }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     private static Vector<double> CreateVector(int size)

@@ -22,6 +22,14 @@ namespace AiDotNet.NeuralNetworks;
 /// useful for smart buildings, energy management, security systems, and space utilization analysis.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new OccupancyNetworkOptions { InputSize = 3, HiddenSize = 256 };
+/// var model = new OccupancyNeuralNetwork&lt;float&gt;(options);
+/// var points = Tensor&lt;float&gt;.Random(new[] { 1, 1000, 3 });
+/// var occupancy = model.Predict(points);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.ThreeDGeneration)]
@@ -31,6 +39,9 @@ namespace AiDotNet.NeuralNetworks;
 public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly OccupancyNeuralNetworkOptions _options;
+
+    /// <inheritdoc/>
+    public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -207,11 +218,11 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         var expectedShape = new[] { input.Shape[0], _historyWindowSize, Architecture.InputSize };
-        if (input.Shape.Length != 3 || !input.Shape.SequenceEqual(expectedShape))
+        if (input.Shape.Length != 3 || !input.Shape.ToArray().SequenceEqual(expectedShape))
         {
             throw new TensorShapeMismatchException(
                 expectedShape,
-                input.Shape,
+                input.Shape.ToArray(),
                 nameof(OccupancyNeuralNetwork<T>),
                 nameof(ForwardTemporal)
             );
@@ -310,9 +321,13 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // Set network to inference mode
+        // Set network AND layers to inference mode.
+        // Critical: BatchNorm in training mode with batch_size=1 normalizes everything
+        // to the same value (zero variance), making all inputs produce identical output.
         bool originalTrainingMode = IsTrainingMode;
         SetTrainingMode(false);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(false);
 
         try
         {
@@ -342,7 +357,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
                 {
                     throw new TensorShapeMismatchException(
                         new[] { -1, _historyWindowSize, Architecture.InputSize },
-                        input.Shape,
+                        input.Shape.ToArray(),
                         nameof(OccupancyNeuralNetwork<T>),
                         nameof(Predict)
                     );
@@ -359,7 +374,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
                     int features = input.Rank > 1 ? input.Shape[1] : input.Shape[0];
 
                     // Create output tensor for batch results
-                    var output = new Tensor<T>([batchSize, Architecture.OutputSize]);
+                    var output = TensorAllocator.Rent<T>([batchSize, Architecture.OutputSize]);
 
                     // Process each input in the batch
                     for (int b = 0; b < batchSize; b++)
@@ -393,8 +408,10 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         }
         finally
         {
-            // Restore original training mode
+            // Restore original training mode for network and layers
             SetTrainingMode(originalTrainingMode);
+            foreach (var layer in Layers)
+                layer.SetTrainingMode(originalTrainingMode);
         }
     }
 
@@ -479,11 +496,11 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         // Validate input shape
         var expectedShape = new[] { input.Shape[0], _historyWindowSize, Architecture.InputSize };
-        if (input.Shape.Length != 3 || !input.Shape.SequenceEqual(expectedShape))
+        if (input.Shape.Length != 3 || !input.Shape.ToArray().SequenceEqual(expectedShape))
         {
             throw new TensorShapeMismatchException(
                 expectedShape,
-                input.Shape,
+                input.Shape.ToArray(),
                 nameof(OccupancyNeuralNetwork<T>),
                 nameof(TrainTemporal)
             );
@@ -524,8 +541,10 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <param name="expectedOutput">The expected output tensor.</param>
     private void TrainNonTemporal(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass
-        var output = Predict(input);
+        // Forward pass with memory for backpropagation (NOT Predict, which sets eval mode)
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(true);
+        var output = ForwardWithMemory(input);
 
         // Calculate loss using the loss function
         Vector<T> predictedVector = output.ToVector();
@@ -561,18 +580,18 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     private Tensor<T> CalculateError(Tensor<T> predicted, Tensor<T> expected)
     {
         // Ensure tensors have the same shape
-        if (!predicted.Shape.SequenceEqual(expected.Shape))
+        if (!predicted.Shape.ToArray().SequenceEqual(expected.Shape.ToArray()))
         {
             throw new TensorShapeMismatchException(
-                expected.Shape,
-                predicted.Shape,
+                expected.Shape.ToArray(),
+                predicted.Shape.ToArray(),
                 nameof(OccupancyNeuralNetwork<T>),
                 nameof(CalculateError)
             );
         }
 
         // Calculate error (expected - predicted)
-        var error = new Tensor<T>(predicted.Shape);
+        var error = new Tensor<T>(predicted.Shape.ToArray());
 
         for (int i = 0; i < predicted.Length; i++)
         {
@@ -625,7 +644,6 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.OccupancyNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputSize", Architecture.InputSize },

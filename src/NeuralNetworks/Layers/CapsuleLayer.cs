@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -34,6 +36,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Capsule)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerTask(LayerTask.Routing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, UsesSurrogateGradient = true, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 2, 4, 3")]
 public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -106,6 +112,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     private int[]? _originalInputShape;
     private Tensor<T>? _lastOutput;
+    private Tensor<T>? _lastPreSquash;
     private Tensor<T>? _lastCouplingCoefficients;
 
     /// <summary>
@@ -131,6 +138,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// and bias values that need to be learned from data.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _transformationMatrix.Length + _bias.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -222,7 +230,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        int totalElements = _transformationMatrix.Shape.Aggregate(1, (acc, dim) => acc * dim);
+        int totalElements = _transformationMatrix.Length;
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / totalElements));
         InitializeTensor(_transformationMatrix, scale);
 
@@ -256,7 +264,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
         // For multi-dimensional tensors, create random and apply transformation
-        int totalElements = tensor.Shape.Aggregate(1, (acc, dim) => acc * dim);
+        int totalElements = tensor.Length;
 
         // Create a flat random tensor [0, 1]
         var randomTensor = Tensor<T>.CreateRandom(totalElements, 1).Reshape([totalElements]);
@@ -318,7 +326,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Clamp values to avoid log(0)
         T epsilon = NumOps.FromDouble(1e-10);
-        var epsilonTensor = new Tensor<T>(_lastCouplingCoefficients.Shape);
+        var epsilonTensor = new Tensor<T>(_lastCouplingCoefficients.Shape.ToArray());
         epsilonTensor.Fill(epsilon);
 
         // p_clamped = max(p, epsilon) - element-wise
@@ -335,7 +343,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         T totalPLogP = sumPLogP.GetFlat(0);
 
         // Average across all distributions (total elements / distribution size)
-        int flatSize = _lastCouplingCoefficients.Shape.Aggregate(1, (acc, dim) => acc * dim);
+        int flatSize = _lastCouplingCoefficients.Length;
         int distributionSize = _numCapsules;
         int numDistributions = flatSize / distributionSize;
 
@@ -453,7 +461,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: need at least 2D [capsules, dim]
@@ -538,6 +546,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             weightedSum = Engine.TensorBroadcastAdd(weightedSum, biasReshaped);
 
             // Apply squash activation
+            _lastPreSquash = weightedSum;
             output = ApplyActivation(weightedSum);
 
             // Update coupling coefficients
@@ -701,7 +710,40 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int inputCapsules = _lastInput.Shape[1];
         int inputDimension = _lastInput.Shape[2];
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
+        // Squash activation is a vector function — need Jacobian per capsule, not scalar derivative.
+        // Output shape: [batch, numCapsules, capsuleDim]
+        // Flatten to [batch*numCapsules, capsuleDim] for per-capsule Jacobian computation.
+        Tensor<T> activationGradient;
+        if (ScalarActivation != null)
+        {
+            int totalCapsules = batchSize * _numCapsules;
+            // Use pre-squash values for Jacobian computation (Squash derivative uses input norms)
+            var preSquash = _lastPreSquash is not null
+                ? _lastPreSquash.Reshape([totalCapsules, _capsuleDimension])
+                : _lastOutput.Reshape([totalCapsules, _capsuleDimension]);
+            var flatGrad = outputGradient.Reshape([totalCapsules, _capsuleDimension]);
+
+            // Get Jacobian: [totalCapsules, capsuleDim, capsuleDim]
+            var jacobians = ScalarActivation.Derivative(preSquash);
+
+            if (jacobians.Shape.Length == 3 && jacobians.Shape[1] == _capsuleDimension && jacobians.Shape[2] == _capsuleDimension)
+            {
+                // Jacobian @ gradient per capsule via BatchMatMul
+                var gradCol = flatGrad.Reshape([totalCapsules, _capsuleDimension, 1]);
+                var resultCol = Engine.BatchMatMul(jacobians, gradCol);
+                activationGradient = resultCol.Reshape([batchSize, _numCapsules, _capsuleDimension]);
+            }
+            else
+            {
+                // Fallback: element-wise (shouldn't happen for Squash)
+                activationGradient = Engine.TensorMultiply(jacobians, flatGrad)
+                    .Reshape([batchSize, _numCapsules, _capsuleDimension]);
+            }
+        }
+        else
+        {
+            activationGradient = outputGradient;
+        }
 
         // === FULLY VECTORIZED Gradient Computation ===
 
@@ -721,21 +763,40 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // _lastCouplingCoefficients: [batchSize, inputCapsules, numCapsules]
         // outputGradient: [batchSize, numCapsules, capsuleDimension]
 
-        // Expand dimensions for broadcasting:
-        // input: [batchSize, inputCapsules, inputDimension, 1, 1]
-        // coef: [batchSize, inputCapsules, 1, numCapsules, 1]
-        // grad: [batchSize, 1, 1, numCapsules, capsuleDimension]
+        // Transformation matrix gradient:
+        // W[i, k, j, d] maps input capsule i dimension k to output capsule j dimension d
+        // Forward: u_hat[b,i,j,d] = sum_k(W[i,k,j,d] * input[b,i,k])
+        // output[b,j,d] = squash(sum_i(coupling[b,i,j] * u_hat[b,i,j,d]))
+        // dW[i,k,j,d] = sum_b(coupling[b,i,j] * dOutput[b,j,d] * input[b,i,k])
+        // Note: uses activationGradient which already includes Squash derivative
+        var grad3D = activationGradient.Shape.Length == 3
+            ? activationGradient
+            : activationGradient.Reshape([batchSize, _numCapsules, _capsuleDimension]);
 
-        var inputExpanded = _lastInput.Reshape([batchSize, inputCapsules, inputDimension, 1, 1]);
-        var coefExpanded = _lastCouplingCoefficients.Reshape([batchSize, inputCapsules, 1, _numCapsules, 1]);
-        var gradExpanded = outputGradient.Reshape([batchSize, 1, 1, _numCapsules, _capsuleDimension]);
+        _transformationMatrixGradient = new Tensor<T>([inputCapsules, inputDimension, _numCapsules, _capsuleDimension]);
 
-        // Element-wise multiply all together
-        var inputCoef = Engine.TensorMultiply(inputExpanded, coefExpanded);
-        var gradProduct = Engine.TensorMultiply(inputCoef, gradExpanded);
-
-        // Sum over batch dimension to get transformation gradient: [inputCapsules, inputDimension, numCapsules, capsuleDimension]
-        _transformationMatrixGradient = Engine.ReduceSum(gradProduct, new[] { 0 }, keepDims: false);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int i = 0; i < inputCapsules; i++)
+            {
+                for (int j = 0; j < _numCapsules; j++)
+                {
+                    T coupling = _lastCouplingCoefficients[b, i, j];
+                    for (int k = 0; k < inputDimension; k++)
+                    {
+                        T inputVal = _lastInput[b, i, k];
+                        T coupledInput = NumOps.Multiply(coupling, inputVal);
+                        for (int d = 0; d < _capsuleDimension; d++)
+                        {
+                            T gradVal = grad3D[b, j, d];
+                            _transformationMatrixGradient[i, k, j, d] = NumOps.Add(
+                                _transformationMatrixGradient[i, k, j, d],
+                                NumOps.Multiply(coupledInput, gradVal));
+                        }
+                    }
+                }
+            }
+        }
 
         // Input gradient:
         // grad_input[b, i, k] = sum_j,d(coupling[b, i, j] * outputGrad[b, j, d] * W[i, k, j, d])
@@ -901,7 +962,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // 7. Store Gradients
         // _biasGradient is flattened - use default zero tensor if gradient is null
-        _biasGradient = biasNode.Gradient ?? Tensor<T>.CreateDefault(_bias.Shape, NumOps.Zero);
+        _biasGradient = biasNode.Gradient ?? Tensor<T>.CreateDefault(_bias.Shape.ToArray(), NumOps.Zero);
 
         // _transformationMatrixGradient needs [I, D_in, O, D_out]
         // weightsPermuted.Gradient is [I, O, D_in, D_out]
@@ -913,7 +974,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
         else
         {
-            _transformationMatrixGradient = Tensor<T>.CreateDefault(_transformationMatrix.Shape, NumOps.Zero);
+            _transformationMatrixGradient = Tensor<T>.CreateDefault(_transformationMatrix.Shape.ToArray(), NumOps.Zero);
         }
 
         var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
@@ -1055,16 +1116,27 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// An error is thrown if the input vector doesn't have the expected number of parameters.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var matGrad = _transformationMatrixGradient != null
+            ? new Vector<T>(_transformationMatrixGradient.ToArray())
+            : new Vector<T>(_transformationMatrix.Length);
+        var biasGrad = _biasGradient != null
+            ? new Vector<T>(_biasGradient.ToArray())
+            : new Vector<T>(_bias.Length);
+        return Vector<T>.Concatenate(matGrad, biasGrad);
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
-        int matrixSize = _transformationMatrix.Shape.Aggregate(1, (acc, dim) => acc * dim);
+        int matrixSize = _transformationMatrix.Length;
         int biasSize = _bias.Length;
 
         if (parameters.Length != matrixSize + biasSize)
             throw new ArgumentException($"Expected {matrixSize + biasSize} parameters, but got {parameters.Length}");
 
         // Set parameters without hot-path conversions
-        _transformationMatrix = new Tensor<T>(_transformationMatrix.Shape, parameters.Slice(0, matrixSize));
+        _transformationMatrix = new Tensor<T>(_transformationMatrix.Shape.ToArray(), parameters.Slice(0, matrixSize));
         _bias = new Tensor<T>([biasSize], parameters.Slice(matrixSize, biasSize));
     }
 
@@ -1094,6 +1166,13 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// just the temporary information used during a single forward/backward pass.
     /// </para>
     /// </remarks>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _transformationMatrixGradient = null;
+        _biasGradient = null;
+    }
+
     public override void ResetState()
     {
         _lastInput = null;

@@ -13,16 +13,32 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// Off-Policy MC uses importance sampling to learn an optimal policy (target)
-/// while following a different exploratory policy (behavior).
+/// <para>Off-Policy MC uses importance sampling to learn an optimal policy (target)
+/// while following a different exploratory policy (behavior).</para>
+/// <para><b>For Beginners:</b> Off-policy MC learns the best strategy by watching someone
+/// else play (the behavior policy), then correcting for the difference using importance
+/// sampling weights. This is like learning optimal chess strategy by studying games played
+/// by beginners, adjusting for their suboptimal moves. The advantage is you can reuse old
+/// data collected under any policy, but importance sampling can introduce high variance.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an off-policy Monte Carlo agent with importance sampling
+/// var options = new OffPolicyMonteCarloOptions&lt;double&gt; { StateSize = 4, ActionSize = 2 };
+/// var agent = new OffPolicyMonteCarloAgent&lt;double&gt;(options);
+///
+/// // Select an action using the behavior policy
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Reinforcement Learning: An Introduction",
-    "http://incompleteideas.net/book/the-book-2nd.html",
+    "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
@@ -243,7 +259,6 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ReinforcementLearning,
         };
     }
 

@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Octo (Berkeley, 2024) is an open-source generalist robot policy trained on 800K demonstrations
+/// from the Open X-Embodiment dataset. It uses a transformer backbone that processes interleaved
+/// image observations and language task specifications, outputting continuous robot actions
+/// that generalize across different robot embodiments and manipulation tasks.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Octo: An Open-Source Generalist Robot Policy (Berkeley, 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> Octo is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Octo is an open-source vision-language-action model for generalist
+/// robot control across different robot platforms. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Octo model for generalist robot policy
+/// // open-source model trained on 800K robot demonstrations
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Octo&lt;double&gt;(architecture, "octo.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Octo&lt;double&gt;(architecture, new OctoOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Robotics)]
@@ -206,7 +230,7 @@ public class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Octo-Native" : "Octo-ONNX", Description = "Octo: open-source generalist robot policy trained on 800K demonstrations.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Octo-Native" : "Octo-ONNX", Description = "Octo: open-source generalist robot policy trained on 800K demonstrations.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Octo";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

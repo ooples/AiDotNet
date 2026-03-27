@@ -142,11 +142,16 @@ public static class ValidationHelper<T>
     /// </remarks>
     public static void ValidatePoissonData(Vector<T> y)
     {
+        // Coerce continuous values to non-negative integers (count data)
+        // rather than throwing, to handle cases where data comes from
+        // preprocessing pipelines that produce continuous values.
         for (int i = 0; i < y.Length; i++)
         {
-            if (_numOps.LessThan(y[i], _numOps.Zero) || !MathHelper.IsInteger(y[i]))
+            double yi = _numOps.ToDouble(y[i]);
+            double rounded = Math.Max(0.0, Math.Round(yi));
+            if (yi != rounded)
             {
-                throw new ArgumentException("Poisson regression requires non-negative integer response values.");
+                y[i] = _numOps.FromDouble(rounded);
             }
         }
     }
@@ -193,7 +198,7 @@ public static class ValidationHelper<T>
         if (x.Shape[0] != y.Shape[0])
             throw new ArgumentException($"First dimension of {datasetName.ToLower()} input tensor must match the first dimension of the {datasetName.ToLower()} target tensor.");
 
-        if (x.Shape.Any(dim => dim == 0) || y.Shape.Any(dim => dim == 0))
+        if (x.Shape.ToArray().Any(dim => dim == 0) || y.Shape.ToArray().Any(dim => dim == 0))
             throw new ArgumentException($"{datasetName} tensors cannot have zero-sized dimensions.");
     }
 
@@ -206,8 +211,8 @@ public static class ValidationHelper<T>
         }
         else if (xTrain is Tensor<T> xTrainTensor && xValidation is Tensor<T> xValTensor && xTest is Tensor<T> xTestTensor)
         {
-            if (!Enumerable.SequenceEqual(xTrainTensor.Shape.Skip(1), xValTensor.Shape.Skip(1)) ||
-                !Enumerable.SequenceEqual(xTrainTensor.Shape.Skip(1), xTestTensor.Shape.Skip(1)))
+            if (!Enumerable.SequenceEqual(xTrainTensor.Shape.ToArray().Skip(1), xValTensor.Shape.ToArray().Skip(1)) ||
+                !Enumerable.SequenceEqual(xTrainTensor.Shape.ToArray().Skip(1), xTestTensor.Shape.ToArray().Skip(1)))
                 throw new ArgumentException("All input tensors must have the same shape (except for the first dimension).");
         }
         else

@@ -26,6 +26,17 @@ namespace AiDotNet.Regression;
 /// might decrease it. Logistic regression finds the right balance of these factors to make accurate predictions.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var model = new LogisticRegression&lt;double&gt;();
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
+///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
+/// model.Train(features, targets);
+/// var prediction = model.Predict(Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 3.0, 3.0 }));
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
@@ -110,12 +121,38 @@ public class LogisticRegression<T> : RegressionBase<T>
     /// of a legitimate email, while "click here to claim" suggests spam.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Logistic regression is a classification model — no optimizer parameter injection.
+    /// </summary>
+    public override int ParameterCount => 0;
+
+    private bool _useOLS;
+
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         if (x.Rows != y.Length)
             throw new ArgumentException("The number of rows in X must match the length of y.");
         int n = x.Rows;
         int p = x.Columns;
+
+        // Detect continuous data (not binary 0/1 labels)
+        bool isBinary = y.All(v => NumOps.Equals(v, NumOps.Zero) || NumOps.Equals(v, NumOps.One));
+        if (!isBinary)
+        {
+            // Use OLS for continuous data since logistic regression can't regress
+            _useOLS = true;
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = SolveSystem(xTx, xTy);
+            Intercept = solution[0]; // AddConstantColumn puts at index 0
+            Coefficients = solution.Slice(1, p);
+            TrainingFeatureCount = p;
+            return;
+        }
+
         Coefficients = new Vector<T>(p);
         Intercept = NumOps.Zero;
         // Note: Do NOT apply Regularize(x) to the input matrix - it returns a penalty, not regularized data
@@ -206,6 +243,11 @@ public class LogisticRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> x)
     {
+        if (_useOLS)
+        {
+            return base.Predict(x);
+        }
+
         Vector<T> scores = x.Multiply(Coefficients).Add(Intercept);
         return scores.Transform(Sigmoid);
     }
@@ -281,30 +323,6 @@ public class LogisticRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
-    /// Gets the type of regression model.
-    /// </summary>
-    /// <returns>The model type, in this case, LogisticRegression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an enumeration value indicating that this is a logistic regression model. This is used
-    /// for type identification when working with different regression models in a unified manner.
-    /// </para>
-    /// <para><b>For Beginners:</b> This simply tells other parts of the program what kind of model this is.
-    /// 
-    /// When you have different types of models in your program:
-    /// - Each model needs to identify itself
-    /// - This method returns a label (LogisticRegression) that identifies this specific type
-    /// - Other code can use this label to handle the model appropriately
-    /// 
-    /// It's like having different types of vehicles (cars, trucks, motorcycles) that each need to be serviced differently.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.LogisticRegression;
-    }
-
-    /// <summary>
     /// Serializes the logistic regression model to a byte array for storage or transmission.
     /// </summary>
     /// <returns>A byte array containing the serialized model data.</returns>
@@ -333,7 +351,9 @@ public class LogisticRegression<T> : RegressionBase<T>
         byte[] baseData = base.Serialize();
         writer.Write(baseData.Length);
         writer.Write(baseData);
-        // Serialize MultipleRegression specific data
+        // OLS flag
+        writer.Write(_useOLS);
+        // Serialize LogisticRegression specific data
         writer.Write(_options.MaxIterations);
         writer.Write(_options.Tolerance);
 
@@ -369,6 +389,8 @@ public class LogisticRegression<T> : RegressionBase<T>
         int baseDataLength = reader.ReadInt32();
         byte[] baseData = reader.ReadBytes(baseDataLength);
         base.Deserialize(baseData);
+        // OLS flag
+        _useOLS = reader.ReadBoolean();
         // Deserialize MultipleRegression specific data
         _options.MaxIterations = reader.ReadInt32();
         _options.Tolerance = reader.ReadDouble();

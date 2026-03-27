@@ -832,7 +832,6 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         {
             Name = "Tacotron2",
             Description = "Attention-based sequence-to-sequence TTS model",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _vocabSize,
             Complexity = 2
         };
@@ -1037,7 +1036,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         }
 
         // Add residual
-        var refined = new Tensor<T>(melSpectrogram.Shape);
+        var refined = new Tensor<T>(melSpectrogram.Shape.ToArray());
         for (int i = 0; i < melSpectrogram.Length; i++)
         {
             refined[i] = NumOps.Add(melSpectrogram[i], residual[i]);
@@ -1097,7 +1096,7 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             residual = postConv.Forward(residual);
         }
 
-        var refined = new Tensor<T>(melSpectrogram.Shape);
+        var refined = new Tensor<T>(melSpectrogram.Shape.ToArray());
         for (int i = 0; i < melSpectrogram.Length; i++)
         {
             refined[i] = NumOps.Add(melSpectrogram[i], residual[i]);

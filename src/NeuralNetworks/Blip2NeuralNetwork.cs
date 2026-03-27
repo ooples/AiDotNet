@@ -48,6 +48,14 @@ namespace AiDotNet.NeuralNetworks;
 /// 2. Vision-to-Language Generative Learning (Q-Former + LLM)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new Blip2Options { ImageSize = 224, MaxTextLength = 128 };
+/// var model = new Blip2NeuralNetwork&lt;float&gt;(options);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 224, 224 });
+/// var output = model.Predict(image);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Multimodal)]
@@ -1191,7 +1199,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             }
 
             T sumExp = NumOps.Zero;
-            var expScores = new T[kvLen];
+            var expScores = new Vector<T>(kvLen);
             for (int k = 0; k < kvLen; k++)
             {
                 expScores[k] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(scores[k], maxScore))));
@@ -1207,10 +1215,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
             for (int d = 0; d < hiddenDim; d++)
             {
                 T weighted = NumOps.Zero;
-                for (int k = 0; k < kvLen; k++)
-                {
-                    weighted = NumOps.Add(weighted, NumOps.Multiply(expScores[k], keyValues[k, d]));
-                }
+                { var _z0 = new Vector<T>(kvLen); for (int _i = 0; _i < kvLen; _i++) _z0[_i] = keyValues[_i, d]; weighted = NumOps.Add(weighted, Engine.DotProduct(expScores, _z0)); }
                 output[q, d] = NumOps.Add(queries[q, d], weighted); // Residual connection
             }
         }
@@ -2409,7 +2414,6 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = Enums.ModelType.Blip2,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ImageSize", _imageSize },

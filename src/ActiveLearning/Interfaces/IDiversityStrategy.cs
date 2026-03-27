@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines;
+
 namespace AiDotNet.ActiveLearning.Interfaces;
 
 /// <summary>
@@ -72,6 +74,11 @@ public interface IDiversityStrategy<T, TInput, TOutput>
 /// <typeparam name="TOutput">The output type for samples.</typeparam>
 public abstract class DiversityStrategyBase<T, TInput, TOutput> : IDiversityStrategy<T, TInput, TOutput>
 {
+    /// <summary>
+    /// Gets the hardware-accelerated computation engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// Gets numeric operations helper.
     /// </summary>

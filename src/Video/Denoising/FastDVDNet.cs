@@ -261,7 +261,7 @@ public class FastDVDNet<T> : VideoDenoisingBase<T>
     public Tensor<T> AddGaussianNoise(Tensor<T> frame, double sigma)
     {
         var random = RandomHelper.CreateSecureRandom();
-        var noisy = new Tensor<T>(frame.Shape);
+        var noisy = new Tensor<T>(frame.Shape.ToArray());
 
         for (int i = 0; i < frame.Length; i++)
         {
@@ -292,7 +292,7 @@ public class FastDVDNet<T> : VideoDenoisingBase<T>
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };
 
         using var results = _onnxSession.Run(inputs);
@@ -405,7 +405,7 @@ public class FastDVDNet<T> : VideoDenoisingBase<T>
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var gradTensor = new Tensor<T>(prediction.Shape, gradient);
+        var gradTensor = new Tensor<T>(prediction.Shape.ToArray(), gradient);
 
         for (int i = Layers.Count - 1; i >= 0; i--) gradTensor = Layers[i].Backward(gradTensor);
         _optimizer?.UpdateParameters(Layers);
@@ -447,7 +447,6 @@ public class FastDVDNet<T> : VideoDenoisingBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.VideoDenoising,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "FastDVDNet" }, { "NumFeatures", _numFeatures },

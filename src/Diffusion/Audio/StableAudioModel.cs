@@ -294,7 +294,6 @@ public class StableAudioModel<T> : AudioDiffusionModelBase<T>
         {
             Name = "Stable-Audio-Open",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Stable Audio Open DiT-based audio generation with timing conditioning at 44.1 kHz",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

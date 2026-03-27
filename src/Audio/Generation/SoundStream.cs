@@ -256,7 +256,6 @@ public class SoundStream<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         {
             Name = _useNativeMode ? "SoundStream-Native" : "SoundStream-ONNX",
             Description = "SoundStream neural audio codec (Zeghidour et al., 2021, Google)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = 1,
             Complexity = _options.EncoderChannels.Length
         };
         m.AdditionalInfo["NumQuantizers"] = _options.NumQuantizers.ToString();

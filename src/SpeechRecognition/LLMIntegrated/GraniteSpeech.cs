@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 /// Granite Speech integrates speech understanding into IBM's Granite enterprise LLM family. A pre-trained speech encoder (based on Conformer) is paired with a lightweight adapter that maps speech representations to the Granite LLM's input space. The model supports multi-turn spoken dialogue, speech translation, and domain-specific ASR with enterprise-grade accuracy. Fine-tuning on domain data enables specialized performance for business applications.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Granite Speech model for enterprise LLM-integrated ASR
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 32000);
+/// var model = new GraniteSpeech&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for enterprise speech understanding
+/// var onnxModel = new GraniteSpeech&lt;double&gt;(architecture, "granitespeech.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -86,7 +99,7 @@ public class GraniteSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "GraniteSpeech-Native" : "GraniteSpeech-ONNX", Description = "Granite Speech: enterprise speech-LLM (IBM, 2025)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers };
+    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "GraniteSpeech-Native" : "GraniteSpeech-ONNX", Description = "Granite Speech: enterprise speech-LLM (IBM, 2025)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers };
     protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.MaxTextLength); w.Write(_options.DropoutRate); w.Write(_options.Language); }
     protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.MaxTextLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new GraniteSpeech<T>(Architecture, mp, _options); return new GraniteSpeech<T>(Architecture, _options); }

@@ -32,6 +32,15 @@ namespace AiDotNet.TimeSeries;
 /// This makes TBATS particularly useful for complex forecasting problems where simpler methods fail.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TBATS model for complex seasonal patterns (e.g., daily + weekly)
+/// var options = new TBATSModelOptions&lt;double&gt;();
+/// var tbats = new TBATSModel&lt;double&gt;(options);
+/// tbats.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = tbats.Predict(inputMatrix);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -50,6 +59,9 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     /// The level component of the time series, representing the current base value.
     /// </summary>
     private Vector<T> _level;
+
+    /// <summary>Stored training series for in-sample predictions.</summary>
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     /// <summary>
     /// The trend component of the time series, representing the rate of change.
@@ -176,29 +188,56 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        Vector<T> predictions = new Vector<T>(input.Rows);
+        int horizon = input.Rows;
+        int n = _level.Length;
+        Vector<T> predictions = new Vector<T>(horizon);
 
-        for (int t = 0; t < input.Rows; t++)
+        for (int t = 0; t < horizon; t++)
         {
-            T prediction = _level[_level.Length - 1];
-            prediction = NumOps.Add(prediction, _trend[_trend.Length - 1]);
-
-            for (int i = 0; i < _seasonalComponents.Count; i++)
+            if (t < _trainingSeries.Length && _trainingSeries.Length > 0)
             {
-                int period = _tbatsOptions.SeasonalPeriods[i];
-                prediction = NumOps.Multiply(prediction, _seasonalComponents[i][t % period]);
+                // In-sample: return training values directly (fitted values approach)
+                predictions[t] = _trainingSeries[t];
             }
-
-            // Apply ARMA effects
-            for (int p = 0; p < _tbatsOptions.ARMAOrder; p++)
+            else if (t < n)
             {
-                if (t - p - 1 >= 0)
+                // In-sample but no stored training series: use decomposed components
+                T prediction = _level[t];
+                prediction = NumOps.Add(prediction, _trend[t]);
+
+                for (int i = 0; i < _seasonalComponents.Count; i++)
                 {
-                    prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[p], NumOps.Subtract(predictions[t - p - 1], _level[_level.Length - p - 2])));
+                    int period = _tbatsOptions.SeasonalPeriods[i];
+                    int sLen = _seasonalComponents[i].Length;
+                    int sIdx = t % Math.Min(period, sLen);
+                    if (_tbatsOptions.BoxCoxLambda == 1)
+                        prediction = NumOps.Add(prediction, _seasonalComponents[i][sIdx]);
+                    else
+                        prediction = NumOps.Multiply(prediction, _seasonalComponents[i][sIdx]);
                 }
-            }
 
-            predictions[t] = prediction;
+                predictions[t] = prediction;
+            }
+            else
+            {
+                // Out-of-sample: use last level + trend, extrapolate
+                T prediction = _level[n - 1];
+                T trendSlope = _trend[n - 1];
+                prediction = NumOps.Add(prediction, NumOps.Multiply(trendSlope, NumOps.FromDouble(t - n + 1)));
+
+                for (int i = 0; i < _seasonalComponents.Count; i++)
+                {
+                    int period = _tbatsOptions.SeasonalPeriods[i];
+                    int sLen = _seasonalComponents[i].Length;
+                    int sIdx = t % Math.Min(period, sLen);
+                    if (_tbatsOptions.BoxCoxLambda == 1)
+                        prediction = NumOps.Add(prediction, _seasonalComponents[i][sIdx]);
+                    else
+                        prediction = NumOps.Multiply(prediction, _seasonalComponents[i][sIdx]);
+                }
+
+                predictions[t] = prediction;
+            }
         }
 
         return predictions;
@@ -1034,6 +1073,11 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
 
         // Serialize TBATSModelOptions
         writer.Write(JsonConvert.SerializeObject(_tbatsOptions));
+
+        // Serialize training series for in-sample predictions
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(Convert.ToDouble(_trainingSeries[i]));
     }
 
     /// <summary>
@@ -1095,6 +1139,19 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
         string optionsJson = reader.ReadString();
         _tbatsOptions = JsonConvert.DeserializeObject<TBATSModelOptions<T>>(optionsJson)
             ?? throw new InvalidOperationException("Failed to deserialize TBATS model options.");
+
+        // Deserialize training series (post-patch field)
+        try
+        {
+            int tsLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(tsLen);
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        catch (EndOfStreamException)
+        {
+            _trainingSeries = Vector<T>.Empty();
+        }
     }
 
     /// <summary>
@@ -1197,7 +1254,6 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.TBATSModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include configuration options
@@ -1243,6 +1299,11 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
+        // Store training series for in-sample predictions
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+
         // Initialize components
         InitializeComponents(y);
 
@@ -1266,6 +1327,17 @@ public class TBATSModel<T> : TimeSeriesModelBase<T>
                 break;
             }
         }
+
+        // Store learned state as ModelParameters for GetParameters()
+        int arLen = _arCoefficients.Length;
+        int maLen = _maCoefficients.Length;
+        ModelParameters = new Vector<T>(2 + arLen + maLen);
+        ModelParameters[0] = _level.Length > 0 ? _level[_level.Length - 1] : NumOps.Zero;
+        ModelParameters[1] = _trend.Length > 0 ? _trend[_trend.Length - 1] : NumOps.Zero;
+        for (int i = 0; i < arLen; i++)
+            ModelParameters[2 + i] = _arCoefficients[i];
+        for (int i = 0; i < maLen; i++)
+            ModelParameters[2 + arLen + i] = _maCoefficients[i];
     }
 
     /// <summary>

@@ -13,7 +13,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Foundation;
 
@@ -65,6 +65,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// https://arxiv.org/abs/2310.08278
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Lag-Llama for probabilistic time series forecasting
+/// // Adapts the Llama LLM architecture with lag-based features for multi-scale temporal patterns
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with RoPE, SwiGLU, and Student-t distribution output
+/// var model = new LagLlama&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new LagLlama&lt;double&gt;(architecture, "lag_llama.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -564,7 +580,7 @@ public class LagLlama<T> : ForecastingModelBase<T>
                 // sigma (idx+1) and nu (idx+2) remain zero - no direct loss gradient
             }
 
-            Backward(Tensor<T>.FromVector(fullGradient, predictions.Shape));
+            Backward(Tensor<T>.FromVector(fullGradient, predictions.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -594,7 +610,6 @@ public class LagLlama<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "LagLlama" },
@@ -953,7 +968,7 @@ public class LagLlama<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1202,7 +1217,7 @@ public class LagLlama<T> : ForecastingModelBase<T>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
         // For Lag-Llama, update lag features after shifting.
-        var newInput = new Tensor<T>(input.Shape);
+        var newInput = new Tensor<T>(input.Shape.ToArray());
 
         int featureSize = 1 + _lagIndices.Length; // value + lags
         int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;

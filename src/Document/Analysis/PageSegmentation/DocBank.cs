@@ -531,7 +531,7 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape);
+        var normalized = new Tensor<T>(image.Shape.ToArray());
 
         // ImageNet normalization (industry standard for DocBank)
         double[] means = [0.485, 0.456, 0.406];
@@ -584,7 +584,6 @@ public class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T>
         return new ModelMetadata<T>
         {
             Name = "DocBank",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Document layout analysis and page segmentation (COLING 2020)",
             FeatureCount = _backboneChannels,
             Complexity = Layers.Count,

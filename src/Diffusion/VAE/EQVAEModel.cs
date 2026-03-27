@@ -32,6 +32,13 @@ namespace AiDotNet.Diffusion.VAE;
 /// Generative Image Modeling", 2025
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var vae = new EQVAEModel&lt;float&gt;(inputChannels: 3, latentChannels: 4, baseChannels: 128);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 512, 512 });
+/// var latent = vae.Encode(image);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Generative)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.FeatureExtraction)]
@@ -171,7 +178,7 @@ public class EQVAEModel<T> : VAEModelBase<T>
     public override (Tensor<T> Mean, Tensor<T> LogVariance) EncodeWithDistribution(Tensor<T> image)
     {
         var mean = Encode(image, sampleMode: false);
-        var logVar = new Tensor<T>(mean.Shape);
+        var logVar = new Tensor<T>(mean.Shape.ToArray());
         return (mean, logVar);
     }
 
@@ -196,7 +203,7 @@ public class EQVAEModel<T> : VAEModelBase<T>
         var latentTrans = Encode(transformed);
 
         // L2 distance between latent representations should be preserved
-        var diff = new Tensor<T>(latentOrig.Shape);
+        var diff = new Tensor<T>(latentOrig.Shape.ToArray());
         var origSpan = latentOrig.AsSpan();
         var transSpan = latentTrans.AsSpan();
         var diffSpan = diff.AsWritableSpan();

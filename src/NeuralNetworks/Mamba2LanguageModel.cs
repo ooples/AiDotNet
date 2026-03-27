@@ -15,8 +15,21 @@ namespace AiDotNet.NeuralNetworks;
 /// Mamba-2 improves upon the original Mamba architecture by replacing the selective scan with a
 /// structured state space duality (SSD) formulation that enables more efficient hardware utilization.
 /// </para>
+/// <para><b>For Beginners:</b> Mamba-2 is a faster version of the Mamba language model that
+/// discovers a mathematical connection between state-space models and transformers. This
+/// insight allows it to use optimized matrix multiplication hardware (like tensor cores on
+/// GPUs) for a 2-8x speedup over the original Mamba, while maintaining the same constant
+/// memory advantage during text generation.</para>
 /// <para><b>Reference:</b> Dao and Gu, "Transformers are SSMs", 2024.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new Mamba2Options { VocabSize = 50280, ModelDim = 2560, NumLayers = 64 };
+/// var model = new Mamba2LanguageModel&lt;float&gt;(options);
+/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var logits = model.Predict(tokens);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -140,7 +153,6 @@ public class Mamba2LanguageModel<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Architecture", "Mamba-2" },

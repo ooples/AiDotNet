@@ -45,7 +45,6 @@ public class MockFullModel : IFullModel<double, Matrix<double>, Vector<double>>
         return new ModelMetadata<double>
         {
             Name = "MockFullModel",
-            ModelType = Enums.ModelType.None,
             FeatureCount = _parameters.Length,
             Complexity = 1
         };
@@ -61,6 +60,7 @@ public class MockFullModel : IFullModel<double, Matrix<double>, Vector<double>>
     }
 
     public int ParameterCount => _parameters.Length;
+    public bool SupportsParameterInitialization => ParameterCount > 0;
 
     public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
     {
@@ -134,4 +134,6 @@ public class MockFullModel : IFullModel<double, Matrix<double>, Vector<double>>
     {
         throw new NotSupportedException("JIT compilation not supported in mock model");
     }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
 }

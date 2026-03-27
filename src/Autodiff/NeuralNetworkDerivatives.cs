@@ -272,7 +272,7 @@ namespace AiDotNet.Autodiff
                 var inputTensor = CreateInputTensor(inputs);
                 var inputNode = TensorOperations<T>.Variable(inputTensor, "input", requiresGradient: true);
                 var outputNode = BuildGraph(network, inputNode);
-                var outputShape = outputNode.Value.Shape;
+                var outputShape = outputNode.Value.Shape.ToArray();
 
                 // Handle 1D output [outputDim] or 2D batched output [1, outputDim]
                 bool is1D = outputShape.Length == 1 && outputShape[0] == outputDim;

@@ -245,7 +245,7 @@ public class MidJourneyV7Model<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "MidJourney V7", Version = "7.0", ModelType = ModelType.NeuralNetwork,
+            Name = "MidJourney V7", Version = "7.0",
             Description = "Multi-scale MMDiT-X with aesthetic-aware training and stylize control",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

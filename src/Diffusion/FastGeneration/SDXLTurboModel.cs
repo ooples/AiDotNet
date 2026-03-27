@@ -32,6 +32,14 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: Sauer et al., "Adversarial Diffusion Distillation", 2023
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 1 };
+/// var model = new SDXLTurboModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.GAN)]
@@ -142,7 +150,7 @@ public class SDXLTurboModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SDXL Turbo", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SDXL Turbo", Version = "1.0",
             Description = "SDXL-quality single-step generation via Adversarial Diffusion Distillation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

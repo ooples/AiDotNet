@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// SEED-X (Tencent, 2024) is a multimodal model with unified multi-granularity comprehension
+/// and generation. It processes visual information at multiple granularity levels from global
+/// scene understanding to fine-grained detail recognition, using a SEED visual tokenizer that
+/// captures both high-level semantics and low-level visual details for generation tasks.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "SEED-X: Multimodal Models with Unified Multi-granularity Comprehension and Generation" (Tencent, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> SEEDX is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> SEED-X is a unified model for multi-granularity visual
+/// understanding and generation from Tencent. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SEED-X model for multi-granularity comprehension and generation
+/// // with unified visual understanding at multiple detail levels
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new SEEDX&lt;double&gt;(architecture, "seedx.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new SEEDX&lt;double&gt;(architecture, new SEEDXOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Multimodal)]
@@ -201,7 +225,7 @@ public class SEEDX<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "SEED-X-Native" : "SEED-X-ONNX", Description = "SEED-X: multi-granularity comprehension and generation model.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "SEED-X-Native" : "SEED-X-ONNX", Description = "SEED-X: multi-granularity comprehension and generation model.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "SEED-X";
         m.AdditionalInfo["SupportsGeneration"] = _options.SupportsGeneration.ToString();
         m.AdditionalInfo["MultiGranularity"] = _options.EnableMultiGranularity.ToString();

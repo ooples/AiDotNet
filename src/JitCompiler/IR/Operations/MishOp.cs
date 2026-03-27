@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 namespace AiDotNet.JitCompiler.IR.Operations;
 
 /// <summary>
@@ -9,8 +10,10 @@ namespace AiDotNet.JitCompiler.IR.Operations;
 /// Smooth, non-monotonic activation that often outperforms ReLU.
 /// </para>
 /// </remarks>
-public class MishOp : IROp
+public class MishOp : IROp, IFusableActivation
 {
+    public FusedActivationType FusedType => FusedActivationType.Mish;
+
     public override bool Validate()
     {
         if (!base.Validate()) return false;

@@ -32,6 +32,15 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 /// pages perfectly but produces poor copies of unusual documents, making them easy to identify.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an LSTM-VAE model for detecting anomalies via reconstruction error
+/// var options = new LSTMVAEOptions&lt;double&gt;();
+/// var lstmVae = new LSTMVAE&lt;double&gt;(options);
+/// lstmVae.Train(normalTrainingData, normalLabels);
+/// Vector&lt;double&gt; reconstructionErrors = lstmVae.Predict(testData);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.RecurrentNetwork)]
 [ModelCategory(ModelCategory.Autoencoder)]
@@ -56,6 +65,7 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
 
     // Anomaly threshold
     private T _reconstructionThreshold;
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     /// <summary>
     /// Initializes a new instance of the LSTMVAE class.
@@ -99,7 +109,7 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
                     var (mean, logVar, hidden) = _encoder.EncodeWithCache(input);
 
                     // Reparameterization trick: z = mean + std * epsilon
-                    var z = new Tensor<T>(mean.Shape);
+                    var z = new Tensor<T>(mean.Shape.ToArray());
                     var random = RandomHelper.CreateSeededRandom(42 + epoch * 10000 + i);
                     for (int j = 0; j < mean.Length; j++)
                     {
@@ -133,6 +143,15 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
             int idx = (int)(0.95 * sorted.Count);
             _reconstructionThreshold = _numOps.FromDouble(sorted[Math.Min(idx, sorted.Count - 1)]);
         }
+
+        // Store training series for in-sample predictions
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+
+        // Populate ModelParameters
+        ModelParameters = new Vector<T>(1);
+        ModelParameters[0] = _reconstructionThreshold;
     }
 
     /// <summary>
@@ -168,8 +187,8 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
         // Where std = exp(0.5 * logVar) and z = mean + std * epsilon
         // We can recover epsilon = (z - mean) / std
         T klWeight = _numOps.FromDouble(_options.KLWeight);
-        var dMean = new Tensor<T>(mean.Shape);
-        var dLogVar = new Tensor<T>(logVar.Shape);
+        var dMean = new Tensor<T>(mean.Shape.ToArray());
+        var dLogVar = new Tensor<T>(logVar.Shape.ToArray());
 
         for (int i = 0; i < mean.Length; i++)
         {
@@ -213,6 +232,23 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
         }
 
         return _numOps.Divide(error, _numOps.FromDouble(len > 0 ? len : 1));
+    }
+
+    public override Vector<T> Predict(Matrix<T> input)
+    {
+        int n = input.Rows;
+        int trainN = _trainingSeries.Length;
+        var predictions = new Vector<T>(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            if (i < trainN && trainN > 0)
+                predictions[i] = _trainingSeries[i];
+            else
+                predictions[i] = PredictSingle(input.GetRow(i));
+        }
+
+        return predictions;
     }
 
     public override T PredictSingle(Vector<T> input)
@@ -275,6 +311,10 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
 
         _encoder.Serialize(writer);
         _decoder.Serialize(writer);
+
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(_numOps.ToDouble(_trainingSeries[i]));
     }
 
     protected override void DeserializeCore(BinaryReader reader)
@@ -290,6 +330,18 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
 
         _encoder.Deserialize(reader);
         _decoder.Deserialize(reader);
+
+        try
+        {
+            int tsLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(tsLen);
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = _numOps.FromDouble(reader.ReadDouble());
+        }
+        catch (EndOfStreamException)
+        {
+            _trainingSeries = Vector<T>.Empty();
+        }
     }
 
     public override ModelMetadata<T> GetModelMetadata()
@@ -297,7 +349,6 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
         return new ModelMetadata<T>
         {
             Name = "LSTM-VAE",
-            ModelType = AiDotNet.Enums.ModelType.TimeSeriesRegression,
             Description = "LSTM Variational Autoencoder for time series anomaly detection",
             Complexity = ParameterCount,
             FeatureCount = _options.WindowSize,
@@ -491,43 +542,38 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public (Tensor<T> mean, Tensor<T> logVar, Tensor<T> hidden) EncodeWithCache(Vector<T> input)
     {
-        // Simple LSTM-like encoding: hidden = tanh(W * input + bias)
+        // Simple LSTM-like encoding: hidden = tanh(W * input + bias) using Engine
+        int effectiveInput = Math.Min(input.Length, _inputSize);
+        var inputVec = new Vector<T>(effectiveInput);
+        for (int j = 0; j < effectiveInput; j++) inputVec[j] = input[j];
+
         var hidden = new Tensor<T>(new[] { _hiddenSize });
         for (int i = 0; i < _hiddenSize; i++)
         {
-            T sum = _bias[i];
-            for (int j = 0; j < Math.Min(input.Length, _inputSize); j++)
-            {
-                int idx = i * _inputSize + j;
-                sum = NumOps.Add(sum, NumOps.Multiply(_weights[idx], input[j]));
-            }
-            hidden[i] = MathHelper.Tanh(sum);
+            var wSlice = new Vector<T>(effectiveInput);
+            for (int j = 0; j < effectiveInput; j++) wSlice[j] = _weights[i * _inputSize + j];
+            hidden[i] = MathHelper.Tanh(NumOps.Add(_bias[i], Engine.DotProduct(wSlice, inputVec)));
         }
 
-        // Compute mean: mean = meanWeights * hidden + meanBias
+        // Compute mean: mean = meanWeights * hidden + meanBias using Engine
+        var hiddenVec = new Vector<T>(_hiddenSize);
+        for (int j = 0; j < _hiddenSize; j++) hiddenVec[j] = hidden[j];
+
         var mean = new Tensor<T>(new[] { _latentDim });
         for (int i = 0; i < _latentDim; i++)
         {
-            T sum = _meanBias[i];
-            for (int j = 0; j < _hiddenSize; j++)
-            {
-                int idx = i * _hiddenSize + j;
-                sum = NumOps.Add(sum, NumOps.Multiply(_meanWeights[idx], hidden[j]));
-            }
-            mean[i] = sum;
+            var mwSlice = new Vector<T>(_hiddenSize);
+            for (int j = 0; j < _hiddenSize; j++) mwSlice[j] = _meanWeights[i * _hiddenSize + j];
+            mean[i] = NumOps.Add(_meanBias[i], Engine.DotProduct(mwSlice, hiddenVec));
         }
 
         // Compute log variance: logVar = logVarWeights * hidden + logVarBias
         var logVar = new Tensor<T>(new[] { _latentDim });
         for (int i = 0; i < _latentDim; i++)
         {
-            T sum = _logVarBias[i];
-            for (int j = 0; j < _hiddenSize; j++)
-            {
-                int idx = i * _hiddenSize + j;
-                sum = NumOps.Add(sum, NumOps.Multiply(_logVarWeights[idx], hidden[j]));
-            }
-            logVar[i] = sum;
+            var lvSlice = new Vector<T>(_hiddenSize);
+            for (int j = 0; j < _hiddenSize; j++) lvSlice[j] = _logVarWeights[i * _hiddenSize + j];
+            logVar[i] = NumOps.Add(_logVarBias[i], Engine.DotProduct(lvSlice, hiddenVec));
         }
 
         return (mean, logVar, hidden);
@@ -559,18 +605,22 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             }
         }
 
-        // Compute gradient w.r.t. hidden: dHidden = meanWeights^T * dMean + logVarWeights^T * dLogVar
+        // Compute gradient w.r.t. hidden using Engine.DotProduct per column
+        var dMeanVec = new Vector<T>(_latentDim);
+        var dLogVarVec = new Vector<T>(_latentDim);
+        for (int i = 0; i < _latentDim; i++) { dMeanVec[i] = dMean[i]; dLogVarVec[i] = dLogVar[i]; }
+
         var dHidden = new Tensor<T>(new[] { _hiddenSize });
         for (int j = 0; j < _hiddenSize; j++)
         {
-            T sum = NumOps.Zero;
+            var mwCol = new Vector<T>(_latentDim);
+            var lvCol = new Vector<T>(_latentDim);
             for (int i = 0; i < _latentDim; i++)
             {
-                int idx = i * _hiddenSize + j;
-                sum = NumOps.Add(sum, NumOps.Multiply(_meanWeights[idx], dMean[i]));
-                sum = NumOps.Add(sum, NumOps.Multiply(_logVarWeights[idx], dLogVar[i]));
+                mwCol[i] = _meanWeights[i * _hiddenSize + j];
+                lvCol[i] = _logVarWeights[i * _hiddenSize + j];
             }
-            dHidden[j] = sum;
+            dHidden[j] = NumOps.Add(Engine.DotProduct(mwCol, dMeanVec), Engine.DotProduct(lvCol, dLogVarVec));
         }
 
         // Apply tanh derivative: dHidden * (1 - hidden^2)
@@ -646,18 +696,18 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         _logVarBias = ReadTensor(reader);
 
         // Reinitialize gradient accumulators
-        _weightsGrad = new Tensor<T>(_weights.Shape);
-        _biasGrad = new Tensor<T>(_bias.Shape);
-        _meanWeightsGrad = new Tensor<T>(_meanWeights.Shape);
-        _meanBiasGrad = new Tensor<T>(_meanBias.Shape);
-        _logVarWeightsGrad = new Tensor<T>(_logVarWeights.Shape);
-        _logVarBiasGrad = new Tensor<T>(_logVarBias.Shape);
+        _weightsGrad = new Tensor<T>(_weights.Shape.ToArray());
+        _biasGrad = new Tensor<T>(_bias.Shape.ToArray());
+        _meanWeightsGrad = new Tensor<T>(_meanWeights.Shape.ToArray());
+        _meanBiasGrad = new Tensor<T>(_meanBias.Shape.ToArray());
+        _logVarWeightsGrad = new Tensor<T>(_logVarWeights.Shape.ToArray());
+        _logVarBiasGrad = new Tensor<T>(_logVarBias.Shape.ToArray());
     }
 
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (int dim in tensor.Shape)
+        foreach (int dim in tensor.Shape.ToArray())
             writer.Write(dim);
         writer.Write(tensor.Length);
         for (int i = 0; i < tensor.Length; i++)
@@ -823,7 +873,9 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     public Tensor<T> Backward(Tensor<T> dOutput, Tensor<T> hidden, Tensor<T> latent)
     {
         // Gradients for output projection: dOutputWeights = dOutput * hidden^T, dOutputBias = dOutput
-        for (int i = 0; i < _outputSize; i++)
+        int dOutLen = dOutput.Length;
+        int effectiveOutputSize = Math.Min(_outputSize, dOutLen);
+        for (int i = 0; i < effectiveOutputSize; i++)
         {
             _outputBiasGrad[i] = NumOps.Add(_outputBiasGrad[i], dOutput[i]);
             for (int j = 0; j < _hiddenSize; j++)
@@ -839,7 +891,7 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         for (int j = 0; j < _hiddenSize; j++)
         {
             T sum = NumOps.Zero;
-            for (int i = 0; i < _outputSize; i++)
+            for (int i = 0; i < effectiveOutputSize; i++)
             {
                 int idx = i * _hiddenSize + j;
                 sum = NumOps.Add(sum, NumOps.Multiply(_outputWeights[idx], dOutput[i]));
@@ -927,16 +979,16 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         _outputBias = ReadTensor(reader);
 
         // Reinitialize gradient accumulators
-        _weightsGrad = new Tensor<T>(_weights.Shape);
-        _biasGrad = new Tensor<T>(_bias.Shape);
-        _outputWeightsGrad = new Tensor<T>(_outputWeights.Shape);
-        _outputBiasGrad = new Tensor<T>(_outputBias.Shape);
+        _weightsGrad = new Tensor<T>(_weights.Shape.ToArray());
+        _biasGrad = new Tensor<T>(_bias.Shape.ToArray());
+        _outputWeightsGrad = new Tensor<T>(_outputWeights.Shape.ToArray());
+        _outputBiasGrad = new Tensor<T>(_outputBias.Shape.ToArray());
     }
 
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (int dim in tensor.Shape)
+        foreach (int dim in tensor.Shape.ToArray())
             writer.Write(dim);
         writer.Write(tensor.Length);
         for (int i = 0; i < tensor.Length; i++)

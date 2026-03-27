@@ -29,7 +29,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 2048, outputSize: 300);
 /// var model = new Tempogram&lt;float&gt;(arch, "tempogram.onnx");
 /// var result = model.Track(audioTensor);
-/// Console.WriteLine($"Tempo: {result.Tempo} BPM");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>
@@ -256,7 +256,6 @@ public class Tempogram<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         {
             Name = _useNativeMode ? "Tempogram-Native" : "Tempogram-ONNX",
             Description = "Neural tempogram for tempo estimation over time",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.FftSize,
             Complexity = _options.NumOnsetLayers
         };
         m.AdditionalInfo["MinBPM"] = _options.MinBPM.ToString("F0");

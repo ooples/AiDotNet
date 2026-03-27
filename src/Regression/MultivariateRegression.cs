@@ -26,6 +26,24 @@ namespace AiDotNet.Regression;
 /// The model learns the best values for these coefficients from your training data to make accurate predictions.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a multivariate regression model for multi-feature prediction
+/// var model = new MultivariateRegression&lt;double&gt;();
+///
+/// // Prepare training data: 5 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.5, 5.3, 8.1, 10.9, 13.7 });
+///
+/// // Train the model on the data
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
@@ -142,30 +160,6 @@ public class MultivariateRegression<T> : RegressionBase<T>
             predictions = predictions.Add(Intercept);
         }
         return predictions;
-    }
-
-    /// <summary>
-    /// Gets the type of regression model.
-    /// </summary>
-    /// <returns>The model type, in this case, MultivariateRegression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an enumeration value indicating that this is a multivariate regression model. This is used
-    /// for type identification when working with different regression models in a unified manner.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method simply identifies what kind of model this is.
-    /// 
-    /// It returns a label (MultivariateRegression) that:
-    /// - Identifies this specific type of model
-    /// - Helps other code handle the model appropriately
-    /// - Is used when saving or loading models
-    /// 
-    /// It's like a name tag that lets other parts of the program know what kind of model they're working with.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.MultivariateRegression;
     }
 
     /// <summary>

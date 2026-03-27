@@ -27,10 +27,31 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// MG-TSD captures temporal patterns at multiple granularities using a coarse-to-fine
 /// guidance mechanism where predictions at coarser levels guide fine-grained diffusion.
 /// </para>
+/// <para><b>For Beginners:</b> MG-TSD forecasts at multiple zoom levels simultaneously.
+/// It first makes a rough forecast (like predicting monthly trends), then uses that to
+/// guide a more detailed forecast (like daily values). This coarse-to-fine approach is
+/// similar to how an artist first sketches the broad outlines before adding fine details,
+/// resulting in more coherent and accurate probabilistic predictions.</para>
 /// <para>
 /// <b>Reference:</b> Fan et al., "MG-TSD: Multi-Granularity Time Series Diffusion Models with Guided Learning Process", ICLR 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an MG-TSD multi-granularity time series diffusion model
+/// // Coarse-to-fine guidance: rough forecasts at monthly level guide daily predictions
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with multi-granularity guided diffusion
+/// var model = new MGTSD&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new MGTSD&lt;double&gt;(architecture, "mgtsd.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -225,13 +246,13 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
             var rand = RandomHelper.CreateSecureRandom();
             int t = rand.Next(_diffusionSteps);
 
-            var noise = new Tensor<T>(target.Shape);
+            var noise = new Tensor<T>(target.Shape.ToArray());
             for (int i = 0; i < target.Length; i++)
                 noise.Data.Span[i] = SampleStandardNormal(rand);
 
             T sqrtAlphaBar = _sqrtAlphasCumprod[t];
             T sqrtOneMinusAlphaBar = _sqrtOneMinusAlphasCumprod[t];
-            var noisyTarget = new Tensor<T>(target.Shape);
+            var noisyTarget = new Tensor<T>(target.Shape.ToArray());
             for (int i = 0; i < target.Length; i++)
                 noisyTarget.Data.Span[i] = NumOps.Add(
                     NumOps.Multiply(sqrtAlphaBar, target[i]),
@@ -240,7 +261,7 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
             var predictedNoise = ForwardTraining(input, noisyTarget, t);
             LastLoss = _lossFunction.CalculateLoss(predictedNoise.ToVector(), noise.ToVector());
             var gradient = _lossFunction.CalculateDerivative(predictedNoise.ToVector(), noise.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, predictedNoise.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, predictedNoise.Shape.ToArray()));
             _optimizer.UpdateParameters(Layers);
         }
         finally { SetTrainingMode(false); }
@@ -281,7 +302,6 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.NeuralNetwork,
         AdditionalInfo = new Dictionary<string, object> { { "NetworkType", "MGTSD" }, { "ContextLength", _contextLength }, { "ForecastHorizon", _forecastHorizon }, { "HiddenDimension", _hiddenDimension }, { "DiffusionSteps", _diffusionSteps }, { "NumGranularities", _numGranularities }, { "GuidanceWeight", _guidanceWeight }, { "UseNativeMode", _useNativeMode } },
         ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
     };
@@ -305,7 +325,7 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
 
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals) { T mse = NumOps.Zero; T mae = NumOps.Zero; int count = 0; for (int i = 0; i < predictions.Length && i < actuals.Length; i++) { var diff = NumOps.Subtract(predictions[i], actuals[i]); mse = NumOps.Add(mse, NumOps.Multiply(diff, diff)); mae = NumOps.Add(mae, NumOps.Abs(diff)); count++; } if (count > 0) { mse = NumOps.Divide(mse, NumOps.FromDouble(count)); mae = NumOps.Divide(mae, NumOps.FromDouble(count)); } return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) }; }
 
-    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input) { int batchSize = input.Rank > 1 ? input.Shape[0] : 1; int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length; var result = new Tensor<T>(input.Shape); for (int b = 0; b < batchSize; b++) { T mean = NumOps.Zero; for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) mean = NumOps.Add(mean, input[idx]); } mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen)); T variance = NumOps.Zero; for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) { var diff = NumOps.Subtract(input[idx], mean); variance = NumOps.Add(variance, NumOps.Multiply(diff, diff)); } } variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen)); T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5))); for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length && idx < result.Length) result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std); } } return result; }
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input) { int batchSize = input.Rank > 1 ? input.Shape[0] : 1; int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length; var result = new Tensor<T>(input.Shape.ToArray()); for (int b = 0; b < batchSize; b++) { T mean = NumOps.Zero; for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) mean = NumOps.Add(mean, input[idx]); } mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen)); T variance = NumOps.Zero; for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) { var diff = NumOps.Subtract(input[idx], mean); variance = NumOps.Add(variance, NumOps.Multiply(diff, diff)); } } variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen)); T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5))); for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length && idx < result.Length) result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std); } } return result; }
 
     public override Dictionary<string, T> GetFinancialMetrics() { T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero; return new Dictionary<string, T> { ["ContextLength"] = NumOps.FromDouble(_contextLength), ["ForecastHorizon"] = NumOps.FromDouble(_forecastHorizon), ["NumGranularities"] = NumOps.FromDouble(_numGranularities), ["LastLoss"] = lastLoss }; }
 

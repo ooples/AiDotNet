@@ -433,6 +433,7 @@ public class AdversarialRobustnessIntegrationTests
         }
 
         public int ParameterCount => _weights.Length;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
 
         public IFullModel<double, Vector<double>, Vector<double>> WithParameters(
             Vector<double> parameters)
@@ -445,6 +446,8 @@ public class AdversarialRobustnessIntegrationTests
         public void Deserialize(byte[] data) { }
         public void SaveModel(string filePath) { }
         public void LoadModel(string filePath) { }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     #endregion

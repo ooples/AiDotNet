@@ -63,8 +63,8 @@ namespace AiDotNet.Reasoning.Strategies;
 /// );
 ///
 /// // Result includes all alternative chains for transparency
-/// Console.WriteLine($"Final answer: {result.FinalAnswer}");
-/// Console.WriteLine($"Based on {result.AlternativeChains.Count} samples");
+/// // Result is available in the returned value
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

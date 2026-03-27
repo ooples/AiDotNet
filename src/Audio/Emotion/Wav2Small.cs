@@ -31,7 +31,7 @@ namespace AiDotNet.Audio.Emotion;
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 80, outputSize: 7);
 /// var model = new Wav2Small&lt;float&gt;(arch, "wav2small.onnx");
 /// var result = model.RecognizeEmotion(speechAudio);
-/// Console.WriteLine($"Emotion: {result.Emotion}, Confidence: {result.Confidence}");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>
@@ -260,7 +260,6 @@ public class Wav2Small<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         {
             Name = _useNativeMode ? "Wav2Small-Native" : "Wav2Small-ONNX",
             Description = "Wav2Small Lightweight SER (Gomez-Alanis et al., 2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels, Complexity = _options.NumLayers
         };
         m.AdditionalInfo["NumClasses"] = _options.NumClasses.ToString();
         m.AdditionalInfo["HiddenDim"] = _options.HiddenDim.ToString();

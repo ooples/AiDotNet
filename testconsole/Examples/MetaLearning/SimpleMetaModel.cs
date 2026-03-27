@@ -71,6 +71,7 @@ internal class SimpleMetaModel : IFullModel<double, Matrix<double>, Vector<doubl
     }
 
     public int ParameterCount => _parameters.Length;
+    public bool SupportsParameterInitialization => ParameterCount > 0;
 
     public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
     {
@@ -164,4 +165,6 @@ internal class SimpleMetaModel : IFullModel<double, Matrix<double>, Vector<doubl
 
     public ComputationNode<double> ExportComputationGraph(List<ComputationNode<double>> inputNodes)
         => throw new NotSupportedException();
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
 }

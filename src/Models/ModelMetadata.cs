@@ -94,36 +94,6 @@ public class ModelMetadata<T>
     }
 
     /// <summary>
-    /// Gets or sets the type of the model.
-    /// </summary>
-    /// <value>A ModelType enumeration value indicating the model's type.</value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates the type of the model, such as regression, classification, clustering, or time series.
-    /// The model type provides a high-level categorization of what the model does and what kind of problems it is designed
-    /// to solve. This information is useful for understanding the model's purpose and for selecting appropriate models for
-    /// specific tasks.
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you what kind of problem the model is designed to solve.
-    ///
-    /// The model type:
-    /// - Indicates whether the model is for regression, classification, clustering, etc.
-    /// - Helps you understand what the model is designed to do
-    /// - Guides how the model's outputs should be interpreted
-    ///
-    /// Common model types include:
-    /// - Regression: Predicts continuous values (like prices, temperatures)
-    /// - Classification: Predicts categories or classes (like spam/not spam)
-    /// - Clustering: Groups similar items together
-    /// - Time Series: Makes predictions based on time-ordered data
-    ///
-    /// Knowing the model type is essential for using the model correctly and
-    /// understanding what kind of predictions it can make.
-    /// </para>
-    /// </remarks>
-    public ModelType ModelType { get; set; }
-
-    /// <summary>
     /// Gets or sets the number of features used by the model.
     /// </summary>
     /// <value>An integer representing the number of input features.</value>

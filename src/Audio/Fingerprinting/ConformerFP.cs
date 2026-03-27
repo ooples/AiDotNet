@@ -256,7 +256,6 @@ public class ConformerFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             Name = _useNativeMode ? "ConformerFP-Native" : "ConformerFP-ONNX",
             Description = "Conformer-based audio fingerprinting (attention + convolution)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumLayers
         };
         m.AdditionalInfo["EmbeddingDim"] = _options.EmbeddingDim.ToString();

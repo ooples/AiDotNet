@@ -273,7 +273,7 @@ public class WeaviateDocumentStore<T> : DocumentStoreBase<T>
     /// <code>
     /// // Get all documents
     /// var allDocs = store.GetAll().ToList();
-    /// Console.WriteLine($"Total documents in class: {allDocs.Count}");
+    /// // Result is available in the returned value
     /// 
     /// // Export to JSON file
     /// var json = JsonConvert.SerializeObject(allDocs);
@@ -307,7 +307,7 @@ public class WeaviateDocumentStore<T> : DocumentStoreBase<T>
     /// Example:
     /// <code>
     /// store.Clear();
-    /// Console.WriteLine($"Documents in class: {store.DocumentCount}"); // 0
+    /// // Result is available in the returned value // 0
     /// </code>
     /// </para>
     /// </remarks>

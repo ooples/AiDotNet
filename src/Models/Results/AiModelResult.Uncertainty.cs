@@ -614,7 +614,7 @@ public partial class AiModelResult<T, TInput, TOutput>
         var varianceTensor = uqResult.Variance != null
             ? uqResult.Variance.Clone()
             : new Tensor<T>(
-                uqResult.Prediction.Shape,
+                uqResult.Prediction.Shape.ToArray(),
                 Vector<T>.CreateDefault(uqResult.Prediction.Length, MathHelper.GetNumericOperations<T>().Zero));
 
         if (uq.DenormalizeUncertainty)
@@ -783,7 +783,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             vec[i] = _uqNumOps.Add(vec[i], scalar);
         }
 
-        var updated = new Tensor<T>(tensor.Shape, vec);
+        var updated = new Tensor<T>(tensor.Shape.ToArray(), vec);
         return ConvertFromTensor(updated);
     }
 
@@ -894,7 +894,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             outVec[i * 2] = numOps.Subtract(numOps.One, p1T);
         }
 
-        var calibrated = new Tensor<T>([batch, 2], outVec).Reshape(probsTensor.Shape);
+        var calibrated = new Tensor<T>([batch, 2], outVec).Reshape(probsTensor.Shape.ToArray());
         return ConvertFromTensor(calibrated);
     }
 
@@ -929,7 +929,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             outVec[i * 2] = numOps.Subtract(numOps.One, p1Cal);
         }
 
-        var calibrated = new Tensor<T>([batch, 2], outVec).Reshape(probsTensor.Shape);
+        var calibrated = new Tensor<T>([batch, 2], outVec).Reshape(probsTensor.Shape.ToArray());
         return ConvertFromTensor(calibrated);
     }
 
@@ -991,7 +991,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             }
         }
 
-        return new Tensor<T>([batch, classes], output).Reshape(tensor.Shape);
+        return new Tensor<T>([batch, classes], output).Reshape(tensor.Shape.ToArray());
     }
 
     /// <summary>
@@ -1042,7 +1042,7 @@ public partial class AiModelResult<T, TInput, TOutput>
     {
         if (output is Tensor<T> tensor)
         {
-            return (TOutput)(object)new Tensor<T>(tensor.Shape);
+            return (TOutput)(object)new Tensor<T>(tensor.Shape.ToArray());
         }
 
         if (output is Vector<T> vector)
@@ -1096,11 +1096,6 @@ public partial class AiModelResult<T, TInput, TOutput>
 
     private static List<MCDropoutLayer<T>> GetMonteCarloDropoutLayers(IFullModel<T, TInput, TOutput> model)
     {
-        if (model is Models.NeuralNetworkModel<T> nn)
-        {
-            return nn.Network.LayersReadOnly.OfType<MCDropoutLayer<T>>().ToList();
-        }
-
         if (model is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> baseNetwork)
         {
             return baseNetwork.LayersReadOnly.OfType<MCDropoutLayer<T>>().ToList();
@@ -1160,7 +1155,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             varianceVec[i] = numOps.Multiply(varianceVec[i], varianceInv);
         }
 
-        var shape = samples[0].Shape;
+        var shape = samples[0].Shape.ToArray();
         return (new Tensor<T>(shape, meanVec), new Tensor<T>(shape, varianceVec));
     }
 
@@ -1208,7 +1203,7 @@ public partial class AiModelResult<T, TInput, TOutput>
             }
         }
 
-        return new Tensor<T>([batch, classes], scaled).Reshape(probabilities.Shape);
+        return new Tensor<T>([batch, classes], scaled).Reshape(probabilities.Shape.ToArray());
     }
 
     private static (bool treatAsProbabilities, int batch, int classes) InferProbabilityDistributionLayout(Tensor<T> tensor, Vector<T> flat)

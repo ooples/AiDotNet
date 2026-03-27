@@ -13,7 +13,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Foundation;
 
@@ -50,6 +50,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// https://arxiv.org/abs/2310.01728
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Time-LLM model that repurposes frozen LLMs for time series forecasting
+/// // Learns a reprogramming layer to translate time series into text-like representations
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with patch reprogramming and frozen LLM backbone
+/// var model = new TimeLLM&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TimeLLM&lt;double&gt;(architecture, "time_llm.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -465,7 +481,7 @@ public class TimeLLM<T> : ForecastingModelBase<T>
 
             // Backward pass
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            Backward(Tensor<T>.FromVector(gradient, output.Shape));
+            Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -496,7 +512,6 @@ public class TimeLLM<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "TimeLLM" },
@@ -785,7 +800,7 @@ public class TimeLLM<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -902,7 +917,7 @@ public class TimeLLM<T> : ForecastingModelBase<T>
         int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
         int steps = Math.Min(stepsUsed, contextLen);
 
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
 
         int predSteps = predictions.Shape.Length > 1 ? predictions.Shape[1] : predictions.Length / Math.Max(1, batchSize);
         int predFeatures = predictions.Shape.Length > 2 ? predictions.Shape[2] : 1;

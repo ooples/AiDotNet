@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -22,6 +23,22 @@ namespace AiDotNet.AutoML;
 /// to discover even better settings over time.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var automl = new EvolutionaryAutoML&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
+/// var bestModel = await automl.SearchAsync(
+///     trainInputs, trainTargets,
+///     valInputs, valTargets,
+///     maxTrials: 100,
+///     timeLimit: TimeSpan.FromMinutes(15));
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public sealed class EvolutionaryAutoML<T, TInput, TOutput> : BuiltInSupervisedAutoMLModelBase<T, TInput, TOutput>
 {
     private const int MinSuccessfulTrialsForEvolution = 10;
@@ -63,7 +80,7 @@ public sealed class EvolutionaryAutoML<T, TInput, TOutput> : BuiltInSupervisedAu
 
                 var parameters = await SuggestNextTrialAsync();
 
-                if (!parameters.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not ModelType modelType)
+                if (!parameters.TryGetValue(ModelTypeKey, out var modelTypeObj) || modelTypeObj is not Type modelType)
                 {
                     throw new InvalidOperationException("AutoML trial parameters must include a ModelType entry.");
                 }
@@ -97,7 +114,7 @@ public sealed class EvolutionaryAutoML<T, TInput, TOutput> : BuiltInSupervisedAu
     public override Task<Dictionary<string, object>> SuggestNextTrialAsync()
     {
         var modelType = PickCandidateModelType();
-        if (modelType == ModelType.None)
+        if (modelType is null)
         {
             throw new InvalidOperationException("No candidate models are configured for AutoML.");
         }
@@ -116,7 +133,7 @@ public sealed class EvolutionaryAutoML<T, TInput, TOutput> : BuiltInSupervisedAu
             }
 
             successfulForType = _trialHistory
-                .Where(t => t.Success && t.Parameters.TryGetValue("ModelType", out var mt) && mt is ModelType m && m == modelType)
+                .Where(t => t.Success && t.Parameters.TryGetValue(ModelTypeKey, out var mt) && mt is Type m && m == modelType)
                 .Select(t => t.Clone())
                 .ToList();
         }
@@ -132,7 +149,7 @@ public sealed class EvolutionaryAutoML<T, TInput, TOutput> : BuiltInSupervisedAu
             sampled = ProposeByEvolution(merged, successfulForType);
         }
 
-        sampled["ModelType"] = modelType;
+        sampled[ModelTypeKey] = modelType;
         return Task.FromResult(sampled);
     }
 

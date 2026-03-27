@@ -45,6 +45,16 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 /// Through Structured State Space Duality", 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+/// var model = new Mamba2&lt;double&gt;(architecture);
+/// var onnxModel = new Mamba2&lt;double&gt;(architecture, "mamba2.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -277,7 +287,6 @@ public class Mamba2<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "Mamba2" },
@@ -511,7 +520,7 @@ public class Mamba2<T> : ForecastingModelBase<T>
         for (int i = 0; i < input.Length; i++)
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         string inputName = OnnxSession.InputMetadata.Keys.First();
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
 
@@ -554,7 +563,7 @@ public class Mamba2<T> : ForecastingModelBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         for (int i = 0; i < _contextLength - stepsUsed; i++)
             result.Data.Span[i] = input.Data.Span[i + stepsUsed];
         for (int i = 0; i < stepsUsed && i < predictions.Length; i++)

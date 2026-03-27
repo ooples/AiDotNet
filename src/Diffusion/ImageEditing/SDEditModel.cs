@@ -51,6 +51,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Meng et al., "SDEdit: Guided Image Synthesis and Editing with Stochastic Differential Equations", ICLR 2022
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new SDEditModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var edited = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Editing)]
@@ -271,8 +279,8 @@ public class SDEditModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -347,7 +355,6 @@ public class SDEditModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "SDEdit",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "SDEdit transforms sketches and images through partial noising and guided denoising",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

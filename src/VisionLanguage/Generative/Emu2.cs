@@ -24,8 +24,28 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Generative Multimodal Models are In-Context Learners" (Sun et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Emu2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Emu2 scales the original Emu architecture to 37 billion parameters,
+/// using a larger EVA-CLIP-E vision encoder and a more powerful LLaMA-based decoder. It excels
+/// at in-context learning for multimodal tasks — given a few examples of image-text pairs, it
+/// can generalize to new tasks without fine-tuning. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Emu2 model for scaled 37B unified understanding and generation
+/// // with strong in-context multimodal learning capabilities
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Emu2&lt;double&gt;(architecture, "emu2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Emu2&lt;double&gt;(architecture, new Emu2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Generative)]
@@ -115,7 +135,7 @@ public class Emu2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMode
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "Emu2-Native" : "Emu2-ONNX", Description = "Emu2: Generative Multimodal Models are In-Context Learners (Sun et al., 2024)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers + _options.NumRegressionLayers }; m.AdditionalInfo["Architecture"] = "Emu2"; m.AdditionalInfo["GenerativeType"] = _options.ArchitectureType.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "Emu2-Native" : "Emu2-ONNX", Description = "Emu2: Generative Multimodal Models are In-Context Learners (Sun et al., 2024)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers + _options.NumRegressionLayers }; m.AdditionalInfo["Architecture"] = "Emu2"; m.AdditionalInfo["GenerativeType"] = _options.ArchitectureType.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.DecoderDim); writer.Write(_options.RegressionDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumRegressionLayers); writer.Write(_options.NumHeads); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.RegressionDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumRegressionLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new Emu2<T>(Architecture, mp, _options); return new Emu2<T>(Architecture, _options); }

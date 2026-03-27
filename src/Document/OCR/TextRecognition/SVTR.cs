@@ -39,7 +39,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 /// <code>
 /// var model = new SVTR&lt;float&gt;(architecture);
 /// var result = model.RecognizeText(textImage);
-/// Console.WriteLine(result.Text);
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// <para>
@@ -363,7 +363,7 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private Tensor<T> PreprocessTextImage(Tensor<T> image)
     {
         var processed = EnsureBatchDimension(image);
-        var normalized = new Tensor<T>(processed.Shape);
+        var normalized = new Tensor<T>(processed.Shape.ToArray());
 
         for (int i = 0; i < processed.Data.Length; i++)
         {
@@ -438,7 +438,6 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         return new ModelMetadata<T>
         {
             Name = "SVTR",
-            ModelType = ModelType.NeuralNetwork,
             Description = "SVTR for scene text recognition (IJCAI 2022)",
             FeatureCount = _embedDim,
             Complexity = _numLayers,

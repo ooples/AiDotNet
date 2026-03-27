@@ -212,7 +212,7 @@ public class HybridBlockScheduler<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -312,7 +312,7 @@ public class HybridBlockScheduler<T> : LayerBase<T>
     private Tensor<T> ApplyRMSNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape.ToArray());
         T eps = NumOps.FromDouble(1e-6);
         var gamma2D = gamma.Reshape(1, _modelDimension);
         var beta2D = beta.Reshape(1, _modelDimension);
@@ -326,7 +326,7 @@ public class HybridBlockScheduler<T> : LayerBase<T>
             var meanSquared = Engine.ReduceSum(squared, new int[] { 1 });  // [batch]
             T divisor = NumOps.FromDouble(_modelDimension);
 
-            var normed = new Tensor<T>(slice.Shape);
+            var normed = new Tensor<T>(slice.Shape.ToArray());
             for (int b = 0; b < batchSize; b++)
             {
                 T rms = NumOps.Sqrt(NumOps.Add(NumOps.Divide(meanSquared[new[] { b }], divisor), eps));
@@ -348,7 +348,7 @@ public class HybridBlockScheduler<T> : LayerBase<T>
     private Tensor<T> BackwardRMSNorm(Tensor<T> dOutput, Tensor<T> input, Tensor<T> gamma,
         int batchSize, int seqLen, out Tensor<T> dGamma, out Tensor<T> dBeta)
     {
-        var dInput = new Tensor<T>(input.Shape);
+        var dInput = TensorAllocator.Rent<T>(input.Shape.ToArray());
         dGamma = new Tensor<T>(new[] { _modelDimension });
         dBeta = new Tensor<T>(new[] { _modelDimension });
         T eps = NumOps.FromDouble(1e-6);

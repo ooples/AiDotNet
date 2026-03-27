@@ -614,7 +614,6 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
         {
             Name = _useNativeMode ? "GenreClassifier-Native" : "GenreClassifier-ONNX",
             Description = "Music genre classification model",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.NumMfccs * 2 + 5,
             Complexity = 1
         };

@@ -64,6 +64,16 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 /// https://arxiv.org/abs/1711.11053
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 60, inputWidth: 1, inputDepth: 1, outputSize: 24);
+/// var model = new MQCNN&lt;double&gt;(architecture);
+/// var onnxModel = new MQCNN&lt;double&gt;(architecture, "mqcnn.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -529,7 +539,6 @@ public class MQCNN<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "MQCNN" },
@@ -930,7 +939,7 @@ public class MQCNN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> CalculateQuantileLossGradient(Tensor<T> predictions, Tensor<T> actuals)
     {
-        var gradient = new Tensor<T>(predictions.Shape);
+        var gradient = new Tensor<T>(predictions.Shape.ToArray());
         int totalElements = _forecastHorizon * _quantiles.Length;
 
         for (int t = 0; t < _forecastHorizon && t < actuals.Length; t++)
@@ -1086,7 +1095,7 @@ public class MQCNN<T> : ForecastingModelBase<T>
         }
 
         // Create ONNX tensor using input shape
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1126,7 +1135,7 @@ public class MQCNN<T> : ForecastingModelBase<T>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
         int totalElements = _lookbackWindow * _numFeatures;
-        var newInput = new Tensor<T>(input.Shape);
+        var newInput = new Tensor<T>(input.Shape.ToArray());
 
         // Shift old values left
         int shift = stepsUsed * _numFeatures;

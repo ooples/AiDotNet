@@ -41,6 +41,19 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// understanding how every pixel relates to every other pixel.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VFIMamba model for state-space based frame interpolation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new VFIMambaOptions();
+/// var vfiMamba = new VFIMamba&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var vfiMambaOnnx = new VFIMamba&lt;double&gt;(architecture, "vfimamba_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -182,7 +195,6 @@ public class VFIMamba<T> : FrameInterpolationBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.FrameInterpolation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "VFIMamba" },

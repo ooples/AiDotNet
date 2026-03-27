@@ -46,6 +46,16 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 /// https://arxiv.org/abs/1704.04110
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 60, inputWidth: 1, inputDepth: 1, outputSize: 24);
+/// var model = new DeepAR&lt;double&gt;(architecture);
+/// var onnxModel = new DeepAR&lt;double&gt;(architecture, "deepar.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -934,7 +944,7 @@ public class DeepAR<T> : ForecastingModelBase<T>
         // Only _scaleStd is used for denormalization; _scaleMean is not needed for this scaling approach
         _scaleStd = new Tensor<T>(new[] { batchSize, 1, features });
 
-        var scaled = new Tensor<T>(input.Shape);
+        var scaled = new Tensor<T>(input.Shape.ToArray());
         T epsilon = NumOps.FromDouble(1e-5);
 
         for (int b = 0; b < batchSize; b++)
@@ -990,7 +1000,7 @@ public class DeepAR<T> : ForecastingModelBase<T>
         int seqLen = output.Shape.Length > 1 ? output.Shape[1] : 1;
         int features = output.Shape.Length > 2 ? output.Shape[2] : 1;
 
-        var unscaled = new Tensor<T>(output.Shape);
+        var unscaled = new Tensor<T>(output.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -1158,7 +1168,7 @@ public class DeepAR<T> : ForecastingModelBase<T>
     private Tensor<T> ComputeGradient(Tensor<T> predictions, Tensor<T> targets)
     {
         var gradVector = LossFunction.CalculateDerivative(predictions.ToVector(), targets.ToVector());
-        return Tensor<T>.FromVector(gradVector, predictions.Shape);
+        return Tensor<T>.FromVector(gradVector, predictions.Shape.ToArray());
     }
 
     /// <summary>
@@ -1214,7 +1224,7 @@ public class DeepAR<T> : ForecastingModelBase<T>
         int seqLen = input.Shape[1];
         int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
 
-        var shifted = new Tensor<T>(input.Shape);
+        var shifted = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {

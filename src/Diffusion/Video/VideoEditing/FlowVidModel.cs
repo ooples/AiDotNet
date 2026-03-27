@@ -34,6 +34,14 @@ namespace AiDotNet.Diffusion.Video.VideoEditing;
 /// - Supports I2V: No | T2V: Yes | V2V: Yes
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new FlowVidModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 24, 64, 64 });
+/// var edited = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.VideoGeneration)]
@@ -190,7 +198,6 @@ public class FlowVidModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "FlowVid",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "FlowVid optical flow guided video-to-video synthesis.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

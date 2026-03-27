@@ -333,7 +333,7 @@ public class LatteModel<T> : VideoDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var ditCount = _dit.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != ditCount + vaeCount)
         {
@@ -406,7 +406,6 @@ public class LatteModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "Latte",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Latte latent diffusion transformer for video generation with factorized attention",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

@@ -36,6 +36,14 @@ namespace AiDotNet.NeuralNetworks
     /// "King - Man + Woman = Queen."
     /// </para>
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var options = new GloVeOptions { EmbeddingDim = 300, VocabSize = 50000 };
+    /// var model = new GloVe&lt;float&gt;(options);
+    /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 50 });
+    /// var embedding = model.Predict(input);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Language)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.EmbeddingModel)]
@@ -325,7 +333,7 @@ namespace AiDotNet.NeuralNetworks
             LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
             var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+            var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
 
             var gradients = new List<Tensor<T>>();
             var currentGradient = outputGradientTensor;
@@ -455,7 +463,6 @@ namespace AiDotNet.NeuralNetworks
             return new ModelMetadata<T>
             {
                 Name = "GloVe",
-                ModelType = ModelType.NeuralNetwork,
                 Description = "GloVe (Global Vectors) embedding model",
                 Complexity = ParameterCount,
                 AdditionalInfo = new Dictionary<string, object>

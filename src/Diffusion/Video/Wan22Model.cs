@@ -35,6 +35,14 @@ namespace AiDotNet.Diffusion.Video;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 480, Width = 832, NumInferenceSteps = 50 };
+/// var model = new Wan22Model&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 81, 60, 104 });
+/// var video = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -193,7 +201,6 @@ public class Wan22Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "Wan22",
             Version = "2.2",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Wan 2.2 video model with timestep-specialized MoE experts.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

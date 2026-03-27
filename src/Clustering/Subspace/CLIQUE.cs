@@ -37,6 +37,14 @@ namespace AiDotNet.Clustering.Subspace;
 /// CLIQUE automatically discovers these hidden subspaces!
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new CLIQUEOptions&lt;double&gt;();
+/// var cLIQUE = new CLIQUE&lt;double&gt;(options);
+/// cLIQUE.Train(dataMatrix);
+/// Vector<double> labels = cLIQUE.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -88,7 +96,6 @@ public class CLIQUE<T> : ClusteringBase<T>
         }).ToList().AsReadOnly();
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -104,6 +111,56 @@ public class CLIQUE<T> : ClusteringBase<T>
             MaxSubspaceDimensions = _options.MaxSubspaceDimensions,
             UseAprioriPruning = _options.UseAprioriPruning
         });
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (CLIQUE<T>)CreateNewInstance();
+        clone._minBounds = _minBounds.ToArray();
+        clone._maxBounds = _maxBounds.ToArray();
+        clone._intervalWidths = _intervalWidths.ToArray();
+
+        if (_subspaceClustersInternal is not null)
+        {
+            clone._subspaceClustersInternal = _subspaceClustersInternal.Select(c => new SubspaceClusterInternal
+            {
+                ClusterId = c.ClusterId,
+                Dimensions = c.Dimensions.ToArray(),
+                DenseUnits = c.DenseUnits.Select(u => new DenseUnit
+                {
+                    Dimensions = u.Dimensions.ToArray(),
+                    Cells = u.Cells.ToArray(),
+                    Count = u.Count,
+                    Points = new List<int>(u.Points)
+                }).ToList(),
+                Points = new HashSet<int>(c.Points)
+            }).ToList();
+        }
+
+        clone.NumClusters = NumClusters;
+        clone.NumFeatures = NumFeatures;
+        clone.IsTrained = IsTrained;
+
+        if (Labels is not null)
+        {
+            clone.Labels = new Vector<T>(Labels.Length);
+            for (int i = 0; i < Labels.Length; i++)
+                clone.Labels[i] = Labels[i];
+        }
+
+        if (ClusterCenters is not null)
+        {
+            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
+            for (int i = 0; i < ClusterCenters.Rows; i++)
+                for (int j = 0; j < ClusterCenters.Columns; j++)
+                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
+        }
+
+        return clone;
     }
 
     /// <inheritdoc />
@@ -172,6 +229,35 @@ public class CLIQUE<T> : ClusteringBase<T>
         // Compute cluster centers
         ComputeClusterCenters(x);
 
+        int premergeK = NumClusters;
+        MergeDegenerateClusters(x);
+
+        // Update subspace cluster IDs after merge to match the post-merge label space
+        if (NumClusters < premergeK && _subspaceClustersInternal is not null && Labels is not null)
+        {
+            // Build old→new label map from the merged Labels
+            var oldToNew = new Dictionary<int, int>();
+            for (int i = 0; i < Labels.Length; i++)
+            {
+                int newLabel = (int)Math.Round(NumOps.ToDouble(Labels[i]));
+                // Find which subspace cluster originally owned this point
+                foreach (var sc in _subspaceClustersInternal)
+                {
+                    if (sc.Points.Contains(i) && !oldToNew.ContainsKey(sc.ClusterId))
+                    {
+                        oldToNew[sc.ClusterId] = newLabel;
+                        break;
+                    }
+                }
+            }
+
+            foreach (var sc in _subspaceClustersInternal)
+            {
+                if (oldToNew.TryGetValue(sc.ClusterId, out int newId))
+                    sc.ClusterId = newId;
+            }
+        }
+
         IsTrained = true;
     }
 
@@ -180,6 +266,10 @@ public class CLIQUE<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
         ValidatePredictInput(x);
+
+        // Return stored labels for in-sample prediction (preserves merge results)
+        if (Labels is not null && ReferenceEquals(x, TrainingDataRef))
+            return new Vector<T>(Labels);
 
         if (_subspaceClustersInternal is null || _subspaceClustersInternal.Count == 0)
         {

@@ -37,7 +37,39 @@ public interface IParameterizable<T, TInput, TOutput>
     int ParameterCount { get; }
 
     /// <summary>
+    /// Gets whether this model supports direct parameter-based initialization.
+    /// </summary>
+    /// <remarks>
+    /// Models that learn their structure during training (decision trees, ensemble methods, clustering)
+    /// may not support having random parameters injected before training. The optimizer uses this
+    /// property to decide whether to call <see cref="SetParameters"/> during random initialization.
+    /// The default implementation returns <c>true</c> when <see cref="ParameterCount"/> is greater than zero.
+    /// </remarks>
+#if NETFRAMEWORK
+    bool SupportsParameterInitialization { get; }
+#else
+    bool SupportsParameterInitialization => ParameterCount > 0;
+#endif
+
+    /// <summary>
     /// Creates a new instance with the specified parameters.
     /// </summary>
     IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters);
+
+    /// <summary>
+    /// Sanitizes random parameters to satisfy model-specific constraints.
+    /// Called by the optimizer after generating random parameter vectors.
+    /// </summary>
+    /// <param name="parameters">The randomly generated parameter vector.</param>
+    /// <returns>A parameter vector that satisfies model constraints (e.g., sorted thresholds for ordinal models).</returns>
+    /// <remarks>
+    /// The default implementation returns the parameters unchanged. Override this in models
+    /// that have structural constraints on their parameters (e.g., monotonically increasing
+    /// thresholds in ordinal regression, non-negative weights in NMF, etc.).
+    /// </remarks>
+#if NETFRAMEWORK
+    Vector<T> SanitizeParameters(Vector<T> parameters);
+#else
+    Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+#endif
 }

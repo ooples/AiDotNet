@@ -196,8 +196,8 @@ public class UniControlNetModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
+        var vaeCount = _vae.GetParameters().Length;
         if (parameters.Length != unetCount + vaeCount)
             throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         var unetParams = new Vector<T>(unetCount);
@@ -240,7 +240,7 @@ public class UniControlNetModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "Uni-ControlNet", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Uni-ControlNet", Version = "1.0",
             Description = "Uni-ControlNet multi-condition simultaneous control with learned mixing",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

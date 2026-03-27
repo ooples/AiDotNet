@@ -27,7 +27,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -44,7 +44,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -59,11 +59,11 @@ public class AttentionLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         Assert.False(ContainsNaN(inputGradient));
     }
 
@@ -81,7 +81,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(query, keyValue);
 
         // Assert
-        Assert.Equal([2, 8, inputSize], output.Shape);
+        Assert.Equal([2, 8, inputSize], output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -100,7 +100,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(input, mask);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -120,7 +120,7 @@ public class AttentionLayersIntegrationTests
 
         // Assert
         Assert.NotSame(original, cloned);
-        Assert.Equal(originalOutput.Shape, clonedOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), clonedOutput.Shape.ToArray());
     }
 
     #endregion
@@ -140,7 +140,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -157,7 +157,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -174,7 +174,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -189,11 +189,11 @@ public class AttentionLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         Assert.False(ContainsNaN(inputGradient));
     }
 
@@ -211,7 +211,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -231,7 +231,7 @@ public class AttentionLayersIntegrationTests
 
         // Assert
         Assert.NotSame(original, cloned);
-        Assert.Equal(originalOutput.Shape, clonedOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), clonedOutput.Shape.ToArray());
     }
 
     #endregion
@@ -251,7 +251,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -268,7 +268,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -285,7 +285,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -300,11 +300,11 @@ public class AttentionLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         Assert.False(ContainsNaN(inputGradient));
     }
 
@@ -322,7 +322,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(query, keyValue);
 
         // Assert
-        Assert.Equal([2, seqLen, embedDim], output.Shape);
+        Assert.Equal([2, seqLen, embedDim], output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -342,7 +342,7 @@ public class AttentionLayersIntegrationTests
 
         // Assert
         Assert.NotSame(original, cloned);
-        Assert.Equal(originalOutput.Shape, clonedOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), clonedOutput.Shape.ToArray());
     }
 
     #endregion
@@ -363,7 +363,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -381,7 +381,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -397,11 +397,11 @@ public class AttentionLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         Assert.False(ContainsNaN(inputGradient));
     }
 
@@ -424,7 +424,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(query, context);
 
         // Assert
-        Assert.Equal([2, seqLen, queryDim], output.Shape);
+        Assert.Equal([2, seqLen, queryDim], output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -444,7 +444,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(query, context);
 
         // Assert
-        Assert.Equal([2, querySeqLen, queryDim], output.Shape);
+        Assert.Equal([2, querySeqLen, queryDim], output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -460,11 +460,11 @@ public class AttentionLayersIntegrationTests
 
         // Act
         var output = layer.Forward(query, context);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(query.Shape, inputGradient.Shape);
+        Assert.Equal(query.Shape.ToArray(), inputGradient.Shape.ToArray());
         Assert.False(ContainsNaN(inputGradient));
     }
 
@@ -485,7 +485,7 @@ public class AttentionLayersIntegrationTests
 
         // Assert
         Assert.NotSame(original, cloned);
-        Assert.Equal(originalOutput.Shape, clonedOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), clonedOutput.Shape.ToArray());
     }
 
     #endregion
@@ -508,7 +508,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(nodeFeatures);
 
         // Assert
-        Assert.Equal([numNodes, outputFeatures], output.Shape);
+        Assert.Equal([numNodes, outputFeatures], output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -529,7 +529,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(nodeFeatures);
 
         // Assert
-        Assert.Equal([batchSize, numNodes, outputFeatures], output.Shape);
+        Assert.Equal([batchSize, numNodes, outputFeatures], output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -547,11 +547,11 @@ public class AttentionLayersIntegrationTests
 
         // Act
         var output = layer.Forward(nodeFeatures);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(nodeFeatures.Shape, inputGradient.Shape);
+        Assert.Equal(nodeFeatures.Shape.ToArray(), inputGradient.Shape.ToArray());
         Assert.False(ContainsNaN(inputGradient));
     }
 
@@ -575,7 +575,7 @@ public class AttentionLayersIntegrationTests
 
         // Assert
         Assert.NotSame(original, cloned);
-        Assert.Equal(originalOutput.Shape, clonedOutput.Shape);
+        Assert.Equal(originalOutput.Shape.ToArray(), clonedOutput.Shape.ToArray());
     }
 
     #endregion
@@ -611,7 +611,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -629,7 +629,7 @@ public class AttentionLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 

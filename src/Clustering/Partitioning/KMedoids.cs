@@ -40,6 +40,14 @@ namespace AiDotNet.Clustering.Partitioning;
 /// - With K-Means, the center might not represent any real customer
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new KMedoidsOptions&lt;double&gt;();
+/// var kMedoids = new KMedoids&lt;double&gt;(options);
+/// kMedoids.Train(dataMatrix);
+/// Vector<double> labels = kMedoids.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -70,7 +78,6 @@ public class KMedoids<T> : ClusteringBase<T>
     public int[]? MedoidIndices => _medoidIndices;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -180,21 +187,30 @@ public class KMedoids<T> : ClusteringBase<T>
             }
         }
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 
     private T[,] ComputeDistanceMatrix(Matrix<T> x, int n, IDistanceMetric<T> metric)
     {
+        int d = x.Columns;
         var distMatrix = new T[n, n];
+
+        // Cache rows as arrays for allocation-free distance
+        var rowArrays = new T[n][];
+        for (int i = 0; i < n; i++)
+        {
+            rowArrays[i] = new T[d];
+            for (int c = 0; c < d; c++)
+                rowArrays[i][c] = x[i, c];
+        }
 
         for (int i = 0; i < n; i++)
         {
             distMatrix[i, i] = NumOps.Zero;
-            var pointI = GetRow(x, i);
             for (int j = i + 1; j < n; j++)
             {
-                var pointJ = GetRow(x, j);
-                T dist = metric.Compute(pointI, pointJ);
+                T dist = metric.ComputeInline(rowArrays[i], rowArrays[j], d);
                 distMatrix[i, j] = dist;
                 distMatrix[j, i] = dist;
             }

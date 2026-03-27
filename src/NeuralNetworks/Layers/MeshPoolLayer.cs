@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -34,6 +36,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Graph)]
+[LayerCategory(LayerCategory.Pooling)]
+[LayerTask(LayerTask.GraphProcessing)]
+[LayerTask(LayerTask.DownSampling)]
+[LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = false, ChangesShape = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 3, 2", TestSetupCode = "var e = new int[4, 2]; for (int i = 0; i < 4; i++) for (int j = 0; j < 2; j++) e[i, j] = (i + j + 1) % 4; ((AiDotNet.NeuralNetworks.Layers.MeshPoolLayer<double>)layer).SetEdgeAdjacency(e);")]
 public class MeshPoolLayer<T> : LayerBase<T>
 {
     #region Properties
@@ -213,7 +220,7 @@ public class MeshPoolLayer<T> : LayerBase<T>
         if (input.Rank != 2 || input.Shape[1] != InputChannels)
         {
             throw new ArgumentException(
-                $"MeshPoolLayer expects input shape [numEdges, {InputChannels}], got [{string.Join(", ", input.Shape)}].",
+                $"MeshPoolLayer expects input shape [numEdges, {InputChannels}], got [{string.Join(", ", input.Shape.ToArray())}].",
                 nameof(input));
         }
 
@@ -397,7 +404,7 @@ public class MeshPoolLayer<T> : LayerBase<T>
         }
 
         var input = inputs[0];
-        int[] shape = input.Shape;
+        int[] shape = input.Shape.ToArray();
 
         if (shape.Length != 2 || shape[1] != InputChannels)
         {
@@ -680,7 +687,7 @@ public class MeshPoolLayer<T> : LayerBase<T>
         int numKept = RemainingEdgeIndices.Length;
 
         // Create zero-initialized input gradient tensor
-        var inputGrad = new Tensor<T>([numEdges, InputChannels]);
+        var inputGrad = TensorAllocator.Rent<T>([numEdges, InputChannels]);
 
         // Create indices tensor for scatter operation
         var indicesTensor = new Tensor<int>(RemainingEdgeIndices, [numKept]);

@@ -33,6 +33,14 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: NVIDIA, "SANA Sprint: One-Step Diffusion with Continuous-Time Consistency Distillation", 2025
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 32, Height = 1024, Width = 1024, NumInferenceSteps = 1 };
+/// var model = new SANASprintModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 32, 32, 32 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -142,7 +150,7 @@ public class SANASprintModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SANA Sprint", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SANA Sprint", Version = "1.0",
             Description = "Ultra-fast single-step 1024x1024 generation via SANA architecture with hybrid distillation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

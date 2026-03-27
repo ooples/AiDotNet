@@ -51,6 +51,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Generative Adversarial Networks" (2019)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new StyleGANOptions { LatentSize = 512, MaxResolution = 1024 };
+/// var model = new StyleGAN&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 512 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Generative)]
@@ -445,7 +453,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         int maxMixingLayer = Math.Max(2, styleSize / 2);
         int mixingLayer = random.Next(1, maxMixingLayer);
 
-        var mixedStyles = new Tensor<T>(styles1.Shape);
+        var mixedStyles = new Tensor<T>(styles1.Shape.ToArray());
 
         for (int b = 0; b < styles1.Shape[0]; b++)
         {
@@ -516,7 +524,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         }
 
         // Create output tensor with expected dimensions
-        var output = new Tensor<T>([batchSize, expectedDepth, expectedHeight, expectedWidth]);
+        var output = TensorAllocator.Rent<T>([batchSize, expectedDepth, expectedHeight, expectedWidth]);
 
         // Tile/repeat input to fill expected dimensions
         for (int b = 0; b < batchSize; b++)
@@ -630,7 +638,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
 
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
-        var gradients = new Tensor<T>(predictions.Shape);
+        var gradients = new Tensor<T>(predictions.Shape.ToArray());
         T epsilon = NumOps.FromDouble(1e-10);
         T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
 
@@ -847,7 +855,6 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.StyleGAN,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "MappingNetworkParameters", MappingNetwork.GetParameterCount() },

@@ -162,7 +162,7 @@ public interface IFewShotExampleSelector<T>
     /// Example:
     /// ```csharp
     /// var allExamples = selector.GetAllExamples();
-    /// Console.WriteLine($"Pool has {allExamples.Count} examples");
+    /// // Result is available in the returned value
     ///
     /// foreach (var ex in allExamples)
     /// {

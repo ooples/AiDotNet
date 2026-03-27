@@ -24,8 +24,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "NVLM: Open Frontier-Class Multimodal LLMs" (NVIDIA, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> NVLM is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> NVLM from NVIDIA takes a hybrid approach that combines two
+/// ways of processing visual information: cross-attention (where the language model attends
+/// to visual features through dedicated cross-attention layers) and decoder-only (where image
+/// tokens are simply concatenated with text tokens). Most models use one or the other, but
+/// NVLM uses both, which lets it retain strong text-only performance while adding powerful
+/// vision capabilities. This is important because many multimodal models lose some text
+/// ability when adding vision — NVLM avoids this trade-off. Default values follow the
+/// original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an NVLM model for hybrid cross-attention + decoder-only VLM
+/// // retaining strong text performance alongside vision capabilities
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new NVLM&lt;double&gt;(architecture, "nvlm.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new NVLM&lt;double&gt;(architecture, new NVLMOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -98,7 +121,7 @@ public class NVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "NVLM-Native" : "NVLM-ONNX", Description = "NVLM 1.0: Cross-Attention + Decoder-Only Hybrid VLM (NVIDIA, 2024)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "NVLM"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["CrossAttention"] = _options.EnableCrossAttention.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "NVLM-Native" : "NVLM-ONNX", Description = "NVLM 1.0: Cross-Attention + Decoder-Only Hybrid VLM (NVIDIA, 2024)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "NVLM"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["CrossAttention"] = _options.EnableCrossAttention.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.DecoderDim); writer.Write(_options.ProjectionDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.EnableCrossAttention); writer.Write(_options.CrossAttentionDim); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.ProjectionDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.EnableCrossAttention = reader.ReadBoolean(); _options.CrossAttentionDim = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new NVLM<T>(Architecture, mp, _options); return new NVLM<T>(Architecture, _options); }

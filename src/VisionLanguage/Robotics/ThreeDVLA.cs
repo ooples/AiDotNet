@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// 3D-VLA (UMass, 2024) connects vision-language-action models to the 3D world via a generative
+/// world model. It processes 3D point cloud observations alongside language instructions and
+/// generates both predicted future states (as a world model) and robot actions, enabling
+/// planning through imagination in 3D space.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "3D-VLA: A 3D Vision-Language-Action Generative World Model (UMass, 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> ThreeDVLA is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> 3D-VLA is a vision-language-action model that uses 3D world
+/// modeling for robot planning and action generation. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a 3D-VLA model for 3D vision-language-action reasoning
+/// // connecting VLA to 3D world via a generative world model
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ThreeDVLA&lt;double&gt;(architecture, "threedvla.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ThreeDVLA&lt;double&gt;(architecture, new ThreeDVLAOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Robotics)]
@@ -231,7 +255,7 @@ public class ThreeDVLA<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "3D-VLA-Native" : "3D-VLA-ONNX", Description = "3D-VLA: connects vision-language-action to 3D world via generative world model.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "3D-VLA-Native" : "3D-VLA-ONNX", Description = "3D-VLA: connects vision-language-action to 3D world via generative world model.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "3D-VLA";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

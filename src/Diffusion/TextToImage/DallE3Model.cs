@@ -25,7 +25,20 @@ namespace AiDotNet.Diffusion.TextToImage;
 /// This implementation provides DALL-E 3 style capabilities including prompt expansion,
 /// text rendering, style control, and high-quality image generation at multiple sizes.
 /// </para>
+/// <para><b>For Beginners:</b> DALL-E 3 generates high-quality images from text descriptions.
+/// Unlike earlier versions, it deeply understands complex prompts with spatial relationships,
+/// text rendering, and artistic styles. It uses a diffusion process (gradually refining random
+/// noise into an image) combined with advanced prompt understanding to produce images that
+/// closely match what you describe in words.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 1024, NumInferenceSteps = 30 };
+/// var model = new DallE3Model&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 128, 128 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Diffusion)]
@@ -148,6 +161,8 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
         NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
+        UNetNoisePredictor<T>? unet = null,
+        StandardVAE<T>? vae = null,
         IConditioningModule<T>? conditioner = null,
         int? seed = null)
         : base(options, scheduler, architecture)
@@ -162,17 +177,17 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
             DallE3ImageSize.Tall1024x1792
         };
 
-        InitializeLayers(conditioner);
+        InitializeLayers(unet, vae, conditioner);
     }
 
     /// <summary>
     /// Initializes the model layers.
     /// </summary>
     [MemberNotNull(nameof(_unet), nameof(_vae))]
-    private void InitializeLayers(IConditioningModule<T>? conditioner)
+    private void InitializeLayers(UNetNoisePredictor<T>? unet, StandardVAE<T>? vae, IConditioningModule<T>? conditioner)
     {
-        _vae = new StandardVAE<T>(inputChannels: 3, latentChannels: LATENT_CHANNELS);
-        _unet = new UNetNoisePredictor<T>(
+        _vae = vae ?? new StandardVAE<T>(inputChannels: 3, latentChannels: LATENT_CHANNELS);
+        _unet = unet ?? new UNetNoisePredictor<T>(
             architecture: Architecture,
             inputChannels: LATENT_CHANNELS,
             outputChannels: LATENT_CHANNELS,
@@ -327,7 +342,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
         scaleFactor = Math.Max(2, Math.Min(4, scaleFactor));
 
         // Get current dimensions
-        var shape = image.Shape;
+        var shape = image.Shape.ToArray();
         if (shape.Length < 3)
         {
             throw new ArgumentException("Image must have at least 3 dimensions [C, H, W]");
@@ -374,7 +389,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
                 "Extension pixels must be a positive value.");
         }
 
-        var shape = image.Shape;
+        var shape = image.Shape.ToArray();
         var channels = shape[^3];
         var height = shape[^2];
         var width = shape[^1];
@@ -624,7 +639,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
 
     private Tensor<T> BilinearUpscale(Tensor<T> image, int newHeight, int newWidth)
     {
-        var shape = image.Shape;
+        var shape = image.Shape.ToArray();
         var channels = shape[^3];
         var oldHeight = shape[^2];
         var oldWidth = shape[^1];
@@ -675,7 +690,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
 
     private Tensor<T> CreateExpandedCanvas(Tensor<T> image, int newWidth, int newHeight, int offsetX, int offsetY)
     {
-        var shape = image.Shape;
+        var shape = image.Shape.ToArray();
         var channels = shape[^3];
         var height = shape[^2];
         var width = shape[^1];
@@ -752,8 +767,8 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != unetCount + vaeCount)
             throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.");
@@ -816,7 +831,6 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
         return new ModelMetadata<T>
         {
             Name = "DallE3Model",
-            ModelType = ModelType.NeuralNetwork,
             Description = "DALL-E 3 style text-to-image generation model",
             AdditionalInfo = new Dictionary<string, object>
             {

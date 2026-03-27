@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -403,10 +404,7 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = b1[j];
-            for (int i = 0; i < _inputDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(x[i], w1[i, j]));
-            }
+            { var wCol_0 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_0[ii] = w1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_0)); }
             double val = NumOps.ToDouble(sum);
             h1[j] = NumOps.FromDouble(ReLU(val));
         }
@@ -416,20 +414,14 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = b2[j];
-            for (int i = 0; i < _hiddenDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(h1[i], w2[i, j]));
-            }
+            { var wCol_1 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_1[ii] = w2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_1)); }
             double val = NumOps.ToDouble(sum);
             h2[j] = NumOps.FromDouble(ReLU(val));
         }
 
         // Output layer (linear)
         T score = b3[0];
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            score = NumOps.Add(score, NumOps.Multiply(h2[i], w3[i, 0]));
-        }
+        { var _e0 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _e0[_i] = w3[_i, 0]; score = NumOps.Add(score, Engine.DotProduct(h2, _e0)); }
 
         return score;
     }
@@ -454,10 +446,7 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = b1[j];
-            for (int i = 0; i < _inputDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(x[i], w1[i, j]));
-            }
+            { var wCol_2 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_2[ii] = w1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_2)); }
             double val = NumOps.ToDouble(sum);
             h1[j] = NumOps.FromDouble(ReLU(val));
         }
@@ -467,20 +456,14 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
         for (int j = 0; j < _hiddenDim; j++)
         {
             T sum = b2[j];
-            for (int i = 0; i < _hiddenDim; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(h1[i], w2[i, j]));
-            }
+            { var wCol_3 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_3[ii] = w2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_3)); }
             double val = NumOps.ToDouble(sum);
             h2[j] = NumOps.FromDouble(ReLU(val));
         }
 
         // Output layer
         T score = b3[0];
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            score = NumOps.Add(score, NumOps.Multiply(h2[i], w3[i, 0]));
-        }
+        { var _e1 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _e1[_i] = w3[_i, 0]; score = NumOps.Add(score, Engine.DotProduct(h2, _e1)); }
 
         return (h1, h2, score);
     }
@@ -501,10 +484,12 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
 
     private void UpdateWeights(Vector<T> weights, Vector<T> gradients, T lr)
     {
+        // w = w - lr * g using Engine vectorized operations
+        var scaled = Engine.Multiply(gradients, lr);
+        var updated = Engine.Subtract(weights, scaled);
         for (int i = 0; i < weights.Length; i++)
         {
-            T update = NumOps.Multiply(lr, gradients[i]);
-            weights[i] = NumOps.Subtract(weights[i], update);
+            weights[i] = updated[i];
         }
     }
 

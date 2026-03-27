@@ -13,13 +13,31 @@ namespace AiDotNet.ReinforcementLearning.Agents.Bandits;
 /// Epsilon-Greedy Multi-Armed Bandit agent.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> The epsilon-greedy bandit is the simplest exploration strategy.
+/// Imagine choosing between multiple slot machines (arms) at a casino. Most of the time
+/// (1-epsilon), you pick the machine that has paid the best so far (exploit). But sometimes
+/// (epsilon%), you pick a random machine to discover if there is something better (explore).
+/// Common starting epsilon is 0.1 (10% exploration). Used in A/B testing and ad selection.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create an epsilon-greedy bandit agent for multi-armed bandit problems
+/// var options = new EpsilonGreedyBanditOptions&lt;double&gt; { NumArms = 10, Epsilon = 0.1 };
+/// var agent = new EpsilonGreedyBanditAgent&lt;double&gt;(options);
+///
+/// // Select an arm to pull
+/// var state = new Vector&lt;double&gt;(new double[] { 1.0 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Reinforcement Learning: An Introduction",
-    "http://incompleteideas.net/book/the-book-2nd.html",
+    "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class EpsilonGreedyBanditAgent<T> : ReinforcementLearningAgentBase<T>
@@ -123,7 +141,7 @@ public class EpsilonGreedyBanditAgent<T> : ReinforcementLearningAgentBase<T>
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
-    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
+    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _options.NumArms;
     public override int FeatureCount => 1;
     public override byte[] Serialize()

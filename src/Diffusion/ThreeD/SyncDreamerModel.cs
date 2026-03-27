@@ -218,8 +218,8 @@ public class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
+        var vaeCount = _vae.GetParameters().Length;
         if (parameters.Length != unetCount + vaeCount)
             throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         var unetParams = new Vector<T>(unetCount);
@@ -262,7 +262,7 @@ public class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "SyncDreamer", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SyncDreamer", Version = "1.0",
             Description = "SyncDreamer synchronized multi-view 3D generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

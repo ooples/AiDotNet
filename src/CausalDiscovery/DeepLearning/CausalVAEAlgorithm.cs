@@ -138,55 +138,56 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
             var gWout = new Matrix<T>(h, d);
             T invN = NumOps.FromDouble(1.0 / n);
 
+            // Pre-allocate reusable vectors outside the sample loop
+            var xRow = new Vector<T>(d);
+            var hEnc = new Vector<T>(h);
+            var wCol = new Vector<T>(d);
+            var epsNoise = new Vector<T>(d);
+            var wmuCol = new Vector<T>(h);
+            var z = new Vector<T>(d);
+            var invRow = new Vector<T>(d);
+            var hDec = new Vector<T>(h);
+            var wdecCol = new Vector<T>(d);
+            var xhat = new Vector<T>(d);
+            var woutCol = new Vector<T>(h);
+
             for (int s = 0; s < n; s++)
             {
-                // Encoder forward: hidden_enc = sigmoid(x * Wenc)
-                var hEnc = new T[h];
+                // Encoder forward: hidden_enc = sigmoid(x * Wenc) using Engine.DotProduct
+                for (int i = 0; i < d; i++) xRow[i] = data[s, i];
                 for (int k = 0; k < h; k++)
                 {
-                    T sum = NumOps.Zero;
-                    for (int i = 0; i < d; i++)
-                        sum = NumOps.Add(sum, NumOps.Multiply(data[s, i], Wenc[i, k]));
-                    double sv = NumOps.ToDouble(sum);
+                    for (int i = 0; i < d; i++) wCol[i] = Wenc[i, k];
+                    double sv = NumOps.ToDouble(Engine.DotProduct(xRow, wCol));
                     hEnc[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
                 }
 
-                // Exogenous noise: epsilon_j = mu_j(hEnc) + stddev * noise
-                var epsNoise = new T[d];
+                // Exogenous noise: epsilon_j = mu_j(hEnc) using Engine.DotProduct
                 for (int j = 0; j < d; j++)
                 {
-                    T mu_j = NumOps.Zero;
-                    for (int k = 0; k < h; k++)
-                        mu_j = NumOps.Add(mu_j, NumOps.Multiply(hEnc[k], Wmu[k, j]));
-                    epsNoise[j] = mu_j; // Use posterior mean for gradient computation
+                    for (int k = 0; k < h; k++) wmuCol[k] = Wmu[k, j];
+                    epsNoise[j] = Engine.DotProduct(hEnc, wmuCol);
                 }
 
-                // Causal layer: z = (I - A)^{-1} * epsilon
-                var z = new T[d];
+                // Causal layer: z = (I - A)^{-1} * epsilon using Engine.DotProduct
                 for (int j = 0; j < d; j++)
                 {
-                    z[j] = NumOps.Zero;
-                    for (int i = 0; i < d; i++)
-                        z[j] = NumOps.Add(z[j], NumOps.Multiply(IminusAinv[j, i], epsNoise[i]));
+                    for (int i = 0; i < d; i++) invRow[i] = IminusAinv[j, i];
+                    z[j] = Engine.DotProduct(invRow, epsNoise);
                 }
 
                 // Decoder: hidden_dec = sigmoid(z * Wdec), xhat = hidden_dec * Wout
-                var hDec = new T[h];
                 for (int k = 0; k < h; k++)
                 {
-                    T sum = NumOps.Zero;
-                    for (int j = 0; j < d; j++)
-                        sum = NumOps.Add(sum, NumOps.Multiply(z[j], Wdec[j, k]));
-                    double sv = NumOps.ToDouble(sum);
+                    for (int j = 0; j < d; j++) wdecCol[j] = Wdec[j, k];
+                    double sv = NumOps.ToDouble(Engine.DotProduct(z, wdecCol));
                     hDec[k] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
                 }
 
-                var xhat = new T[d];
                 for (int j = 0; j < d; j++)
                 {
-                    xhat[j] = NumOps.Zero;
-                    for (int k = 0; k < h; k++)
-                        xhat[j] = NumOps.Add(xhat[j], NumOps.Multiply(hDec[k], Wout[k, j]));
+                    for (int k = 0; k < h; k++) woutCol[k] = Wout[k, j];
+                    xhat[j] = Engine.DotProduct(hDec, woutCol);
                 }
 
                 // Reconstruction loss gradients
@@ -320,30 +321,17 @@ public class CausalVAEAlgorithm<T> : DeepCausalBase<T>
                 rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
         }
 
-        // Final output: threshold adjacency
-        var result = new Matrix<T>(d, d);
-        T threshold = NumOps.FromDouble(0.5);
+        // Final output: extract learned edge probabilities and build adjacency
+        var learnedP = new double[d, d];
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
                 if (i == j) continue;
                 double sv = NumOps.ToDouble(ALogits[i, j]);
-                double sigVal = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
-                T prob = NumOps.FromDouble(sigVal);
-
-                if (NumOps.GreaterThan(prob, threshold))
-                {
-                    T varI = cov[i, i];
-                    if (NumOps.GreaterThan(varI, eps))
-                    {
-                        T weight = NumOps.Divide(cov[i, j], varI);
-                        if (NumOps.GreaterThan(NumOps.Abs(weight), NumOps.FromDouble(0.1)))
-                            result[i, j] = weight;
-                    }
-                }
+                learnedP[i, j] = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
             }
 
-        return result;
+        return BuildFinalAdjacency(learnedP, cov, d);
     }
 
 }

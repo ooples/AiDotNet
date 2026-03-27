@@ -47,6 +47,15 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 /// Is it unusual for this time of day? Is it unusual given the recent trend?"
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a time-series-aware isolation forest for anomaly detection
+/// var options = new TimeSeriesIsolationForestOptions&lt;double&gt;();
+/// var iForest = new TimeSeriesIsolationForest&lt;double&gt;(options);
+/// iForest.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; anomalyScores = iForest.Predict(testMatrix);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelCategory(ModelCategory.AnomalyDetection)]
@@ -139,6 +148,11 @@ public class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
         var sortedScores = scores.OrderByDescending(s => _numOps.ToDouble(s)).ToList();
         int thresholdIndex = (int)(_options.ContaminationRate * sortedScores.Count);
         _anomalyThreshold = _numOps.ToDouble(sortedScores[Math.Min(thresholdIndex, sortedScores.Count - 1)]);
+
+        // Store ModelParameters for GetParameters() — use anomaly threshold + tree count
+        ModelParameters = new Vector<T>(2);
+        ModelParameters[0] = _numOps.FromDouble(_anomalyThreshold);
+        ModelParameters[1] = _numOps.FromDouble(_forest.Count);
     }
 
     /// <summary>
@@ -488,7 +502,6 @@ public class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.TimeSeriesRegression,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["Architecture"] = "TimeSeriesIsolationForest",

@@ -130,7 +130,7 @@ public static class DiffusionNoiseHelper<T>
     public static Tensor<T> ScaleNoise(Tensor<T> noise, double scale)
     {
         var scaleT = NumOps.FromDouble(scale);
-        var result = new Tensor<T>(noise.Shape);
+        var result = new Tensor<T>(noise.Shape.ToArray());
         var noiseSpan = noise.AsSpan();
         var resultSpan = result.AsWritableSpan();
 
@@ -160,7 +160,7 @@ public static class DiffusionNoiseHelper<T>
     /// </remarks>
     public static Tensor<T> AddNoise(Tensor<T> signal, Tensor<T> noise, T sqrtAlphaCumprod, T sqrtOneMinusAlphaCumprod)
     {
-        var result = new Tensor<T>(signal.Shape);
+        var result = new Tensor<T>(signal.Shape.ToArray());
         var signalSpan = signal.AsSpan();
         var noiseSpan = noise.AsSpan();
         var resultSpan = result.AsWritableSpan();
@@ -278,7 +278,7 @@ public static class DiffusionNoiseHelper<T>
         var tVal = NumOps.FromDouble(t);
         var oneMinusT = NumOps.FromDouble(1.0 - t);
 
-        var result = new Tensor<T>(noise1.Shape);
+        var result = new Tensor<T>(noise1.Shape.ToArray());
         var span1 = noise1.AsSpan();
         var span2 = noise2.AsSpan();
         var resultSpan = result.AsWritableSpan();
@@ -346,7 +346,7 @@ public static class DiffusionNoiseHelper<T>
         var scale1 = Math.Sin((1.0 - t) * theta) / sinTheta;
         var scale2 = Math.Sin(t * theta) / sinTheta;
 
-        var result = new Tensor<T>(noise1.Shape);
+        var result = new Tensor<T>(noise1.Shape.ToArray());
         var resultSpan = result.AsWritableSpan();
 
         for (int i = 0; i < resultSpan.Length; i++)

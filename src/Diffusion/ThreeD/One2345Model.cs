@@ -224,8 +224,8 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         EnsureInitialized();
-        var unetCount = _unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
+        var vaeCount = _vae.GetParameters().Length;
         if (parameters.Length != unetCount + vaeCount)
             throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         var unetParams = new Vector<T>(unetCount);
@@ -269,7 +269,7 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "One-2-3-45", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "One-2-3-45", Version = "1.0",
             Description = "One-2-3-45 single image to 3D mesh in 45 seconds",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

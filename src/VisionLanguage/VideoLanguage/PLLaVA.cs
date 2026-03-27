@@ -16,10 +16,33 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// PLLaVA (HKU, 2024) extends image-based LLaVA models to video through parameter-free pooling
+/// operations. Without adding any learnable parameters, it aggregates frame-level visual tokens
+/// using average pooling along the temporal dimension, providing a simple yet effective baseline
+/// for video dense captioning and video question answering.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "PLLaVA: Parameter-free LLaVA Extension from Images to Videos" (HKU, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> PLLaVA is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> PLLaVA is a video-language model that extends image LLMs to
+/// video using parameter-free pooling. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PLLaVA model for video dense captioning
+/// // with parameter-free pooling to extend image LLMs to video
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new PLLaVA&lt;double&gt;(architecture, "pllava.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new PLLaVA&lt;double&gt;(architecture, new PLLaVAOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Video)]
@@ -194,7 +217,7 @@ public class PLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "PLLaVA-Native" : "PLLaVA-ONNX", Description = "PLLaVA: parameter-free pooling extension from images to video.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "PLLaVA-Native" : "PLLaVA-ONNX", Description = "PLLaVA: parameter-free pooling extension from images to video.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "PLLaVA";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         m.AdditionalInfo["ParameterFreePooling"] = _options.EnableParameterFreePooling.ToString();

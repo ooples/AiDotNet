@@ -475,7 +475,7 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape);
+        var normalized = new Tensor<T>(image.Shape.ToArray());
         double[] means = [0.48145466, 0.4578275, 0.40821073];
         double[] stds = [0.26862954, 0.26130258, 0.27577711];
 
@@ -513,7 +513,6 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
         return new ModelMetadata<T>
         {
             Name = "DocOwl",
-            ModelType = ModelType.NeuralNetwork,
             Description = "DocOwl multimodal LLM for document understanding (arXiv 2023)",
             FeatureCount = _languageDim,
             Complexity = _visionLayers + _languageLayers,

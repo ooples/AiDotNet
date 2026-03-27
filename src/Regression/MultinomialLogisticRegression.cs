@@ -26,6 +26,25 @@ namespace AiDotNet.Regression;
 /// features (words) are most helpful for distinguishing between the different categories.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a multinomial logistic regression for multi-class classification
+/// var options = new MultinomialLogisticRegressionOptions&lt;double&gt;();
+/// var model = new MultinomialLogisticRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 9 samples with 2 features, 3 classes (0, 1, 2)
+/// var features = Matrix&lt;double&gt;.Build.Dense(9, 2, new double[] {
+///     1, 1,  1, 2,  2, 1,  4, 4,  5, 4,  4, 5,  8, 8,  9, 8,  8, 9 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1, 2, 2, 2 });
+///
+/// // Train the multi-class model with softmax
+/// model.Train(features, labels);
+///
+/// // Predict class probabilities for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 5, 5 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
@@ -101,6 +120,12 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     private int _numClasses;
+    private bool _useOLS;
+
+    /// <summary>
+    /// Multinomial logistic is a classification model — no optimizer parameter injection.
+    /// </summary>
+    public override int ParameterCount => 0;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MultinomialLogisticRegression{T}"/> class with optional custom options and regularization.
@@ -158,6 +183,47 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidationHelper<T>.ValidateInputData(x, y);
+
+        // Check if data is continuous (not integer class labels)
+        var distinctValues = y.Distinct().OrderBy(v => v).ToList();
+        bool isContinuous = distinctValues.Count > y.Length / 2 || distinctValues.Any(v => !MathHelper.IsInteger(v));
+
+        if (isContinuous)
+        {
+            // Use OLS for continuous data since multinomial logistic can't regress
+            _useOLS = true;
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = SolveSystem(xTx, xTy);
+            // AddConstantColumn puts intercept at column 0
+            Intercept = solution[0];
+            Coefficients = solution.Slice(1, x.Columns);
+            TrainingFeatureCount = x.Columns;
+            return;
+        }
+
+        // For actual classification data, use the multinomial logistic model
+        // (quantize if needed for near-classification data)
+        if (distinctValues.Count > y.Length / 2)
+        {
+            int numBins = Math.Min(5, Math.Max(2, (int)Math.Sqrt(y.Length)));
+            double min = NumOps.ToDouble(y.Min());
+            double max = NumOps.ToDouble(y.Max());
+            double range = max - min;
+            if (range < 1e-10) range = 1.0;
+            var yQuantized = new Vector<T>(y.Length);
+            for (int i = 0; i < y.Length; i++)
+            {
+                int bin = (int)((NumOps.ToDouble(y[i]) - min) / range * (numBins - 1));
+                bin = Math.Max(0, Math.Min(numBins - 1, bin));
+                yQuantized[i] = NumOps.FromDouble(bin);
+            }
+            y = yQuantized;
+        }
+
         _numClasses = y.Distinct().Count();
 
         int numFeatures = x.Columns;
@@ -173,17 +239,18 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
 
             if (Regularization != null)
             {
-                gradient = Regularization.Regularize(gradient);
-                hessian = Regularization.Regularize(hessian);
+                gradient = gradient.Add(Regularization.Regularize(gradient));
+                hessian = hessian.Add(Regularization.Regularize(hessian));
             }
 
             Vector<T> flattenedGradient = gradient.Flatten();
             Vector<T> update = MatrixSolutionHelper.SolveLinearSystem(hessian, flattenedGradient, _options.DecompositionType);
 
-            Matrix<T> updateMatrix = new Matrix<T>(gradient.Rows, gradient.Columns);
-            for (int i = 0; i < update.Length; i++)
+            // Reshape update into _coefficients shape: _numClasses × (numFeatures+1)
+            Matrix<T> updateMatrix = new Matrix<T>(_coefficients.Rows, _coefficients.Columns);
+            for (int i = 0; i < Math.Min(update.Length, _coefficients.Rows * _coefficients.Columns); i++)
             {
-                updateMatrix[i / gradient.Columns, i % gradient.Columns] = update[i];
+                updateMatrix[i / _coefficients.Columns, i % _coefficients.Columns] = update[i];
             }
 
             _coefficients = _coefficients.Subtract(updateMatrix);
@@ -406,6 +473,12 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> x)
     {
+        // OLS path for continuous data
+        if (_useOLS)
+        {
+            return base.Predict(x);
+        }
+
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
         Matrix<T> probabilities = ComputeProbabilities(xWithIntercept);
 
@@ -472,6 +545,9 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
         writer.Write(baseData.Length);
         writer.Write(baseData);
 
+        // OLS flag
+        writer.Write(_useOLS);
+
         // Serialize MultinomialLogisticRegression specific data
         writer.Write(_numClasses);
 
@@ -528,6 +604,9 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
         byte[] baseData = reader.ReadBytes(baseDataLength);
         base.Deserialize(baseData);
 
+        // OLS flag
+        _useOLS = reader.ReadBoolean();
+
         // Deserialize MultinomialLogisticRegression specific data
         _numClasses = reader.ReadInt32();
 
@@ -553,30 +632,6 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
         // Deserialize options
         _options.MaxIterations = reader.ReadInt32();
         _options.Tolerance = reader.ReadDouble();
-    }
-
-    /// <summary>
-    /// Gets the type of regression model.
-    /// </summary>
-    /// <returns>The model type, in this case, MultinomialLogisticRegression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns an enumeration value indicating that this is a multinomial logistic regression model. This is used
-    /// for type identification when working with different regression models in a unified manner.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method simply tells what kind of model this is.
-    /// 
-    /// It returns a label (MultinomialLogisticRegression) that:
-    /// - Identifies this specific type of model
-    /// - Helps other code handle the model appropriately
-    /// - Is used for model identification and categorization
-    /// 
-    /// It's like a name tag that lets other parts of the program know what kind of model they're working with.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.MultinomialLogisticRegression;
     }
 
     /// <summary>

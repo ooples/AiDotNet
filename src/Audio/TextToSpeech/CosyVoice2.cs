@@ -236,7 +236,6 @@ public class CosyVoice2<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         {
             Name = _useNativeMode ? "CosyVoice2-Native" : "CosyVoice2-ONNX",
             Description = $"CosyVoice2 {_options.Variant} streaming TTS (Du et al., 2024, Alibaba)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumTextEncoderLayers + _options.NumDecoderLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

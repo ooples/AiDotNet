@@ -13,7 +13,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Foundation;
 
@@ -67,6 +67,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// https://arxiv.org/abs/2310.10688
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TimesFM (Google) for zero-shot time series forecasting
+/// // Decoder-only transformer pre-trained on diverse domains with patch-based tokenization
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with patch-based decoder-only architecture
+/// var model = new TimesFM&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TimesFM&lt;double&gt;(architecture, "timesfm.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -538,7 +554,7 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape));
+        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -565,7 +581,6 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "TimesFM" },
@@ -770,7 +785,7 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     private Tensor<T> CreateQuantileConditionedInput(Tensor<T> hiddenStates, double quantileLevel)
     {
-        var conditioned = new Tensor<T>(hiddenStates.Shape);
+        var conditioned = new Tensor<T>(hiddenStates.Shape.ToArray());
         double qScale = 2.0 * quantileLevel - 1.0; // Map [0,1] to [-1,1]
 
         for (int i = 0; i < hiddenStates.Length; i++)
@@ -966,7 +981,7 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         if (a.Length != b.Length)
         {
             int minLen = Math.Min(a.Length, b.Length);
-            var result = new Tensor<T>(a.Shape);
+            var result = new Tensor<T>(a.Shape.ToArray());
             for (int i = 0; i < minLen; i++)
                 result[i] = NumOps.Add(a[i], b[i]);
             for (int i = minLen; i < a.Length; i++)
@@ -1060,7 +1075,7 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1106,7 +1121,7 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         if (batchSize > 1)
             throw new InvalidOperationException("TimesFM autoregressive helpers currently support batchSize = 1.");
 
-        var newInput = new Tensor<T>(input.Shape);
+        var newInput = new Tensor<T>(input.Shape.ToArray());
         int steps = Math.Min(stepsUsed, _contextLength);
 
         // Shift existing data left by stepsUsed

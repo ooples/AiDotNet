@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 namespace AiDotNet.JitCompiler.IR.Operations;
 
 /// <summary>
@@ -9,12 +10,14 @@ namespace AiDotNet.JitCompiler.IR.Operations;
 /// Allows small gradients for negative inputs.
 /// </para>
 /// </remarks>
-public class LeakyReLUOp : IROp
+public class LeakyReLUOp : IROp, IFusableActivation
 {
     /// <summary>
     /// The negative slope. Default is 0.01.
     /// </summary>
     public double Alpha { get; set; } = 0.01;
+
+    public FusedActivationType FusedType => FusedActivationType.LeakyReLU;
 
     public override bool Validate()
     {

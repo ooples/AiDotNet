@@ -37,7 +37,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 80, outputSize: 5000);
 /// var model = new Zipformer&lt;float&gt;(arch, "zipformer_medium.onnx");
 /// var result = model.Transcribe(audioWaveform);
-/// Console.WriteLine(result.Text); // "hello world"
+/// // Result is available in the returned value // "hello world"
 /// </code>
 /// </para>
 /// </remarks>
@@ -208,7 +208,6 @@ public class Zipformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Name = _useNativeMode ? "Zipformer-Native" : "Zipformer-ONNX",
             Description = $"Zipformer {_options.Variant} U-Net ASR (Yao et al., 2023, Next-gen Kaldi)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = totalLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

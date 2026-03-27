@@ -75,9 +75,9 @@ namespace AiDotNet.Reasoning.Verification;
 /// var chain = /* your reasoning chain */;
 /// double reward = await hybridModel.CalculateRewardAsync(chain, correctAnswer: "42");
 ///
-/// Console.WriteLine($"Process score: {await prm.CalculateRewardAsync(chain)}");
-/// Console.WriteLine($"Outcome score: {await orm.CalculateRewardAsync(chain, "42")}");
-/// Console.WriteLine($"Hybrid score: {reward}");
+/// // Result is available in the returned value
+/// // Result is available in the returned value
+/// // Result is available in the returned value
 /// ```
 ///
 /// **Research:**

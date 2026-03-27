@@ -40,6 +40,16 @@ namespace AiDotNet.NER.TransformerBased;
 /// Use this when you need NER for non-English text or multilingual applications.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 512,
+///     outputSize: 9,
+///     hiddenLayers: new[] { 256, 128 },
+///     networkType: NetworkType.Classification);
+/// var xLMRoBERTaNER = new XLMRoBERTaNER&lt;float&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Transformer)]

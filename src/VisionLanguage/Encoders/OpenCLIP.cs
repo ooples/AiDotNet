@@ -58,6 +58,22 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </list>
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an OpenCLIP model for open-source contrastive image-text alignment
+/// // trained on LAION-2B/5B public datasets matching CLIP performance
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new OpenCLIP&lt;double&gt;(architecture, "openclip.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new OpenCLIP&lt;double&gt;(architecture, new OpenCLIPOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -311,7 +327,6 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
         {
             Name = _useNativeMode ? "OpenCLIP-Native" : "OpenCLIP-ONNX",
             Description = "OpenCLIP: Open-source Contrastive Language-Image Pre-training (Cherti et al., CVPR 2023)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.ProjectionDim,
             Complexity = _options.NumVisionLayers + _options.NumTextLayers
         };

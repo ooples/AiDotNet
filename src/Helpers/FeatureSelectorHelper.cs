@@ -291,7 +291,7 @@ public static class FeatureSelectorHelper<T, TInput>
         else if (originalData is Tensor<T> tensor)
         {
             // For tensor inputs, create a new tensor with selected features
-            int[] newShape = (int[])tensor.Shape.Clone();
+            int[] newShape = (int[])tensor.Shape.ToArray().Clone();
             newShape[1] = featureIndices.Count; // Adjust feature dimension
 
             var resultTensor = new Tensor<T>(newShape);
@@ -347,7 +347,7 @@ public static class FeatureSelectorHelper<T, TInput>
         else if (originalData is Tensor<T> tensor)
         {
             // Create a new tensor with only the selected features
-            int[] newShape = (int[])tensor.Shape.Clone();
+            int[] newShape = (int[])tensor.Shape.ToArray().Clone();
             newShape[1] = selectedFeatureIndices.Count;
 
             var resultTensor = new Tensor<T>(newShape);

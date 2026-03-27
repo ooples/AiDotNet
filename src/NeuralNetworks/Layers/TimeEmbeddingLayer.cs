@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -30,6 +32,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Embedding)]
+[LayerTask(LayerTask.PositionalEncoding)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 1", TestConstructorArgs = "8, 16")]
 public class TimeEmbeddingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -107,7 +113,23 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
+    public override int ParameterCount => _linear1Weights.Length + _linear1Bias.Length + _linear2Weights.Length + _linear2Bias.Length;
     public override bool SupportsTraining => true;
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_linear1WeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            _linear1WeightsGradient.ToVector(), _linear1BiasGradient!.ToVector(),
+            _linear2WeightsGradient!.ToVector(), _linear2BiasGradient!.ToVector());
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _linear1WeightsGradient = null; _linear1BiasGradient = null;
+        _linear2WeightsGradient = null; _linear2BiasGradient = null;
+    }
 
     /// <inheritdoc/>
     protected override bool SupportsGpuExecution => true;
@@ -164,7 +186,7 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
             _lastHidden = hidden.ToTensor();
 
             // Cache GPU tensors for backward pass
-            _gpuInputShape = input.Shape;
+            _gpuInputShape = input.Shape.ToArray();
             _gpuTimesteps = timesteps;
             _gpuSinusoidalEmbed = embedding;
             _gpuHidden = hidden;

@@ -34,6 +34,19 @@ namespace AiDotNet.Video.Inpainting;
 /// - Temporal consistency enforcement
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an E2FGVI model for flow-guided video inpainting
+/// var e2fgvi = new E2FGVI&lt;double&gt;();
+///
+/// // Or configure with custom feature dimensions
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new E2FGVI&lt;double&gt;(architecture, numFeatures: 128);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -343,7 +356,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         LastLoss = loss;
 
         // Compute gradient: d(MSE)/d(pred) = 2 * (pred - target) / N
-        var gradient = new Tensor<T>(prediction.Shape);
+        var gradient = new Tensor<T>(prediction.Shape.ToArray());
         T scale = NumOps.FromDouble(2.0 / expectedOutput.Length);
         for (int i = 0; i < expectedOutput.Length; i++)
         {
@@ -590,7 +603,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         if (neighbors.Count == 0)
             return currentFeatures;
 
-        var accumulated = ZeroTensor(currentFeatures.Shape);
+        var accumulated = ZeroTensor(currentFeatures.Shape.ToArray());
 
         foreach (var (neighborFrame, neighborMask, flow) in neighbors)
         {
@@ -620,7 +633,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         int height = frame.Shape[2];
         int width = frame.Shape[3];
 
-        var masked = new Tensor<T>(frame.Shape);
+        var masked = new Tensor<T>(frame.Shape.ToArray());
         for (int b = 0; b < batchSize; b++)
             for (int c = 0; c < channels; c++)
                 for (int h = 0; h < height; h++)
@@ -641,7 +654,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         int height = original.Shape[2];
         int width = original.Shape[3];
 
-        var blended = new Tensor<T>(original.Shape);
+        var blended = new Tensor<T>(original.Shape.ToArray());
         for (int b = 0; b < batchSize; b++)
             for (int c = 0; c < channels; c++)
                 for (int h = 0; h < height; h++)
@@ -666,7 +679,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         int flowH = flow.Shape[2];
         int flowW = flow.Shape[3];
 
-        var warped = new Tensor<T>(features.Shape);
+        var warped = new Tensor<T>(features.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
             for (int h = 0; h < height; h++)
@@ -818,7 +831,6 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.VideoInpainting,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "E2FGVI" },

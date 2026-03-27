@@ -41,6 +41,19 @@ namespace AiDotNet.Video.Generation;
 /// - Progressive training strategy
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an OpenSora model for text-to-video generation
+/// var openSora = new OpenSora&lt;double&gt;();
+///
+/// // Or configure with custom generation parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Generative,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 3);
+/// var model = new OpenSora&lt;double&gt;(architecture, numFrames: 16, numInferenceSteps: 50);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -360,7 +373,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         double sqrtOneMinusAlphaCumprod = Math.Sqrt(1 - alphaCumprod);
 
         // Sample noise
-        var noise = InitializeLatents(input.Shape, random);
+        var noise = InitializeLatents(input.Shape.ToArray(), random);
 
         // Create noisy input: x_t = sqrt(alpha_cumprod) * x_0 + sqrt(1 - alpha_cumprod) * noise
         var scaledInput = Engine.TensorMultiplyScalar(input, NumOps.FromDouble(sqrtAlphaCumprod));
@@ -382,7 +395,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         LastLoss = loss;
 
         // Compute gradient: d(MSE)/d(pred) = 2 * (pred - target) / N
-        var gradient = new Tensor<T>(predictedNoise.Shape);
+        var gradient = new Tensor<T>(predictedNoise.Shape.ToArray());
         T scale = NumOps.FromDouble(2.0 / noise.Length);
         for (int i = 0; i < noise.Length; i++)
         {
@@ -465,7 +478,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
 
     private Tensor<T> InitializeLatentsFromImage(Tensor<T> imageLatent, Random random)
     {
-        var noise = InitializeLatents(imageLatent.Shape, random);
+        var noise = InitializeLatents(imageLatent.Shape.ToArray(), random);
 
         // Mix image latent with noise (50/50 blend)
         var scaledImg = Engine.TensorMultiplyScalar(imageLatent, NumOps.FromDouble(0.5));
@@ -516,7 +529,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
 
             // Multi-head self-attention
             var qkv = _ditQKV[i].Forward(normed);
-            var attended = DiTMultiHeadAttention(qkv, features.Shape);
+            var attended = DiTMultiHeadAttention(qkv, features.Shape.ToArray());
             attended = _ditAttnProj[i].Forward(attended);
 
             // First residual connection
@@ -539,7 +552,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         var noise = _finalLayer.Forward(features);
 
         // Unpatchify
-        return UnpatchifyNoise(noise, latents.Shape);
+        return UnpatchifyNoise(noise, latents.Shape.ToArray());
     }
 
     /// <summary>
@@ -893,7 +906,7 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         int height = input.Shape[2];
         int width = input.Shape[3];
 
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         const double eps = 1e-5;
 
         for (int b = 0; b < batchSize; b++)
@@ -1195,7 +1208,6 @@ public class OpenSora<T> : NeuralNetworkBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.TextToVideo,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "OpenSora" },

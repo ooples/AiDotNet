@@ -100,12 +100,8 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        T result = Intercept;
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            result = NumOps.Add(result, NumOps.Multiply(Weights[j], sample[j]));
-        }
-        return result;
+        // Use Engine for hardware-accelerated dot product: w · x + b
+        return NumOps.Add(Intercept, Engine.DotProduct(Weights, sample));
     }
 
     /// <summary>
@@ -344,15 +340,17 @@ public abstract class LinearClassifierBase<T> : ProbabilisticClassifierBase<T>
         // for proper gradient computation
         var scores = DecisionFunctionBatch(input);
 
+        // Compute error vector once: error = scores - target
+        var errors = Engine.Subtract(scores, target);
+
+        // Gradient: grad[j] = mean(error · x[:,j]) using Engine.DotProduct
+        T invN = NumOps.FromDouble(1.0 / input.Rows);
         for (int j = 0; j < NumFeatures; j++)
         {
-            T grad = NumOps.Zero;
+            var column = new Vector<T>(input.Rows);
             for (int i = 0; i < input.Rows; i++)
-            {
-                T error = NumOps.Subtract(scores[i], target[i]);
-                grad = NumOps.Add(grad, NumOps.Multiply(error, input[i, j]));
-            }
-            gradients[j] = NumOps.Divide(grad, NumOps.FromDouble(input.Rows));
+                column[i] = input[i, j];
+            gradients[j] = NumOps.Multiply(Engine.DotProduct(errors, column), invN);
         }
 
         return gradients;

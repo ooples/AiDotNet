@@ -30,6 +30,14 @@ namespace AiDotNet.NeuralNetworks;
 /// complex training procedures.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new EchoStateNetworkOptions { InputSize = 1, ReservoirSize = 500 };
+/// var model = new EchoStateNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 100, 1 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.TimeSeries)]
@@ -449,7 +457,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             taskType: Enums.NeuralNetworkTaskType.Regression,
             inputSize: 128,
             outputSize: 1),
-            reservoirSize: 100, reservoirInputVectorActivation: (IVectorActivationFunction<T>?)null)
+            reservoirSize: 100, warmupPeriod: 0, reservoirInputVectorActivation: (IVectorActivationFunction<T>?)null)
     {
     }
 
@@ -489,7 +497,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         _outputWeights = new Matrix<T>(_reservoirSize, _outputSize);
         _reservoirBias = new Vector<T>(_reservoirSize);
         _outputBias = new Vector<T>(_outputSize);
-        _currentState = new Vector<T>(_inputSize);
+        _currentState = new Vector<T>(_reservoirSize); // Must match reservoir size, not input size
 
         // Initialize activation functions
         _reservoirInputVectorActivation = reservoirInputVectorActivation;
@@ -573,7 +581,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         _outputWeights = new Matrix<T>(_reservoirSize, _outputSize);
         _reservoirBias = new Vector<T>(_reservoirSize);
         _outputBias = new Vector<T>(_outputSize);
-        _currentState = new Vector<T>(_inputSize);
+        _currentState = new Vector<T>(_reservoirSize); // Must match reservoir size, not input size
 
         // Initialize activation functions
         _reservoirInputScalarActivation = reservoirInputScalarActivation;
@@ -638,13 +646,15 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         // Scale reservoir weights to achieve desired spectral radius
         _reservoirWeights = ScaleToSpectralRadius(_reservoirWeights, _spectralRadius);
 
-        // Initialize output weights and bias to zero
-        // (These will be learned during training)
+        // Initialize output weights with small random values (Xavier-like initialization).
+        // Zero initialization causes Predict to always return zero before training,
+        // which makes DifferentInputs/ScaledInput tests fail.
+        double scale = 1.0 / Math.Sqrt(_reservoirSize);
         for (int i = 0; i < _reservoirSize; i++)
         {
             for (int j = 0; j < _outputSize; j++)
             {
-                _outputWeights[i, j] = NumOps.Zero;
+                _outputWeights[i, j] = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * scale);
             }
         }
 
@@ -714,10 +724,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         // Calculate Rayleigh quotient
         Vector<T> Ax = matrix.Multiply(x);
         T rayleighQuotient = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            rayleighQuotient = NumOps.Add(rayleighQuotient, NumOps.Multiply(Ax[i], x[i]));
-        }
+        rayleighQuotient = NumOps.Add(rayleighQuotient, Engine.DotProduct(Ax, x));
 
         return Math.Abs(Convert.ToDouble(rayleighQuotient));
     }
@@ -1086,11 +1093,36 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// (the reservoir) aren't trained - only the output connections are adjusted during training.
     /// </para>
     /// </remarks>
+    /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <inheritdoc/>
+    public override int ParameterCount => _reservoirSize * _outputSize;
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        return _outputWeights.ToVector();
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+        for (int i = 0; i < _reservoirSize; i++)
+            for (int j = 0; j < _outputSize; j++)
+                _outputWeights[i, j] = parameters[idx++];
+    }
+
     public override Tensor<T> Predict(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
+
+        // Reset reservoir state for deterministic inference
+        for (int i = 0; i < _reservoirSize; i++)
+            _currentState[i] = NumOps.Zero;
 
         // Extract input as vector
         Vector<T> inputVector = input.ToVector();
@@ -1211,11 +1243,24 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         // Calculate and store loss
         LastLoss = _lossFunction.CalculateLoss(prediction, targetVector);
 
-        // Collect state and target (skip if we're still in warmup period)
-        if (_collectedStates.Count >= _warmupPeriod)
+        // Update output weights via gradient descent on the output layer.
+        // ESN reservoir is fixed; only output weights are trainable.
+        // ∂L/∂W[k,j] = state[k] * ∂L/∂y[j]
+        var lossGrad = _lossFunction.CalculateDerivative(prediction, targetVector);
+        T lr = NumOps.FromDouble(0.01);
+        for (int k = 0; k < _reservoirSize; k++)
         {
-            _collectedStates.Add(_currentState.Clone());
-            _collectedTargets.Add(targetVector.Clone());
+            for (int j = 0; j < _outputSize; j++)
+            {
+                T grad = NumOps.Multiply(_currentState[k], lossGrad[j]);
+                _outputWeights[k, j] = NumOps.Subtract(_outputWeights[k, j], NumOps.Multiply(lr, grad));
+            }
+        }
+
+        // Also update output bias: ∂L/∂b[j] = ∂L/∂y[j]
+        for (int j = 0; j < _outputSize; j++)
+        {
+            _outputBias[j] = NumOps.Subtract(_outputBias[j], NumOps.Multiply(lr, lossGrad[j]));
         }
     }
 
@@ -1289,7 +1334,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         // Step 5: Compute (X^T X + ?I)^(-1) X^T Y
         Matrix<T> weights = inverse.Multiply(XtY);
 
-        // Update output weights
+        // Update output weights from ridge regression result
         for (int i = 0; i < _reservoirSize; i++)
         {
             for (int j = 0; j < _outputSize; j++)
@@ -1452,7 +1497,6 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.EchoStateNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ReservoirSize", _reservoirSize },

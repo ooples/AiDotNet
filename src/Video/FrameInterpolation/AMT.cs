@@ -172,7 +172,6 @@ public class AMT<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "AMT-Native" : "AMT-ONNX",
             Description = $"AMT {_options.Variant} all-pairs multi-field transforms (Li et al., CVPR 2023)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumFlowFields * _options.NumRefinementIters
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

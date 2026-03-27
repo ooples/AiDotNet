@@ -27,8 +27,8 @@ public class S6ScanTests
         var (output, hiddenStates) = S6Scan<float>.SequentialScanForward(
             x, delta, aLog, b, c, dParam, batchSize, seqLen, innerDim, stateDim);
 
-        Assert.Equal(new[] { batchSize, seqLen, innerDim }, output.Shape);
-        Assert.Equal(new[] { batchSize, seqLen + 1, innerDim, stateDim }, hiddenStates.Shape);
+        Assert.Equal(new[] { batchSize, seqLen, innerDim }, output.Shape.ToArray());
+        Assert.Equal(new[] { batchSize, seqLen + 1, innerDim, stateDim }, hiddenStates.Shape.ToArray());
     }
 
     [Fact]
@@ -96,17 +96,17 @@ public class S6ScanTests
         var (output, hiddenStates) = S6Scan<float>.SequentialScanForward(
             x, delta, aLog, b, c, dParam, batchSize, seqLen, innerDim, stateDim);
 
-        var dOutput = CreateRandomTensor(output.Shape);
+        var dOutput = CreateRandomTensor(output.Shape.ToArray());
         var (dX, dDelta, dALog, dB, dC, dD) = S6Scan<float>.SequentialScanBackward(
             dOutput, x, delta, aLog, b, c, dParam, hiddenStates,
             batchSize, seqLen, innerDim, stateDim);
 
-        Assert.Equal(new[] { batchSize, seqLen, innerDim }, dX.Shape);
-        Assert.Equal(new[] { batchSize, seqLen, innerDim }, dDelta.Shape);
-        Assert.Equal(new[] { innerDim, stateDim }, dALog.Shape);
-        Assert.Equal(new[] { batchSize, seqLen, stateDim }, dB.Shape);
-        Assert.Equal(new[] { batchSize, seqLen, stateDim }, dC.Shape);
-        Assert.Equal(new[] { innerDim }, dD.Shape);
+        Assert.Equal(new[] { batchSize, seqLen, innerDim }, dX.Shape.ToArray());
+        Assert.Equal(new[] { batchSize, seqLen, innerDim }, dDelta.Shape.ToArray());
+        Assert.Equal(new[] { innerDim, stateDim }, dALog.Shape.ToArray());
+        Assert.Equal(new[] { batchSize, seqLen, stateDim }, dB.Shape.ToArray());
+        Assert.Equal(new[] { batchSize, seqLen, stateDim }, dC.Shape.ToArray());
+        Assert.Equal(new[] { innerDim }, dD.Shape.ToArray());
     }
 
     [Fact]
@@ -127,7 +127,7 @@ public class S6ScanTests
         var (output, hiddenStates) = S6Scan<float>.SequentialScanForward(
             x, delta, aLog, b, c, dParam, batchSize, seqLen, innerDim, stateDim);
 
-        var dOutput = CreateRandomTensor(output.Shape);
+        var dOutput = CreateRandomTensor(output.Shape.ToArray());
         var (dX, dDelta, dALog, dB, dC, dD) = S6Scan<float>.SequentialScanBackward(
             dOutput, x, delta, aLog, b, c, dParam, hiddenStates,
             batchSize, seqLen, innerDim, stateDim);
@@ -158,7 +158,7 @@ public class S6ScanTests
         var output = S6Scan<float>.ParallelScan(
             x, delta, aLog, b, c, dParam, batchSize, seqLen, innerDim, stateDim);
 
-        Assert.Equal(new[] { batchSize, seqLen, innerDim }, output.Shape);
+        Assert.Equal(new[] { batchSize, seqLen, innerDim }, output.Shape.ToArray());
     }
 
     [Fact]
@@ -232,7 +232,7 @@ public class S6ScanTests
         var (output, _) = S6Scan<double>.SequentialScanForward(
             x, delta, aLog, b, c, dParam, batchSize, seqLen, innerDim, stateDim);
 
-        Assert.Equal(new[] { batchSize, seqLen, innerDim }, output.Shape);
+        Assert.Equal(new[] { batchSize, seqLen, innerDim }, output.Shape.ToArray());
         Assert.False(ContainsNaNDouble(output));
     }
 
@@ -247,13 +247,13 @@ public class S6ScanTests
 
         var output = block.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
 
         // Backward should also still work
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         var inputGrad = block.Backward(grad);
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         Assert.False(ContainsNaN(inputGrad));
     }
 

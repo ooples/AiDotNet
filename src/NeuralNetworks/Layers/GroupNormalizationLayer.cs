@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -34,6 +35,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Normalization)]
+[LayerTask(LayerTask.ActivationNormalization)]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "2, 4")]
 public class GroupNormalizationLayer<T> : LayerBase<T>
 {
     private readonly T _epsilon;
@@ -74,6 +78,7 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
 
     #endregion
 
+    public override int ParameterCount => _gamma.Length + _beta.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -138,9 +143,9 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
 
         // Support any rank >= 2. Last 3 dims are [C, H, W] for 3D+, or [N, C] for 2D.
         if (shape.Length < 2)
@@ -234,7 +239,7 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
 
         // Support any rank >= 2
         if (shape.Length < 2)
@@ -438,16 +443,24 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         if (parameters.Length != totalParams)
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
 
-        var gammaVec = parameters.Slice(0, _gamma.Length);
-        var betaVec = parameters.Slice(_gamma.Length, _beta.Length);
-
-        _gamma = Tensor<T>.FromVector(gammaVec, _gamma.Shape);
-        _beta = Tensor<T>.FromVector(betaVec, _beta.Shape);
+        // Write in-place to preserve engine persistent tensor references
+        var gSpan = _gamma.Data.Span;
+        for (int i = 0; i < _gamma.Length; i++) gSpan[i] = parameters[i];
+        var bSpan = _beta.Data.Span;
+        for (int i = 0; i < _beta.Length; i++) bSpan[i] = parameters[_gamma.Length + i];
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_gamma);
         Engine.InvalidatePersistentTensor(_beta);
     }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_gammaGradient == null || _betaGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
+    }
+
+    public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
 
     public override void ResetState()
     {

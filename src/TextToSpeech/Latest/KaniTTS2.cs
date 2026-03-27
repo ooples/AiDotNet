@@ -12,6 +12,21 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// <summary>KaniTTS2: Kani-TTS-2: Improved Lightweight Codec TTS.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Kani-TTS-2: Improved Lightweight Codec TTS" (-, 2026)</item></list></para><para><b>For Beginners:</b> KaniTTS2: Kani-TTS-2: Improved Lightweight Codec TTS.. This model converts text input into speech audio output.</para></remarks>
+/// <example>
+/// <code>
+/// // Create a Kani-TTS 2 model for improved lightweight codec-based TTS
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new KaniTTS2&lt;double&gt;(architecture, "kanitts2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new KaniTTS2&lt;double&gt;(architecture, new KaniTTS2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -43,7 +58,7 @@ public class KaniTTS2<T> : TtsModelBase<T>, ICodecTts<T>
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { var o = Predict(input); var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector()); var gt = Tensor<T>.FromVector(g); for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt); _optimizer?.UpdateParameters(Layers); } finally { SetTrainingMode(false); } }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "KaniTTS2-Native" : "KaniTTS2-ONNX", Description = "KaniTTS2 TTS", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.LLMDim }; }
+    public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "KaniTTS2-Native" : "KaniTTS2-ONNX", Description = "KaniTTS2 TTS", FeatureCount = _options.LLMDim }; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.SampleRate); writer.Write(_options.CodebookSize); writer.Write(_options.DropoutRate); writer.Write(_options.LLMDim); writer.Write(_options.NumCodebooks); writer.Write(_options.NumEncoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.NumLLMLayers); writer.Write(_options.TextEncoderDim); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = reader.ReadInt32();  _options.CodebookSize = reader.ReadInt32(); _options.DropoutRate = reader.ReadDouble(); _options.LLMDim = reader.ReadInt32(); _options.NumCodebooks = reader.ReadInt32(); _options.NumEncoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.NumLLMLayers = reader.ReadInt32(); _options.TextEncoderDim = reader.ReadInt32();  base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.LLMDim; if (!_useNativeMode && _options.ModelPath is {} p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is {} mp && !string.IsNullOrEmpty(mp)) return new KaniTTS2<T>(Architecture, mp, _options); return new KaniTTS2<T>(Architecture, _options); }

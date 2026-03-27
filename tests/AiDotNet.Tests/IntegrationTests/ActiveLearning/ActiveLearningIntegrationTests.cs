@@ -1002,6 +1002,7 @@ public class ActiveLearningIntegrationTests
         public Vector<double> GetParameters() => new(0);
         public void SetParameters(Vector<double> parameters) { }
         public int ParameterCount => 0;
+        public bool SupportsParameterInitialization => false;
         public IFullModel<double, Tensor<double>, Tensor<double>> WithParameters(Vector<double> parameters) => this;
 
         // IFeatureAware
@@ -1027,6 +1028,8 @@ public class ActiveLearningIntegrationTests
 
         // IFullModel specific
         public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     /// <summary>

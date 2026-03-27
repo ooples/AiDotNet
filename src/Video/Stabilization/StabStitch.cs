@@ -27,6 +27,19 @@ namespace AiDotNet.Video.Stabilization;
 /// a seamless panoramic output without separate stabilization and stitching stages.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a StabStitch model for joint stabilization and stitching
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new StabStitchOptions();
+/// var stabStitch = new StabStitch&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var stabStitchOnnx = new StabStitch&lt;double&gt;(architecture, "stabstitch_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -145,7 +158,6 @@ public class StabStitch<T> : VideoStabilizationBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoStabilization,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "StabStitch" },

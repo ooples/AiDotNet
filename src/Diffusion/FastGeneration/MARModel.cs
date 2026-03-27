@@ -34,6 +34,14 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: Li et al., "Autoregressive Image Generation without Vector Quantization", NeurIPS 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 256, Width = 256, NumInferenceSteps = 12 };
+/// var model = new MARModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 32, 32 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.Diffusion)]
@@ -140,7 +148,7 @@ public class MARModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "Masked Autoregressive (MAR)", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Masked Autoregressive (MAR)", Version = "1.0",
             Description = "Image generation via continuous-valued masked token prediction without VQ",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

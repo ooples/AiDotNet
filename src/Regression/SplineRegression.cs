@@ -34,6 +34,24 @@ namespace AiDotNet.Regression;
 /// A spline regression can capture these changing relationships much better than a simple line.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a spline regression with piecewise polynomial fitting
+/// var options = new SplineRegressionOptions&lt;double&gt;();
+/// var model = new SplineRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 1 feature
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 1, new double[] { 1, 2, 3, 4, 5, 6 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 1.0, 3.5, 4.0, 3.8, 5.5, 8.0 });
+///
+/// // Train with piecewise polynomials at knot points
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 1, new double[] { 3.5 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Regression)]
@@ -144,6 +162,20 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
     }
 
     /// <summary>
+    /// Spline regression solves analytically — no optimizer parameter injection needed.
+    /// Returning 0 makes SupportsParameterInitialization return false.
+    /// </summary>
+    public override int ParameterCount => 0;
+
+    /// <summary>
+    /// Returns original feature indices (not expanded spline basis indices).
+    /// </summary>
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        return Enumerable.Range(0, _knots.Count > 0 ? _knots.Count : 0);
+    }
+
+    /// <summary>
     /// Optimizes the spline regression model using the provided input data and target values.
     /// </summary>
     /// <param name="x">The input feature matrix, where rows represent observations and columns represent features.</param>
@@ -185,19 +217,39 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
         // Solve for coefficients with optional ridge regularization
         var xTx = basisFunctions.Transpose().Multiply(basisFunctions);
 
-        // Add ridge regularization to the diagonal if strength is specified
-        var regularizationStrength = Regularization?.GetOptions().Strength ?? 0.0;
-        if (regularizationStrength > 0)
-        {
-            T regTerm = NumOps.FromDouble(regularizationStrength);
-            for (int i = 0; i < xTx.Rows; i++)
+        // Symmetrize X'X to handle floating-point rounding in matrix multiplication
+        // (X'X is mathematically symmetric but may have tiny asymmetries)
+        for (int i = 0; i < xTx.Rows; i++)
+            for (int j = i + 1; j < xTx.Columns; j++)
             {
-                xTx[i, i] = NumOps.Add(xTx[i, i], regTerm);
+                var avg = NumOps.Divide(NumOps.Add(xTx[i, j], xTx[j, i]), NumOps.FromDouble(2.0));
+                xTx[i, j] = avg;
+                xTx[j, i] = avg;
             }
+
+        // Always add minimum ridge regularization for numerical stability (prevents
+        // Cholesky failure on collinear/degenerate data).
+        // Use 1e-4 minimum: 1e-6 is insufficient for nearly-perfect collinearity
+        // where off-diagonal values dominate the diagonal.
+        var regularizationStrength = Regularization?.GetOptions().Strength ?? 0.0;
+        var effectiveReg = Math.Max(regularizationStrength, 1e-4);
+        T regTerm = NumOps.FromDouble(effectiveReg);
+        for (int i = 0; i < xTx.Rows; i++)
+        {
+            xTx[i, i] = NumOps.Add(xTx[i, i], regTerm);
         }
 
         var xTy = basisFunctions.Transpose().Multiply(y);
-        _coefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _options.DecompositionType);
+        try
+        {
+            _coefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _options.DecompositionType);
+        }
+        catch (ArgumentException)
+        {
+            // Cholesky can still fail on severely ill-conditioned matrices;
+            // fall back to QR decomposition which handles rank deficiency.
+            _coefficients = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Qr);
+        }
     }
 
     /// <summary>
@@ -385,7 +437,6 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
     /// You generally won't need to call this method directly in your code.
     /// </para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.SplineRegression;
 
     /// <summary>
     /// Serializes the spline regression model to a byte array for storage or transmission.

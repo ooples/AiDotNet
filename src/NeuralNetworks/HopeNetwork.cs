@@ -16,6 +16,22 @@ namespace AiDotNet.NeuralNetworks;
 /// Core innovation of Google's Nested Learning paradigm.
 /// </summary>
 /// <typeparam name="T">The numeric type</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> HopeNetwork is a self-modifying neural network inspired by
+/// Google's Nested Learning paradigm. Unlike standard networks with fixed architectures, it
+/// can modify its own behavior during inference through a continuum memory system. This allows
+/// it to perform unbounded levels of in-context learning, meaning it can keep adapting to new
+/// patterns without being retrained. Think of it as a network that can "learn to learn" in
+/// real time.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// var options = new HopeNetworkOptions { InputSize = 10, HiddenSize = 64 };
+/// var model = new HopeNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 10 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
@@ -258,7 +274,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             }
         }
 
-        return new Tensor<T>(input.Shape, modified);
+        return new Tensor<T>(input.Shape.ToArray(), modified);
     }
 
     /// <summary>
@@ -307,7 +323,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             blended[i] = _numOps.Add(partA, partB);
         }
 
-        return new Tensor<T>(a.Shape, blended);
+        return new Tensor<T>(a.Shape.ToArray(), blended);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -419,6 +435,10 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
+        // Reset layer state for deterministic inference
+        foreach (var layer in Layers)
+            layer.ResetState();
+
         return Forward(input);
     }
 
@@ -471,46 +491,42 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Trains the network on a single input-output pair (required by NeuralNetworkBase).
     /// </summary>
+    /// <summary>
+    /// Persistent Adam optimizer for stable training.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
+        Guard.NotNull(input);
+        Guard.NotNull(expectedOutput);
 
-        if (expectedOutput == null)
-            throw new ArgumentNullException(nameof(expectedOutput));
-
-        if (LossFunction == null)
-            throw new InvalidOperationException("Loss function is not set");
+        SetTrainingMode(true);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(true);
 
         // Forward pass
-        var prediction = Forward(input);
-
-        // Convert tensors to vectors for loss computation
-        var predictionVector = new Vector<T>(prediction.ToArray());
-        var expectedVector = new Vector<T>(expectedOutput.ToArray());
+        var output = ForwardWithMemory(input);
+        var outputVector = output.ToVector();
+        var expectedVector = expectedOutput.ToVector();
 
         // Compute loss
-        var loss = LossFunction.CalculateLoss(predictionVector, expectedVector);
+        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
 
-        // Compute loss gradient
-        var lossGradientVector = LossFunction.CalculateDerivative(predictionVector, expectedVector);
+        // Backward pass with proper gradient
+        var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
+        var gradTensor = Tensor<T>.FromVector(lossGrad);
+        if (gradTensor.Rank < output.Rank)
+            gradTensor = gradTensor.Reshape(output.Shape.ToArray());
 
-        // Convert gradient vector back to tensor for backward pass
-        var lossGradient = new Tensor<T>(prediction.Shape, lossGradientVector);
+        Backpropagate(gradTensor);
 
-        // Backward pass
-        Backward(lossGradient);
-
-        // Update parameters using gradient descent with default learning rate
-        T learningRate = _numOps.FromDouble(0.001);
-
-        foreach (var layer in Layers)
-        {
-            if (layer.SupportsTraining)
-            {
-                layer.UpdateParameters(learningRate);
-            }
-        }
+        // Persistent Adam optimizer
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        var paramGrads = GetParameterGradients();
+        var currentParams = GetParameters();
+        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
+        UpdateParameters(updatedParams);
 
         // Periodically consolidate memory
         if (_adaptationStep % 100 == 0)
@@ -527,7 +543,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         var metadata = new ModelMetadata<T>
         {
             Name = "HopeNetwork",
-            ModelType = Enums.ModelType.RecurrentNeuralNetwork, // Hope is a recurrent architecture variant
+// Hope is a recurrent architecture variant
             Version = "1.0",
             Description = "Self-modifying recurrent network with Continuum Memory System for continual learning based on Google's Nested Learning paradigm",
             FeatureCount = _hiddenDim,

@@ -25,8 +25,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Qwen2-VL: Enhancing Vision-Language Model's Perception of the World at Any Resolution" (Wang et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Qwen2VL is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Qwen2-VL introduces two key innovations. First, "Naive Dynamic
+/// Resolution" lets it process images at any resolution without padding or cropping — the model
+/// adapts to each image's natural size. Second, Multimodal RoPE (M-RoPE) extends positional
+/// encoding across three dimensions: text position, spatial location in images, and temporal
+/// position in videos. This means the model naturally understands not just what tokens say,
+/// but where they are in text, where they are in an image, and when they appear in a video.
+/// This unified positional encoding enables native video understanding alongside image
+/// comprehension. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Qwen2-VL model for any-resolution visual understanding
+/// // using Naive Dynamic Resolution with M-RoPE positional encoding
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Qwen2VL&lt;double&gt;(architecture, "qwen2vl.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Qwen2VL&lt;double&gt;(architecture, new Qwen2VLOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -129,7 +152,7 @@ public class Qwen2VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "Qwen2-VL-Native" : "Qwen2-VL-ONNX", Description = "Qwen2-VL: Enhancing Vision-Language Model's Perception of the World at Any Resolution (Wang et al., 2024)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumResamplerLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "Qwen2-VL"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["MRoPE"] = _options.EnableMRoPE.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "Qwen2-VL-Native" : "Qwen2-VL-ONNX", Description = "Qwen2-VL: Enhancing Vision-Language Model's Perception of the World at Any Resolution (Wang et al., 2024)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumResamplerLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "Qwen2-VL"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["MRoPE"] = _options.EnableMRoPE.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.ResamplerDim); writer.Write(_options.DecoderDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumResamplerLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.NumResamplerHeads); writer.Write(_options.EnableMRoPE); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.ResamplerDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumResamplerLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.NumResamplerHeads = reader.ReadInt32(); _options.EnableMRoPE = reader.ReadBoolean(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new Qwen2VL<T>(Architecture, mp, _options); return new Qwen2VL<T>(Architecture, _options); }

@@ -51,6 +51,17 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// 3. Gradually increase data weight
     /// 4. Use separate learning rates for network and parameters
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+    ///     inputType: InputType.OneDimensional,
+    ///     taskType: NeuralNetworkTaskType.Regression,
+    ///     inputSize: 2, outputSize: 1);
+    /// var inverseProblem = new HeatConductivityInverseProblem&lt;float&gt;();
+    /// var bc = new IBoundaryCondition&lt;float&gt;[] { dirichletBC };
+    /// var pinn = new InverseProblemPINN&lt;float&gt;(architecture, inverseProblem, bc);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Science)]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -440,8 +451,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
             for (int d = 0; d < inputDim; d++)
             {
-                var plusInput = new Tensor<T>(input.Shape);
-                var minusInput = new Tensor<T>(input.Shape);
+                var plusInput = new Tensor<T>(input.Shape.ToArray());
+                var minusInput = new Tensor<T>(input.Shape.ToArray());
 
                 for (int i = 0; i < inputDim; i++)
                 {
@@ -725,7 +736,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 LastLoss = lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
                 var outputGradientVector = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-                var outputGradient = new Tensor<T>(prediction.Shape, outputGradientVector);
+                var outputGradient = new Tensor<T>(prediction.Shape.ToArray(), outputGradientVector);
 
                 Backpropagate(outputGradient);
                 _optimizer.UpdateParameters(Layers);
@@ -836,7 +847,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
             return new ModelMetadata<T>
             {
-                ModelType = ModelType.NeuralNetwork,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "NetworkType", "InverseProblemPINN" },

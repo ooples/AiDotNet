@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// RadFM (2024) is a generalist foundation model for radiology that uses a 3D Vision Transformer
+/// with a perceiver module to encode volumetric CT and MRI data. It handles both 2D radiographs
+/// and 3D volumetric scans, generating radiology reports, answering visual questions about
+/// medical images, and supporting multi-modal clinical decision-making.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "RadFM: Towards Generalist Foundation Model for Radiology (Various, 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> RadFM is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> RadFM is a vision-language model for radiology report generation
+/// and visual question answering on medical imaging data. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a RadFM model for radiology report generation and VQA
+/// // with 3D ViT encoding for volumetric CT/MRI data
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new RadFM&lt;double&gt;(architecture, "radfm.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new RadFM&lt;double&gt;(architecture, new RadFMOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Healthcare)]
@@ -94,7 +118,7 @@ public class RadFM<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "RadFM-Native" : "RadFM-ONNX", Description = "RadFM: 3D ViT with perceiver for radiology report generation and VQA.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "RadFM-Native" : "RadFM-ONNX", Description = "RadFM: 3D ViT with perceiver for radiology report generation and VQA.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "RadFM";
         m.AdditionalInfo["MedicalDomain"] = _options.MedicalDomain;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

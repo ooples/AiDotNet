@@ -549,7 +549,7 @@ public class SegmentationInterfaceContractTests
         var model = new SegFormer<double>(Arch(), numClasses: 21, modelSize: SegFormerModelSize.B2);
         var meta = model.GetModelMetadata();
         Assert.NotNull(meta);
-        Assert.Equal(ModelType.SemanticSegmentation, meta.ModelType);
+
         Assert.NotNull(meta.AdditionalInfo);
         Assert.Equal("SegFormer", meta.AdditionalInfo["ModelName"]);
         Assert.Equal(21, meta.AdditionalInfo["NumClasses"]);

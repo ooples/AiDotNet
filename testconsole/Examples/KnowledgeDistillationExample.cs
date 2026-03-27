@@ -357,6 +357,7 @@ public static class KnowledgeDistillationExample
         public Vector<double> GetParameters() => new Vector<double>(0);
         public void SetParameters(Vector<double> parameters) { }
         public int ParameterCount => _isLarge ? 1000 : 100;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
         public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters) => this;
 
         public IEnumerable<int> GetActiveFeatureIndices() => Enumerable.Range(0, _inputDim);
@@ -386,6 +387,8 @@ public static class KnowledgeDistillationExample
             var outputNode = TensorOperations<double>.Mean(inputNode);
             return outputNode;
         }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 }
 

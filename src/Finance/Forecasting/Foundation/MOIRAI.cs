@@ -13,7 +13,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Foundation;
 
@@ -52,6 +52,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// https://arxiv.org/abs/2402.02592
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MOIRAI universal time series foundation model
+/// // Multi-scale patching and masked encoder for any-to-any forecasting across domains
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with multi-scale masked encoder
+/// var model = new MOIRAI&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new MOIRAI&lt;double&gt;(architecture, "moirai_base.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -504,7 +520,7 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape));
+        Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -532,7 +548,6 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "MOIRAI" },
@@ -1001,7 +1016,7 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
 
         // Convert input to ONNX tensor format
         var inputData = ConvertToFloatArray(input);
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
 
         // Get input name from model
         var inputMeta = OnnxSession.InputMetadata;
@@ -1037,7 +1052,7 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     private Tensor<T> ApplyRandomMasking(Tensor<T> input)
     {
-        var masked = new Tensor<T>(input.Shape);
+        var masked = new Tensor<T>(input.Shape.ToArray());
         var rand = RandomHelper.CreateSecureRandom();
 
         // Copy input data
@@ -1237,7 +1252,7 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         int contextLen = _contextLength;
 
         // Shift old values left

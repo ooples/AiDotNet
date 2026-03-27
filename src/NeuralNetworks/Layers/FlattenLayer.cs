@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.Gpu;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -38,6 +40,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Structural)]
+[LayerTask(LayerTask.Projection)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 2, 2", TestConstructorArgs = "new[] { 1, 2, 2 }")]
 public class FlattenLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -257,7 +262,7 @@ public class FlattenLayer<T> : LayerBase<T>
         if (_lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        return Engine.Reshape(outputGradient, _lastInput.Shape);
+        return Engine.Reshape(outputGradient, _lastInput.Shape.ToArray());
     }
 
     /// <summary>
@@ -464,7 +469,7 @@ public class FlattenLayer<T> : LayerBase<T>
         // Cache input shape for BackwardGpu
         if (IsTrainingMode)
         {
-            _lastInputGpuShape = input.Shape.ToArray();
+            _lastInputGpuShape = input.Shape.ToArray().ToArray();
         }
 
         // Handle unbatched input (3D: [C, H, W] or 2D: [H, W] or 1D)

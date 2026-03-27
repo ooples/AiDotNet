@@ -171,7 +171,6 @@ public class MGLDVSR<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "MGLDVSR-Native" : "MGLDVSR-ONNX",
             Description = $"MGLD-VSR {_options.Variant} motion-guided latent diffusion VSR (Yang et al., 2024)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumResBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

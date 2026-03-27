@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Graph.Embeddings;
@@ -280,11 +281,8 @@ public abstract class KGEmbeddingBase<T> : IKnowledgeGraphEmbedding<T>
 
     private protected static void NormalizeL2(T[] vector)
     {
-        T sumSq = NumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(vector[i], vector[i]));
-        }
+        var vec = new Vector<T>(vector);
+        T sumSq = AiDotNetEngine.Current.DotProduct(vec, vec);
 
         double norm = NumOps.ToDouble(NumOps.Sqrt(sumSq));
         if (norm < 1e-12) return;

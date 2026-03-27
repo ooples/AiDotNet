@@ -1,4 +1,3 @@
-using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
@@ -19,138 +18,100 @@ namespace AiDotNet.AutoML.Registry;
 /// </remarks>
 internal static class AutoMLTabularModelFactory<T>
 {
-    public static IFullModel<T, Matrix<T>, Vector<T>> Create(ModelType modelType, IReadOnlyDictionary<string, object> parameters)
+    private static readonly Dictionary<Type, Func<IReadOnlyDictionary<string, object>, IFullModel<T, Matrix<T>, Vector<T>>>> _factories = new()
     {
-        return modelType switch
+        [typeof(SimpleRegression<>)] = p => CreateWithOptions(
+            (RegressionOptions<T> o) => new SimpleRegression<T>(o), new RegressionOptions<T>(), p),
+
+        [typeof(MultipleRegression<>)] = p => CreateWithOptions(
+            (RegressionOptions<T> o) => new MultipleRegression<T>(o), new RegressionOptions<T>(), p),
+
+        [typeof(BayesianRegression<>)] = p => CreateWithOptions(
+            (BayesianRegressionOptions<T> o) => new BayesianRegression<T>(o), new BayesianRegressionOptions<T>(), p),
+
+        [typeof(PolynomialRegression<>)] = p => CreateWithOptions(
+            (PolynomialRegressionOptions<T> o) => new PolynomialRegression<T>(o), new PolynomialRegressionOptions<T>(), p),
+
+        [typeof(QuantileRegression<>)] = p => CreateWithOptions(
+            (QuantileRegressionOptions<T> o) => new QuantileRegression<T>(o), new QuantileRegressionOptions<T>(), p),
+
+        [typeof(RobustRegression<>)] = p => CreateWithOptions(
+            (RobustRegressionOptions<T> o) => new RobustRegression<T>(o), new RobustRegressionOptions<T>(), p),
+
+        [typeof(LogisticRegression<>)] = p => CreateWithOptions(
+            (LogisticRegressionOptions<T> o) => new LogisticRegression<T>(o), new LogisticRegressionOptions<T>(), p),
+
+        [typeof(MultinomialLogisticRegression<>)] = p => CreateWithOptions(
+            (MultinomialLogisticRegressionOptions<T> o) => new MultinomialLogisticRegression<T>(o), new MultinomialLogisticRegressionOptions<T>(), p),
+
+        [typeof(GaussianProcessRegression<>)] = p => CreateWithOptions(
+            (GaussianProcessRegressionOptions o) => new GaussianProcessRegression<T>(o), new GaussianProcessRegressionOptions(), p),
+
+        [typeof(RandomForestRegression<>)] = p => CreateWithOptions(
+            (RandomForestRegressionOptions o) => new RandomForestRegression<T>(o), new RandomForestRegressionOptions(), p),
+
+        [typeof(GradientBoostingRegression<>)] = p => CreateWithOptions(
+            (GradientBoostingRegressionOptions o) => new GradientBoostingRegression<T>(o), new GradientBoostingRegressionOptions(), p),
+
+        [typeof(DecisionTreeRegression<>)] = p => CreateWithOptions(
+            (DecisionTreeOptions o) => new DecisionTreeRegression<T>(o), new DecisionTreeOptions(), p),
+
+        [typeof(ExtremelyRandomizedTreesRegression<>)] = p => CreateWithOptions(
+            (ExtremelyRandomizedTreesRegressionOptions o) => new ExtremelyRandomizedTreesRegression<T>(o), new ExtremelyRandomizedTreesRegressionOptions(), p),
+
+        [typeof(AdaBoostR2Regression<>)] = p => CreateWithOptions(
+            (AdaBoostR2RegressionOptions o) => new AdaBoostR2Regression<T>(o), new AdaBoostR2RegressionOptions(), p),
+
+        [typeof(QuantileRegressionForests<>)] = p => CreateWithOptions(
+            (QuantileRegressionForestsOptions o) => new QuantileRegressionForests<T>(o), new QuantileRegressionForestsOptions(), p),
+
+        [typeof(ConditionalInferenceTreeRegression<>)] = p => CreateWithOptions(
+            (ConditionalInferenceTreeOptions o) => new ConditionalInferenceTreeRegression<T>(o), new ConditionalInferenceTreeOptions(), p),
+
+        [typeof(M5ModelTree<>)] = p => CreateWithOptions(
+            (M5ModelTreeOptions o) => new M5ModelTree<T>(o), new M5ModelTreeOptions(), p),
+
+        [typeof(KNearestNeighborsRegression<>)] = p => CreateWithOptions(
+            (KNearestNeighborsOptions o) => new KNearestNeighborsRegression<T>(o), new KNearestNeighborsOptions(), p),
+
+        [typeof(SupportVectorRegression<>)] = p => CreateWithOptions(
+            (SupportVectorRegressionOptions o) => new SupportVectorRegression<T>(o), new SupportVectorRegressionOptions(), p),
+
+        [typeof(KernelRidgeRegression<>)] = p => CreateWithOptions(
+            (KernelRidgeRegressionOptions o) => new KernelRidgeRegression<T>(o), new KernelRidgeRegressionOptions(), p),
+
+        [typeof(GeneralizedAdditiveModel<>)] = p => CreateWithOptions(
+            (GeneralizedAdditiveModelOptions<T> o) => new GeneralizedAdditiveModel<T>(o), new GeneralizedAdditiveModelOptions<T>(), p),
+
+        [typeof(RadialBasisFunctionRegression<>)] = p => CreateWithOptions(
+            (RadialBasisFunctionOptions o) => new RadialBasisFunctionRegression<T>(o), new RadialBasisFunctionOptions(), p),
+
+        [typeof(MultilayerPerceptronRegression<>)] = p => CreateWithOptions(
+            (MultilayerPerceptronOptions<T, Matrix<T>, Vector<T>> o) => new MultilayerPerceptronRegression<T>(o),
+            new MultilayerPerceptronOptions<T, Matrix<T>, Vector<T>>(), p),
+
+        [typeof(TimeSeriesRegression<>)] = p => CreateWithOptions(
+            (ARIMAOptions<T> o) => new TimeSeriesRegression<T>(o), new ARIMAOptions<T>(), p),
+
+        [typeof(NeuralNetworkRegression<>)] = p => CreateWithOptions(
+            (NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>> o) => new NeuralNetworkRegression<T>(o),
+            new NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>>(), p),
+    };
+
+    public static IFullModel<T, Matrix<T>, Vector<T>> Create(Type modelType, IReadOnlyDictionary<string, object> parameters)
+    {
+        if (modelType is null)
+            throw new ArgumentNullException(nameof(modelType));
+
+        var lookupType = modelType.IsGenericType ? modelType.GetGenericTypeDefinition() : modelType;
+
+        if (_factories.TryGetValue(lookupType, out var factory))
         {
-            ModelType.SimpleRegression => CreateWithOptions(
-                (RegressionOptions<T> options) => new SimpleRegression<T>(options),
-                new RegressionOptions<T>(),
-                parameters),
+            return factory(parameters);
+        }
 
-            ModelType.MultipleRegression => CreateWithOptions(
-                (RegressionOptions<T> options) => new MultipleRegression<T>(options),
-                new RegressionOptions<T>(),
-                parameters),
-
-            ModelType.BayesianRegression => CreateWithOptions(
-                (BayesianRegressionOptions<T> options) => new BayesianRegression<T>(options),
-                new BayesianRegressionOptions<T>(),
-                parameters),
-
-            ModelType.PolynomialRegression => CreateWithOptions(
-                (PolynomialRegressionOptions<T> options) => new PolynomialRegression<T>(options),
-                new PolynomialRegressionOptions<T>(),
-                parameters),
-
-            ModelType.QuantileRegression => CreateWithOptions(
-                (QuantileRegressionOptions<T> options) => new QuantileRegression<T>(options),
-                new QuantileRegressionOptions<T>(),
-                parameters),
-
-            ModelType.RobustRegression => CreateWithOptions(
-                (RobustRegressionOptions<T> options) => new RobustRegression<T>(options),
-                new RobustRegressionOptions<T>(),
-                parameters),
-
-            ModelType.LogisticRegression => CreateWithOptions(
-                (LogisticRegressionOptions<T> options) => new LogisticRegression<T>(options),
-                new LogisticRegressionOptions<T>(),
-                parameters),
-
-            ModelType.MultinomialLogisticRegression => CreateWithOptions(
-                (MultinomialLogisticRegressionOptions<T> options) => new MultinomialLogisticRegression<T>(options),
-                new MultinomialLogisticRegressionOptions<T>(),
-                parameters),
-
-            ModelType.GaussianProcessRegression => CreateWithOptions(
-                (GaussianProcessRegressionOptions options) => new GaussianProcessRegression<T>(options),
-                new GaussianProcessRegressionOptions(),
-                parameters),
-
-            ModelType.RandomForest => CreateWithOptions(
-                (RandomForestRegressionOptions options) => new RandomForestRegression<T>(options),
-                new RandomForestRegressionOptions(),
-                parameters),
-
-            ModelType.GradientBoosting => CreateWithOptions(
-                (GradientBoostingRegressionOptions options) => new GradientBoostingRegression<T>(options),
-                new GradientBoostingRegressionOptions(),
-                parameters),
-
-            ModelType.DecisionTree => CreateWithOptions(
-                (DecisionTreeOptions options) => new DecisionTreeRegression<T>(options),
-                new DecisionTreeOptions(),
-                parameters),
-
-            ModelType.ExtremelyRandomizedTrees => CreateWithOptions(
-                (ExtremelyRandomizedTreesRegressionOptions options) => new ExtremelyRandomizedTreesRegression<T>(options),
-                new ExtremelyRandomizedTreesRegressionOptions(),
-                parameters),
-
-            ModelType.AdaBoostR2 => CreateWithOptions(
-                (AdaBoostR2RegressionOptions options) => new AdaBoostR2Regression<T>(options),
-                new AdaBoostR2RegressionOptions(),
-                parameters),
-
-            ModelType.QuantileRegressionForests => CreateWithOptions(
-                (QuantileRegressionForestsOptions options) => new QuantileRegressionForests<T>(options),
-                new QuantileRegressionForestsOptions(),
-                parameters),
-
-            ModelType.ConditionalInferenceTree => CreateWithOptions(
-                (ConditionalInferenceTreeOptions options) => new ConditionalInferenceTreeRegression<T>(options),
-                new ConditionalInferenceTreeOptions(),
-                parameters),
-
-            ModelType.M5ModelTree => CreateWithOptions(
-                (M5ModelTreeOptions options) => new M5ModelTree<T>(options),
-                new M5ModelTreeOptions(),
-                parameters),
-
-            ModelType.KNearestNeighbors => CreateWithOptions(
-                (KNearestNeighborsOptions options) => new KNearestNeighborsRegression<T>(options),
-                new KNearestNeighborsOptions(),
-                parameters),
-
-            ModelType.SupportVectorRegression => CreateWithOptions(
-                (SupportVectorRegressionOptions options) => new SupportVectorRegression<T>(options),
-                new SupportVectorRegressionOptions(),
-                parameters),
-
-            ModelType.KernelRidgeRegression => CreateWithOptions(
-                (KernelRidgeRegressionOptions options) => new KernelRidgeRegression<T>(options),
-                new KernelRidgeRegressionOptions(),
-                parameters),
-
-            ModelType.GeneralizedAdditiveModelRegression => CreateWithOptions(
-                (GeneralizedAdditiveModelOptions<T> options) => new GeneralizedAdditiveModel<T>(options),
-                new GeneralizedAdditiveModelOptions<T>(),
-                parameters),
-
-            ModelType.RadialBasisFunctionRegression => CreateWithOptions(
-                (RadialBasisFunctionOptions options) => new RadialBasisFunctionRegression<T>(options),
-                new RadialBasisFunctionOptions(),
-                parameters),
-
-            ModelType.MultilayerPerceptronRegression => CreateWithOptions(
-                (MultilayerPerceptronOptions<T, Matrix<T>, Vector<T>> options) => new MultilayerPerceptronRegression<T>(options),
-                new MultilayerPerceptronOptions<T, Matrix<T>, Vector<T>>(),
-                parameters),
-
-            ModelType.TimeSeriesRegression => CreateWithOptions(
-                (ARIMAOptions<T> options) => new TimeSeriesRegression<T>(options),
-                new ARIMAOptions<T>(),
-                parameters),
-
-            ModelType.NeuralNetworkRegression => CreateWithOptions(
-                (NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>> options) => new NeuralNetworkRegression<T>(options),
-                new NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>>(),
-                parameters),
-
-            _ => throw new NotSupportedException(
-                $"AutoML model type '{modelType}' is not currently supported by the built-in tabular AutoML factory.")
-        };
+        throw new NotSupportedException(
+            $"AutoML model type '{modelType.Name}' is not currently supported by the built-in tabular AutoML factory.");
     }
 
     private static TModel CreateWithOptions<TOptions, TModel>(

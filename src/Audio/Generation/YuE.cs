@@ -269,7 +269,6 @@ public class YuE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         {
             Name = _useNativeMode ? "YuE-Native" : "YuE-ONNX",
             Description = "YuE full-song music generation with vocals (Yuan et al., 2025)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.SemanticDim,
             Complexity = _options.NumSemanticLayers + _options.NumAcousticLayers
         };
         m.AdditionalInfo["LyricsVocabSize"] = _options.LyricsVocabSize.ToString();

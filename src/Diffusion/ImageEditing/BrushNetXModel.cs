@@ -37,6 +37,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// - Resolution: 1024x1024 native
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 1024, NumInferenceSteps = 30 };
+/// var model = new BrushNetXModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 128, 128 });
+/// var inpainted = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Inpainting)]
@@ -128,7 +136,7 @@ public class BrushNetXModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "BrushNet-X", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "BrushNet-X", Version = "1.0",
             Description = "SDXL dual-branch inpainting for high-resolution 1024x1024 generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

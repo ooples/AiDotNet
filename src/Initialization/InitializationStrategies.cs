@@ -55,6 +55,37 @@ public static class InitializationStrategies<T>
     public static IInitializationStrategy<T> Zero { get; } = new ZeroInitializationStrategy<T>();
 
     /// <summary>
+    /// He/Kaiming normal initialization. Recommended for ReLU/GELU activations (PyTorch default for linear layers).
+    /// </summary>
+    public static IInitializationStrategy<T> He { get; } = new HeInitializationStrategy<T>(useNormal: true);
+
+    /// <summary>
+    /// He/Kaiming uniform initialization. Alternative to He normal.
+    /// </summary>
+    public static IInitializationStrategy<T> HeUniform { get; } = new HeInitializationStrategy<T>(useNormal: false);
+
+    /// <summary>
+    /// LeCun normal initialization. For SELU activations and self-normalizing networks.
+    /// </summary>
+    public static IInitializationStrategy<T> LeCun { get; } = new LeCunInitializationStrategy<T>();
+
+    /// <summary>
+    /// Orthogonal initialization. Excellent for RNNs, LSTMs, and very deep networks.
+    /// Preserves gradient norms across layers.
+    /// </summary>
+    public static IInitializationStrategy<T> Orthogonal { get; } = new OrthogonalInitializationStrategy<T>();
+
+    /// <summary>
+    /// Orthogonal initialization with sqrt(2) gain, optimized for ReLU networks.
+    /// </summary>
+    public static IInitializationStrategy<T> OrthogonalReLU { get; } = new OrthogonalInitializationStrategy<T>(gain: Math.Sqrt(2.0));
+
+    /// <summary>
+    /// Small uniform initialization U(-0.05, 0.05). Simple baseline.
+    /// </summary>
+    public static IInitializationStrategy<T> UniformSmall { get; } = new UniformInitializationStrategy<T>(0.05);
+
+    /// <summary>
     /// Creates a new initialization strategy that loads weights from a file.
     /// </summary>
     /// <param name="filePath">The path to the weights file.</param>

@@ -30,6 +30,14 @@ namespace AiDotNet.NeuralNetworks;
 /// can create remarkably realistic synthetic data like images, music, or text.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new GenerativeAdversarialNetworkOptions { LatentSize = 100, ImageSize = 28 };
+/// var model = new GenerativeAdversarialNetwork&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.Generative)]
@@ -1072,7 +1080,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         // Calculate gradients for binary cross-entropy: (prediction - target)
         int batchSize = predictions.Shape[0];
-        var gradients = new Tensor<T>(predictions.Shape);
+        var gradients = new Tensor<T>(predictions.Shape.ToArray());
 
         for (int i = 0; i < batchSize; i++)
         {
@@ -1570,7 +1578,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GenerativeAdversarialNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "GeneratorParameters", Generator.GetParameterCount() },
@@ -1839,7 +1846,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         var realPart = Engine.TensorMultiply(epsilonBroadcast, realFlat);
         var fakePart = Engine.TensorMultiply(oneMinusEpsilon, fakeFlat);
         var interpolatedFlat = Engine.TensorAdd(realPart, fakePart);
-        var interpolated = interpolatedFlat.Reshape(realSamples.Shape);
+        var interpolated = interpolatedFlat.Reshape(realSamples.Shape.ToArray());
 
         // Compute gradients using symbolic differentiation (autodiff)
         var gradients = ComputeSymbolicGradient(interpolated);
@@ -1924,7 +1931,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
         // Create gradient signal: we want d(output)/d(input)
         // Start with gradient of 1.0 with respect to the output
-        var outputGradient = new Tensor<T>(output.Shape);
+        var outputGradient = new Tensor<T>(output.Shape.ToArray());
         outputGradient.Fill(NumOps.One);
 
         // Run backward pass through discriminator layers to compute input gradient
@@ -1972,7 +1979,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     private Tensor<T> ComputeNumericalGradient(Tensor<T> input)
     {
-        var gradients = new Tensor<T>(input.Shape);
+        var gradients = new Tensor<T>(input.Shape.ToArray());
         T epsilon = NumOps.FromDouble(1e-4); // Small perturbation for numerical gradient
 
         // Store original discriminator training mode
@@ -1980,7 +1987,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         Discriminator.SetTrainingMode(false); // Use inference mode for gradient computation
 
         // Work on a copy to avoid modifying the input tensor
-        var inputCopy = new Tensor<T>(input.Shape);
+        var inputCopy = new Tensor<T>(input.Shape.ToArray());
         for (int idx = 0; idx < input.Length; idx++)
         {
             inputCopy[idx] = input[idx];

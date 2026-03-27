@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.AutoML.SearchSpace;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -16,6 +18,26 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "AttentiveNAS: Improving Neural Architecture Search via Attentive Sampling" (CVPR 2021)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> AttentiveNAS improves architecture search by paying
+    /// attention to which sub-networks perform well. Instead of sampling random architectures,
+    /// it learns to focus on promising designs, like a smart student who concentrates on
+    /// the most important study topics rather than studying everything equally.</para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
+    /// var nas = new AttentiveNAS&lt;float&gt;(searchSpace, numNodes: 4);
+    /// Architecture&lt;float&gt; architecture = nas.DeriveArchitecture();
+    /// </code>
+    /// </example>
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.Optimization)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.VeryHigh)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     public class AttentiveNAS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;
@@ -117,7 +139,7 @@ namespace AiDotNet.AutoML.NAS
         /// </summary>
         private Vector<T> ComputeAttentionScores(Vector<T> contextVector)
         {
-            // Simple attention: W * context
+            // Linear attention projection: scores = W * context (no softmax needed for NAS scoring)
             var scores = new Vector<T>(_attentionWeights.Columns);
 
             for (int j = 0; j < _attentionWeights.Columns; j++)

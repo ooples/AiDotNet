@@ -15,7 +15,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.StateSpace;
 
@@ -63,6 +63,16 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 /// https://arxiv.org/abs/2403.09898
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 7, inputDepth: 1, outputSize: 96);
+/// var model = new TimeMachine&lt;double&gt;(architecture);
+/// var onnxModel = new TimeMachine&lt;double&gt;(architecture, "timemachine.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -446,7 +456,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape));
+        Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -480,7 +490,6 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "TimeMachine" },
@@ -727,7 +736,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         T std = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(variance)) + 1e-8);
 
         // Normalize
-        var normalized = new Tensor<T>(input.Shape);
+        var normalized = new Tensor<T>(input.Shape.ToArray());
         for (int i = 0; i < length; i++)
         {
             normalized.Data.Span[i] = NumOps.Divide(
@@ -906,7 +915,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape)
+        foreach (var dim in input.Shape.ToArray())
         {
             totalSize *= dim;
         }
@@ -985,7 +994,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         int inputLength = input.Data.Length;
         int predLength = Math.Min(prediction.Data.Length, inputLength);
 
-        var shifted = new Tensor<T>(input.Shape);
+        var shifted = new Tensor<T>(input.Shape.ToArray());
 
         // Copy shifted values (skip first predLength values)
         for (int i = predLength; i < inputLength; i++)

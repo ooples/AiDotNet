@@ -40,6 +40,14 @@ namespace AiDotNet.Clustering.Hierarchical;
 /// - Each split is a small K-Means problem, so it's efficient
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new BisectingKMeansOptions&lt;double&gt;();
+/// var bisectingKMeans = new BisectingKMeans&lt;double&gt;(options);
+/// bisectingKMeans.Train(dataMatrix);
+/// Vector<double> labels = bisectingKMeans.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -76,7 +84,6 @@ public class BisectingKMeans<T> : ClusteringBase<T>
     public IReadOnlyList<BisectionNode>? Hierarchy => _hierarchy?.AsReadOnly();
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -273,6 +280,10 @@ public class BisectingKMeans<T> : ClusteringBase<T>
 
         // Compute final inertia
         Inertia = ComputeInertia(x, Labels, ClusterCenters);
+
+        // Merge degenerate clusters (single natural cluster split into K)
+        MergeDegenerateClusters(x);
+
         IsTrained = true;
     }
 

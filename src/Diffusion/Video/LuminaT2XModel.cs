@@ -49,6 +49,14 @@ namespace AiDotNet.Diffusion.Video;
 /// Reference: Gao et al., "Lumina-T2X: Transforming Text into Any Modality", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new LuminaT2XModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 16, 64, 64 });
+/// var video = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Multimodal)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -217,7 +225,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "Lumina-T2X", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Lumina-T2X", Version = "1.0",
             Description = "Lumina-T2X unified text-to-any generation framework",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

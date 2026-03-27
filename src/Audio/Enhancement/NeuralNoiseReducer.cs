@@ -48,6 +48,28 @@ namespace AiDotNet.Audio.Enhancement;
 /// 2. Native Mode: Train your own model on custom data
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a neural noise reducer with default settings
+/// var reducer = new NeuralNoiseReducer&lt;float&gt;();
+///
+/// // Or load a pre-trained ONNX model
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 257,
+///     outputSize: 257);
+///
+/// // Create reducer with default architecture
+/// var reducer = new NeuralNoiseReducer&lt;float&gt;();
+///
+/// // Or with custom architecture
+/// // var reducer = new NeuralNoiseReducer&lt;float&gt;(architecture);
+///
+/// // Enhance noisy audio
+/// Tensor&lt;float&gt; cleanAudio = reducer.Enhance(noisyAudioTensor);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -939,7 +961,6 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         {
             Name = "NeuralNoiseReducer",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Neural network-based audio noise reducer with U-Net architecture"
         };
 

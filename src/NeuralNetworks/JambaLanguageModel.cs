@@ -20,6 +20,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Transformer attention's precise token interactions for the best of both worlds.</para>
 /// <para><b>Reference:</b> Lieber et al., "Jamba: A Hybrid Transformer-Mamba Language Model", 2024.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new JambaOptions { VocabSize = 65536, ModelDim = 4096, NumLayers = 32 };
+/// var model = new JambaLanguageModel&lt;float&gt;(options);
+/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var logits = model.Predict(tokens);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -144,7 +152,6 @@ public class JambaLanguageModel<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Architecture", "Jamba" },

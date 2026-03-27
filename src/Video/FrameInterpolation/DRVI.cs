@@ -190,7 +190,6 @@ public class DRVI<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "DRVI-Native" : "DRVI-ONNX",
             Description = $"DRVI {_options.Variant} disentangled content-motion interpolation (2024)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumContentBlocks + _options.NumMotionBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

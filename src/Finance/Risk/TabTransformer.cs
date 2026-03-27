@@ -22,6 +22,21 @@ namespace AiDotNet.Finance.Risk;
 /// contextual embeddings for these categories before combining them with numerical data.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for categorical-rich tabular risk data (10 features, single output)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 10, outputSize: 1);
+///
+/// // Training mode: transformer contextualizes categorical embeddings before MLP
+/// var model = new TabTransformer&lt;double&gt;(architecture);
+///
+/// // Parameterless constructor with default architecture
+/// var defaultModel = new TabTransformer&lt;double&gt;();
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Tabular)]

@@ -226,7 +226,6 @@ public class BigVGAN<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         {
             Name = _useNativeMode ? "BigVGAN-Native" : "BigVGAN-ONNX",
             Description = $"BigVGAN {_options.Variant} universal vocoder (Lee et al., 2023, NVIDIA)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels, Complexity = _options.UpsampleRates.Length
         };
         m.AdditionalInfo["Variant"] = _options.Variant;
         m.AdditionalInfo["SampleRate"] = _options.SampleRate.ToString();

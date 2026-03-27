@@ -40,6 +40,14 @@ namespace AiDotNet.Diffusion.Video;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 480, Width = 832, NumInferenceSteps = 50 };
+/// var model = new Wan21Model&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 81, 60, 104 });
+/// var video = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -185,7 +193,6 @@ public class Wan21Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "Wan-2.1",
             Version = "2.1",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Wan 2.1: MoE DiT video generation (Alibaba, 2025)",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

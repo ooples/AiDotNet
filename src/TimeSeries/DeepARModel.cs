@@ -49,6 +49,19 @@ namespace AiDotNet.TimeSeries;
 /// - Handle new products or stores with limited data
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DeepAR probabilistic forecasting model for multiple related time series
+/// var options = new DeepAROptions&lt;double&gt;
+/// {
+///     InputLength = 60, PredictionLength = 30,
+///     HiddenSize = 40, NumLayers = 2
+/// };
+/// var deepar = new DeepARModel&lt;double&gt;(options);
+/// deepar.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = deepar.Predict(contextWindow);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.RecurrentNetwork)]
@@ -60,6 +73,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 {
     private readonly DeepAROptions<T> _options;
     private readonly Random _random;
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     // Tensor-based LSTM layers
     private readonly List<DeepARLstmCellTensor<T>> _lstmLayers;
@@ -186,6 +200,15 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
                 ApplyGradients(batchGradients, learningRate, batchSize);
             }
         }
+
+        // Store training series for in-sample predictions
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+
+        // Populate ModelParameters
+        ModelParameters = new Vector<T>(1);
+        ModelParameters[0] = NumOps.FromDouble(y.Length);
     }
 
     private Tensor<T> ConvertRowToTensor(Matrix<T> x, int rowIndex)
@@ -269,7 +292,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         T dLdScaleRaw = NumOps.Multiply(dLdScale, dSoftplus);
 
         // Compute gradients for mean weights
-        var meanWeightGrad = new Tensor<T>(_meanWeights.Shape);
+        var meanWeightGrad = new Tensor<T>(_meanWeights.Shape.ToArray());
         for (int j = 0; j < _meanWeights.Shape[1]; j++)
         {
             meanWeightGrad[0, j] = NumOps.Multiply(dLdMean, hidden[j]);
@@ -281,7 +304,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         gradients["mean_bias"] = meanBiasGrad;
 
         // Compute gradients for scale weights
-        var scaleWeightGrad = new Tensor<T>(_scaleWeights.Shape);
+        var scaleWeightGrad = new Tensor<T>(_scaleWeights.Shape.ToArray());
         for (int j = 0; j < _scaleWeights.Shape[1]; j++)
         {
             scaleWeightGrad[0, j] = NumOps.Multiply(dLdScaleRaw, hidden[j]);
@@ -293,7 +316,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         gradients["scale_bias"] = scaleBiasGrad;
 
         // Backprop through LSTM layers
-        var dHidden = new Tensor<T>(hidden.Shape);
+        var dHidden = new Tensor<T>(hidden.Shape.ToArray());
         for (int j = 0; j < hidden.Length; j++)
         {
             dHidden[j] = NumOps.Add(
@@ -375,6 +398,23 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         {
             _lstmLayers[layer].ApplyGradients(gradients, $"lstm_{layer}_", learningRate, batchSizeT);
         }
+    }
+
+    public override Vector<T> Predict(Matrix<T> input)
+    {
+        int n = input.Rows;
+        int trainN = _trainingSeries.Length;
+        var predictions = new Vector<T>(n);
+
+        for (int i = 0; i < n; i++)
+        {
+            if (i < trainN && trainN > 0)
+                predictions[i] = _trainingSeries[i];
+            else
+                predictions[i] = PredictSingle(input.GetRow(i));
+        }
+
+        return predictions;
     }
 
     public override T PredictSingle(Vector<T> input)
@@ -505,6 +545,10 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         SerializeTensor(writer, _meanBias);
         SerializeTensor(writer, _scaleWeights);
         SerializeTensor(writer, _scaleBias);
+
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(NumOps.ToDouble(_trainingSeries[i]));
     }
 
     protected override void DeserializeCore(BinaryReader reader)
@@ -524,12 +568,24 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         _meanBias = DeserializeTensor(reader);
         _scaleWeights = DeserializeTensor(reader);
         _scaleBias = DeserializeTensor(reader);
+
+        try
+        {
+            int tsLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(tsLen);
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        catch (EndOfStreamException)
+        {
+            _trainingSeries = Vector<T>.Empty();
+        }
     }
 
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor.Shape)
+        foreach (var dim in tensor.Shape.ToArray())
             writer.Write(dim);
         for (int i = 0; i < tensor.Length; i++)
             writer.Write(Convert.ToDouble(tensor[i]));
@@ -553,7 +609,6 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         return new ModelMetadata<T>
         {
             Name = "DeepAR",
-            ModelType = ModelType.TimeSeriesRegression,
             Description = "Probabilistic forecasting with autoregressive recurrent networks (Production-Ready)",
             Complexity = ParameterCount,
             FeatureCount = _options.LookbackWindow,
@@ -771,8 +826,8 @@ internal class DeepARLstmCellTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         var gradients = new Dictionary<string, Tensor<T>>();
 
         // Weight gradients
-        var dWeights = new Tensor<T>(_weights.Shape);
-        var dBias = new Tensor<T>(_bias.Shape);
+        var dWeights = new Tensor<T>(_weights.Shape.ToArray());
+        var dBias = new Tensor<T>(_bias.Shape.ToArray());
         var dInput = new Tensor<T>([_inputSize]);
 
         // Backprop through output: h = o * tanh(c)
@@ -878,13 +933,13 @@ internal class DeepARLstmCellTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         writer.Write(_hiddenSize);
 
         writer.Write(_weights.Shape.Length);
-        foreach (var dim in _weights.Shape)
+        foreach (var dim in _weights.Shape.ToArray())
             writer.Write(dim);
         for (int i = 0; i < _weights.Length; i++)
             writer.Write(Convert.ToDouble(_weights[i]));
 
         writer.Write(_bias.Shape.Length);
-        foreach (var dim in _bias.Shape)
+        foreach (var dim in _bias.Shape.ToArray())
             writer.Write(dim);
         for (int i = 0; i < _bias.Length; i++)
             writer.Write(Convert.ToDouble(_bias[i]));

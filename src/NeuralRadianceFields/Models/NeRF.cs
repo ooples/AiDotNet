@@ -113,6 +113,18 @@ namespace AiDotNet.NeuralRadianceFields.Models;
 /// by Mildenhall et al., ECCV 2020
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a NeRF model with custom architecture parameters
+/// var nerf = new NeRF&lt;float&gt;(
+///     positionEncodingLevels: 10,
+///     directionEncodingLevels: 4,
+///     hiddenDim: 256,
+///     numLayers: 8);
+/// // Render a novel view from camera position and direction
+/// Tensor&lt;float&gt; output = nerf.Forward(positionAndDirectionInput);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -668,7 +680,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
             data[i] = numOps.FromDouble(grad * sig * (1.0 - sig));
         }
 
-        return new Tensor<T>(data, gradient.Shape);
+        return new Tensor<T>(data, gradient.Shape.ToArray());
     }
 
     private Tensor<T> ApplySoftplusGradient(Tensor<T> raw, Tensor<T> gradient)
@@ -683,7 +695,7 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
             data[i] = numOps.FromDouble(grad * sigmoid);
         }
 
-        return new Tensor<T>(data, gradient.Shape);
+        return new Tensor<T>(data, gradient.Shape.ToArray());
     }
 
     private Tensor<T> AddTensors(Tensor<T> left, Tensor<T> right)
@@ -1307,7 +1319,6 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "PositionEncodingLevels", _positionEncodingLevels },

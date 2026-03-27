@@ -41,6 +41,14 @@ namespace AiDotNet.Clustering.AutoK;
 /// - Only split if the fit improvement outweighs the penalty
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new XMeansOptions&lt;double&gt;();
+/// var xMeans = new XMeans&lt;double&gt;(options);
+/// xMeans.Train(dataMatrix);
+/// Vector<double> labels = xMeans.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -71,7 +79,6 @@ public class XMeans<T> : ClusteringBase<T>
     public double BIC => _bic;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -116,6 +123,7 @@ public class XMeans<T> : ClusteringBase<T>
         kmeans.Train(x);
         var currentLabels = kmeans.Labels ?? new Vector<T>(n);
         var currentCenters = kmeans.ClusterCenters ?? new Matrix<T>(currentK, d);
+        currentK = currentCenters.Rows; // Sync with actual K after potential degenerate merge
 
         // Iteratively try to split clusters
         bool improved = true;
@@ -242,6 +250,14 @@ public class XMeans<T> : ClusteringBase<T>
         ClusterCenters = currentCenters;
         Labels = currentLabels;
         _bic = ComputeTotalBIC(x, currentLabels, currentCenters, n, d, currentK);
+
+        MergeDegenerateClusters(x);
+
+        // Recompute BIC after merge since cluster count and assignments may have changed
+        if (NumClusters < currentK && ClusterCenters is not null && Labels is not null)
+        {
+            _bic = ComputeTotalBIC(x, Labels, ClusterCenters, n, d, NumClusters);
+        }
 
         IsTrained = true;
     }
@@ -380,21 +396,28 @@ public class XMeans<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
+        // Return stored labels for in-sample prediction
+        if (Labels is not null && ReferenceEquals(x, TrainingDataRef))
+            return new Vector<T>(Labels);
+
         var labels = new Vector<T>(x.Rows);
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        int d = x.Columns;
+        var pointArr = new T[d];
+        var centerArr = new T[d];
 
         for (int i = 0; i < x.Rows; i++)
         {
-            var point = GetRow(x, i);
+            for (int j = 0; j < d; j++) pointArr[j] = x[i, j];
             T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             if (ClusterCenters is not null)
             {
-                for (int c = 0; c < NumClusters; c++)
+                for (int c = 0; c < Math.Min(NumClusters, ClusterCenters.Rows); c++)
                 {
-                    var center = GetRow(ClusterCenters, c);
-                    T dist = metric.Compute(point, center);
+                    for (int j = 0; j < d; j++) centerArr[j] = ClusterCenters[c, j];
+                    T dist = metric.ComputeInline(pointArr, centerArr, d);
 
                     if (NumOps.LessThan(dist, minDist))
                     {

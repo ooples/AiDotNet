@@ -33,16 +33,32 @@ public class TransitionData<T>
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// Modified PI performs limited policy evaluation sweeps before improvement,
-/// trading off between the efficiency of VI and the stability of PI.
+/// <para>Modified PI performs limited policy evaluation sweeps before improvement,
+/// trading off between the efficiency of VI and the stability of PI.</para>
+/// <para><b>For Beginners:</b> Modified Policy Iteration is a middle ground between two classic
+/// algorithms: Value Iteration (fast but less stable) and Policy Iteration (stable but slow).
+/// Instead of fully evaluating a policy before improving it, it does a limited number of
+/// evaluation sweeps. Think of it like proofreading a draft: you do a few passes (not infinite)
+/// before revising. The number of evaluation sweeps controls the speed-stability trade-off.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Modified Policy Iteration agent balancing speed and stability
+/// var options = new ModifiedPolicyIterationOptions&lt;double&gt; { StateSize = 4, ActionSize = 2, EvaluationSweeps = 5 };
+/// var agent = new ModifiedPolicyIterationAgent&lt;double&gt;(options);
+///
+/// // Select an action using the partially-evaluated policy
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Reinforcement Learning: An Introduction",
-    "http://incompleteideas.net/book/the-book-2nd.html",
+    "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
@@ -279,7 +295,6 @@ public class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ReinforcementLearning,
         };
     }
 

@@ -32,7 +32,7 @@ namespace AiDotNet.Audio.Emotion;
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 80, outputSize: 7);
 /// var model = new WavLMSER&lt;float&gt;(arch, "wavlm_ser.onnx");
 /// var result = model.RecognizeEmotion(speechAudio);
-/// Console.WriteLine($"Emotion: {result.Emotion}, Confidence: {result.Confidence}");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>
@@ -291,7 +291,6 @@ internal class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<T>
         {
             Name = _useNativeMode ? "WavLM-SER-Native" : "WavLM-SER-ONNX",
             Description = $"WavLM-SER {_options.Variant} Speech Emotion Recognition (Chen et al., 2022)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels, Complexity = _options.NumLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;
         m.AdditionalInfo["NumClasses"] = _options.NumClasses.ToString();

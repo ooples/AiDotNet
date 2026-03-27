@@ -1467,7 +1467,7 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     ///     "Explain why this prediction was made and what factors contributed most?",
     ///     ReasoningMode.ChainOfThought
     /// );
-    /// Console.WriteLine(reasoningResult.FinalAnswer);
+    /// // Result is available in the returned value
     /// </code>
     /// </para>
     /// </remarks>

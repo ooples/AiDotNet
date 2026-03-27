@@ -219,7 +219,6 @@ public class Qwen2Audio<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
         {
             Name = _useNativeMode ? "Qwen2-Audio-Native" : "Qwen2-Audio-ONNX",
             Description = "Qwen2-Audio multimodal audio-language model (Chu et al., 2024, Alibaba)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.AudioEncoderDim,
             Complexity = _options.NumAudioEncoderLayers + _options.NumLMLayers
         };
         m.AdditionalInfo["LMHiddenDim"] = _options.LMHiddenDim.ToString();

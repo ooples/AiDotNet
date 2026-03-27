@@ -27,6 +27,19 @@ namespace AiDotNet.Video.Denoising;
 /// awareness, avoiding expensive optical flow or attention.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a ShiftNet model for efficient temporal-shift video denoising
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new ShiftNetOptions();
+/// var shiftNet = new ShiftNet&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var shiftNetOnnx = new ShiftNet&lt;double&gt;(architecture, "shiftnet_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -151,7 +164,6 @@ public class ShiftNet<T> : VideoDenoisingBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoDenoising,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "ShiftNet" },

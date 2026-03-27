@@ -55,6 +55,14 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// - Supports mesh extraction via marching cubes
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 64, Width = 64, NumInferenceSteps = 50 };
+/// var model = new DreamFusionModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 8, 8 });
+/// var rendering = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.Diffusion)]
@@ -379,7 +387,7 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> GenerateNoise(Tensor<T> template)
     {
-        var noise = new Tensor<T>(template.Shape);
+        var noise = new Tensor<T>(template.Shape.ToArray());
         var noiseSpan = noise.AsWritableSpan();
 
         for (int i = 0; i < noiseSpan.Length; i++)
@@ -615,8 +623,8 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var nerfCount = _nerf.ParameterCount;
-        var unetCount = _unet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
+        var vaeCount = _vae.GetParameters().Length;
 
         var nerfParams = new T[nerfCount];
         var unetParams = new T[unetCount];
@@ -671,7 +679,6 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "DreamFusion",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Text-to-3D generation via Score Distillation Sampling",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

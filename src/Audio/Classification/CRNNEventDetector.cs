@@ -294,7 +294,7 @@ public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        var result = new Tensor<T>(modelOutput.Shape);
+        var result = new Tensor<T>(modelOutput.Shape.ToArray());
         for (int i = 0; i < modelOutput.Length; i++)
         {
             double logit = NumOps.ToDouble(modelOutput[i]);
@@ -309,7 +309,6 @@ public class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector<
         {
             Name = _useNativeMode ? "CRNNEventDetector-Native" : "CRNNEventDetector-ONNX",
             Description = $"CRNN for Sound Event Detection {_options.Variant} (Cakir et al., 2017)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = ClassLabels.Count,
             Complexity = _options.CNNChannels.Length + _options.NumRNNLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

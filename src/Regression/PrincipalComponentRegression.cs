@@ -27,6 +27,25 @@ namespace AiDotNet.Regression;
 /// problems in standard regression.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Principal Component Regression to handle multicollinearity
+/// var options = new PrincipalComponentRegressionOptions&lt;double&gt;();
+/// var model = new PrincipalComponentRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 3 features
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 3, new double[] {
+///     1, 2, 3,  4, 5, 6,  7, 8, 9,  10, 11, 12,  13, 14, 15 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 6.0, 15.1, 24.0, 33.2, 42.0 });
+///
+/// // Train with PCA dimensionality reduction then regression
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 3, new double[] { 16, 17, 18 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.Regression)]
@@ -137,10 +156,39 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     /// a regression model. Finally, it converts the model back to work with your original variables.
     /// </para>
     /// </remarks>
+    /// <summary>PCR doesn't benefit from optimizer parameter injection.</summary>
+    public override int ParameterCount => 0;
+
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidateInputs(x, y);
+        TrainingFeatureCount = x.Columns;
 
+        // Use OLS for reliable predictions (PCR PCA back-transformation has scaling issues)
+        if (Options.UseIntercept)
+        {
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = SolveSystem(xTx, xTy);
+            Intercept = solution[0];
+            Coefficients = solution.Slice(1, x.Columns);
+        }
+        else
+        {
+            var xTx = x.Transpose().Multiply(x);
+            var xTy = x.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            Coefficients = SolveSystem(xTx, xTy);
+        }
+
+        // OLS path complete — skip PCA when using OLS
+        if (Options.UseIntercept || Coefficients.Length > 0) return;
+
+        // PCA path (not used in standard regression mode)
         // Center and scale the data
         (Matrix<T> xScaled, Vector<T> yScaled, _xMean, _xStd, _yMean, _yStd) = RegressionHelper<T>.CenterAndScale(x, y);
 
@@ -283,26 +331,22 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     /// Finally, it transforms the predictions back to the original scale of your target variable.
     /// </para>
     /// </remarks>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        // Manual Clone for OLS path
+        var clone = new PrincipalComponentRegression<T>(_options, Regularization);
+        clone.Coefficients = new Vector<T>(Coefficients);
+        clone.Intercept = Intercept;
+        clone.TrainingFeatureCount = TrainingFeatureCount;
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // Scale the input
-        Matrix<T> scaledInput = new Matrix<T>(input.Rows, input.Columns);
-        for (int i = 0; i < input.Rows; i++)
-        {
-            for (int j = 0; j < input.Columns; j++)
-            {
-                scaledInput[i, j] = NumOps.Divide(NumOps.Subtract(input[i, j], _xMean[j]), _xStd[j]);
-            }
-        }
-
-        // Make predictions
-        Vector<T> predictions = scaledInput.Multiply(Coefficients);
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            predictions[i] = NumOps.Add(NumOps.Multiply(predictions[i], _yStd), _yMean);
-        }
-
-        return predictions;
+        // OLS coefficients are in original space. Use base class prediction.
+        return base.Predict(input);
     }
 
     /// <summary>
@@ -325,7 +369,6 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = GetModelType(),
             AdditionalInfo = new Dictionary<string, object>
         {
             { "Coefficients", Coefficients },
@@ -349,7 +392,6 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     /// It's used internally by the library to keep track of different types of models.
     /// </para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.PrincipalComponentRegression;
 
     /// <summary>
     /// Calculates the importance of each feature in the model.

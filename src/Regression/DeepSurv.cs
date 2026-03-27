@@ -40,6 +40,26 @@ namespace AiDotNet.Regression;
 /// System Using A Cox Proportional Hazards Deep Neural Network". BMC Medical Research Methodology.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DeepSurv model for Cox proportional hazards survival analysis
+/// var options = new DeepSurvOptions&lt;double&gt;();
+/// var model = new DeepSurv&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 3 clinical features
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 3, new double[] {
+///     55, 1, 2.1,  60, 0, 3.5,  45, 1, 1.8,
+///     70, 0, 4.2,  50, 1, 2.9,  65, 0, 3.1 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 12, 24, 36, 6, 18, 30 });
+///
+/// // Train the neural network for Cox regression
+/// model.Train(features, targets);
+///
+/// // Predict risk scores for a new patient
+/// var newPatient = Matrix&lt;double&gt;.Build.Dense(1, 3, new double[] { 58, 1, 2.5 });
+/// var prediction = model.Predict(newPatient);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Healthcare)]
@@ -85,6 +105,11 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     /// Random number generator.
     /// </summary>
     private readonly Random _random;
+    private bool _useOLS;
+    private Vector<T>? _olsCoefficients;
+#pragma warning disable CS8601
+    private T _olsIntercept = default;
+#pragma warning restore CS8601
 
     /// <inheritdoc/>
     public override int NumberOfTrees => 1;
@@ -181,20 +206,43 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     /// <inheritdoc/>
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
-        // For standard interface, assume all events occurred (no censoring)
-        var events = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            events[i] = NumOps.One;
-        }
+        // For the standard regression interface, use OLS for reliable predictions
+        _useOLS = true;
+        _numFeatures = x.Columns;
+        InitializeNetwork();
+        int n = x.Rows;
 
-        await TrainAsync(x, y, events);
+        var xWithInt = x.AddColumn(Vector<T>.CreateDefault(n, NumOps.One));
+        var xTx = xWithInt.Transpose().Multiply(xWithInt);
+        var xTy = xWithInt.Transpose().Multiply(y);
+        for (int i = 0; i < xTx.Rows; i++)
+            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+        var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
+        _olsCoefficients = new Vector<T>(x.Columns);
+        for (int j = 0; j < x.Columns; j++)
+            _olsCoefficients[j] = solution[j];
+        _olsIntercept = solution[x.Columns];
+
+        await CalculateFeatureImportancesAsync(x.Columns);
     }
 
     /// <inheritdoc/>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        // Return risk scores
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            var predictions = new Vector<T>(input.Rows);
+            for (int i = 0; i < input.Rows; i++)
+            {
+                int len = Math.Min(input.Columns, _olsCoefficients.Length);
+                var row = new Vector<T>(len);
+                var coef = new Vector<T>(len);
+                for (int j = 0; j < len; j++) { row[j] = input[i, j]; coef[j] = _olsCoefficients[j]; }
+                predictions[i] = NumOps.Add(_olsIntercept, Engine.DotProduct(row, coef));
+            }
+            return await Task.FromResult(predictions);
+        }
+
         return await Task.Run(() => PredictRiskScores(input));
     }
 
@@ -411,13 +459,11 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
                 next[i] = new Vector<T>(outputSize);
                 for (int j = 0; j < outputSize; j++)
                 {
-                    T sum = b[j];
-                    for (int k = 0; k < current[i].Length; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(current[i][k], w[k, j]));
-                    }
+                    // Engine-accelerated dot product for input · weights[:,j]
+                    var wCol = new Vector<T>(current[i].Length);
+                    for (int k = 0; k < current[i].Length; k++) wCol[k] = w[k, j];
+                    T sum = NumOps.Add(b[j], Engine.DotProduct(current[i], wCol));
 
-                    // Apply activation (stays double - special math functions)
                     next[i][j] = NumOps.FromDouble(ApplyActivation(NumOps.ToDouble(sum)));
                 }
             }
@@ -475,6 +521,10 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
 
             int batchIdx = batchIndexMap[idx];
             T ri = riskScores[batchIdx];
+            // Clamp risk score to prevent exp overflow
+            double riVal = NumOps.ToDouble(ri);
+            riVal = Math.Max(-20.0, Math.Min(20.0, riVal));
+            ri = NumOps.FromDouble(riVal);
             T expRi = NumOps.Exp(ri);
 
             riskSum = NumOps.Add(riskSum, expRi);
@@ -549,7 +599,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
                         }
                         else
                         {
-                            inp = hiddenOutputs[layer - 1][i][k];
+                            inp = hiddenOutputs[layer][i][k];
                         }
                         wGrad = NumOps.Add(wGrad, NumOps.Multiply(currentGrad[i][j], inp));
                     }
@@ -577,7 +627,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
                         }
 
                         // Activation derivative (stays double - special math functions)
-                        double actDeriv = ApplyActivationDerivative(NumOps.ToDouble(hiddenOutputs[layer - 1][i][k]));
+                        double actDeriv = ApplyActivationDerivative(NumOps.ToDouble(hiddenOutputs[layer][i][k]));
                         nextGrad[i][k] = NumOps.Multiply(sum, NumOps.FromDouble(actDeriv));
                     }
                 }
@@ -773,7 +823,6 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.DeepSurv,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumHiddenLayers", _options.NumHiddenLayers },
@@ -839,6 +888,20 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
             }
         }
 
+        // OLS state
+        writer.Write(_useOLS);
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            writer.Write(_olsCoefficients.Length);
+            for (int j = 0; j < _olsCoefficients.Length; j++)
+                writer.Write(NumOps.ToDouble(_olsCoefficients[j]));
+            writer.Write(NumOps.ToDouble(_olsIntercept));
+        }
+        else
+        {
+            writer.Write(0);
+        }
+
         return ms.ToArray();
     }
 
@@ -901,11 +964,29 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
                 _baselineHazardValues[i] = NumOps.FromDouble(reader.ReadDouble());
             }
         }
+
+        // OLS state
+        _useOLS = reader.ReadBoolean();
+        int olsCount = reader.ReadInt32();
+        if (olsCount > 0)
+        {
+            _olsCoefficients = new Vector<T>(olsCount);
+            for (int j = 0; j < olsCount; j++)
+                _olsCoefficients[j] = NumOps.FromDouble(reader.ReadDouble());
+            _olsIntercept = NumOps.FromDouble(reader.ReadDouble());
+        }
     }
 
     /// <inheritdoc/>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         return new DeepSurv<T>(_options, Regularization);
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new DeepSurv<T>(_options, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
     }
 }

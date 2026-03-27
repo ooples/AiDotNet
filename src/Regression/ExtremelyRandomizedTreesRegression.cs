@@ -29,6 +29,25 @@ namespace AiDotNet.Regression;
 /// often leads to better decisions than relying on just one person.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Extra Trees regression with additional randomization
+/// var options = new ExtremelyRandomizedTreesRegressionOptions&lt;double&gt;();
+/// var model = new ExtremelyRandomizedTreesRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train with random split thresholds for extra variance reduction
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample (averages all trees)
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
@@ -242,18 +261,21 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     /// </remarks>
     public override async Task<Vector<T>> PredictAsync(Matrix<T> input)
     {
-        // Note: Tree-based methods handle regularization through tree structure parameters
-        // (MaxDepth, MinSamplesSplit, etc.), not through data transformation
-        var predictionTasks = _trees.Select(tree => new Func<Vector<T>>(() => tree.Predict(input)));
-        var predictions = await ParallelProcessingHelper.ProcessTasksInParallel(predictionTasks, _options.MaxDegreeOfParallelism);
+        // Predict sequentially for deterministic results.
+        // Parallel execution can cause floating-point accumulation order differences.
+        var predictions = new List<Vector<T>>(_trees.Count);
+        foreach (var tree in _trees)
+        {
+            predictions.Add(await Task.Run(() => tree.Predict(input)));
+        }
 
         var result = new T[input.Rows];
         for (int i = 0; i < input.Rows; i++)
         {
-            result[i] = NumOps.Divide(
-                predictions.Aggregate(NumOps.Zero, (acc, p) => NumOps.Add(acc, p[i])),
-                NumOps.FromDouble(_trees.Count)
-            );
+            T sum = NumOps.Zero;
+            foreach (var p in predictions)
+                sum = NumOps.Add(sum, p[i]);
+            result[i] = NumOps.Divide(sum, NumOps.FromDouble(_trees.Count));
         }
 
         return new Vector<T>(result);
@@ -326,8 +348,8 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     /// Example:
     /// ```csharp
     /// var metadata = extraTrees.GetModelMetadata();
-    /// Console.WriteLine($"Model type: {metadata.ModelType}");
-    /// Console.WriteLine($"Number of trees: {metadata.AdditionalInfo["NumberOfTrees"]}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// ```
     /// </para>
     /// </remarks>
@@ -335,7 +357,6 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.ExtremelyRandomizedTrees,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfTrees", _trees.Count },
@@ -526,6 +547,32 @@ public class ExtremelyRandomizedTreesRegression<T> : AsyncDecisionTreeRegression
     {
         // Create and return a new instance with the same configuration
         return new ExtremelyRandomizedTreesRegression<T>(_options, Regularization);
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new ExtremelyRandomizedTreesRegression<T>(_options, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
+    }
+
+    /// <summary>
+    /// Returns all features up to the number of features used during training.
+    /// </summary>
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        if (_trees.Count > 0)
+        {
+            // Collect features used across all individual trees
+            var active = new HashSet<int>();
+            foreach (var tree in _trees)
+            {
+                foreach (var idx in tree.GetActiveFeatureIndices())
+                    active.Add(idx);
+            }
+            return active;
+        }
+        return base.GetActiveFeatureIndices();
     }
 
     #region IJitCompilable Implementation Override

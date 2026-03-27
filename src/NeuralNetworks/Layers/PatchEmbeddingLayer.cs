@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -27,6 +28,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// the patches like "words" in a sentence.
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Embedding)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "8, 8, 3, 4, 16")]
 public class PatchEmbeddingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -174,7 +179,8 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         int channels,
         int patchSize,
         int embeddingDim,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [channels, imageHeight, imageWidth],
             [(imageHeight / patchSize) * (imageWidth / patchSize), embeddingDim],
@@ -204,6 +210,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         _projectionWeights = new Tensor<T>([patchDim, _embeddingDim]);
         _projectionBias = new Tensor<T>([_embeddingDim]);
 
+        InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
         InitializeParameters();
 
         // Register trainable parameters for GPU memory persistence
@@ -217,20 +224,8 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     private void InitializeParameters()
     {
         int patchDim = _channels * _patchSize * _patchSize;
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (patchDim + _embeddingDim)));
-
-        for (int i = 0; i < _projectionWeights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _projectionWeights.Shape[1]; j++)
-            {
-                _projectionWeights[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-            }
-        }
-
-        for (int i = 0; i < _projectionBias.Shape[0]; i++)
-        {
-            _projectionBias[i] = NumOps.Zero;
-        }
+        InitializeLayerWeights(_projectionWeights, patchDim, _embeddingDim);
+        InitializeLayerBiases(_projectionBias);
     }
 
     /// <summary>
@@ -255,7 +250,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // PatchEmbedding expects 4D input [B, C, H, W], normalize to 4D
@@ -510,12 +505,16 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         var transposedInput = reshapedInput.Transpose(new[] { 0, 2, 4, 1, 3, 5 });
         var patches = transposedInput.Reshape(batchSize, _numPatches, patchDim);
 
-        // 3. Gradient w.r.t Weights: patches^T @ grad
-        var patchesT = patches.Transpose(new[] { 0, 2, 1 });
-        // [B, P, N] @ [B, N, E] -> [B, P, E]
-        var weightGradBatch = Engine.BatchMatMul(patchesT, activationGradient);
-        // Sum over batch
-        _projectionWeightsGradient = Engine.ReduceSum(weightGradBatch, new[] { 0 });
+        // 3. Gradient w.r.t Weights: sum_b(patches[b]^T @ grad[b])
+        _projectionWeightsGradient = new Tensor<T>([patchDim, _embeddingDim]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            var patchB = patches.GetSliceAlongDimension(b, 0).Reshape([_numPatches, patchDim]);
+            var gradB = activationGradient.GetSliceAlongDimension(b, 0).Reshape([_numPatches, _embeddingDim]);
+            var patchBT = Engine.TensorTranspose(patchB); // [P, N]
+            var wGradB = Engine.TensorMatMul(patchBT, gradB); // [P, E]
+            _projectionWeightsGradient = _projectionWeightsGradient.Add(wGradB);
+        }
 
         // 4. Gradient w.r.t Input (Patches)
         // [B*N, E] @ [E, P] -> [B*N, P]
@@ -532,7 +531,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         var gradTransposed = gradReshaped.Transpose(new[] { 0, 3, 1, 4, 2, 5 });
 
         // Reshape to [B, C, H, W]
-        var inputGradient = gradTransposed.Reshape(_lastInput.Shape);
+        var inputGradient = gradTransposed.Reshape(_lastInput.Shape.ToArray());
 
         // Restore gradient shape to match original input shape
         if (_originalInputShape != null && _originalInputShape.Length != 4)
@@ -653,6 +652,21 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// It keeps the learned parameters but clears temporary calculation values.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_projectionWeightsGradient == null || _projectionBiasGradient == null)
+            return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_projectionWeightsGradient.ToArray()),
+            new Vector<T>(_projectionBiasGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _projectionWeightsGradient = null; _projectionBiasGradient = null;
+    }
+
     public override void ResetState()
     {
         _lastInput = null;
@@ -691,7 +705,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
 
         // PatchEmbedding expects 4D input [B, C, H, W]
         bool hasBatch = shape.Length == 4;
@@ -815,9 +829,9 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
 
         // Store GPU gradients for GPU-resident training
         _gpuWeightGradient?.Dispose();
-        _gpuWeightGradient = new GpuTensor<T>(backend, weightGradGpu.Buffer, weightGradGpu.Shape, GpuTensorRole.Gradient, ownsBuffer: false);
+        _gpuWeightGradient = new GpuTensor<T>(backend, weightGradGpu.Buffer, weightGradGpu.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: false);
         _gpuBiasGradient?.Dispose();
-        _gpuBiasGradient = new GpuTensor<T>(backend, biasGradGpu.Buffer, biasGradGpu.Shape, GpuTensorRole.Gradient, ownsBuffer: false);
+        _gpuBiasGradient = new GpuTensor<T>(backend, biasGradGpu.Buffer, biasGradGpu.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: false);
 
         // Input gradient: gradOutput @ weights^T -> [B*N, embedDim] @ [embedDim, patchDim] = [B*N, patchDim]
         var weightsGpu = gpuEngine.UploadToGpu<T>(_projectionWeights, GpuTensorRole.Weight);

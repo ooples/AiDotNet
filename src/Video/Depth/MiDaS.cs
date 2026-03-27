@@ -256,7 +256,7 @@ public class MiDaS<T> : NeuralNetworkBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = _onnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -287,7 +287,7 @@ public class MiDaS<T> : NeuralNetworkBase<T>
         LastLoss = loss;
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
 
         var currentGradient = outputGradientTensor;
         for (int i = Layers.Count - 1; i >= 0; i--)
@@ -347,7 +347,6 @@ public class MiDaS<T> : NeuralNetworkBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.DepthEstimation,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "ModelName", "MiDaS" },

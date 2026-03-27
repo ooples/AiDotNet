@@ -34,6 +34,28 @@ namespace AiDotNet.Classification.Linear;
 /// - Assumes linear relationship between features and class labels
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
+/// <example>
+/// <code>
+/// // Create ridge classifier with L2 regularized least squares
+/// var options = new LinearClassifierOptions&lt;double&gt;();
+/// var classifier = new RidgeClassifier&lt;double&gt;(options);
+///
+/// // Prepare training data
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
+///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
+///
+/// // Train using closed-form ridge regression solution
+/// classifier.Train(features, labels);
+///
+/// // Predict class based on closest regression target
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
+/// var prediction = classifier.Predict(newSample);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelCategory(ModelCategory.Regularization)]
@@ -56,7 +78,6 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.RidgeClassifier;
 
     /// <summary>
     /// Trains the Ridge Classifier using closed-form solution.
@@ -109,18 +130,24 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
         // Compute ridge regression solution: w = (X'X + alpha*I)^(-1) X'y
         T alpha = NumOps.FromDouble(Options.Alpha);
 
-        // Compute X'X
+        // Pre-extract columns from X as Vector<T> for Engine.DotProduct
+        var xCols = new Vector<T>[NumFeatures];
+        for (int col = 0; col < NumFeatures; col++)
+        {
+            xCols[col] = new Vector<T>(x.Rows);
+            for (int row = 0; row < x.Rows; row++)
+            {
+                xCols[col][row] = xCentered[row, col];
+            }
+        }
+
+        // Compute X'X using Engine.DotProduct
         var xtx = new Matrix<T>(NumFeatures, NumFeatures);
         for (int i = 0; i < NumFeatures; i++)
         {
             for (int j = 0; j < NumFeatures; j++)
             {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < x.Rows; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(xCentered[k, i], xCentered[k, j]));
-                }
-                xtx[i, j] = sum;
+                xtx[i, j] = Engine.DotProduct(xCols[i], xCols[j]);
 
                 // Add regularization to diagonal
                 if (i == j)
@@ -130,16 +157,11 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
             }
         }
 
-        // Compute X'y
+        // Compute X'y using Engine.DotProduct
         var xty = new Vector<T>(NumFeatures);
         for (int j = 0; j < NumFeatures; j++)
         {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < x.Rows; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(xCentered[i, j], yRegression[i]));
-            }
-            xty[j] = sum;
+            xty[j] = Engine.DotProduct(xCols[j], yRegression);
         }
 
         // Solve the linear system using Cholesky or simple Gaussian elimination
@@ -149,11 +171,7 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
         if (Options.FitIntercept && xMean is not null)
         {
             // intercept = y_mean - w'x_mean
-            Intercept = yMean;
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                Intercept = NumOps.Subtract(Intercept, NumOps.Multiply(Weights[j], xMean[j]));
-            }
+            Intercept = NumOps.Subtract(yMean, Engine.DotProduct(Weights, xMean));
         }
         else
         {

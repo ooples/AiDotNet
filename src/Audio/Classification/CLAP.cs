@@ -408,7 +408,7 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o)
     {
-        var r = new Tensor<T>(o.Shape);
+        var r = new Tensor<T>(o.Shape.ToArray());
         for (int i = 0; i < o.Length; i++)
             r[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(o[i]))));
         return r;
@@ -421,7 +421,6 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         {
             Name = _useNativeMode ? "CLAP-Native" : "CLAP-ONNX",
             Description = "CLAP Contrastive Language-Audio Pre-training (Wu et al., ICASSP 2023)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = ClassLabels.Count,
             Complexity = _options.NumAudioEncoderLayers
         };

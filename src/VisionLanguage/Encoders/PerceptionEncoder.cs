@@ -22,8 +22,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Perception Encoder: The best satisfies all" (Meta, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> PerceptionEncoder is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Meta's Perception Encoder is a vision backbone that produces
+/// both global features (a single vector summarizing the whole image) and dense spatial
+/// features (one vector per image region). This makes it versatile — the global features
+/// work for classification and retrieval, while the spatial features enable detection and
+/// segmentation. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Perception Encoder for global and dense visual features
+/// // combining contrastive and dense prediction objectives
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new PerceptionEncoder&lt;double&gt;(architecture, "perception_encoder.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new PerceptionEncoder&lt;double&gt;(architecture, new PerceptionEncoderOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
@@ -52,7 +72,7 @@ public class PerceptionEncoder<T> : VisionLanguageModelBase<T>, IVisualEncoder<T
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "PerceptionEncoder-Native" : "PerceptionEncoder-ONNX", Description = "Perception Encoder: Vision Foundation for Multimodal Alignment (Meta, 2025)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.EmbeddingDim, Complexity = _options.NumLayers }; m.AdditionalInfo["Architecture"] = "PerceptionEncoder"; m.AdditionalInfo["UseDenseFeatures"] = _options.UseDenseFeatures.ToString(); m.AdditionalInfo["GlobalPooling"] = _options.GlobalPooling.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "PerceptionEncoder-Native" : "PerceptionEncoder-ONNX", Description = "Perception Encoder: Vision Foundation for Multimodal Alignment (Meta, 2025)", FeatureCount = _options.EmbeddingDim, Complexity = _options.NumLayers }; m.AdditionalInfo["Architecture"] = "PerceptionEncoder"; m.AdditionalInfo["UseDenseFeatures"] = _options.UseDenseFeatures.ToString(); m.AdditionalInfo["GlobalPooling"] = _options.GlobalPooling.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.EmbeddingDim); writer.Write(_options.NumLayers); writer.Write(_options.NumHeads); writer.Write(_options.AlignmentProjectionDim); writer.Write(_options.UseDenseFeatures); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.EmbeddingDim = reader.ReadInt32(); _options.NumLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.AlignmentProjectionDim = reader.ReadInt32(); _options.UseDenseFeatures = reader.ReadBoolean(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new PerceptionEncoder<T>(Architecture, mp, _options); return new PerceptionEncoder<T>(Architecture, _options); }

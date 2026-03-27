@@ -28,10 +28,31 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// and generalizes to unseen timescales. It uses structured state spaces for linear-time
 /// processing of long sequences.
 /// </para>
+/// <para><b>For Beginners:</b> FlowState is a compact forecasting model from IBM that punches
+/// well above its weight. With only 9.1 million parameters (tiny by modern standards), it
+/// outperforms models 20 times its size. It uses state-space models, which process data
+/// like a conveyor belt rather than looking at everything at once, making it very efficient
+/// with long sequences of data like years of daily stock prices.</para>
 /// <para>
 /// <b>Reference:</b> IBM Research, "SSM Time Series Model", 2025.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FlowState SSM-based foundation model (IBM, only 9.1M params)
+/// // Uses structured state spaces for linear-time processing of long sequences
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with state-space model layers
+/// var model = new FlowState&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new FlowState&lt;double&gt;(architecture, "flowstate.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -227,7 +248,7 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
             var output = ForwardNative(input);
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
             _optimizer.UpdateParameters(Layers);
         }
         finally
@@ -247,7 +268,6 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "FlowState" },
@@ -361,7 +381,7 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         for (int b = 0; b < batchSize; b++)
         {
             T mean = NumOps.Zero;

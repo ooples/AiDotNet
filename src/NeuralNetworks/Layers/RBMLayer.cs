@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -26,6 +28,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class RBMLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -335,16 +340,18 @@ public class RBMLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // Initialize biases to zero using Fill
+        // Initialize biases to zero
         _visibleBiases.Fill(NumOps.Zero);
         _hiddenBiases.Fill(NumOps.Zero);
 
-        // Initialize weights with small random values using Engine operations
-        // Create random tensor [0, 1], scale to [0, 0.1], shift to [-0.05, 0.05]
+        // Initialize weights: U(-0.1, 0.1) scaled by 1/sqrt(visibleUnits).
+        // Standard U(-0.05, 0.05) is too narrow for large layers.
+        // This gives wider initialization while remaining stable for sigmoid.
+        double range = 2.0 / Math.Sqrt(_visibleUnits);
         var randomTensor = Tensor<T>.CreateRandom(_hiddenUnits, _visibleUnits);
-        var scaledTensor = Engine.TensorMultiplyScalar(randomTensor, NumOps.FromDouble(0.1));
+        var scaledTensor = Engine.TensorMultiplyScalar(randomTensor, NumOps.FromDouble(range));
         var shiftTensor = new Tensor<T>([_hiddenUnits, _visibleUnits]);
-        shiftTensor.Fill(NumOps.FromDouble(0.05));
+        shiftTensor.Fill(NumOps.FromDouble(range / 2.0));
         _weights = Engine.TensorSubtract(scaledTensor, shiftTensor);
     }
 
@@ -372,7 +379,7 @@ public class RBMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
         if (rank < 1)
             throw new ArgumentException("Input must have at least one dimension.", nameof(input));
@@ -419,7 +426,7 @@ public class RBMLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         if (rank < 1)
@@ -673,12 +680,53 @@ public class RBMLayer<T> : LayerBase<T>
         for (int d = 0; d < rank - 1; d++)
             flatBatch *= outputGradient.Shape[d];
 
-        var hidden2D = rank == 1
+        var outGrad2D = rank == 1
             ? outputGradient.Reshape([1, _hiddenUnits])
             : outputGradient.Reshape([flatBatch, _hiddenUnits]);
 
-        _reconstructedHidden = hidden2D;
+        // Forward was: hidden = sigmoid(input @ W^T + b_h)
+        // Backprop through sigmoid: dPreAct = outGrad * sigmoid'(preAct) = outGrad * hidden * (1 - hidden)
+        // We need the hidden activations from forward. Recompute from _lastVisibleInput:
+        if (_lastVisibleInput != null)
+        {
+            var input2D = _lastVisibleInput.Shape.Length == 1
+                ? _lastVisibleInput.Reshape([1, _visibleUnits])
+                : _lastVisibleInput.Reshape([flatBatch, _visibleUnits]);
 
+            // Recompute pre-activation and sigmoid derivative
+            var preAct = Engine.TensorAdd(
+                Engine.TensorMatMul(input2D, Engine.TensorTranspose(_weights)),
+                Engine.TensorRepeatElements(_hiddenBiases.Reshape([1, _hiddenUnits]), flatBatch, axis: 0));
+            var hidden = new Tensor<T>(preAct.Shape.ToArray());
+            for (int i = 0; i < hidden.Length; i++)
+                hidden[i] = MathHelper.Sigmoid(preAct[i]);
+
+            // sigmoid'(x) = sigmoid(x) * (1 - sigmoid(x))
+            var ones = new Tensor<T>(hidden.Shape.ToArray());
+            ones.Fill(NumOps.One);
+            var sigmoidDeriv = Engine.TensorMultiply(hidden, Engine.TensorSubtract(ones, hidden));
+            var dPreAct = Engine.TensorMultiply(outGrad2D, sigmoidDeriv);
+
+            // Weight gradients: dW = input^T @ dPreAct (note: W is [hidden, visible] so transpose)
+            _weightsGradient = Engine.TensorTranspose(Engine.TensorMatMul(Engine.TensorTranspose(input2D), dPreAct));
+            _hiddenBiasesGradient = Engine.ReduceSum(dPreAct, [0], keepDims: false);
+            _visibleBiasesGradient = new Tensor<T>(_visibleBiases.Shape.ToArray()); // visible biases don't affect forward
+
+            // Input gradient: dInput = dPreAct @ W
+            var inputGrad = Engine.TensorMatMul(dPreAct, _weights);
+
+            if (_originalInputShape == null)
+                return inputGrad;
+            if (_originalInputShape.Length == 1)
+                return inputGrad.Reshape([_visibleUnits]);
+            var outputShape = (int[])_originalInputShape.Clone();
+            outputShape[^1] = _visibleUnits;
+            return inputGrad.Reshape(outputShape);
+        }
+
+        // Fallback: reconstruction-based backward (legacy)
+        var hidden2D = outGrad2D;
+        _reconstructedHidden = hidden2D;
         Tensor<T> visibleProbs = SampleVisibleGivenHiddenTensor(hidden2D);
         _reconstructedVisible = visibleProbs;
 
@@ -688,9 +736,9 @@ public class RBMLayer<T> : LayerBase<T>
         if (_originalInputShape.Length == 1)
             return visibleProbs.Reshape([_visibleUnits]);
 
-        var outputShape = (int[])_originalInputShape.Clone();
-        outputShape[^1] = _visibleUnits;
-        return visibleProbs.Reshape(outputShape);
+        var fallbackShape = (int[])_originalInputShape.Clone();
+        fallbackShape[^1] = _visibleUnits;
+        return visibleProbs.Reshape(fallbackShape);
     }
 
 
@@ -772,7 +820,7 @@ public class RBMLayer<T> : LayerBase<T>
 
         _weightsGradient = weightsNode.Gradient;
         _hiddenBiasesGradient = biasNode.Gradient;
-        _visibleBiasesGradient = new Tensor<T>(_visibleBiases.Shape);
+        _visibleBiasesGradient = new Tensor<T>(_visibleBiases.Shape.ToArray());
         _visibleBiasesGradient.Fill(NumOps.Zero);
 
         var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
@@ -848,7 +896,7 @@ public class RBMLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> SampleBinaryStatesTensor(Tensor<T> probabilities)
     {
-        var randomTensor = Tensor<T>.CreateRandom(probabilities.Shape);
+        var randomTensor = Tensor<T>.CreateRandom(probabilities.Shape.ToArray());
         return Engine.TensorGreaterThan(probabilities, randomTensor);
     }
 
@@ -999,12 +1047,25 @@ public class RBMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        // Use Vector.Concatenate for production-grade parameter extraction
         return Vector<T>.Concatenate(
             new Vector<T>(_weights.ToArray()),
             new Vector<T>(_visibleBiases.ToArray()),
             new Vector<T>(_hiddenBiases.ToArray())
         );
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+        // _weights is a 2D Tensor [visibleUnits, hiddenUnits]
+        for (int i = 0; i < _weights.Length; i++)
+            _weights.SetFlat(i, parameters[idx++]);
+        // _visibleBiases is a 1D Tensor [visibleUnits]
+        for (int i = 0; i < _visibleBiases.Length; i++)
+            _visibleBiases.SetFlat(i, parameters[idx++]);
+        // _hiddenBiases is a 1D Tensor [hiddenUnits]
+        for (int i = 0; i < _hiddenBiases.Length; i++)
+            _hiddenBiases.SetFlat(i, parameters[idx++]);
     }
 
     /// <summary>
@@ -1029,6 +1090,22 @@ public class RBMLayer<T> : LayerBase<T>
     /// - Processing unrelated sequences of data
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_weightsGradient == null || _visibleBiasesGradient == null || _hiddenBiasesGradient == null)
+            return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_weightsGradient.ToArray()),
+            new Vector<T>(_visibleBiasesGradient.ToArray()),
+            new Vector<T>(_hiddenBiasesGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _weightsGradient = null; _visibleBiasesGradient = null; _hiddenBiasesGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear cached values used during contrastive divergence training

@@ -27,8 +27,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <item>Paper: "Scaling Language-Image Pre-training via Masking" (Li et al., 2022)</item>
 /// </list>
 /// </para>
-/// <para><b>For Beginners:</b> FLIP is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> FLIP speeds up CLIP training by randomly hiding 50-75% of
+/// image patches during training, dramatically reducing computation. At inference time, all
+/// patches are used for full accuracy. This simple trick allows training larger models or
+/// using more data within the same compute budget. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FLIP model for accelerated contrastive training
+/// // using random image patch masking for 2-4x training speedup
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new FLIP&lt;double&gt;(architecture, "flip.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new FLIP&lt;double&gt;(architecture, new FLIPOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -108,7 +128,7 @@ public class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMod
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var meta = new ModelMetadata<T> { Name = _useNativeMode ? "FLIP-Native" : "FLIP-ONNX", Description = "FLIP: Fast Language-Image Pre-training via Masking (Li et al., 2022)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers };
+        var meta = new ModelMetadata<T> { Name = _useNativeMode ? "FLIP-Native" : "FLIP-ONNX", Description = "FLIP: Fast Language-Image Pre-training via Masking (Li et al., 2022)", FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers };
         meta.AdditionalInfo["Architecture"] = "FLIP"; meta.AdditionalInfo["MaskingRatio"] = _options.MaskingRatio.ToString(); meta.AdditionalInfo["ProjectionDim"] = _options.ProjectionDim.ToString();
         return meta;
     }

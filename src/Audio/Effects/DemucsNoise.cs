@@ -188,7 +188,6 @@ public class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         {
             Name = _useNativeMode ? "DemucsNoise-Native" : "DemucsNoise-ONNX",
             Description = $"Demucs for Noise {_options.Variant} (Defossez et al., 2020, Meta)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = 1, Complexity = _options.Depth
         };
         m.AdditionalInfo["Variant"] = _options.Variant;
         m.AdditionalInfo["Depth"] = _options.Depth.ToString();

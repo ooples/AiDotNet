@@ -51,6 +51,32 @@ namespace AiDotNet.Classification.MultiLabel;
 /// - Label correlations are important
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create Label Powerset treating each label combination as a class
+/// var classifier = new LabelPowerset&lt;double&gt;();
+///
+/// // Prepare features and multi-label targets
+/// var features = new Matrix&lt;double&gt;(4, 2);
+/// features[0, 0] = 1.0; features[0, 1] = 2.0;
+/// features[1, 0] = 3.0; features[1, 1] = 4.0;
+/// features[2, 0] = 5.0; features[2, 1] = 6.0;
+/// features[3, 0] = 7.0; features[3, 1] = 8.0;
+/// var labels = new Matrix&lt;double&gt;(4, 3);
+/// labels[0, 0] = 1; labels[0, 1] = 0; labels[0, 2] = 1;
+/// labels[1, 0] = 1; labels[1, 1] = 1; labels[1, 2] = 0;
+/// labels[2, 0] = 0; labels[2, 1] = 1; labels[2, 2] = 1;
+/// labels[3, 0] = 0; labels[3, 1] = 0; labels[3, 2] = 1;
+///
+/// // Train single multi-class classifier on label combination classes
+/// classifier.Train(features, labels);
+///
+/// // Predict complete label combination for new sample
+/// var newSample = new Matrix&lt;double&gt;(1, 2);
+/// newSample[0, 0] = 2.0; newSample[0, 1] = 3.0;
+/// var prediction = classifier.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Classification)]
@@ -449,21 +475,6 @@ public class LabelPowerset<T> : MultiLabelClassifierBase<T>
     #endregion
 
     #region Abstract Method Implementations
-
-    /// <summary>
-    /// Gets the model type identifier.
-    /// </summary>
-    /// <returns>The ModelType enum value for Label Powerset.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This identifies what kind of model this is within the
-    /// AiDotNet library's type system.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.LabelPowersetClassifier;
-    }
 
     /// <summary>
     /// Gets all learnable parameters of the model as a single vector.

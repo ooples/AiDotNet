@@ -64,11 +64,11 @@ public class EmbeddingLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert - input gradient should match input shape (zero tensor for embeddings)
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public class EmbeddingLayersIntegrationTests
 
         // Act - forward, backward, update
         var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         layer.Backward(outputGradient);
         layer.UpdateParameters(0.01f);
 
@@ -209,11 +209,11 @@ public class EmbeddingLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         Assert.False(ContainsNaN(inputGradient));
     }
 
@@ -293,11 +293,11 @@ public class EmbeddingLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert - gradient shape should match input
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
     }
 
     [Fact]
@@ -313,7 +313,7 @@ public class EmbeddingLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         layer.Backward(outputGradient);
         layer.UpdateParameters(0.01f);
 
@@ -376,7 +376,7 @@ public class EmbeddingLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -393,7 +393,7 @@ public class EmbeddingLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -408,11 +408,11 @@ public class EmbeddingLayersIntegrationTests
 
         // Act
         var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape);
+        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
         var inputGradient = layer.Backward(outputGradient);
 
         // Assert - gradient flows through unchanged for positional encoding
-        Assert.Equal(input.Shape, inputGradient.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
         Assert.False(ContainsNaN(inputGradient));
     }
 
@@ -597,7 +597,7 @@ public class EmbeddingLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -614,7 +614,7 @@ public class EmbeddingLayersIntegrationTests
         var output = layer.Forward(input);
 
         // Assert
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 

@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -31,6 +32,14 @@ namespace AiDotNet.NeuralNetworks;
 /// powerful for language tasks, time series prediction, and many other sequence-based problems.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new AttentionNetworkOptions { HiddenSize = 256, NumHeads = 8 };
+/// var model = new AttentionNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 10, 64 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -113,6 +122,12 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     private readonly ILossFunction<T> _lossFunction;
 
     /// <summary>
+    /// The optimizer used for parameter updates during training.
+    /// Defaults to AdamW, the industry standard for transformer-based architectures.
+    /// </summary>
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+
+    /// <summary>
     /// Stores the last computed attention entropy loss for diagnostics.
     /// </summary>
     private T _lastAttentionEntropyLoss;
@@ -168,7 +183,7 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// Cross-Entropy Loss is used by default because it works well for many language-related tasks.
     /// </para>
     /// </remarks>
-    public AttentionNetwork(NeuralNetworkArchitecture<T> architecture, int sequenceLength, int embeddingSize, ILossFunction<T>? lossFunction = null, AttentionNetworkOptions? options = null) :
+    public AttentionNetwork(NeuralNetworkArchitecture<T> architecture, int sequenceLength, int embeddingSize, ILossFunction<T>? lossFunction = null, AttentionNetworkOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _options = options ?? new AttentionNetworkOptions();
@@ -182,6 +197,8 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         InitializeLayers();
+
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
     /// <summary>
@@ -339,15 +356,15 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         var flattenedGradient = _lossFunction.CalculateDerivative(flattenedOutput, flattenedExpectedOutput);
 
         // Unflatten the gradient to match the output shape
-        var gradient = new Tensor<T>(output.Shape).Unflatten(flattenedGradient);
+        var gradient = new Tensor<T>(output.Shape.ToArray()).Unflatten(flattenedGradient);
 
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
             gradient = Layers[i].Backward(gradient);
         }
 
-        // Update parameters
-        UpdateParameters(GetParameters());
+        // Update parameters using the optimizer (AdamW by default for transformer architectures)
+        _optimizer.UpdateParameters(Layers);
     }
 
     /// <summary>
@@ -375,7 +392,6 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.AttentionNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "SequenceLength", _sequenceLength },

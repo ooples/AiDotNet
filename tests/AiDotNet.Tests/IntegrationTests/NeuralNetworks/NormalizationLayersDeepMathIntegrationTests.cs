@@ -233,7 +233,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         var input = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0 }));
         var output = bn.Forward(input);
 
-        Assert.Single(output.Shape);
+        Assert.Single(output.Shape.ToArray());
         Assert.Equal(3, output.Shape[0]);
     }
 
@@ -796,7 +796,7 @@ public class NormalizationLayersDeepMathIntegrationTests
         var inputGrad = bn.Backward(grad);
 
         // Should preserve 1D rank
-        Assert.Single(inputGrad.Shape);
+        Assert.Single(inputGrad.Shape.ToArray());
         Assert.Equal(3, inputGrad.Shape[0]);
     }
 

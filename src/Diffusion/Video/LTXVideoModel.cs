@@ -415,7 +415,6 @@ public class LTXVideoModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "LTX-Video",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "LTX-Video lightweight real-time video generation with extreme latent compression",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

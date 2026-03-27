@@ -34,6 +34,14 @@ namespace AiDotNet.Diffusion.Video;
 /// - Supports I2V: Yes | T2V: Yes | V2V: No
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 1080, Width = 1920, NumInferenceSteps = 30 };
+/// var model = new RunwayGen4Model&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 120, 135, 240 });
+/// var video = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -179,7 +187,6 @@ public class RunwayGen4Model<T> : VideoDiffusionModelBase<T>
         {
             Name = "Runway-Gen-4",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Runway Gen-4 multi-modal understanding and generation model.",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

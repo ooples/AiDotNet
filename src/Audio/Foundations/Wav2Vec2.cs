@@ -160,7 +160,7 @@ public class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
                 layerOutputs.Add(c);
         }
         if (layerOutputs.Count == 0) return c;
-        var result = new Tensor<T>(layerOutputs[0].Shape);
+        var result = new Tensor<T>(layerOutputs[0].Shape.ToArray());
         int count = layerOutputs.Count;
         for (int li = 0; li < count; li++)
         {
@@ -219,7 +219,6 @@ public class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>
         {
             Name = _useNativeMode ? "wav2vec2-Native" : "wav2vec2-ONNX",
             Description = $"wav2vec 2.0 {_options.Variant} self-supervised speech model (Baevski et al., 2020)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = 1, Complexity = _options.NumLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;
         m.AdditionalInfo["HiddenDim"] = _options.HiddenDim.ToString();

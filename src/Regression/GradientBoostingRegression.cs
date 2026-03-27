@@ -33,6 +33,25 @@ namespace AiDotNet.Regression;
 /// - It combines many simple models (trees) into a strong predictive model
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a gradient boosting regression model
+/// var options = new GradientBoostingRegressionOptions&lt;double&gt;();
+/// var model = new GradientBoostingRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train the ensemble model sequentially
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
@@ -355,9 +374,9 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// Example:
     /// ```csharp
     /// var metadata = gbr.GetModelMetadata();
-    /// Console.WriteLine($"Model type: {metadata.ModelType}");
-    /// Console.WriteLine($"Number of trees: {metadata.AdditionalInfo["NumberOfTrees"]}");
-    /// Console.WriteLine($"Learning rate: {metadata.AdditionalInfo["LearningRate"]}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// ```
     /// </para>
     /// </remarks>
@@ -365,7 +384,6 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GradientBoosting,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfTrees", _options.NumberOfTrees },
@@ -535,6 +553,34 @@ public class GradientBoostingRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         // Create and return a new instance with the same configuration
         return new GradientBoostingRegression<T>(_options, Regularization);
+    }
+
+    /// <inheritdoc/>
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        // Aggregate active features from all trees in the ensemble
+        var activeFeatures = new HashSet<int>();
+        foreach (var tree in _trees)
+        {
+            foreach (var idx in tree.GetActiveFeatureIndices())
+            {
+                activeFeatures.Add(idx);
+            }
+        }
+        return activeFeatures;
+    }
+
+    /// <inheritdoc/>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (GradientBoostingRegression<T>)base.Clone();
+        clone._initialPrediction = _initialPrediction;
+        clone._trees = new List<DecisionTreeRegression<T>>(_trees.Count);
+        foreach (var tree in _trees)
+        {
+            clone._trees.Add((DecisionTreeRegression<T>)tree.Clone());
+        }
+        return clone;
     }
 
     #region IJitCompilable Implementation Override

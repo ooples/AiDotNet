@@ -17,10 +17,35 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Transfusion (Meta, 2024) combines autoregressive next-token prediction and continuous
+/// diffusion loss within a single multi-modal transformer. Text tokens use cross-entropy loss
+/// while image patches use diffusion denoising loss, allowing the model to both generate
+/// text autoregressively and produce high-quality images through diffusion within a unified
+/// architecture.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Transfusion: Predict the Next Token and Diffuse Images with One Multi-Modal Model" (Meta, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Transfusion is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Transfusion is a unified model that combines autoregressive
+/// text generation with diffusion-based image generation. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Transfusion model combining autoregressive and diffusion objectives
+/// // in a single transformer for unified text and image generation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Transfusion&lt;double&gt;(architecture, "transfusion.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Transfusion&lt;double&gt;(architecture, new TransfusionOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Multimodal)]
@@ -215,7 +240,7 @@ public class Transfusion<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Transfusion-Native" : "Transfusion-ONNX", Description = "Transfusion: combined autoregressive and diffusion loss in single transformer.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Transfusion-Native" : "Transfusion-ONNX", Description = "Transfusion: combined autoregressive and diffusion loss in single transformer.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Transfusion";
         m.AdditionalInfo["SupportsGeneration"] = _options.SupportsGeneration.ToString();
         m.AdditionalInfo["DiffusionLoss"] = _options.EnableDiffusionLoss.ToString();

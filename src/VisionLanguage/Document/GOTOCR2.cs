@@ -17,10 +17,33 @@ namespace AiDotNet.VisionLanguage.Document;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// GOT-OCR2 (StepFun, 2024) is a 580M unified end-to-end OCR model that handles diverse visual
+/// text including plain text, tables, charts, mathematical equations, and music scores. It uses
+/// a vision encoder with a lightweight language decoder to directly generate structured text
+/// output from document images without separate detection and recognition stages.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "General OCR Theory: Towards OCR-2.0 via a Unified End-to-end Model" (StepFun, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> GOTOCR2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> GOT-OCR2 is a unified OCR model that handles text, tables,
+/// charts, equations, and music scores. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a GOT-OCR2 model for unified end-to-end OCR
+/// // handling text, tables, charts, equations, and music scores
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GOTOCR2&lt;double&gt;(architecture, "gotocr2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GOTOCR2&lt;double&gt;(architecture, new GOTOCR2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -93,7 +116,7 @@ public class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingMode
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GOT-OCR2-Native" : "GOT-OCR2-ONNX", Description = "GOT-OCR2: 580M unified OCR model for text, tables, charts, equations, and music scores.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "GOT-OCR2-Native" : "GOT-OCR2-ONNX", Description = "GOT-OCR2: 580M unified OCR model for text, tables, charts, equations, and music scores.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "GOT-OCR2";
         m.AdditionalInfo["OcrFree"] = _options.IsOcrFree.ToString();
         m.AdditionalInfo["MathOCR"] = _options.EnableMathOCR.ToString();

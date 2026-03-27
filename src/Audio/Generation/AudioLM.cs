@@ -248,7 +248,6 @@ public class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         {
             Name = _useNativeMode ? "AudioLM-Native" : "AudioLM-ONNX",
             Description = "AudioLM hierarchical audio language model (Borsos et al., 2023, Google)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.SemanticDim,
             Complexity = _options.NumSemanticLayers + _options.NumCoarseLayers + _options.NumFineLayers
         };
         m.AdditionalInfo["SemanticVocabSize"] = _options.SemanticVocabSize.ToString();

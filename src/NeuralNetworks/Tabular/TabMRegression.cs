@@ -250,7 +250,7 @@ public class TabMRegression<T> : TabMBase<T>
         int expandedBatchSize = batchSize * Options.NumEnsembleMembers;
 
         // Gradient of MSE w.r.t averaged predictions
-        var avgPredGrad = new Tensor<T>(_predictionsCache.Shape);
+        var avgPredGrad = new Tensor<T>(_predictionsCache.Shape.ToArray());
         var scale = NumOps.FromDouble(2.0 / (batchSize * _outputDimension));
 
         for (int i = 0; i < _predictionsCache.Length; i++)

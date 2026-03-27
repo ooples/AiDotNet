@@ -62,6 +62,16 @@ namespace AiDotNet.NER.TransformerBased;
 /// - You can accept higher latency compared to BiLSTM-CRF
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 512,
+///     outputSize: 9,
+///     hiddenLayers: new[] { 256, 128 },
+///     networkType: NetworkType.Classification);
+/// var bERTNER = new BERTNER&lt;float&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Transformer)]

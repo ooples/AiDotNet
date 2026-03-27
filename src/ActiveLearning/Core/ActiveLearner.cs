@@ -44,7 +44,7 @@ namespace AiDotNet.ActiveLearning.Core;
 /// learner.Initialize(initialLabeled, unlabeledPool);
 ///
 /// var result = learner.Run(oracle, stoppingCriterion);
-/// Console.WriteLine($"Final accuracy: {result.FinalTrainingAccuracy}");
+/// // Result is available in the returned value
 /// </code>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]

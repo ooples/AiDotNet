@@ -17,10 +17,33 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Kimi-VL (Moonshot AI, 2025) is a Mixture of Experts vision-language model featuring
+/// the MoonViT visual encoder and long-context processing capabilities. It uses sparse
+/// MoE routing for efficient scaling and supports extended context windows for processing
+/// high-resolution images and lengthy multi-turn conversations with visual inputs.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Kimi-VL Technical Report" (Moonshot AI, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> KimiVL is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Kimi-VL is a vision-language model with MoE architecture
+/// for efficient multimodal reasoning. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Kimi-VL model for multimodal reasoning
+/// // with MoE architecture, MoonViT encoder, and long-context processing
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new KimiVL&lt;double&gt;(architecture, "kimivl.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new KimiVL&lt;double&gt;(architecture, new KimiVLOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -191,7 +214,7 @@ public class KimiVL<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Kimi-VL-Native" : "Kimi-VL-ONNX", Description = "Kimi-VL: MoE VLM with MoonViT and long-context processing.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Kimi-VL-Native" : "Kimi-VL-ONNX", Description = "Kimi-VL: MoE VLM with MoonViT and long-context processing.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Kimi-VL";
         m.AdditionalInfo["ReasoningApproach"] = _options.ReasoningApproach;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

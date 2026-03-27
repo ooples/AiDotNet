@@ -77,7 +77,7 @@ public class SuperLearnerOptions
     /// Gets or sets whether to normalize base model predictions before meta-learning.
     /// </summary>
     /// <value>Default is true.</value>
-    public bool NormalizeBasePredictions { get; set; } = true;
+    public bool NormalizeBasePredictions { get; set; } = false;
 
     /// <summary>
     /// Gets or sets the regularization strength for the meta-learner.

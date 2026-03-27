@@ -1,4 +1,6 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -25,6 +27,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// Reference: Liu et al., "Swin Transformer: Hierarchical Vision Transformer using Shifted Windows", ICCV 2021
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Transformer)]
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.AttentionComputation)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 16, 16", TestConstructorArgs = "16, 2, 4")]
 public class SwinTransformerBlockLayer<T> : LayerBase<T>
 {
     private readonly int _dim;
@@ -57,6 +64,10 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
     private Tensor<T>? _cachedAttnOutput;
     private Tensor<T>? _cachedResidual1;
     private Tensor<T>? _cachedNorm2Output;
+    private Tensor<T>? _cachedQkv; // [numWindows, windowArea, 3*dim]
+    private double[,,,]? _cachedAttnProbs; // [numWindows, numHeads, windowArea, windowArea]
+    private int _cachedNumWindows;
+    private int _cachedWindowArea;
     private int _cachedH;
     private int _cachedW;
 
@@ -305,7 +316,7 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int w = x.Shape[2];
         int c = x.Shape[3];
 
-        var shifted = new Tensor<T>(x.Shape);
+        var shifted = new Tensor<T>(x.Shape.ToArray());
 
         for (int b = 0; b < batch; b++)
         {
@@ -450,27 +461,16 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int windowArea = windows.Shape[1];
         int c = windows.Shape[2];
 
-        // Project to Q, K, V for all windows
-        var qkv = new Tensor<T>([numWindows, windowArea, 3 * c]);
-        for (int win = 0; win < numWindows; win++)
-        {
-            for (int t = 0; t < windowArea; t++)
-            {
-                var tokenIn = new Tensor<T>([1, c]);
-                for (int d = 0; d < c; d++)
-                {
-                    tokenIn[0, d] = windows[win, t, d];
-                }
-                var tokenQkv = _qkvProj.Forward(tokenIn);
-                for (int d = 0; d < 3 * c; d++)
-                {
-                    qkv[win, t, d] = tokenQkv[0, d];
-                }
-            }
-        }
+        // Project to Q, K, V for all windows (batched for correct backward)
+        var flatWindows = windows.Reshape([numWindows * windowArea, c]);
+        var flatQkv = _qkvProj.Forward(flatWindows);
+        var qkv = flatQkv.Reshape([numWindows, windowArea, 3 * c]);
+        _cachedQkv = qkv;
+        _cachedNumWindows = numWindows;
+        _cachedWindowArea = windowArea;
 
         // Compute attention per window
-        var output = new Tensor<T>([numWindows, windowArea, c]);
+        var output = TensorAllocator.Rent<T>([numWindows, windowArea, c]);
 
         for (int win = 0; win < numWindows; win++)
         {
@@ -530,6 +530,14 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
                 }
             }
 
+            // Cache attention probs for backward
+            if (_cachedAttnProbs == null)
+                _cachedAttnProbs = new double[numWindows, _numHeads, windowArea, windowArea];
+            for (int head = 0; head < _numHeads; head++)
+                for (int i = 0; i < windowArea; i++)
+                    for (int j = 0; j < windowArea; j++)
+                        _cachedAttnProbs[win, head, i, j] = attnProbs[head, i, j];
+
             // Apply attention to values and concatenate heads
             var attnOut = new double[windowArea, c];
             for (int head = 0; head < _numHeads; head++)
@@ -551,23 +559,16 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
                 }
             }
 
-            // Output projection
+            // Cache attention output in the output tensor for outProj batching
             for (int t = 0; t < windowArea; t++)
-            {
-                var tokenIn = new Tensor<T>([1, c]);
                 for (int d = 0; d < c; d++)
-                {
-                    tokenIn[0, d] = NumOps.FromDouble(attnOut[t, d]);
-                }
-                var tokenOut = _outProj.Forward(tokenIn);
-                for (int d = 0; d < c; d++)
-                {
-                    output[win, t, d] = tokenOut[0, d];
-                }
-            }
+                    output[win, t, d] = NumOps.FromDouble(attnOut[t, d]);
         }
 
-        return output;
+        // Batch output projection across ALL windows and tokens for correct backward
+        var flatAttnOut = output.Reshape([numWindows * windowArea, c]);
+        var flatProjOut = _outProj.Forward(flatAttnOut);
+        return flatProjOut.Reshape([numWindows, windowArea, c]);
     }
 
     private Tensor<T> ApplyMLP(Tensor<T> x)
@@ -575,31 +576,11 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int batch = x.Shape[0];
         int seqLen = x.Shape[1];
 
-        var result = new Tensor<T>(x.Shape);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                var tokenIn = new Tensor<T>([1, _dim]);
-                for (int d = 0; d < _dim; d++)
-                {
-                    tokenIn[0, d] = x[b, s, d];
-                }
-
-                // FC1 + GELU (activation built into layer)
-                var hidden = _mlpFc1.Forward(tokenIn);
-
-                // FC2
-                var tokenOut = _mlpFc2.Forward(hidden);
-                for (int d = 0; d < _dim; d++)
-                {
-                    result[b, s, d] = tokenOut[0, d];
-                }
-            }
-        }
-
-        return result;
+        // Batch all tokens for correct Forward/Backward (single _lastInput)
+        var flat = x.Reshape([batch * seqLen, _dim]);
+        var hidden = _mlpFc1.Forward(flat);
+        var flatOut = _mlpFc2.Forward(hidden);
+        return flatOut.Reshape([batch, seqLen, _dim]);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -635,61 +616,94 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int batch = gradient.Shape[0];
         int seqLen = gradient.Shape[1];
 
-        var result = new Tensor<T>(gradient.Shape);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int s = 0; s < seqLen; s++)
-            {
-                var tokenGrad = new Tensor<T>([1, _dim]);
-                for (int d = 0; d < _dim; d++)
-                {
-                    tokenGrad[0, d] = gradient[b, s, d];
-                }
-
-                var fc2Grad = _mlpFc2.Backward(tokenGrad);
-                var fc1Grad = _mlpFc1.Backward(fc2Grad);
-
-                for (int d = 0; d < _dim; d++)
-                {
-                    result[b, s, d] = fc1Grad[0, d];
-                }
-            }
-        }
-
-        return result;
+        // Batch all tokens (matching batched ApplyMLP Forward)
+        var flatGrad = gradient.Reshape([batch * seqLen, _dim]);
+        var fc2Grad = _mlpFc2.Backward(flatGrad);
+        var fc1Grad = _mlpFc1.Backward(fc2Grad);
+        return fc1Grad.Reshape([batch, seqLen, _dim]);
     }
 
     private Tensor<T> BackwardWindowAttention(Tensor<T> gradient)
     {
-        // Simplified backward - in full implementation would need to track
-        // all intermediate values and compute gradients through attention
         int batch = gradient.Shape[0];
         int seqLen = gradient.Shape[1];
 
-        var result = new Tensor<T>(gradient.Shape);
+        if (_cachedQkv == null || _cachedAttnProbs == null)
+            throw new InvalidOperationException("Forward must be called before backward.");
 
-        for (int b = 0; b < batch; b++)
+        int numWindows = _cachedNumWindows;
+        int windowArea = _cachedWindowArea;
+
+        // Step 1: Backward through outProj (batched)
+        var flatGrad = gradient.Reshape([batch * seqLen, _dim]);
+        var outProjGrad = _outProj.Backward(flatGrad);
+        // outProjGrad shape: [numWindows * windowArea, dim]
+        var dAttnOut = outProjGrad.Reshape([numWindows, windowArea, _dim]);
+
+        // Step 2: Backward through attention per window
+        // attnOut[i, d] = sum_j probs[head, i, j] * V[j, headOffset + d]
+        // dV[j, d] += sum_i probs[head, i, j] * dAttnOut[i, d]
+        // dProbs[head, i, j] += sum_d dAttnOut[i, headOffset+d] * V[j, headOffset+d]
+        var dQkv = new Tensor<T>([numWindows, windowArea, 3 * _dim]);
+
+        for (int win = 0; win < numWindows; win++)
         {
-            for (int s = 0; s < seqLen; s++)
+            for (int head = 0; head < _numHeads; head++)
             {
-                var tokenGrad = new Tensor<T>([1, _dim]);
-                for (int d = 0; d < _dim; d++)
+                int headOffset = head * _headDim;
+                int vOffset = 2 * _dim + headOffset;
+
+                // Compute dProbs and dV
+                var dProbs = new double[windowArea, windowArea];
+                for (int i = 0; i < windowArea; i++)
                 {
-                    tokenGrad[0, d] = gradient[b, s, d];
+                    for (int j = 0; j < windowArea; j++)
+                    {
+                        double dp = 0;
+                        for (int d = 0; d < _headDim; d++)
+                        {
+                            double dOut = NumOps.ToDouble(dAttnOut[win, i, headOffset + d]);
+                            double vVal = NumOps.ToDouble(_cachedQkv[win, j, vOffset + d]);
+                            dp += dOut * vVal;
+                            // dV[j, vOffset+d] += probs[i,j] * dAttnOut[i, headOffset+d]
+                            dQkv[win, j, vOffset + d] = NumOps.Add(dQkv[win, j, vOffset + d],
+                                NumOps.FromDouble(_cachedAttnProbs[win, head, i, j] * dOut));
+                        }
+                        dProbs[i, j] = dp;
+                    }
                 }
 
-                var outProjGrad = _outProj.Backward(tokenGrad);
-                var qkvGrad = _qkvProj.Backward(outProjGrad);
-
-                for (int d = 0; d < _dim; d++)
+                // Softmax backward: dScores[i,j] = probs[i,j] * (dProbs[i,j] - dot(probs[i,:], dProbs[i,:]))
+                for (int i = 0; i < windowArea; i++)
                 {
-                    result[b, s, d] = qkvGrad[0, d];
+                    double dot = 0;
+                    for (int j = 0; j < windowArea; j++)
+                        dot += _cachedAttnProbs[win, head, i, j] * dProbs[i, j];
+
+                    for (int j = 0; j < windowArea; j++)
+                    {
+                        double dScore = _cachedAttnProbs[win, head, i, j] * (dProbs[i, j] - dot) * _scale;
+
+                        // dQ[i, headOffset+d] += dScore * K[j, headOffset+d]
+                        // dK[j, headOffset+d] += dScore * Q[i, headOffset+d]
+                        for (int d = 0; d < _headDim; d++)
+                        {
+                            double kVal = NumOps.ToDouble(_cachedQkv[win, j, _dim + headOffset + d]);
+                            double qVal = NumOps.ToDouble(_cachedQkv[win, i, headOffset + d]);
+                            dQkv[win, i, headOffset + d] = NumOps.Add(dQkv[win, i, headOffset + d],
+                                NumOps.FromDouble(dScore * kVal));
+                            dQkv[win, j, _dim + headOffset + d] = NumOps.Add(dQkv[win, j, _dim + headOffset + d],
+                                NumOps.FromDouble(dScore * qVal));
+                        }
+                    }
                 }
             }
         }
 
-        return result;
+        // Step 3: Backward through qkvProj
+        var flatDQkv = dQkv.Reshape([numWindows * windowArea, 3 * _dim]);
+        var qkvGrad = _qkvProj.Backward(flatDQkv);
+        return qkvGrad.Reshape([batch, seqLen, _dim]);
     }
 
     /// <inheritdoc/>
@@ -775,6 +789,15 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         allGrads.AddRange(_mlpFc2.GetParameterGradients().ToArray());
 
         return new Vector<T>([.. allGrads]);
+    }
+
+    /// <inheritdoc/>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _norm1.ClearGradients(); _norm2.ClearGradients();
+        _qkvProj.ClearGradients(); _outProj.ClearGradients();
+        _mlpFc1.ClearGradients(); _mlpFc2.ClearGradients();
     }
 
     /// <inheritdoc/>

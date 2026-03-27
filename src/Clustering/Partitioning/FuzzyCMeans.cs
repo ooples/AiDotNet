@@ -39,6 +39,16 @@ namespace AiDotNet.Clustering.Partitioning;
 /// - You need confidence/probability information
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Use AiModelBuilder facade for fuzzy clustering
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new FuzzyCMeans&lt;double&gt;(new FuzzyCMeansOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(dataMatrix, labels);
+/// var predictions = result.Predict(newData);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -73,7 +83,6 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
     public Matrix<T> MembershipMatrix => _membershipMatrix.Clone();
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -168,6 +177,7 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
             Labels[i] = NumOps.FromDouble(bestCluster);
         }
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 
@@ -219,9 +229,14 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
         double exponent = 2.0 / (m - 1);
         T epsilon = NumOps.FromDouble(1e-10);
 
+        // Cache point arrays for allocation-free distance computation
+        var pointArr = new T[d];
+        var centerArr = new T[d];
+
         for (int i = 0; i < n; i++)
         {
-            var point = GetRow(x, i);
+            for (int j = 0; j < d; j++)
+                pointArr[j] = x[i, j];
 
             // Compute distances to all centers
             var distances = new T[k];
@@ -230,13 +245,10 @@ public class FuzzyCMeans<T> : ClusteringBase<T>
 
             for (int c = 0; c < k; c++)
             {
-                var center = new Vector<T>(d);
                 for (int j = 0; j < d; j++)
-                {
-                    center[j] = centers[c, j];
-                }
+                    centerArr[j] = centers[c, j];
 
-                distances[c] = metric.Compute(point, center);
+                distances[c] = metric.ComputeInline(pointArr, centerArr, d);
 
                 if (NumOps.LessThan(distances[c], epsilon))
                 {

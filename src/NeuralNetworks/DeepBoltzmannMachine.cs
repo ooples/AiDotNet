@@ -29,6 +29,14 @@ namespace AiDotNet.NeuralNetworks;
 /// DBMs can both recognize patterns in data and generate new data with similar patterns.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new DeepBoltzmannMachineOptions { VisibleSize = 784, HiddenLayers = new[] { 500, 200 } };
+/// var model = new DeepBoltzmannMachine&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -99,6 +107,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// layer to the deepest hidden layer.
     /// </remarks>
     private List<int> _layerSizes;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 
     /// <summary>
     /// Gets or sets the number of training epochs.
@@ -237,7 +246,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
             taskType: Enums.NeuralNetworkTaskType.Regression,
             inputSize: 128,
             outputSize: 1),
-            epochs: 10, learningRate: MathHelper.GetNumericOperations<T>().FromDouble(0.001),
+            epochs: 10, learningRate: MathHelper.GetNumericOperations<T>().FromDouble(0.0001),
             activationFunction: (IActivationFunction<T>?)null)
     {
     }
@@ -393,11 +402,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
 
             // Copy the trained weights and biases to our DBM
             _layerWeights[layer] = new Tensor<T>(
-                _layerWeights[layer].Shape,
+                _layerWeights[layer].Shape.ToArray(),
                 tmpRBM.GetParameters().GetSubVector(0, _layerSizes[layer] * _layerSizes[layer + 1]));
 
             _layerBiases[layer] = new Tensor<T>(
-                _layerBiases[layer].Shape,
+                _layerBiases[layer].Shape.ToArray(),
                 tmpRBM.GetParameters().GetSubVector(
                     _layerSizes[layer] * _layerSizes[layer + 1],
                     _layerSizes[layer]));
@@ -500,6 +509,64 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Manual 2D matrix multiplication to avoid Engine.TensorMatMul issues with certain shapes.
+    /// </summary>
+    private Tensor<T> MatMul2D(Tensor<T> a, Tensor<T> b)
+    {
+        int m = a.Shape[0];
+        int k = a.Shape[1];
+        int n = b.Shape[1];
+        var result = new Tensor<T>([m, n]);
+        for (int i = 0; i < m; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                T sum = NumOps.Zero;
+                for (int p = 0; p < k; p++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(a[i, p], b[p, j]));
+                }
+                result[i, j] = sum;
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Adapts the first layer weights and biases when actual input size differs from architecture.
+    /// </summary>
+    private void AdaptInputWeights(int actualInputSize)
+    {
+        int oldInputSize = _layerSizes[0];
+        int hiddenSize = _layerWeights[0].Shape[1];
+
+        // Resize first weight matrix
+        var newWeights = new Tensor<T>([actualInputSize, hiddenSize]);
+        int sharedSize = Math.Min(oldInputSize, actualInputSize);
+        for (int i = 0; i < sharedSize; i++)
+            for (int j = 0; j < hiddenSize; j++)
+                newWeights[i, j] = _layerWeights[0][i, j];
+        // New rows get Xavier-scale random values
+        if (actualInputSize > sharedSize)
+        {
+            double scale = Math.Sqrt(2.0 / (actualInputSize + hiddenSize));
+            var rng = RandomHelper.CreateSecureRandom();
+            for (int i = sharedSize; i < actualInputSize; i++)
+                for (int j = 0; j < hiddenSize; j++)
+                    newWeights[i, j] = NumOps.FromDouble((rng.NextDouble() * 2 - 1) * scale);
+        }
+        _layerWeights[0] = newWeights;
+
+        // Resize first bias
+        var newBias = new Tensor<T>([1, actualInputSize]);
+        for (int i = 0; i < Math.Min(oldInputSize, actualInputSize); i++)
+            newBias[0, i] = _layerBiases[0][0, i];
+        _layerBiases[0] = newBias;
+
+        _layerSizes[0] = actualInputSize;
+    }
+
+    /// <summary>
     /// Makes a prediction using the Deep Boltzmann Machine.
     /// </summary>
     /// <param name="input">The input tensor to make predictions for.</param>
@@ -515,6 +582,18 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
+        // Use Layers-based forward pass for supervised prediction
+        if (Layers.Count > 0)
+        {
+            Tensor<T> current = input;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
+            return current;
+        }
+
+        // Fallback: generative reconstruction
         var reconstructed = Reconstruct(input);
         return reconstructed;
     }
@@ -532,7 +611,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     private Tensor<T> Reconstruct(Tensor<T> input)
     {
         // Remember original shape
-        var originalShape = input.Shape;
+        var originalShape = input.Shape.ToArray();
         var was1D = originalShape.Length == 1;
 
         var hidden = PropagateUp(input);
@@ -560,14 +639,26 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     private Tensor<T> PropagateUp(Tensor<T> visible)
     {
         // Ensure input is 2D for matrix multiplication
-        // 1D [features] -> 2D [1, features]
         var hidden = visible.Shape.Length == 1
             ? visible.Reshape([1, visible.Shape[0]])
             : visible;
 
+        // Adapt first layer weights if input size doesn't match
+        int actualInputSize = hidden.Shape[^1];
+        if (_layerWeights.Count > 0 && _layerWeights[0].Shape[0] != actualInputSize)
+        {
+            AdaptInputWeights(actualInputSize);
+        }
+
         for (int layer = 0; layer < _layerSizes.Count - 1; layer++)
         {
-            hidden = ActivationFunction(hidden.Multiply(_layerWeights[layer]).Add(_layerBiases[layer + 1]));
+            var product = MatMul2D(hidden, _layerWeights[layer]);
+            var biasUp = _layerBiases[layer + 1];
+            var bias = biasUp.Rank < product.Rank
+                ? new Tensor<T>([1, biasUp.Length], biasUp.ToVector())
+                : biasUp;
+            var withBias = Engine.TensorAdd(product, bias);
+            hidden = ActivationFunction(withBias);
         }
 
         return hidden;
@@ -588,8 +679,15 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         var visible = hidden;
         for (int layer = _layerSizes.Count - 2; layer >= 0; layer--)
         {
-            // Use the correct overload of Transpose
-            visible = ActivationFunction(visible.Multiply(_layerWeights[layer].Transpose([1, 0])).Add(_layerBiases[layer]));
+            // O(1) view-based transpose — no data copy unless MatMul needs contiguous
+            var transposed = _layerWeights[layer].Transpose([1, 0]);
+            var product = MatMul2D(visible, transposed);
+            var biasDown = _layerBiases[layer];
+            var bias = biasDown.Rank < product.Rank
+                ? new Tensor<T>([1, biasDown.Length], biasDown.ToVector())
+                : biasDown;
+            var withBias = Engine.TensorAdd(product, bias);
+            visible = ActivationFunction(withBias);
         }
 
         return visible;
@@ -622,9 +720,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     private T CalculateLoss(Tensor<T> original, Tensor<T> reconstructed)
     {
-        var squaredDifferences = original.Subtract(reconstructed).Transform((x, _) => NumOps.Multiply(x, x));
-        var sumOfSquaredDifferences = squaredDifferences.Sum();
-        T scalarSum = sumOfSquaredDifferences[0];
+        // MSE loss using Engine-accelerated operations
+        var diff = Engine.TensorSubtract(original, reconstructed);
+        var squaredDiff = Engine.TensorMultiply(diff, diff);
+        var sumTensor = squaredDiff.Sum();
+        T scalarSum = sumTensor[0];
 
         return NumOps.Divide(scalarSum, NumOps.FromDouble(original.Length));
     }
@@ -655,28 +755,52 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        T currentLearningRate = _learningRate;
-
-        for (int epoch = 0; epoch < _epochs; epoch++)
+        // Handle 1D input [features] → treat as single sample [1, features]
+        if (input.Rank == 1)
         {
-            T epochLoss = NumOps.Zero;
-            for (int i = 0; i < input.Shape[0]; i += _batchSize)
+            input = input.Reshape([1, input.Length]);
+        }
+
+        // Supervised training: use Layers-based forward/backward to minimize MSE against target
+        // CD training is for unsupervised pretraining; for supervised tasks, use backprop
+        if (Layers.Count > 0)
+        {
+            // Forward through layers
+            SetTrainingMode(true);
+            var prediction = ForwardWithMemory(input);
+
+            // Compute loss and gradients
+            var flatPred = prediction.ToVector();
+            var flatTarget = expectedOutput.Rank == 1
+                ? expectedOutput.ToVector()
+                : expectedOutput.Reshape([expectedOutput.Length]).ToVector();
+            LastLoss = LossFunction.CalculateLoss(flatPred, flatTarget);
+            var outputGrad = LossFunction.CalculateDerivative(flatPred, flatTarget);
+
+            // Backpropagate
+            Backpropagate(Tensor<T>.FromVector(outputGrad));
+
+            // Update parameters
+            _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            foreach (var layer in Layers)
             {
-                var batchSize = Math.Min(_batchSize, input.Shape[0] - i);
-                var batch = input.Slice(i, 0, i + batchSize, input.Shape[1]);
-
-                var (_, batchLoss) = TrainOnBatch(batch, currentLearningRate);
-                epochLoss = NumOps.Add(epochLoss, batchLoss);
+                if (layer.SupportsTraining && layer.ParameterCount > 0)
+                {
+                    var layerParams = layer.GetParameters();
+                    var layerGrads = layer.GetParameterGradients();
+                    if (layerParams.Length == layerGrads.Length && layerGrads.Length > 0)
+                    {
+                        var updated = _trainOptimizer.UpdateParameters(layerParams, layerGrads);
+                        layer.SetParameters(updated);
+                    }
+                }
             }
-            epochLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(input.Shape[0]));
-
-            Console.WriteLine($"Epoch {epoch + 1}/{_epochs}, Loss: {epochLoss}, Learning Rate: {currentLearningRate}");
-
-            // Store the current loss
-            LastLoss = epochLoss;
-
-            // Decay learning rate for next epoch
-            currentLearningRate = NumOps.Multiply(currentLearningRate, _learningRateDecay);
+        }
+        else
+        {
+            // Fallback: CD training for unsupervised pretraining
+            var (_, loss) = TrainOnBatch(input, _learningRate);
+            LastLoss = loss;
         }
     }
 
@@ -702,25 +826,76 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     private (Tensor<T> reconstructed, T loss) TrainOnBatch(Tensor<T> batch, T learningRate)
     {
-        var positivePhase = batch;
-        var negativePhase = batch;
+        int batchSize = batch.Shape[0];
 
-        // Contrastive Divergence
+        // Compute per-layer activations for positive phase (data-driven)
+        var positiveActivations = new List<Tensor<T>> { batch };
+        var current = batch;
+        for (int layer = 0; layer < _layerSizes.Count - 1; layer++)
+        {
+            var prod = MatMul2D(current, _layerWeights[layer]);
+            // Reshape bias to match product rank for broadcasting
+            // Create a 2D view for broadcasting without modifying the stored bias
+            var biasData = _layerBiases[layer + 1];
+            var bias = biasData.Rank < prod.Rank
+                ? new Tensor<T>([1, biasData.Length], biasData.ToVector())
+                : biasData;
+            var withBias = Engine.TensorAdd(prod, bias);
+            current = ActivationFunction(withBias);
+            positiveActivations.Add(current);
+        }
+
+        // Contrastive Divergence: reconstruct and get negative phase activations
+        var negativePhase = batch;
         for (int step = 0; step < _cdSteps; step++)
         {
             negativePhase = Reconstruct(negativePhase);
         }
 
+        var negativeActivations = new List<Tensor<T>> { negativePhase };
+        current = negativePhase;
         for (int layer = 0; layer < _layerSizes.Count - 1; layer++)
         {
-            var positiveAssociations = positivePhase.Transpose([1, 0]).Multiply(PropagateUp(positivePhase));
-            var negativeAssociations = negativePhase.Transpose([1, 0]).Multiply(PropagateUp(negativePhase));
+            var prod = MatMul2D(current, _layerWeights[layer]);
+            // Create a 2D view for broadcasting without modifying the stored bias
+            var biasData = _layerBiases[layer + 1];
+            var bias = biasData.Rank < prod.Rank
+                ? new Tensor<T>([1, biasData.Length], biasData.ToVector())
+                : biasData;
+            var withBias = Engine.TensorAdd(prod, bias);
+            current = ActivationFunction(withBias);
+            negativeActivations.Add(current);
+        }
 
-            var weightGradient = positiveAssociations.Subtract(negativeAssociations).Transform((x, _) => NumOps.Divide(x, NumOps.FromDouble(batch.Shape[0])));
-            _layerWeights[layer] = _layerWeights[layer].Add(weightGradient.Multiply(learningRate));
+        // Update weights and biases per layer using Engine-accelerated associations
+        var batchScale = NumOps.FromDouble(batchSize);
+        for (int layer = 0; layer < _layerSizes.Count - 1; layer++)
+        {
+            // Associations: visible^T * hidden for each layer pair
+            var posLayerT = Engine.TensorTranspose(positiveActivations[layer]);
+            var posAssoc = MatMul2D(posLayerT, positiveActivations[layer + 1]);
+            var negLayerT = Engine.TensorTranspose(negativeActivations[layer]);
+            var negAssoc = MatMul2D(negLayerT, negativeActivations[layer + 1]);
 
-            var biasGradient = positivePhase.Sum([0]).Subtract(negativePhase.Sum([0])).Transform((x, _) => NumOps.Divide(x, NumOps.FromDouble(batch.Shape[0])));
-            _layerBiases[layer] = _layerBiases[layer].Add(biasGradient.Multiply(learningRate));
+            var assocDiff = Engine.TensorSubtract(posAssoc, negAssoc);
+            var weightGradient = Engine.TensorDivideScalar(assocDiff, batchScale);
+            var scaledGradient = Engine.TensorMultiplyScalar(weightGradient, learningRate);
+            _layerWeights[layer] = Engine.TensorAdd(_layerWeights[layer], scaledGradient);
+
+            // Bias update: mean difference of activations at the layer above
+            var posBiasSum = positiveActivations[layer + 1].Sum([0]);
+            var negBiasSum = negativeActivations[layer + 1].Sum([0]);
+            // Flatten to 1D to match bias shape
+            if (posBiasSum.Rank > 1) posBiasSum = posBiasSum.Reshape([posBiasSum.Length]);
+            if (negBiasSum.Rank > 1) negBiasSum = negBiasSum.Reshape([negBiasSum.Length]);
+            var biasDiff = Engine.TensorSubtract(posBiasSum, negBiasSum);
+            var biasGradient = Engine.TensorDivideScalar(biasDiff, batchScale);
+            var scaledBiasGrad = Engine.TensorMultiplyScalar(biasGradient, learningRate);
+            // Ensure bias stays 1D after update
+            var currentBias = _layerBiases[layer + 1];
+            if (currentBias.Rank > 1) currentBias = currentBias.Reshape([currentBias.Length]);
+            if (scaledBiasGrad.Rank > 1) scaledBiasGrad = scaledBiasGrad.Reshape([scaledBiasGrad.Length]);
+            _layerBiases[layer + 1] = Engine.TensorAdd(currentBias, scaledBiasGrad);
         }
 
         var reconstructed = Reconstruct(batch);
@@ -737,6 +912,38 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// This method updates all the parameters of the DBM (weights and biases) from a single vector.
     /// It expects the parameters to be arranged in the same order as they are returned by GetParameters.
     /// </remarks>
+    /// <inheritdoc/>
+    public override int ParameterCount
+    {
+        get
+        {
+            int count = 0;
+            for (int i = 0; i < _layerWeights.Count; i++)
+            {
+                count += _layerWeights[i].Length + _layerBiases[i].Length;
+            }
+            return count;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var parameters = new Vector<T>(ParameterCount);
+        int index = 0;
+        for (int i = 0; i < _layerWeights.Count; i++)
+        {
+            var weightVec = _layerWeights[i].ToVector();
+            for (int j = 0; j < weightVec.Length; j++)
+                parameters[index++] = weightVec[j];
+
+            var biasVec = _layerBiases[i].ToVector();
+            for (int j = 0; j < biasVec.Length; j++)
+                parameters[index++] = biasVec[j];
+        }
+        return parameters;
+    }
+
     public override void UpdateParameters(Vector<T> parameters)
     {
         int index = 0;
@@ -744,12 +951,12 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         {
             int weightCount = _layerWeights[i].Length;
             var weightVector = parameters.GetSubVector(index, weightCount);
-            _layerWeights[i] = new Tensor<T>(_layerWeights[i].Shape, weightVector);
+            _layerWeights[i] = new Tensor<T>(_layerWeights[i].Shape.ToArray(), weightVector);
             index += weightCount;
 
             int biasCount = _layerBiases[i].Length;
             var biasVector = parameters.GetSubVector(index, biasCount);
-            _layerBiases[i] = new Tensor<T>(_layerBiases[i].Shape, biasVector);
+            _layerBiases[i] = new Tensor<T>(_layerBiases[i].Shape.ToArray(), biasVector);
             index += biasCount;
         }
     }
@@ -767,7 +974,6 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.DeepBoltzmannMachine,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfLayers", _layerSizes.Count },

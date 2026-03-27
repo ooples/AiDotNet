@@ -22,8 +22,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "An Inverse Scaling Law for CLIP Training" (Li et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> CLIPA is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> CLIPA discovers that training CLIP at low resolution first,
+/// then fine-tuning at full resolution, reduces training cost by 7-8x while maintaining
+/// performance. This "inverse scaling law" makes it much cheaper to train strong vision-
+/// language models by progressively increasing image resolution during training. Default
+/// values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a CLIPA model for accelerated contrastive training
+/// // using progressive resolution for 7-8x training cost reduction
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new CLIPA&lt;double&gt;(architecture, "clipa.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new CLIPA&lt;double&gt;(architecture, new CLIPAOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -53,7 +73,7 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "CLIPA-Native" : "CLIPA-ONNX", Description = "CLIPA: An Inverse Scaling Law for CLIP Training (Li et al., 2023)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers }; m.AdditionalInfo["Architecture"] = "CLIPA"; m.AdditionalInfo["InitialImageSize"] = _options.InitialImageSize.ToString(); m.AdditionalInfo["ReducedResolutionFraction"] = _options.ReducedResolutionFraction.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "CLIPA-Native" : "CLIPA-ONNX", Description = "CLIPA: An Inverse Scaling Law for CLIP Training (Li et al., 2023)", FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers }; m.AdditionalInfo["Architecture"] = "CLIPA"; m.AdditionalInfo["InitialImageSize"] = _options.InitialImageSize.ToString(); m.AdditionalInfo["ReducedResolutionFraction"] = _options.ReducedResolutionFraction.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ImageEncoderModelPath ?? string.Empty); writer.Write(_options.TextEncoderModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionEmbeddingDim); writer.Write(_options.TextEmbeddingDim); writer.Write(_options.ProjectionDim); writer.Write(_options.Temperature); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string ip = reader.ReadString(); if (!string.IsNullOrEmpty(ip)) _options.ImageEncoderModelPath = ip; string tp = reader.ReadString(); if (!string.IsNullOrEmpty(tp)) _options.TextEncoderModelPath = tp; _options.ImageSize = reader.ReadInt32(); _options.VisionEmbeddingDim = reader.ReadInt32(); _options.TextEmbeddingDim = reader.ReadInt32(); _options.ProjectionDim = reader.ReadInt32(); _options.Temperature = reader.ReadDouble(); if (!_useNativeMode && _options.ImageEncoderModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxImageEncoder = new OnnxModel<T>(p, _options.OnnxOptions); if (_options.TextEncoderModelPath is { } t2 && !string.IsNullOrEmpty(t2)) OnnxTextEncoder = new OnnxModel<T>(t2, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ImageEncoderModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new CLIPA<T>(Architecture, mp, _options); return new CLIPA<T>(Architecture, _options); }

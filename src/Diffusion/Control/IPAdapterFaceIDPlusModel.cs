@@ -32,6 +32,23 @@ namespace AiDotNet.Diffusion.Control;
 /// Reference: Ye et al., "IP-Adapter: Text Compatible Image Prompt Adapter", 2023
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create IP-Adapter FaceID Plus for identity-preserving generation
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 4,
+///     Height = 512,
+///     Width = 512,
+///     NumInferenceSteps = 30
+/// };
+/// var model = new IPAdapterFaceIDPlusModel&lt;float&gt;(options);
+///
+/// // Generate new images preserving a person's face identity
+/// var faceEmbedding = Tensor&lt;float&gt;.Random(new[] { 1, 512 });
+/// var result = model.Predict(faceEmbedding);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -156,7 +173,7 @@ public class IPAdapterFaceIDPlusModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "IP-Adapter-FaceID-Plus", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "IP-Adapter-FaceID-Plus", Version = "1.0",
             Description = "Face-identity-preserving image prompt adapter combining FaceID + CLIP embeddings",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

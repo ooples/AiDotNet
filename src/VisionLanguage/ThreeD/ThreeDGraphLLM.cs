@@ -17,10 +17,33 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// 3DGraphLLM (CogAI, 2025) uses 3D scene graphs as structured input for large language models.
+/// It constructs semantic graphs from 3D scenes where nodes represent objects with their spatial
+/// properties and edges encode spatial relationships, providing the LLM with a structured
+/// representation for precise spatial reasoning, object counting, and relationship understanding.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "3DGraphLLM: 3D Scene Graph as Input for Large Language Models (CogAI, 2025)"</item></list></para>
-/// <para><b>For Beginners:</b> ThreeDGraphLLM is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> 3DGraphLLM is a vision-language model that uses scene graphs
+/// for structured 3D spatial reasoning. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a 3DGraphLLM model for 3D scene graph reasoning
+/// // using semantic graphs as structured input for spatial understanding
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new ThreeDGraphLLM&lt;double&gt;(architecture, "threedgraphllm.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new ThreeDGraphLLM&lt;double&gt;(architecture, new ThreeDGraphLLMOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.ThreeD)]
@@ -246,7 +269,7 @@ public class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLangua
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "3DGraphLLM-Native" : "3DGraphLLM-ONNX", Description = "3DGraphLLM: 3D scene graph as LLM input for spatial reasoning.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "3DGraphLLM-Native" : "3DGraphLLM-ONNX", Description = "3DGraphLLM: 3D scene graph as LLM input for spatial reasoning.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "3DGraphLLM";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

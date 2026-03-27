@@ -49,6 +49,14 @@ namespace AiDotNet.NeuralNetworks;
 /// </list>
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new MixtureOfExpertsOptions { InputSize = 64, NumExperts = 8, TopK = 2, HiddenSize = 256 };
+/// var model = new MixtureOfExpertsNeuralNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 64 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Ensemble)]
@@ -473,7 +481,6 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.MixtureOfExperts,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputShape", Architecture.GetInputShape() },
@@ -599,6 +606,25 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
     /// - Cross-validation (training and testing on different data splits)
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Creates a deep copy by creating a new instance with the same options
+    /// and copying all parameters. Overrides base to avoid generic layer
+    /// deserialization which can't reconstruct MoE expert architecture.
+    /// </summary>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        var copy = (NeuralNetworkBase<T>)CreateNewInstance();
+
+        // Copy parameters from original to clone
+        var originalParams = GetParameters();
+        if (originalParams.Length > 0 && originalParams.Length == copy.GetParameters().Length)
+        {
+            copy.UpdateParameters(originalParams);
+        }
+
+        return copy;
+    }
+
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         // Create a clone of the options to ensure the new instance has independent configuration

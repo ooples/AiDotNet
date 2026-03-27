@@ -9,13 +9,52 @@ using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.EligibilityTraces;
 
+/// <summary>
+/// SARSA(lambda) agent that combines on-policy SARSA control with eligibility traces
+/// for faster credit assignment while respecting the current exploration policy.
+/// </summary>
+/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para>
+/// SARSA(lambda) extends SARSA by maintaining eligibility traces that propagate
+/// temporal-difference errors backward through recently visited state-action pairs.
+/// Unlike Q(lambda), SARSA(lambda) is on-policy: it updates based on the action
+/// actually taken, making it safer in environments with dangerous states.
+/// </para>
+/// <para><b>For Beginners:</b>
+/// SARSA(lambda) combines two ideas:
+/// - **SARSA**: Learn from the actions you actually take (on-policy, safer)
+/// - **Eligibility traces**: Remember and update recent states when rewards arrive
+///
+/// This means the agent learns faster than plain SARSA (credit propagates back
+/// through the trajectory) while still being cautious about risky actions.
+///
+/// The lambda parameter controls the trace decay:
+/// - lambda = 0: Same as regular SARSA (1-step updates)
+/// - lambda = 1: Full Monte Carlo returns (high variance)
+/// - lambda = 0.9: Good default balance
+///
+/// Best for: Environments where safety matters AND episodes are long.
+/// </para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create an on-policy SARSA(lambda) agent with eligibility traces
+/// var options = new SARSALambdaOptions&lt;double&gt; { Lambda = 0.9, LearningRate = 0.1, StateSize = 4, ActionSize = 2 };
+/// var agent = new SARSALambdaAgent&lt;double&gt;(options);
+///
+/// // Select an action for the current state
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Reinforcement Learning: An Introduction",
-    "http://incompleteideas.net/book/the-book-2nd.html",
+    "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
@@ -154,7 +193,7 @@ public class SARSALambdaAgent<T> : ReinforcementLearningAgentBase<T>
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
-    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = Enums.ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
+    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> {FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _qTable.Count * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()

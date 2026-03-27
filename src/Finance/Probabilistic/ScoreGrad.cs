@@ -16,7 +16,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Probabilistic;
 
@@ -65,6 +65,19 @@ namespace AiDotNet.Finance.Probabilistic;
 /// https://arxiv.org/abs/2106.10121
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a ScoreGrad model for energy-based time series forecasting
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 100, inputWidth: 1, inputDepth: 1, outputSize: 24);
+/// var model = new ScoreGrad&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for score-based forecasting
+/// var onnxModel = new ScoreGrad&lt;double&gt;(architecture, "scoregrad.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.Diffusion)]
@@ -473,7 +486,7 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(predictedScore.ToVector(), trueScore.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictedScore.Shape));
+        Backward(Tensor<T>.FromVector(gradient, predictedScore.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -507,7 +520,6 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "ScoreGrad" },
@@ -807,7 +819,7 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape)
+        foreach (var dim in input.Shape.ToArray())
         {
             totalSize *= dim;
         }
@@ -931,7 +943,7 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
             resultVec[i] = NumOps.FromDouble(newX);
         }
 
-        return new Tensor<T>(current.Shape, new Vector<T>(resultVec));
+        return new Tensor<T>(current.Shape.ToArray(), new Vector<T>(resultVec));
     }
 
     /// <summary>
@@ -1033,8 +1045,8 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
             noisyVec[i] = NumOps.FromDouble(dataVal + noise);
         }
 
-        return (new Tensor<T>(data.Shape, new Vector<T>(noisyVec)),
-                new Tensor<T>(data.Shape, new Vector<T>(noiseVec)));
+        return (new Tensor<T>(data.Shape.ToArray(), new Vector<T>(noisyVec)),
+                new Tensor<T>(data.Shape.ToArray(), new Vector<T>(noiseVec)));
     }
 
     /// <summary>
@@ -1063,7 +1075,7 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
             scoreVec[i] = NumOps.FromDouble(-n / sigmaSq);
         }
 
-        return new Tensor<T>(noise.Shape, new Vector<T>(scoreVec));
+        return new Tensor<T>(noise.Shape.ToArray(), new Vector<T>(scoreVec));
     }
 
     /// <summary>

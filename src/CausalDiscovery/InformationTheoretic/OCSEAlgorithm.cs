@@ -73,7 +73,7 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
         if (d < 2)
             throw new ArgumentException($"oCSE requires at least 2 variables, got {d}.");
         if (effectiveN < d + 3)
-            throw new ArgumentException($"oCSE requires at least {d + 3 + 1} time points for {d} variables, got {n}.");
+            throw new ArgumentException($"oCSE requires at least {d + 4} time points for {d} variables, got {n}.");
 
         // Compute transitions: delta_Y[t] = Y[t+1] - Y[t]
         var transitions = new Matrix<T>(effectiveN, d);
@@ -90,6 +90,26 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
             var deltaY = new Vector<T>(effectiveN);
             for (int t = 0; t < effectiveN; t++)
                 deltaY[t] = transitions[t, target];
+
+            // Check if transitions are near-constant (deterministic trend).
+            // If so, use raw data values instead, since constant transitions carry no MI.
+            double deltaVar = 0;
+            double deltaMean = 0;
+            for (int t = 0; t < effectiveN; t++)
+                deltaMean += NumOps.ToDouble(deltaY[t]);
+            deltaMean /= effectiveN;
+            for (int t = 0; t < effectiveN; t++)
+            {
+                double diff = NumOps.ToDouble(deltaY[t]) - deltaMean;
+                deltaVar += diff * diff;
+            }
+            if (deltaVar / effectiveN < 1e-10)
+            {
+                // Transitions are near-constant — no temporal variation to explain.
+                // Skip this target: constant transitions carry zero mutual information,
+                // so no causal parents can be identified. Leave W[*,target] as zero.
+                continue;
+            }
 
             // Greedy forward selection of causal parents
             var selectedParents = new List<int>();

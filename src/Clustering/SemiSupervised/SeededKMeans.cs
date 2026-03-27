@@ -44,6 +44,16 @@ namespace AiDotNet.Clustering.SemiSupervised;
 /// - Helps when random init gives poor results
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Use AiModelBuilder facade for seeded K-Means clustering
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new SeededKMeans&lt;double&gt;(new SeededKMeansOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(dataMatrix, labels);
+/// var predictions = result.Predict(newData);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -68,7 +78,6 @@ public class SeededKMeans<T> : ClusteringBase<T>
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -135,19 +144,14 @@ public class SeededKMeans<T> : ClusteringBase<T>
                     continue;
                 }
 
-                var point = GetRow(x, i);
+                var pointArr = new T[d];
+                for (int j = 0; j < d; j++) pointArr[j] = x[i, j];
                 int bestCluster = 0;
                 T bestDist = NumOps.MaxValue;
 
                 for (int c = 0; c < k; c++)
                 {
-                    var center = new Vector<T>(d);
-                    for (int j = 0; j < d; j++)
-                    {
-                        center[j] = centers[c][j];
-                    }
-
-                    T dist = metric.Compute(point, center);
+                    T dist = metric.ComputeInline(pointArr, centers[c], d);
                     if (NumOps.LessThan(dist, bestDist))
                     {
                         bestDist = dist;
@@ -213,6 +217,7 @@ public class SeededKMeans<T> : ClusteringBase<T>
             Labels[i] = NumOps.FromDouble(labels[i]);
         }
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 

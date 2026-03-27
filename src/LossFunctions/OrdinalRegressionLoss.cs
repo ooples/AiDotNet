@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+
 namespace AiDotNet.LossFunctions;
 
 /// <summary>
@@ -26,6 +29,9 @@ namespace AiDotNet.LossFunctions;
 /// This approach preserves the ordering information in the categories during training.
 /// </para>
 /// </remarks>
+[LossCategory(LossCategory.Classification)]
+[LossTask(LossTask.MultiClass)]
+[LossProperty(IsNonNegative = true, ZeroForIdentical = true, ExpectedOutput = OutputType.Probabilities)]
 public class OrdinalRegressionLoss<T> : LossFunctionBase<T>
 {
     /// <summary>

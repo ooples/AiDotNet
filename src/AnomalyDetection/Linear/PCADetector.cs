@@ -170,37 +170,32 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
         var scores = new Vector<T>(X.Rows);
         int d = X.Columns;
 
+        // Pre-allocate reusable vectors outside the loop
+        var centered = new Vector<T>(d);
+        var projected = new Vector<T>(_fittedComponents);
+        var reconstructed = new Vector<T>(d);
+        var compCol = new Vector<T>(_fittedComponents);
+
         for (int i = 0; i < X.Rows; i++)
         {
             // Center the point
-            var centered = new Vector<T>(d);
             for (int j = 0; j < d; j++)
-            {
-                centered[j] = NumOps.Subtract(X[i, j], (_mean ?? throw new InvalidOperationException("Mean not computed."))[j]);
-            }
+                centered[j] = NumOps.Subtract(X[i, j], _mean![j]);
 
             // Project onto components
-            var projected = new Vector<T>(_fittedComponents);
             for (int c = 0; c < _fittedComponents; c++)
             {
                 T dot = NumOps.Zero;
                 for (int j = 0; j < d; j++)
-                {
-                    dot = NumOps.Add(dot, NumOps.Multiply(centered[j], (_components ?? throw new InvalidOperationException("Components not computed."))[c, j]));
-                }
+                    dot = NumOps.Add(dot, NumOps.Multiply(centered[j], _components![c, j]));
                 projected[c] = dot;
             }
 
             // Reconstruct from projection
-            var reconstructed = new Vector<T>(d);
             for (int j = 0; j < d; j++)
             {
-                T sum = NumOps.Zero;
-                for (int c = 0; c < _fittedComponents; c++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(projected[c], (_components ?? throw new InvalidOperationException("Components not computed."))[c, j]));
-                }
-                reconstructed[j] = sum;
+                for (int c = 0; c < _fittedComponents; c++) compCol[c] = _components![c, j];
+                reconstructed[j] = Engine.DotProduct(projected, compCol);
             }
 
             // Compute reconstruction error (residual from unretained components)
@@ -217,7 +212,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
             double mahalanobis = 0;
             for (int c = 0; c < _fittedComponents; c++)
             {
-                double eigenvalue = NumOps.ToDouble((_explainedVariance ?? throw new InvalidOperationException("Explained variance not computed."))[c]);
+                double eigenvalue = NumOps.ToDouble(_explainedVariance![c]);
                 if (eigenvalue > EigenvalueFloor)
                 {
                     double proj = NumOps.ToDouble(projected[c]);
@@ -239,14 +234,15 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < d; i++)
         {
+            // Pre-allocate column vectors outside inner loop
+            var colI = new Vector<T>(n);
+            var colJ = new Vector<T>(n);
+            for (int k = 0; k < n; k++) colI[k] = centered[k, i];
+
             for (int j = i; j < d; j++)
             {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < n; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(centered[k, i], centered[k, j]));
-                }
-                cov[i, j] = NumOps.Divide(sum, NumOps.FromDouble(n - 1));
+                for (int k = 0; k < n; k++) colJ[k] = centered[k, j];
+                cov[i, j] = NumOps.Divide(Engine.DotProduct(colI, colJ), NumOps.FromDouble(n - 1));
                 cov[j, i] = cov[i, j];
             }
         }
@@ -287,12 +283,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
                 }
 
                 // Normalize
-                T norm = NumOps.Zero;
-                for (int j = 0; j < d; j++)
-                {
-                    norm = NumOps.Add(norm, NumOps.Multiply(Av[j], Av[j]));
-                }
-                norm = NumOps.Sqrt(norm);
+                T norm = NumOps.Sqrt(Engine.DotProduct(Av, Av));
 
                 if (NumOps.LessThan(norm, NumOps.FromDouble(1e-10))) break;
 
@@ -314,11 +305,7 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
                 Av2[i] = sum;
             }
 
-            T eigenvalue = NumOps.Zero;
-            for (int j = 0; j < d; j++)
-            {
-                eigenvalue = NumOps.Add(eigenvalue, NumOps.Multiply(v[j], Av2[j]));
-            }
+            T eigenvalue = Engine.DotProduct(v, Av2);
 
             eigenvalues[e] = eigenvalue;
             for (int j = 0; j < d; j++)

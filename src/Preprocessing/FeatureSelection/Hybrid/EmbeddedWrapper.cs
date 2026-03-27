@@ -170,8 +170,9 @@ public class EmbeddedWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         double currentScore = 0;
 
         // Order candidates by embedded importance for guided search
+        var embeddedImportance = _embeddedImportance ?? throw new InvalidOperationException("_embeddedImportance has not been initialized.");
         var orderedCandidates = available
-            .OrderByDescending(j => (_embeddedImportance ?? throw new InvalidOperationException("Embedded importance not computed."))[j])
+            .OrderByDescending(j => embeddedImportance[j])
             .ToList();
 
         int iterations = 0;
@@ -203,7 +204,7 @@ public class EmbeddedWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 selected.Add(bestFeature);
                 available.Remove(bestFeature);
                 currentScore = bestScore;
-                (_wrapperScores ?? throw new InvalidOperationException("Wrapper scores not computed."))[bestFeature] = bestScore;
+                _wrapperScores![bestFeature] = bestScore;
             }
             else
             {
@@ -232,7 +233,7 @@ public class EmbeddedWrapper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         foreach (int j in subset)
         {
             double corr = ComputeCorrelation(data, target, j, n, yMean);
-            double importance = (_embeddedImportance ?? throw new InvalidOperationException("Embedded importance not computed."))[j];
+            double importance = _embeddedImportance![j];
             score += corr * 0.5 + importance * 0.5;
         }
 

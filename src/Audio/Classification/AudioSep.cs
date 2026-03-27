@@ -301,7 +301,7 @@ public class AudioSep<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        var result = new Tensor<T>(modelOutput.Shape);
+        var result = new Tensor<T>(modelOutput.Shape.ToArray());
         for (int i = 0; i < modelOutput.Length; i++)
         {
             double logit = NumOps.ToDouble(modelOutput[i]);
@@ -316,7 +316,6 @@ public class AudioSep<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         {
             Name = _useNativeMode ? "AudioSep-Native" : "AudioSep-ONNX",
             Description = $"AudioSep: Open-Vocabulary Audio Separation {_options.Variant} (Liu et al., ICML 2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = ClassLabels.Count,
             Complexity = _options.NumSeparationLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

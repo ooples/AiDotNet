@@ -42,6 +42,16 @@ namespace AiDotNet.Clustering.Partitioning;
 /// difference is very small (a few percent in inertia).
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Use AiModelBuilder facade for mini-batch K-Means clustering
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new MiniBatchKMeans&lt;double&gt;(new MiniBatchKMeansOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(dataMatrix, labels);
+/// var predictions = result.Predict(newData);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -86,7 +96,6 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
     public int NumIterations => _numIterations;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -140,6 +149,21 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         ClusterCenters = bestCenters;
         Labels = bestLabels;
         Inertia = bestInertia;
+        MergeDegenerateClusters(x);
+
+        // After merge, _centerCounts must match the post-merge cluster count.
+        // NumClusters and ClusterCenters.Rows may now be smaller than _options.NumClusters.
+        _centerCounts = new int[NumClusters];
+        if (Labels is not null)
+        {
+            for (int i = 0; i < Labels.Length; i++)
+            {
+                int label = (int)Math.Round(NumOps.ToDouble(Labels[i]));
+                if (label >= 0 && label < _centerCounts.Length)
+                    _centerCounts[label]++;
+            }
+        }
+
         IsTrained = true;
     }
 
@@ -167,6 +191,10 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
         ValidatePredictInput(x);
+
+        // Return stored labels for in-sample prediction (preserves merge results)
+        if (Labels is not null && ReferenceEquals(x, TrainingDataRef))
+            return new Vector<T>(Labels);
 
         if (ClusterCenters is null)
             throw new InvalidOperationException("MiniBatchKMeans: ClusterCenters not initialized. Call Train() first.");
@@ -258,7 +286,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
             double minDist = double.MaxValue;
             int nearest = 0;
 
-            for (int k = 0; k < _options.NumClusters; k++)
+            for (int k = 0; k < centers.Rows; k++)
             {
                 var center = GetRow(centers, k);
                 T dist = distanceMetric.Compute(point, center);
@@ -300,7 +328,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
 
     private void ReassignEmptyClusters(Matrix<T> batch, Matrix<T> centers, int[] assignments, T[] distances)
     {
-        for (int k = 0; k < _options.NumClusters; k++)
+        for (int k = 0; k < centers.Rows && k < _centerCounts.Length; k++)
         {
             if (_centerCounts[k] == 0)
             {
@@ -460,7 +488,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
             double minDist = double.MaxValue;
             int nearestCluster = 0;
 
-            for (int k = 0; k < _options.NumClusters; k++)
+            for (int k = 0; k < centers.Rows; k++)
             {
                 var center = GetRow(centers, k);
                 T dist = distanceMetric.Compute(point, center);
@@ -487,6 +515,7 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             int cluster = (int)NumOps.ToDouble(labels[i]);
+            if (cluster < 0 || cluster >= centers.Rows) continue;
             var point = GetRow(x, i);
             var center = GetRow(centers, cluster);
             T dist = distanceMetric.Compute(point, center);
@@ -498,13 +527,13 @@ public class MiniBatchKMeans<T> : ClusteringBase<T>
 
     private Matrix<T> ComputeDistancesToCenters(Matrix<T> x, Matrix<T> centers)
     {
-        var distances = new Matrix<T>(x.Rows, _options.NumClusters);
+        var distances = new Matrix<T>(x.Rows, centers.Rows);
         var distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            for (int k = 0; k < _options.NumClusters; k++)
+            for (int k = 0; k < centers.Rows; k++)
             {
                 var center = GetRow(centers, k);
                 distances[i, k] = distanceMetric.Compute(point, center);

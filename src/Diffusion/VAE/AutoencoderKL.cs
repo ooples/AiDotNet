@@ -56,6 +56,14 @@ namespace AiDotNet.Diffusion.VAE;
 /// ```
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var vae = new AutoencoderKL&lt;float&gt;(inputChannels: 3, latentChannels: 4, baseChannels: 128);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 512, 512 });
+/// var latent = vae.Encode(image);
+/// var decoded = vae.Decode(latent);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Generative)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.FeatureExtraction)]
@@ -349,7 +357,7 @@ public class AutoencoderKL<T> : VAEModelBase<T>
 
         // Backward pass (simplified - actual implementation would propagate gradients)
         var reconstructionGrad = LossFunction.CalculateDerivative(reconstruction.ToVector(), expectedOutput.ToVector());
-        var gradTensor = new Tensor<T>(reconstruction.Shape);
+        var gradTensor = new Tensor<T>(reconstruction.Shape.ToArray());
         var gradSpan = gradTensor.AsWritableSpan();
         for (int i = 0; i < gradSpan.Length && i < reconstructionGrad.Length; i++)
         {

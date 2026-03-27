@@ -23,6 +23,7 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// Options specific to the normal optimizer, including parameters inherited from genetic algorithms.
     /// </summary>
     private GeneticAlgorithmOptimizerOptions<T, TInput, TOutput> _normalOptions;
+    private int _configuredMinFeatures;
 
     /// <summary>
     /// Initializes a new instance of the NormalOptimizer class.
@@ -71,6 +72,15 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         ValidationHelper<T>.ValidateInputData(inputData);
+
+        // Initialize feature bounds if not explicitly configured
+        int totalFeatures = InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
+        if (Options.MaximumFeatures <= 0)
+            Options.MaximumFeatures = totalFeatures;
+        if (Options.MinimumFeatures <= 0)
+            Options.MinimumFeatures = Math.Max(1, totalFeatures);
+        // Store the configured minimum so adaptive updates don't go below it
+        _configuredMinFeatures = Options.MinimumFeatures;
 
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>
         {
@@ -156,7 +166,7 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     {
         if (FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
         {
-            Options.MinimumFeatures = Math.Max(1, Options.MinimumFeatures - 1);
+            Options.MinimumFeatures = Math.Max(_configuredMinFeatures, Options.MinimumFeatures - 1);
             Options.MaximumFeatures = Math.Min(Options.MaximumFeatures + 1, _normalOptions.MaximumFeatures);
         }
         else
@@ -296,8 +306,15 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
     /// <returns>A list of indices representing the selected features.</returns>
     private List<int> RandomlySelectFeatures(int totalFeatures)
     {
+        // When neither MinimumFeatures nor MaximumFeatures is explicitly configured,
+        // use all features to avoid random subset selection on small feature sets.
+        if (Options.MinimumFeatures == 0 && Options.MaximumFeatures == 0)
+        {
+            return Enumerable.Range(0, totalFeatures).ToList();
+        }
+
         var selectedFeatures = new List<int>();
-        int numFeatures = Random.Next(Options.MinimumFeatures, Math.Min(Options.MaximumFeatures, totalFeatures) + 1);
+        int numFeatures = Random.Next(Math.Max(1, Options.MinimumFeatures), Math.Min(Options.MaximumFeatures, totalFeatures) + 1);
 
         while (selectedFeatures.Count < numFeatures)
         {

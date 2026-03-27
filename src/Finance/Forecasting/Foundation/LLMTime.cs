@@ -27,10 +27,31 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// for zero-shot forecasting by treating the task as next-token prediction on numerical text.
 /// No fine-tuning is required—the LLM backbone is frozen.
 /// </para>
+/// <para><b>For Beginners:</b> LLM-Time takes an unconventional approach: it converts your
+/// numerical data into text (like "3.2, 3.5, 3.8, ...") and asks a large language model to
+/// predict the next numbers, just like predicting the next word in a sentence. Remarkably,
+/// this works without any training on time series data at all. The LLM already understands
+/// number patterns from its language training.</para>
 /// <para>
 /// <b>Reference:</b> Gruver et al., "Large Language Models Are Zero-Shot Time Series Forecasters", NeurIPS 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an LLMTime model for zero-shot forecasting via LLM tokenization
+/// // Converts numeric time series to text strings and uses a frozen LLM for prediction
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with text-based time series representation
+/// var model = new LLMTime&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new LLMTime&lt;double&gt;(architecture, "llmtime.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -239,7 +260,7 @@ public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -260,7 +281,6 @@ public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "LLMTime" },
@@ -392,7 +412,7 @@ public class LLMTime<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {

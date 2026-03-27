@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -50,6 +52,10 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 16", TestConstructorArgs = "4, 16, 4")]
 internal class MambaBlock<T> : LayerBase<T>
 {
     // Configuration
@@ -205,12 +211,15 @@ internal class MambaBlock<T> : LayerBase<T>
         int expandFactor = 2,
         int convKernelSize = 4,
         int dtRank = -1,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, modelDimension],
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         if (sequenceLength <= 0)
         {
             throw new ArgumentException(
@@ -316,21 +325,13 @@ internal class MambaBlock<T> : LayerBase<T>
 
     private void InitializeTensor(Tensor<T> tensor)
     {
-        int fanIn = tensor.Shape[0];
-        int fanOut = tensor.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = NumOps.Multiply(
-                NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-        }
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape.Length > 1 ? tensor.Shape[1] : tensor.Shape[0]);
     }
 
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -457,7 +458,7 @@ internal class MambaBlock<T> : LayerBase<T>
 
         // Step 8 backward: output projection
         var gradFlat = activationGrad.Reshape(batchSize * seqLength, _modelDimension);
-        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
+        _outputProjectionBiasGradient = ReduceSumAxes01(activationGrad, batchSize, seqLength, _modelDimension);
 
         var gatedFlat = _lastGatedOutput.Reshape(batchSize * seqLength, _innerDimension);
         _outputProjectionWeightsGradient = Engine.TensorMatMul(
@@ -465,7 +466,6 @@ internal class MambaBlock<T> : LayerBase<T>
 
         var dGated = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
             .Reshape(batchSize, seqLength, _innerDimension);
-
         // Step 7 backward: output gating y = scan_output * SiLU(z) via Engine
         var zGate = Engine.Swish(_lastZBranch);
         var dScanOutput = Engine.TensorMultiply(dGated, zGate);
@@ -485,7 +485,7 @@ internal class MambaBlock<T> : LayerBase<T>
         var dDeltaSoftplus = Engine.TensorMultiply(dDelta, softplusDerivative);
 
         var dDeltaFlat = dDeltaSoftplus.Reshape(batchSize * seqLength, _innerDimension);
-        _dtProjectionBiasGradient = Engine.ReduceSum(dDeltaSoftplus, new int[] { 0, 1 });
+        _dtProjectionBiasGradient = ReduceSumAxes01(dDeltaSoftplus, batchSize, seqLength, _innerDimension);
         var dDeltaLowRankFlat = Engine.TensorMatMul(dDeltaFlat, _dtProjectionWeights.Transpose([1, 0]));
 
         var deltaLowRankFlat = SliceTensor(
@@ -522,7 +522,7 @@ internal class MambaBlock<T> : LayerBase<T>
         var dProjected = ConcatenateTensors(dXBranch, dZBranch, 2);
         var dProjectedFlat = dProjected.Reshape(batchSize * seqLength, _innerDimension * 2);
 
-        _inputProjectionBiasGradient = Engine.ReduceSum(dProjected, new int[] { 0, 1 });
+        _inputProjectionBiasGradient = ReduceSumAxes01(dProjected, batchSize, seqLength, _innerDimension * 2);
 
         var input2D = _lastInput.Reshape(batchSize * seqLength, _modelDimension);
         _inputProjectionWeightsGradient = Engine.TensorMatMul(
@@ -553,7 +553,7 @@ internal class MambaBlock<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> DepthwiseConv1DForward(Tensor<T> input, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
         var bias2D = _convBias.Reshape(1, _innerDimension);
 
         // Pre-compute weight slices for each kernel position: [innerDim] -> [1, innerDim]
@@ -575,9 +575,9 @@ internal class MambaBlock<T> : LayerBase<T>
                 int srcT = t - k;  // causal: only current and past positions
                 if (srcT >= 0)
                 {
-                    var x_src = input.GetSliceAlongDimension(srcT, 1);  // [batch, innerDim]
+                    var x_src = input.GetSliceAlongDimension(srcT, 1).Clone();
                     result_t = Engine.TensorAdd(result_t,
-                        Engine.TensorBroadcastMultiply(x_src, weightSlices[k]));
+                        Engine.TensorBroadcastMultiply(x_src, weightSlices[k]).Clone());
                 }
             }
 
@@ -588,61 +588,53 @@ internal class MambaBlock<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Backward pass for depthwise causal Conv1D using Engine tensor operations.
+    /// Backward pass for depthwise causal Conv1D using explicit per-element computation.
+    /// Avoids Engine 3D tensor operations that have contiguity/reduction bugs.
     /// </summary>
     private Tensor<T> DepthwiseConv1DBackward(
         Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
         _convBiasGradient = new Tensor<T>(new[] { _innerDimension });
+        _convWeightsGradient = new Tensor<T>(new[] { _innerDimension, _convKernelSize });
 
-        // Per-kernel-position weight gradient accumulators
-        var weightGradSlices = new Tensor<T>[_convKernelSize];
-        for (int k = 0; k < _convKernelSize; k++)
-            weightGradSlices[k] = new Tensor<T>(new[] { _innerDimension });
-
-        // Pre-compute weight slices for input gradient: [innerDim] -> [1, innerDim]
-        var weightSlices = new Tensor<T>[_convKernelSize];
-        for (int k = 0; k < _convKernelSize; k++)
+        // Depthwise conv1d: output[b,t,d] = sum_k(weight[d,k] * input[b,t-k,d]) + bias[d]
+        // Backward:
+        //   dInput[b,srcT,d] += weight[d,k] * dOutput[b,t,d]  where srcT = t-k
+        //   dWeight[d,k] += sum_b(input[b,srcT,d] * dOutput[b,t,d])
+        //   dBias[d] += sum_b,t(dOutput[b,t,d])
+        for (int bi = 0; bi < batchSize; bi++)
         {
-            weightSlices[k] = _convWeights.GetSliceAlongDimension(k, 1)
-                .Reshape(1, _innerDimension);
-        }
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            var dOut_t = dOutput.GetSliceAlongDimension(t, 1);  // [batch, innerDim]
-
-            // Bias gradient: sum over batch
-            var biasGradContrib = Engine.ReduceSum(dOut_t, new int[] { 0 });
-            _convBiasGradient = Engine.TensorAdd(_convBiasGradient, biasGradContrib);
-
-            for (int k = 0; k < _convKernelSize; k++)
+            for (int t = 0; t < seqLen; t++)
             {
-                int srcT = t - k;
-                if (srcT >= 0)
+                for (int d = 0; d < _innerDimension; d++)
                 {
-                    var x_src = input.GetSliceAlongDimension(srcT, 1);  // [batch, innerDim]
+                    T dOutVal = dOutput[new[] { bi, t, d }];
 
-                    // Weight gradient: sum_batch(x_src * dOut)
-                    var wGradContrib = Engine.ReduceSum(
-                        Engine.TensorMultiply(x_src, dOut_t), new int[] { 0 });
-                    weightGradSlices[k] = Engine.TensorAdd(weightGradSlices[k], wGradContrib);
+                    // Bias gradient
+                    _convBiasGradient[d] = NumOps.Add(_convBiasGradient[d], dOutVal);
 
-                    // Input gradient: dInput[srcT] += weights[:, k] * dOut[t]
-                    var dInputContrib = Engine.TensorBroadcastMultiply(dOut_t, weightSlices[k]);
-                    var dInput_srcT = dInput.GetSliceAlongDimension(srcT, 1);
-                    dInput_srcT = Engine.TensorAdd(dInput_srcT, dInputContrib);
-                    dInput.SetSlice(1, srcT, dInput_srcT);
+                    for (int k = 0; k < _convKernelSize; k++)
+                    {
+                        int srcT = t - k;
+                        if (srcT >= 0)
+                        {
+                            T w = _convWeights[new[] { d, k }];
+                            T xVal = input[new[] { bi, srcT, d }];
+
+                            // Input gradient
+                            dInput[new[] { bi, srcT, d }] = NumOps.Add(
+                                dInput[new[] { bi, srcT, d }],
+                                NumOps.Multiply(w, dOutVal));
+
+                            // Weight gradient
+                            _convWeightsGradient[new[] { d, k }] = NumOps.Add(
+                                _convWeightsGradient[new[] { d, k }],
+                                NumOps.Multiply(xVal, dOutVal));
+                        }
+                    }
                 }
             }
-        }
-
-        // Assemble weight gradients into [innerDim, convKernelSize] tensor
-        _convWeightsGradient = new Tensor<T>(new[] { _innerDimension, _convKernelSize });
-        for (int k = 0; k < _convKernelSize; k++)
-        {
-            _convWeightsGradient.SetSlice(1, k, weightGradSlices[k]);
         }
 
         return dInput;
@@ -651,6 +643,20 @@ internal class MambaBlock<T> : LayerBase<T>
     #endregion
 
     #region Engine-Accelerated Helpers
+
+    /// <summary>
+    /// Workaround for Engine.ReduceSum multi-axis [0,1] bug (AiDotNet.Tensors PR #62).
+    /// Sums a [batch, seq, features] tensor over batch and seq → [features].
+    /// </summary>
+    private Tensor<T> ReduceSumAxes01(Tensor<T> tensor, int batch, int seq, int features)
+    {
+        var result = new Tensor<T>(new[] { features });
+        for (int bi = 0; bi < batch; bi++)
+            for (int t = 0; t < seq; t++)
+                for (int d = 0; d < features; d++)
+                    result[d] = NumOps.Add(result[d], tensor[new[] { bi, t, d }]);
+        return result;
+    }
 
     /// <summary>
     /// Computes SiLU derivative using Engine operations: sigmoid(x) + x * sigmoid(x) * (1 - sigmoid(x)).
@@ -674,7 +680,7 @@ internal class MambaBlock<T> : LayerBase<T>
     /// </summary>
     private static Tensor<T> SliceTensor(Tensor<T> input, int axis, int start, int length)
     {
-        var shape = (int[])input.Shape.Clone();
+        var shape = (int[])input.Shape.ToArray().Clone();
         shape[axis] = length;
         var output = new Tensor<T>(shape);
 
@@ -790,6 +796,34 @@ internal class MambaBlock<T> : LayerBase<T>
             for (int i = 0; i < tensor.Length; i++)
                 tensor[i] = parameters[index++];
         }
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
+            new Vector<T>(_convWeightsGradient!.ToArray()),
+            new Vector<T>(_convBiasGradient!.ToArray()),
+            new Vector<T>(_xProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_dtProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_dtProjectionBiasGradient!.ToArray()),
+            new Vector<T>(_aLogGradient!.ToArray()),
+            new Vector<T>(_dParamGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _inputProjectionWeightsGradient = null; _inputProjectionBiasGradient = null;
+        _convWeightsGradient = null; _convBiasGradient = null;
+        _xProjectionWeightsGradient = null;
+        _dtProjectionWeightsGradient = null; _dtProjectionBiasGradient = null;
+        _aLogGradient = null; _dParamGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />

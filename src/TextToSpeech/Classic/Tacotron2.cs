@@ -22,6 +22,22 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para><b>For Beginners:</b> Tacotron 2 is an improved version of Tacotron that produces higher-quality speech.
 /// It generates mel-spectrograms from text using an encoder-decoder architecture with attention,
 /// then a separate vocoder (like WaveNet) converts the mel-spectrogram into an audio waveform.</para>
+/// <example>
+/// <code>
+/// // Create a Tacotron 2 model for high-quality attention-based TTS
+/// // with location-sensitive attention and WaveNet vocoder conditioning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Tacotron2&lt;double&gt;(architecture, "tacotron2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Tacotron2&lt;double&gt;(architecture, new Tacotron2Options());
+/// </code>
+/// </example>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -277,7 +293,6 @@ public class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>
         {
             Name = _useNativeMode ? "Tacotron2-Native" : "Tacotron2-ONNX",
             Description = "Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions (Shen et al., 2018)",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.HiddenDim,
             Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers
         };

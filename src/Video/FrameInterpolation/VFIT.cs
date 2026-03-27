@@ -38,6 +38,19 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// complex motions like acceleration, deceleration, and periodic movements.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VFIT model for multi-frame transformer interpolation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new VFITOptions();
+/// var vfit = new VFIT&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var vfitOnnx = new VFIT&lt;double&gt;(architecture, "vfit_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -169,7 +182,6 @@ public class VFIT<T> : FrameInterpolationBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.FrameInterpolation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "VFIT" },

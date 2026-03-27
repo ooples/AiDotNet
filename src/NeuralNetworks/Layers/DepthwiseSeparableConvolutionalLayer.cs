@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -30,6 +31,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.Medium, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "1, 2, 3, 8, 8, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -410,7 +415,23 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// Some other layer types might not have trainable parameters and would return false here.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;
     public override bool SupportsTraining => true;
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_depthwiseKernelsGradient == null || _pointwiseKernelsGradient == null || _biasesGradient == null)
+            return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            Vector<T>.Concatenate(new Vector<T>(_depthwiseKernelsGradient.ToArray()), new Vector<T>(_pointwiseKernelsGradient.ToArray())),
+            new Vector<T>(_biasesGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _depthwiseKernelsGradient = null; _pointwiseKernelsGradient = null; _biasesGradient = null;
+    }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
@@ -561,10 +582,10 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         T pointwiseScale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(_inputDepth)));
 
         _depthwiseKernels = Engine.TensorMultiplyScalar(
-            new Tensor<T>(_depthwiseKernels.Shape, Vector<T>.CreateRandom(_depthwiseKernels.Length, -0.5, 0.5)),
+            new Tensor<T>(_depthwiseKernels.Shape.ToArray(), Vector<T>.CreateRandom(_depthwiseKernels.Length, -0.5, 0.5)),
             depthwiseScale);
         _pointwiseKernels = Engine.TensorMultiplyScalar(
-            new Tensor<T>(_pointwiseKernels.Shape, Vector<T>.CreateRandom(_pointwiseKernels.Length, -0.5, 0.5)),
+            new Tensor<T>(_pointwiseKernels.Shape.ToArray(), Vector<T>.CreateRandom(_pointwiseKernels.Length, -0.5, 0.5)),
             pointwiseScale);
 
         _biases.Fill(NumOps.Zero);
@@ -738,7 +759,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: input is in CHW/NCHW format [C, H, W] or [B, C, H, W]
@@ -874,7 +895,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
                 $"DepthwiseSeparableConv2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
         }
 
-        var originalInputShape = input.Shape;
+        var originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
         bool addedBatchDimension = false;
 
@@ -998,7 +1019,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         int outputHeight = CalculateOutputDimension(inputHeight, _kernelSize, _stride, _padding);
         int outputWidth = CalculateOutputDimension(inputWidth, _kernelSize, _stride, _padding);
 
-        var output = new Tensor<T>([batchSize, outputHeight, outputWidth, _inputDepth]);
+        var output = TensorAllocator.Rent<T>([batchSize, outputHeight, outputWidth, _inputDepth]);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -1064,7 +1085,7 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         int height = input.Shape[1];
         int width = input.Shape[2];
 
-        var output = new Tensor<T>([batchSize, height, width, _outputDepth]);
+        var output = TensorAllocator.Rent<T>([batchSize, height, width, _outputDepth]);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -1167,16 +1188,16 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         _biasesGradient = Engine.ReduceSum(deltaNCHW, new[] { 0, 2, 3 }, keepDims: false);
 
         // Calculate pointwise kernel gradient (1x1 conv backward)
-        _pointwiseKernelsGradient = Engine.Conv2DBackwardKernel(deltaNCHW, depthwiseOutputNCHW, _pointwiseKernels.Shape, new int[] { 1, 1 }, new int[] { 0, 0 }, new int[] { 1, 1 });
+        _pointwiseKernelsGradient = Engine.Conv2DBackwardKernel(deltaNCHW, depthwiseOutputNCHW, _pointwiseKernels.Shape.ToArray(), new int[] { 1, 1 }, new int[] { 0, 0 }, new int[] { 1, 1 });
 
         // Calculate depthwise output gradient (backward through pointwise)
-        var depthwiseGradNCHW = Engine.Conv2DBackwardInput(deltaNCHW, _pointwiseKernels, depthwiseOutputNCHW.Shape, new int[] { 1, 1 }, new int[] { 0, 0 }, new int[] { 1, 1 });
+        var depthwiseGradNCHW = Engine.Conv2DBackwardInput(deltaNCHW, _pointwiseKernels, depthwiseOutputNCHW.Shape.ToArray(), new int[] { 1, 1 }, new int[] { 0, 0 }, new int[] { 1, 1 });
 
         // Calculate depthwise kernel gradient
-        _depthwiseKernelsGradient = Engine.DepthwiseConv2DBackwardKernel(depthwiseGradNCHW, inputNCHW, _depthwiseKernels.Shape, strideArr, paddingArr);
+        _depthwiseKernelsGradient = Engine.DepthwiseConv2DBackwardKernel(depthwiseGradNCHW, inputNCHW, _depthwiseKernels.Shape.ToArray(), strideArr, paddingArr);
 
         // Calculate input gradient (backward through depthwise)
-        var inputGradient = Engine.DepthwiseConv2DBackwardInput(depthwiseGradNCHW, _depthwiseKernels, inputNCHW.Shape, strideArr, paddingArr);
+        var inputGradient = Engine.DepthwiseConv2DBackwardInput(depthwiseGradNCHW, _depthwiseKernels, inputNCHW.Shape.ToArray(), strideArr, paddingArr);
 
         // inputGradient is in NCHW format [batch, channels, H, W]
         // Restore to original input shape based on rank

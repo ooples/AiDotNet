@@ -985,7 +985,6 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["generator_type"] = "MisGAN",
@@ -1006,7 +1005,7 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     private Tensor<T> ApplyReLU(Tensor<T> input)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
             result[i] = NumOps.GreaterThan(input[i], NumOps.Zero) ? input[i] : NumOps.Zero;
         return result;
@@ -1016,7 +1015,7 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         INumericOperations<T> numOps)
     {
         int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput.Shape);
+        var result = new Tensor<T>(gradOutput.Shape.ToArray());
         for (int i = 0; i < len; i++)
             result[i] = numOps.ToDouble(preActivation[i]) > 0 ? gradOutput[i] : numOps.Zero;
         return result;
@@ -1024,7 +1023,7 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         T slope = NumOps.FromDouble(0.2);
         for (int i = 0; i < input.Length; i++)
         {
@@ -1037,7 +1036,7 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     private Tensor<T> ApplyLeakyReLUDerivative(Tensor<T> gradOutput, Tensor<T> preActivation)
     {
         int len = Math.Min(gradOutput.Length, preActivation.Length);
-        var result = new Tensor<T>(gradOutput.Shape);
+        var result = new Tensor<T>(gradOutput.Shape.ToArray());
         T slope = NumOps.FromDouble(0.2);
         for (int i = 0; i < len; i++)
         {
@@ -1050,7 +1049,7 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     private Tensor<T> ApplySigmoid(Tensor<T> input)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length; i++)
         {
             double val = NumOps.ToDouble(input[i]);
@@ -1064,7 +1063,7 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     {
         if (_transformer is null) return output;
 
-        var result = new Tensor<T>(output.Shape);
+        var result = new Tensor<T>(output.Shape.ToArray());
         int idx = 0;
 
         for (int col = 0; col < _columns.Count && idx < output.Length; col++)
@@ -1116,7 +1115,7 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     /// </summary>
     private Tensor<T> SafeGradient(Tensor<T> grad, double maxNorm)
     {
-        var result = new Tensor<T>(grad.Shape);
+        var result = new Tensor<T>(grad.Shape.ToArray());
         double normSq = 0;
 
         for (int i = 0; i < grad.Length; i++)
@@ -1182,7 +1181,7 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     private Tensor<T> ElementwiseMultiplyTensor(Tensor<T> a, Tensor<T> b)
     {
         int len = Math.Min(a.Length, b.Length);
-        var result = new Tensor<T>(a.Shape);
+        var result = new Tensor<T>(a.Shape.ToArray());
         for (int i = 0; i < len; i++)
             result[i] = NumOps.Multiply(a[i], b[i]);
         return result;
@@ -1222,7 +1221,7 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     private static Tensor<T> CloneTensor(Tensor<T> source)
     {
-        var clone = new Tensor<T>(source.Shape);
+        var clone = new Tensor<T>(source.Shape.ToArray());
         for (int i = 0; i < source.Length; i++)
             clone[i] = source[i];
         return clone;

@@ -41,6 +41,14 @@ namespace AiDotNet.Diffusion.SuperResolution;
 /// Reference: Wu et al., "SeeSR: Towards Semantics-Aware Real-World Image Super-Resolution", CVPR 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 1024, Width = 1024, NumInferenceSteps = 20 };
+/// var model = new SeeSRModel&lt;float&gt;(options);
+/// var lowRes = Tensor&lt;float&gt;.Random(new[] { 1, 4, 32, 32 });
+/// var highRes = model.Predict(lowRes);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Enhancement)]
@@ -148,7 +156,7 @@ public class SeeSRModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "SeeSR", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "SeeSR", Version = "1.0",
             Description = "Semantics-aware diffusion super-resolution with tag-guided detail generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

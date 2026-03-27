@@ -36,6 +36,31 @@ namespace AiDotNet.Classification.SemiSupervised;
 /// have unequal sizes.
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
+/// <example>
+/// <code>
+/// // Create label spreading with symmetric normalization
+/// var options = new LabelSpreadingOptions&lt;double&gt;();
+/// var classifier = new LabelSpreading&lt;double&gt;(options);
+///
+/// // Prepare data: -1 indicates unlabeled samples
+/// var features = new Matrix&lt;double&gt;(6, 2);
+/// features[0, 0] = 1.0; features[0, 1] = 1.1;
+/// features[1, 0] = 1.2; features[1, 1] = 0.9;
+/// features[2, 0] = 0.8; features[2, 1] = 1.0;
+/// features[3, 0] = 5.0; features[3, 1] = 5.1;
+/// features[4, 0] = 5.2; features[4, 1] = 4.9;
+/// features[5, 0] = 4.8; features[5, 1] = 5.0;
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, -1, -1, 1, -1, -1 });
+///
+/// // Spread labels with alpha clamping to preserve original labels
+/// classifier.Train(features, labels);
+///
+/// // Predict labels for all samples
+/// var prediction = classifier.Predict(features);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelCategory(ModelCategory.Kernel)]
@@ -1056,6 +1081,10 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
         }
 
         clone._numLabeled = _numLabeled;
+        clone.NumFeatures = NumFeatures;
+        clone.NumClasses = NumClasses;
+        clone.ClassLabels = ClassLabels?.Clone();
+        clone.TaskType = TaskType;
 
         return clone;
     }
@@ -1063,21 +1092,6 @@ public class LabelSpreading<T> : SemiSupervisedClassifierBase<T>
     #endregion
 
     #region Abstract Method Implementations
-
-    /// <summary>
-    /// Gets the model type identifier.
-    /// </summary>
-    /// <returns>The ModelType enum value for Label Spreading.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This identifies what kind of model this is within the
-    /// AiDotNet library's type system.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.LabelSpreading;
-    }
 
     /// <summary>
     /// Gets all learnable parameters of the model as a single vector.

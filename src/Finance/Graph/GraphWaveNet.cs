@@ -16,7 +16,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Graph;
 
@@ -66,6 +66,21 @@ namespace AiDotNet.Finance.Graph;
 /// https://arxiv.org/abs/1906.00121
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for adaptive graph traffic forecasting (207 sensors, 12-step horizon)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 12, inputWidth: 207, inputDepth: 2, outputSize: 12);
+///
+/// // Training mode: learns graph structure adaptively via node embeddings
+/// var model = new GraphWaveNet&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained Graph WaveNet model
+/// var onnxModel = new GraphWaveNet&lt;double&gt;(architecture, "graphwavenet.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.GraphAnalysis)]
 [ModelCategory(ModelCategory.GraphNetwork)]
@@ -582,7 +597,7 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape));
+        Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -647,7 +662,6 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "GraphWaveNet" },
@@ -940,7 +954,7 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape)
+        foreach (var dim in input.Shape.ToArray())
             totalSize *= dim;
 
         var flattened = new Tensor<T>(new[] { totalSize });
@@ -1024,7 +1038,7 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
             }
         }
 
-        return new Tensor<T>(nodeFeatures.Shape, new Vector<T>(result.Select(d => NumOps.FromDouble(d)).ToArray()));
+        return new Tensor<T>(nodeFeatures.Shape.ToArray(), new Vector<T>(result.Select(d => NumOps.FromDouble(d)).ToArray()));
     }
 
     #endregion
@@ -1115,7 +1129,7 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
             double noise = (_random.NextDouble() - 0.5) * 0.01 * Math.Abs(val + 1e-6);
             perturbed[i] = NumOps.FromDouble(val + noise);
         }
-        return new Tensor<T>(input.Shape, new Vector<T>(perturbed));
+        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(perturbed));
     }
 
     #endregion

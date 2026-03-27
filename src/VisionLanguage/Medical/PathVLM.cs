@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Medical;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// PathVLM (2024) is a histopathology-specific vision-language model that processes whole-slide
+/// images at multiple magnification levels. It uses multi-scale patch processing to capture both
+/// cellular-level details and tissue-level context, enabling pathology report generation,
+/// diagnosis assistance, and visual question answering on histopathology specimens.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "PathVLM: A Vision-Language Model for Computational Pathology (Various, 2024)"</item></list></para>
-/// <para><b>For Beginners:</b> PathVLM is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> PathVLM is a vision-language model specialized for computational
+/// pathology and histopathology image analysis. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PathVLM model for histopathology image analysis
+/// // with multi-scale patch processing at multiple magnification levels
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new PathVLM&lt;double&gt;(architecture, "pathvlm.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new PathVLM&lt;double&gt;(architecture, new PathVLMOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Healthcare)]
@@ -95,7 +119,7 @@ public class PathVLM<T> : VisionLanguageModelBase<T>, IMedicalVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "PathVLM-Native" : "PathVLM-ONNX", Description = "PathVLM: histopathology-specific vision-language model.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "PathVLM-Native" : "PathVLM-ONNX", Description = "PathVLM: histopathology-specific vision-language model.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "PathVLM";
         m.AdditionalInfo["MedicalDomain"] = _options.MedicalDomain;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

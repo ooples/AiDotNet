@@ -28,6 +28,14 @@ namespace AiDotNet.Diffusion.Panorama;
 /// Perfect for VR content or immersive environments.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 2048, NumInferenceSteps = 30 };
+/// var model = new StitchDiffusionModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 256 });
+/// var panorama = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -105,7 +113,7 @@ public class StitchDiffusionModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "StitchDiffusion", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "StitchDiffusion", Version = "1.0",
             Description = "360-degree panorama with circular padding and wrap-around consistency",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "circular-padding-panorama");

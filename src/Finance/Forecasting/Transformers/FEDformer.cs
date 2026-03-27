@@ -12,7 +12,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Transformers;
 
@@ -41,6 +41,22 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// ICML 2022. https://arxiv.org/abs/2201.12740
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FEDformer for long-term forecasting with frequency-domain attention
+/// // Achieves O(N) complexity via Fourier/Wavelet transforms instead of O(N^2) attention
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 96, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with frequency-enhanced decomposed attention
+/// var model = new FEDformer&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new FEDformer&lt;double&gt;(architecture, "fedformer_etth2.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -538,7 +554,7 @@ public class FEDformer<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        Backward(Tensor<T>.FromVector(outputGradient, prediction.Shape));
+        Backward(Tensor<T>.FromVector(outputGradient, prediction.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -576,7 +592,6 @@ public class FEDformer<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "FEDformer" },
@@ -881,7 +896,7 @@ public class FEDformer<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -917,7 +932,7 @@ public class FEDformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ApplyRevIN(Tensor<T> input, bool normalize)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         T epsilon = NumOps.FromDouble(1e-5);
 
         if (normalize)
@@ -1019,7 +1034,7 @@ public class FEDformer<T> : ForecastingModelBase<T>
         Array.Copy(input.Data.ToArray(), shiftAmount, newData, 0, input.Length - shiftAmount);
         Array.Copy(predictions.Data.ToArray(), 0, newData, input.Length - shiftAmount, shiftAmount);
 
-        return new Tensor<T>(input.Shape, new Vector<T>(newData));
+        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(newData));
     }
 
     /// <summary>

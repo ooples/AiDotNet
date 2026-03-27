@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
@@ -24,6 +26,9 @@ namespace AiDotNet.ActivationFunctions;
 /// everywhere (it has a well-defined slope at every point), which can make training more stable.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = false, IsBounded = false, Cost = ComputeCost.Medium)]
 public class SoftPlusActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

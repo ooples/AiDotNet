@@ -117,7 +117,7 @@ public class ActivationPool<T> : IDisposable
 
             while (pool.TryTake(out var pooledTensor))
             {
-                if (pooledTensor.Tensor is not null && ShapeMatches(pooledTensor.Tensor.Shape, shape))
+                if (pooledTensor.Tensor is not null && ShapeMatches(pooledTensor.Tensor.Shape.ToArray(), shape))
                 {
                     // Return non-matching tensors back to pool before returning
                     foreach (var pt in toReturn)
@@ -174,7 +174,7 @@ public class ActivationPool<T> : IDisposable
         if (tensor == null)
             return;
 
-        var totalElements = CalculateTotalElements(tensor.Shape);
+        var totalElements = CalculateTotalElements(tensor.Shape.ToArray());
         var sizeClass = GetSizeClass(totalElements);
 
         var pool = _pools.GetOrAdd(sizeClass, _ => new ConcurrentBag<PooledTensor<T>>());

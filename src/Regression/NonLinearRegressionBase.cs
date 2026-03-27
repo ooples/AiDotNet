@@ -502,7 +502,6 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = GetModelType(),
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["KernelType"] = Options.KernelType,
@@ -531,7 +530,6 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
     /// internally by the library to keep track of different types of models.
     /// </para>
     /// </remarks>
-    protected abstract ModelType GetModelType();
 
     /// <summary>
     /// Serializes the model to a byte array.
@@ -861,15 +859,21 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
     /// <param name="parameters">A vector containing the model parameters.</param>
     public virtual void SetParameters(Vector<T> parameters)
     {
-        int expectedParamCount = Alphas.Length + 1; // Alphas.Length + 1 (for Bias term)
-        if (parameters.Length != expectedParamCount)
+        if (parameters.Length < 1)
         {
-            throw new ArgumentException($"Expected {expectedParamCount} parameters, but got {parameters.Length}", nameof(parameters));
+            throw new ArgumentException("Parameters vector must have at least one element (bias term).", nameof(parameters));
         }
 
         // Match GetParameters order: bias first, then alphas
         B = parameters[0];
-        for (int i = 0; i < Alphas.Length; i++)
+
+        // Resize Alphas if needed (optimizer may call before training initializes Alphas)
+        int alphaCount = parameters.Length - 1;
+        if (Alphas.Length != alphaCount)
+        {
+            Alphas = new Vector<T>(alphaCount);
+        }
+        for (int i = 0; i < alphaCount; i++)
         {
             Alphas[i] = parameters[i + 1];
         }
@@ -1011,6 +1015,12 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
     {
         get { return Alphas.Length + 1; } // Alphas + bias term
     }
+
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
 
     /// <inheritdoc/>
     public virtual int[] GetInputShape()
@@ -1480,7 +1490,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
 
     private static Tensor<T> CreateFilledTensorLike(ComputationNode<T> referenceNode, T value)
     {
-        var tensor = new Tensor<T>((int[])referenceNode.Value.Shape.Clone());
+        var tensor = new Tensor<T>((int[])referenceNode.Value.Shape.ToArray().Clone());
         tensor.Fill(value);
         return tensor;
     }

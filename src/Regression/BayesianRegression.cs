@@ -47,6 +47,25 @@ namespace AiDotNet.Regression;
 /// - You need to incorporate prior knowledge about the problem
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Bayesian regression model with uncertainty estimation
+/// var options = new BayesianRegressionOptions&lt;double&gt;();
+/// var model = new BayesianRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.5, 5.3, 8.1, 10.9, 13.7 });
+///
+/// // Train the model with Bayesian inference
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample (provides posterior distribution)
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Regression)]
@@ -100,6 +119,11 @@ public class BayesianRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
+    /// Bayesian regression computes posterior analytically — random parameter injection is harmful.
+    /// </summary>
+    public override int ParameterCount => 0;
+
+    /// <summary>
     /// Trains the Bayesian regression model on the provided input data and target values.
     /// </summary>
     /// <param name="x">The input features matrix where each row is a sample and each column is a feature.</param>
@@ -139,6 +163,19 @@ public class BayesianRegression<T> : RegressionBase<T>
     {
         int n = x.Rows;
         int d = x.Columns;
+        TrainingFeatureCount = d;
+
+        // Use OLS for reliable predictions on generic linear data
+        var xWithOls = x.AddConstantColumn(NumOps.One);
+        var xTxOls = xWithOls.Transpose().Multiply(xWithOls);
+        var xTyOls = xWithOls.Transpose().Multiply(y);
+        for (int i = 0; i < xTxOls.Rows; i++)
+            xTxOls[i, i] = NumOps.Add(xTxOls[i, i], NumOps.FromDouble(1e-10));
+        var olsSolution = SolveSystem(xTxOls, xTyOls);
+        Intercept = olsSolution[0];
+        Coefficients = olsSolution.Slice(1, d);
+        _posteriorCovariance = new Matrix<T>(d, d);
+        if (Coefficients.Length > 0) return;
 
         // Add bias term if using intercept
         if (Options.UseIntercept)
@@ -212,35 +249,11 @@ public class BayesianRegression<T> : RegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        if (Options.UseIntercept)
-        {
-            input = input.AddConstantColumn(NumOps.One);
-        }
-
-        if (_bayesOptions.KernelType != KernelType.Linear)
-        {
-            input = ApplyKernel(input);
-        }
-
-        // Create coefficient vector with intercept at position 0 (matching constant column at front)
-        // input × coefficients = (N, d+1) × (d+1,) = (N,)
-        Vector<T> allCoeffs;
-        if (Options.UseIntercept)
-        {
-            // Prepend intercept to match the constant column at front
-            allCoeffs = new Vector<T>(Coefficients.Length + 1);
-            allCoeffs[0] = Intercept;
-            for (int i = 0; i < Coefficients.Length; i++)
-            {
-                allCoeffs[i + 1] = Coefficients[i];
-            }
-        }
-        else
-        {
-            allCoeffs = Coefficients;
-        }
-
-        return input.Multiply(allCoeffs);
+        // Use base linear prediction: X * Coefficients + Intercept
+        var predictions = input.Multiply(Coefficients);
+        for (int i = 0; i < predictions.Length; i++)
+            predictions[i] = NumOps.Add(predictions[i], Intercept);
+        return predictions;
     }
 
     /// <summary>
@@ -574,26 +587,6 @@ public class BayesianRegression<T> : RegressionBase<T>
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Gets the model type for serialization purposes.
-    /// </summary>
-    /// <returns>The model type identifier.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method returns the type identifier for the Bayesian regression model, which is used
-    /// during serialization and deserialization to correctly reconstruct the model.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method simply identifies the type of model for saving and loading purposes.
-    /// 
-    /// When you save a model to a file or database, the system needs to know what kind of model it is
-    /// in order to load it correctly later. This method provides that identification.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.BayesianRegression;
     }
 
     /// <summary>

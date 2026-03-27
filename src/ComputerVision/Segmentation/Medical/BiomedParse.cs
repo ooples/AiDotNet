@@ -37,6 +37,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 /// <b>Reference:</b> Zhao et al., "BiomedParse: a biomedical foundation model for image parsing of everything everywhere all at once", Nature Methods 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a BiomedParse model for text-prompted biomedical segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
+/// var model = new BiomedParse&lt;double&gt;(architecture, numClasses: 1);
+///
+/// // Or load a pre-trained ONNX model for multi-modality biomedical parsing
+/// var onnxModel = new BiomedParse&lt;double&gt;(architecture, "biomedparse.onnx", numClasses: 1);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Segmentation)]
@@ -217,7 +230,7 @@ public class BiomedParse<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         for (int i = 0; i < input.Length; i++)
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = _onnxSession.Run(inputs);
@@ -329,7 +342,6 @@ public class BiomedParse<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "BiomedParse" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

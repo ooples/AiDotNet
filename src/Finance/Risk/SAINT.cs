@@ -23,6 +23,21 @@ namespace AiDotNet.Finance.Risk;
 /// but fully learnable.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for tabular risk assessment (50 features, binary classification)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputSize: 50, outputSize: 2);
+///
+/// // Training mode: self-attention over features + intersample attention over rows
+/// var model = new SAINT&lt;double&gt;(architecture);
+///
+/// // Parameterless constructor with default 50-feature regression architecture
+/// var defaultModel = new SAINT&lt;double&gt;();
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Tabular)]

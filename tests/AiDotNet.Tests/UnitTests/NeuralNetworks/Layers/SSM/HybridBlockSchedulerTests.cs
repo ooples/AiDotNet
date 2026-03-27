@@ -73,7 +73,7 @@ public class HybridBlockSchedulerTests
         var input = CreateRandomTensor(new[] { batchSize, seqLen, modelDim });
         var output = scheduler.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -92,7 +92,7 @@ public class HybridBlockSchedulerTests
         var input = CreateRandomTensor(new[] { seqLen, modelDim });
         var output = scheduler.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -110,10 +110,10 @@ public class HybridBlockSchedulerTests
 
         var input = CreateRandomTensor(new[] { 1, seqLen, modelDim });
         var output = scheduler.Forward(input);
-        var grad = CreateRandomTensor(output.Shape, seed: 99);
+        var grad = CreateRandomTensor(output.Shape.ToArray(), seed: 99);
         var inputGrad = scheduler.Backward(grad);
 
-        Assert.Equal(input.Shape, inputGrad.Shape);
+        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
         Assert.False(ContainsNaN(inputGrad));
     }
 
@@ -253,7 +253,7 @@ public class HybridBlockSchedulerTests
         var input = CreateRandomTensor(new[] { 1, seqLen, modelDim });
         var output = scheduler.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -274,7 +274,7 @@ public class HybridBlockSchedulerTests
         // Verify forward pass works
         var input = CreateRandomTensor(new[] { 1, 8, 32 });
         var output = scheduler.Forward(input);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -295,7 +295,7 @@ public class HybridBlockSchedulerTests
         // Verify forward pass works
         var input = CreateRandomTensor(new[] { 1, 8, 32 });
         var output = scheduler.Forward(input);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -316,7 +316,7 @@ public class HybridBlockSchedulerTests
         // Verify forward pass works
         var input = CreateRandomTensor(new[] { 1, 8, 32 });
         var output = scheduler.Forward(input);
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
     }
 
@@ -339,13 +339,13 @@ public class HybridBlockSchedulerTests
 
         var input = CreateRandomTensor(new[] { 1, 4, 16 });
         var output = scheduler.Forward(input);
-        var grad = CreateRandomTensor(output.Shape);
+        var grad = CreateRandomTensor(output.Shape.ToArray());
         scheduler.Backward(grad);
         scheduler.UpdateParameters(0.001f);
 
         scheduler.ResetState();
         var output2 = scheduler.Forward(input);
-        Assert.Equal(output.Shape, output2.Shape);
+        Assert.Equal(output.Shape.ToArray(), output2.Shape.ToArray());
         Assert.False(ContainsNaN(output2));
     }
 
@@ -368,7 +368,7 @@ public class HybridBlockSchedulerTests
         var input = CreateRandomDoubleTensor(new[] { 1, seqLen, modelDim });
         var output = scheduler.Forward(input);
 
-        Assert.Equal(input.Shape, output.Shape);
+        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaNDouble(output));
     }
 

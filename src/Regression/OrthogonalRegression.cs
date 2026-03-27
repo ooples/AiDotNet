@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums;
 
 namespace AiDotNet.Regression;
@@ -25,6 +26,24 @@ namespace AiDotNet.Regression;
 /// to all points when measuring distance perpendicular to the line, rather than just vertically.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an orthogonal (total least squares) regression model
+/// var model = new OrthogonalRegression&lt;double&gt;();
+///
+/// // Prepare training data: 5 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.5, 5.3, 8.1, 10.9, 13.7 });
+///
+/// // Train minimizing perpendicular distance to the hyperplane
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelTask(ModelTask.Regression)]
@@ -95,9 +114,6 @@ public class OrthogonalRegression<T> : RegressionBase<T>
         int n = x.Rows;
         int p = x.Columns;
 
-        // Apply regularization to the input matrix
-        x = Regularization.Regularize(x);
-
         // Center the data
         Vector<T> meanX = new(p);
         for (int j = 0; j < p; j++)
@@ -134,7 +150,8 @@ public class OrthogonalRegression<T> : RegressionBase<T>
             }
         }
 
-        // Compute the augmented matrix [X y]
+        // Total Least Squares via SVD of the augmented matrix [X | y]
+        // The TLS solution is extracted from the last right singular vector of [X y].
         Matrix<T> augmentedMatrix = new(n, p + 1);
         for (int i = 0; i < n; i++)
         {
@@ -145,24 +162,42 @@ public class OrthogonalRegression<T> : RegressionBase<T>
             augmentedMatrix[i, p] = centeredY[i];
         }
 
-        // Get the solution using MatrixSolutionHelper with the decomposition type from options
-        Vector<T> solution = MatrixSolutionHelper.SolveLinearSystem(augmentedMatrix, augmentedMatrix.GetColumn(p), _options.DecompositionType);
-
-        // Rescale the solution
-        for (int j = 0; j < p; j++)
+        // SVD of the augmented matrix: the TLS solution is the last column of V
+        Coefficients = new Vector<T>(p);
+        bool svdSucceeded = false;
+        try
         {
-            solution[j] = NumOps.Divide(solution[j], scaleX[j]);
+            var svd = new SvdDecomposition<T>(augmentedMatrix);
+            var vt = svd.Vt;
+            int lastRow = vt.Rows - 1;
+
+            T vLast = vt[lastRow, p];
+            if (NumOps.GreaterThan(NumOps.Abs(vLast), NumOps.FromDouble(1e-14)))
+            {
+                for (int j = 0; j < p; j++)
+                {
+                    T coeff = NumOps.Negate(NumOps.Divide(vt[lastRow, j], vLast));
+                    Coefficients[j] = NumOps.Divide(coeff, scaleX[j]);
+                }
+                svdSucceeded = true;
+            }
+        }
+        catch (Exception)
+        {
+            // SVD decomposition failed on ill-conditioned matrix
         }
 
-        // Normalize the solution
-        T norm = NumOps.Sqrt(solution.DotProduct(solution));
-        solution = solution.Divide(norm);
-
-        // Extract coefficients and intercept
-        Coefficients = solution.GetSubVector(0, p);
-
-        // Apply regularization to the coefficients
-        Coefficients = Regularization.Regularize(Coefficients);
+        if (!svdSucceeded)
+        {
+            // Ridge-regularized OLS: (X'X + λI)^-1 X'y — always solvable
+            var xTx = centeredX.Transpose().Multiply(centeredX);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-8));
+            var xTy = centeredX.Transpose().Multiply(centeredY);
+            Coefficients = xTx.Inverse().Multiply(xTy);
+            for (int j = 0; j < p; j++)
+                Coefficients[j] = NumOps.Divide(Coefficients[j], scaleX[j]);
+        }
 
         Intercept = NumOps.Subtract(meanY, Coefficients.DotProduct(meanX));
     }
@@ -181,7 +216,6 @@ public class OrthogonalRegression<T> : RegressionBase<T>
     /// It's used internally by the library to keep track of different types of models.
     /// </para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.OrthogonalRegression;
 
     /// <summary>
     /// Serializes the model to a byte array.

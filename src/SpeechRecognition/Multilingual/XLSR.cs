@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// XLS-R scales wav2vec 2.0 pre-training to 128 languages using 436k hours of unlabeled speech. The model (up to 2B parameters) uses the same contrastive pre-training approach but with massively multilingual data. Fine-tuning with CTC on labeled data achieves strong results across many languages, with particularly significant improvements for low-resource languages. The cross-lingual transfer is enabled by shared phonetic structures across languages.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an XLS-R model for cross-lingual speech representation (128 languages)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new XLSR&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for cross-lingual ASR
+/// var onnxModel = new XLSR&lt;double&gt;(architecture, "xlsr.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
@@ -87,7 +100,7 @@ public class XLSR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "XLSR-Native" : "XLSR-ONNX", Description = "XLS-R: cross-lingual SSL at scale + CTC (Meta, 2022)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers };
+    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "XLSR-Native" : "XLSR-ONNX", Description = "XLS-R: cross-lingual SSL at scale + CTC (Meta, 2022)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers };
     protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.MaxTextLength); w.Write(_options.DropoutRate); w.Write(_options.Language); }
     protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.MaxTextLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new XLSR<T>(Architecture, mp, _options); return new XLSR<T>(Architecture, _options); }

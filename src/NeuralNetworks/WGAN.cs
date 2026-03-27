@@ -34,6 +34,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Reference: Arjovsky et al., "Wasserstein GAN" (2017)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new WGANOptions { LatentSize = 100, CriticIterations = 5, ClipValue = 0.01 };
+/// var model = new WGAN&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.Generative)]
@@ -459,7 +467,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
         var derivativeVector = _lossFunction.CalculateDerivative(predictedScores, labels);
 
         // Convert gradient vector back to tensor for backpropagation
-        var gradients = new Tensor<T>(criticScores.Shape);
+        var gradients = new Tensor<T>(criticScores.Shape.ToArray());
         for (int i = 0; i < batchSize; i++)
         {
             gradients[i, 0] = derivativeVector[i];
@@ -512,7 +520,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
         var derivativeVector = _lossFunction.CalculateDerivative(predictedScores, labels);
 
         // Convert gradient vector back to tensor for backpropagation
-        var gradients = new Tensor<T>(criticScores.Shape);
+        var gradients = new Tensor<T>(criticScores.Shape.ToArray());
         for (int i = 0; i < batchSize; i++)
         {
             gradients[i, 0] = derivativeVector[i];
@@ -712,7 +720,6 @@ public class WGAN<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.WassersteinGAN,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "GeneratorParameters", Generator.GetParameterCount() },

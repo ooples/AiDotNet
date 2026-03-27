@@ -22,6 +22,17 @@ namespace AiDotNet.Finance.AutoML;
 /// It tries several finance models and chooses the one that scores best on your data.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new FinancialAutoMLOptions&lt;float&gt;(architecture);
+/// var automl = new FinancialAutoML&lt;float&gt;(options);
+/// var bestModel = await automl.SearchAsync(
+///     trainInputs, trainTargets,
+///     valInputs, valTargets,
+///     maxTrials: 20,
+///     timeLimit: TimeSpan.FromMinutes(30));
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelCategory(ModelCategory.Optimization)]
 [ModelTask(ModelTask.Regression)]
@@ -135,7 +146,7 @@ public class FinancialAutoML<T> : SupervisedAutoMLModelBase<T, Tensor<T>, Tensor
 
                 var parameters = await SuggestNextTrialAsync();
 
-                if (!parameters.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not ModelType modelType)
+                if (!parameters.TryGetValue("ModelType", out var modelTypeObj) || modelTypeObj is not Type modelType)
                 {
                     throw new InvalidOperationException("AutoML trial parameters must include a ModelType entry.");
                 }
@@ -177,7 +188,7 @@ public class FinancialAutoML<T> : SupervisedAutoMLModelBase<T, Tensor<T>, Tensor
     public override Task<Dictionary<string, object>> SuggestNextTrialAsync()
     {
         var modelType = PickCandidateModelType();
-        if (modelType == ModelType.None)
+        if (modelType is null)
         {
             throw new InvalidOperationException("No candidate models are configured for FinancialAutoML.");
         }
@@ -211,7 +222,7 @@ public class FinancialAutoML<T> : SupervisedAutoMLModelBase<T, Tensor<T>, Tensor
     /// </para>
     /// </remarks>
     protected override Task<IFullModel<T, Tensor<T>, Tensor<T>>> CreateModelAsync(
-        ModelType modelType,
+        Type modelType,
         Dictionary<string, object> parameters)
     {
         var model = _modelFactory.Create(modelType, parameters);
@@ -228,7 +239,7 @@ public class FinancialAutoML<T> : SupervisedAutoMLModelBase<T, Tensor<T>, Tensor
     /// <b>For Beginners:</b> This tells AutoML which settings it can tune.
     /// </para>
     /// </remarks>
-    protected override Dictionary<string, ParameterRange> GetDefaultSearchSpace(ModelType modelType)
+    protected override Dictionary<string, ParameterRange> GetDefaultSearchSpace(Type modelType)
     {
         return _financeSearchSpace.GetSearchSpace(modelType);
     }
@@ -324,25 +335,25 @@ public class FinancialAutoML<T> : SupervisedAutoMLModelBase<T, Tensor<T>, Tensor
     /// This method picks a small, safe starter set based on the task type.
     /// </para>
     /// </remarks>
-    private static List<ModelType> GetDefaultModelsForDomain(FinancialDomain domain)
+    private static List<Type> GetDefaultModelsForDomain(FinancialDomain domain)
     {
         return domain switch
         {
-            FinancialDomain.Forecasting => new List<ModelType>
+            FinancialDomain.Forecasting => new List<Type>
             {
-                ModelType.PatchTST,
-                ModelType.ITransformer,
-                ModelType.DeepAR,
-                ModelType.NBEATS,
-                ModelType.TFT
+                typeof(Forecasting.Transformers.PatchTST<>),
+                typeof(Forecasting.Transformers.ITransformer<>),
+                typeof(Forecasting.Neural.DeepAR<>),
+                typeof(Forecasting.Neural.NBEATSFinance<>),
+                typeof(Forecasting.Transformers.TFT<>)
             },
-            FinancialDomain.Risk => new List<ModelType>
+            FinancialDomain.Risk => new List<Type>
             {
-                ModelType.NeuralVaR,
-                ModelType.TabNet,
-                ModelType.TabTransformer
+                typeof(Risk.NeuralVaR<>),
+                typeof(Risk.TabNet<>),
+                typeof(Risk.TabTransformer<>)
             },
-            _ => new List<ModelType>()
+            _ => new List<Type>()
         };
     }
 

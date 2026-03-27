@@ -40,6 +40,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 /// Segmentation using Stable Diffusion", arXiv 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DiffSeg model for unsupervised segmentation from diffusion attention
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
+/// var model = new DiffSeg&lt;double&gt;(architecture, numClasses: 150);
+///
+/// // Or load a pre-trained ONNX model for label-free segmentation
+/// var onnxModel = new DiffSeg&lt;double&gt;(architecture, "diffseg.onnx", numClasses: 150);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Segmentation)]
@@ -247,7 +260,7 @@ public class DiffSeg<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         if (!hasBatch) input = AddBatchDimension(input);
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "pixel_values";
         using var results = _onnxSession.Run(new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) });
         var outputTensor = results.First().AsTensor<float>();
@@ -360,7 +373,6 @@ public class DiffSeg<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "DiffSeg" }, { "Description", "DiffSeg Unsupervised Semantic Segmentation" },

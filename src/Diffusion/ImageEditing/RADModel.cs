@@ -37,6 +37,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// - Multi-region editing in single denoising pass
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new RADModel&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var result = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Inpainting)]
@@ -129,7 +137,7 @@ public class RADModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "RAD", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "RAD", Version = "1.0",
             Description = "Region-aware diffusion for multi-region spatially controlled editing",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

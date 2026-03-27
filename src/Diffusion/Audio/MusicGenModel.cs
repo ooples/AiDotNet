@@ -669,7 +669,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
             var latentVector = latent.ToVector();
             var noiseVector = noisePrediction.ToVector();
             latentVector = Scheduler.Step(noiseVector, timestep, latentVector, NumOps.Zero);
-            latent = new Tensor<T>(latent.Shape, latentVector);
+            latent = new Tensor<T>(latent.Shape.ToArray(), latentVector);
         }
 
         return _musicVAE.UnscaleLatent(latent);
@@ -762,7 +762,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
             var latentVector = latent.ToVector();
             var noiseVector = noisePrediction.ToVector();
             latentVector = Scheduler.Step(noiseVector, timestep, latentVector, NumOps.Zero);
-            latent = new Tensor<T>(latent.Shape, latentVector);
+            latent = new Tensor<T>(latent.Shape.ToArray(), latentVector);
         }
 
         return _musicVAE.UnscaleLatent(latent);
@@ -862,7 +862,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
     private Tensor<T> BlendConditions(Tensor<T> primary, Tensor<T> secondary, double secondaryStrength)
     {
         // Resize secondary to match primary if needed, then blend
-        var result = new Tensor<T>(primary.Shape);
+        var result = new Tensor<T>(primary.Shape.ToArray());
         var resultSpan = result.AsWritableSpan();
         var primarySpan = primary.AsSpan();
         var secondarySpan = secondary.AsSpan();
@@ -969,7 +969,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.ParameterCount;
+        var unetCount = _unet.GetParameters().Length;
         var vaeCount = _musicVAE.ParameterCount;
         var melodyCount = _melodyEncoder.ParameterCount;
         var rhythmCount = _rhythmEncoder.ParameterCount;

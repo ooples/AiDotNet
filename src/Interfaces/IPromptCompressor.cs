@@ -31,9 +31,9 @@ namespace AiDotNet.Interfaces;
 ///
 /// var result = compressor.CompressWithMetrics(longPrompt, new CompressionOptions { TargetReduction = 0.3 });
 ///
-/// Console.WriteLine($"Original: {result.OriginalTokenCount} tokens");
-/// Console.WriteLine($"Compressed: {result.CompressedTokenCount} tokens");
-/// Console.WriteLine($"Savings: {result.CompressionRatio:P0}");
+/// // Result is available in the returned value
+/// // Result is available in the returned value
+/// // Result is available in the returned value
 ///
 /// // Output:
 /// // Original: 80 tokens
@@ -95,11 +95,11 @@ public interface IPromptCompressor
     /// <code>
     /// var result = compressor.CompressWithMetrics(longPrompt, options);
     ///
-    /// Console.WriteLine($"Original tokens: {result.OriginalTokenCount}");
-    /// Console.WriteLine($"Compressed tokens: {result.CompressedTokenCount}");
-    /// Console.WriteLine($"Tokens saved: {result.TokensSaved}");
-    /// Console.WriteLine($"Compression ratio: {result.CompressionRatio:P0}");
-    /// Console.WriteLine($"Estimated savings: ${result.EstimatedCostSavings}");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// </code>
     ///
     /// This is useful for:

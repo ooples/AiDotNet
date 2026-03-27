@@ -627,7 +627,6 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
         {
             Name = $"PixArt-{sizeName}",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = $"PixArt-{sizeName} text-to-image diffusion model using DiT architecture",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

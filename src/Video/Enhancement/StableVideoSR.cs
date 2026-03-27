@@ -181,7 +181,6 @@ public class StableVideoSR<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "StableVideoSR-Native" : "StableVideoSR-ONNX",
             Description = $"StableVideoSR {_options.Variant} temporal diffusion VSR (2024)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumTemporalLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

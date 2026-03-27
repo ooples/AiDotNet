@@ -427,7 +427,6 @@ public abstract class TransformerNERBase<T> : SequenceLabeling.SequenceLabelingN
         {
             Name = _useNativeMode ? $"{_modelName}-Native" : $"{_modelName}-ONNX",
             Description = $"{_modelName} {_options.Variant} transformer NER ({_paperCitation})",
-            ModelType = ModelType.NamedEntityRecognition,
             Complexity = _options.NumTransformerLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

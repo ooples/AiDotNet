@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -34,6 +36,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Capsule)]
+[LayerCategory(LayerCategory.Convolution)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "1, 2, 4, 3, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class PrimaryCapsuleLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -97,6 +103,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// during the backward pass for gradient calculation.
     /// </remarks>
     private Tensor<T>? _lastOutput;
+    private Tensor<T>? _lastPreSquash;
 
     /// <summary>
     /// The number of input channels.
@@ -161,6 +168,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// that best represent the entities in the data.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _convWeights.Length + _convBias.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -339,7 +347,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // PrimaryCapsule needs to handle both NCHW (from ConvolutionalLayer) and NHWC inputs
@@ -447,6 +455,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         // SquashActivation expects 2D input [numCapsules, capsuleDim], so reshape and apply
         int totalCapsules = batchSize * outputHeight * outputWidth * _capsuleChannels;
         var flatOutput = output.Reshape([totalCapsules, _capsuleDimension]);
+        _lastPreSquash = flatOutput;
         var activatedFlat = ApplyActivation(flatOutput);
         _lastOutput = activatedFlat.Reshape([batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
 
@@ -669,11 +678,47 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
-
         int batchSize = _lastInput.Shape[0];
-        int outputHeight = activationGradient.Shape[1];
-        int outputWidth = activationGradient.Shape[2];
+        int outputHeight = _lastOutput.Shape[1];
+        int outputWidth = _lastOutput.Shape[2];
+
+        // Squash activation produces a Jacobian [totalCapsules, capsuleDim, capsuleDim],
+        // not a scalar derivative. Apply via matrix-vector multiply per capsule.
+        int totalCapsules = batchSize * outputHeight * outputWidth * _capsuleChannels;
+        var flatPreact = new Tensor<T>([totalCapsules, _capsuleDimension]);
+        // Reconstruct pre-activation from Forward (pre-squash output)
+        // Since we don't cache pre-activation, recompute from _lastOutput by inverting squash
+        // Simpler: compute derivative from pre-activation input to squash
+        var flatGrad = outputGradient.Reshape([totalCapsules, _capsuleDimension]);
+
+        // Get the Jacobian of squash at the PRE-activation point (not post-activation)
+        var preSquash = _lastPreSquash ?? _lastOutput.Reshape([totalCapsules, _capsuleDimension]);
+        var jacobians = ScalarActivation is not null ? ScalarActivation.Derivative(preSquash) : preSquash;
+        var activationGradientFlat = new Tensor<T>([totalCapsules, _capsuleDimension]);
+
+        if (jacobians.Shape.Length == 3 && jacobians.Shape[1] == _capsuleDimension && jacobians.Shape[2] == _capsuleDimension)
+        {
+            // Jacobian case: Jacobian @ gradient per capsule via BatchMatMul
+            // jacobians: [totalCapsules, D, D], flatGrad: [totalCapsules, D] → [totalCapsules, D, 1]
+            var gradCol = flatGrad.Reshape([totalCapsules, _capsuleDimension, 1]);
+            var resultCol = Engine.BatchMatMul(jacobians, gradCol); // [totalCapsules, D, 1]
+            activationGradientFlat = resultCol.Reshape([totalCapsules, _capsuleDimension]);
+        }
+        else
+        {
+            // Scalar derivative case: element-wise multiply
+            activationGradientFlat = Engine.TensorMultiply(jacobians, flatGrad);
+        }
+
+        var activationGradient = activationGradientFlat
+            .Reshape([batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
+
+        try {
+            var dbg = $"flatGrad[0..3]=[{NumOps.ToDouble(flatGrad[0,0]):E3},{NumOps.ToDouble(flatGrad[0,1]):E3},{NumOps.ToDouble(flatGrad[0,2]):E3},{NumOps.ToDouble(flatGrad[0,3]):E3}]\n" +
+                      $"actGrad[0..3]=[{NumOps.ToDouble(activationGradientFlat[0,0]):E3},{NumOps.ToDouble(activationGradientFlat[0,1]):E3},{NumOps.ToDouble(activationGradientFlat[0,2]):E3},{NumOps.ToDouble(activationGradientFlat[0,3]):E3}]\n" +
+                      $"preSquash[0..3]=[{NumOps.ToDouble(preSquash[0,0]):E3},{NumOps.ToDouble(preSquash[0,1]):E3},{NumOps.ToDouble(preSquash[0,2]):E3},{NumOps.ToDouble(preSquash[0,3]):E3}]\n";
+        } catch { }
+
         int outputChannels = _capsuleChannels * _capsuleDimension;
 
         // Reshape activation gradient to NCHW [batch, outC, H, W]
@@ -687,8 +732,8 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         var inputNCHW = _inputWasNCHW ? _lastInput : _lastInput.Transpose([0, 3, 1, 2]);
 
         // Gradients via Conv2D ops
-        var inputGradNCHW = Engine.Conv2DBackwardInput(gradNCHW, kernelNCHW, inputNCHW.Shape, new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });
-        var kernelGrad = Engine.Conv2DBackwardKernel(gradNCHW, inputNCHW, kernelNCHW.Shape, new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });
+        var inputGradNCHW = Engine.Conv2DBackwardInput(gradNCHW, kernelNCHW, inputNCHW.Shape.ToArray(), new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });
+        var kernelGrad = Engine.Conv2DBackwardKernel(gradNCHW, inputNCHW, kernelNCHW.Shape.ToArray(), new[] { _stride, _stride }, new[] { 0, 0 }, new[] { 1, 1 });
 
         // Bias gradient: sum over batch/height/width
         _convBiasGradient = Engine.ReduceSum(gradNCHW, new[] { 0, 2, 3 }, keepDims: false);
@@ -926,6 +971,20 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// ensuring that all matrices and vectors maintain their correct dimensions.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var wGrad = _convWeightsGradient != null ? new Vector<T>(_convWeightsGradient.ToArray()) : new Vector<T>(_convWeights.Length);
+        var bGrad = _convBiasGradient != null ? new Vector<T>(_convBiasGradient.ToArray()) : new Vector<T>(_convBias.Length);
+        return Vector<T>.Concatenate(wGrad, bGrad);
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _convWeightsGradient = null;
+        _convBiasGradient = null;
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int weightSize = _convWeights.Length;
@@ -938,7 +997,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         }
 
         // Use Tensor.FromVector for production-grade parameter setting
-        _convWeights = Tensor<T>.FromVector(parameters.Slice(0, weightSize), _convWeights.Shape);
+        _convWeights = Tensor<T>.FromVector(parameters.Slice(0, weightSize), _convWeights.Shape.ToArray());
         _convBias = Tensor<T>.FromVector(parameters.Slice(weightSize, biasSize), [biasSize]);
     }
 

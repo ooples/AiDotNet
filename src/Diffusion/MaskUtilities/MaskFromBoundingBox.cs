@@ -61,7 +61,7 @@ public class MaskFromBoundingBox<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
         Guard.NotNull(data);
         if (data.Shape.Length == 0)
             throw new ArgumentException("Input tensor must have at least one dimension.", nameof(data));
-        var shape = data.Shape;
+        var shape = data.Shape.ToArray();
         int height = shape[0];
         int width = shape.Length > 1 ? shape[1] : 1;
         return Generate(height, width, _boxes);

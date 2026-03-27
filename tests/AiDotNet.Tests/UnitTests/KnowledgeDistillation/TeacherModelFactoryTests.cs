@@ -354,6 +354,7 @@ public class TeacherModelFactoryTests
         }
 
         public int ParameterCount => _inputDim * _outputDim;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
 
         public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters)
         {
@@ -377,5 +378,7 @@ public class TeacherModelFactoryTests
             var sumNode = TensorOperations<double>.Sum(inputNode);
             return sumNode;
         }
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 }

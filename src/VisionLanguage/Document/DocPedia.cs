@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Document;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// DocPedia (2024) unleashes the power of large multimodal models for document understanding by
+/// operating in the frequency domain. It converts document images into frequency representations
+/// via DCT transforms, enabling the model to capture both structural layout patterns and fine
+/// text details without requiring explicit OCR preprocessing.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "DocPedia: Unleashing the Power of Large Multimodal Model in the Frequency Domain" (2024)</item></list></para>
-/// <para><b>For Beginners:</b> DocPedia is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> DocPedia is a document understanding model that processes documents
+/// in the frequency domain for text and layout analysis. Default values follow the original
+/// paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DocPedia model for frequency-domain document understanding
+/// // with DCT-based visual encoding for text and layout analysis
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new DocPedia&lt;double&gt;(architecture, "docpedia.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new DocPedia&lt;double&gt;(architecture, new DocPediaOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -94,7 +118,7 @@ public class DocPedia<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingMod
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "DocPedia-Native" : "DocPedia-ONNX", Description = "DocPedia: frequency-domain document understanding model.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "DocPedia-Native" : "DocPedia-ONNX", Description = "DocPedia: frequency-domain document understanding model.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "DocPedia";
         m.AdditionalInfo["OcrFree"] = _options.IsOcrFree.ToString();
         m.AdditionalInfo["FrequencyDomain"] = _options.EnableFrequencyDomain.ToString();

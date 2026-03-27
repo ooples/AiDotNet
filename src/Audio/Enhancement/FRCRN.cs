@@ -217,7 +217,6 @@ public class FRCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         {
             Name = _useNativeMode ? "FRCRN-Native" : "FRCRN-ONNX",
             Description = $"FRCRN {_options.Variant} speech enhancement (Zhao et al., 2022)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumFreqBins, Complexity = _options.NumStages
         };
         m.AdditionalInfo["Variant"] = _options.Variant;
         m.AdditionalInfo["EncoderChannels"] = _options.EncoderChannels.ToString();

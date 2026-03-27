@@ -12,6 +12,16 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// Balances exploration and exploitation using confidence intervals: UCB(a) = Q(a) + c * √(ln(t) / N(a))
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <example>
+    /// <code>
+    /// // Create UCB exploration that favors under-explored actions
+    /// var exploration = new UpperConfidenceBoundExploration&lt;double&gt;(explorationConstant: 2.0);
+    ///
+    /// // Select action using upper confidence bound: Q(a) + c * sqrt(ln(t) / N(a))
+    /// var policyAction = new Vector&lt;double&gt;(new double[] { 1.5, 0.8, 2.3 });
+    /// var action = exploration.GetExplorationAction(state, policyAction, actionSpaceSize: 3, random);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
     [ModelTask(ModelTask.Classification)]

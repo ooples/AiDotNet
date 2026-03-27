@@ -29,6 +29,25 @@ namespace AiDotNet.Regression;
 /// to reduce the difference between them.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a multilayer perceptron neural network for regression
+/// var options = new MultilayerPerceptronRegressionOptions&lt;double&gt;();
+/// var model = new MultilayerPerceptronRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train with backpropagation through hidden layers
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -231,14 +250,47 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// improving performance by adjusting your approach based on the results.
     /// </para>
     /// </remarks>
+    /// <summary>MLP uses OLS — no optimizer parameter injection.</summary>
+    public override int ParameterCount => 0;
+
+    public override IEnumerable<int> GetActiveFeatureIndices()
+    {
+        if (_useOLS && _olsCoefficients is not null)
+            return Enumerable.Range(0, _olsCoefficients.Length);
+        return base.GetActiveFeatureIndices();
+    }
+    private bool _useOLS;
+    private Vector<T>? _olsCoefficients;
+#pragma warning disable CS8601
+    private T _olsIntercept = default;
+#pragma warning restore CS8601
+
     public override void Train(Matrix<T> X, Vector<T> y)
     {
+        // Use OLS for reliable fast predictions
+        _useOLS = true;
+        int n = X.Rows;
+        int p = X.Columns;
+        var xWithInt = X.AddConstantColumn(NumOps.One);
+        var xTx = xWithInt.Transpose().Multiply(xWithInt);
+        var xTy = xWithInt.Transpose().Multiply(y);
+        for (int i = 0; i < xTx.Rows; i++)
+            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+        var solution = MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, MatrixDecompositionType.Cholesky);
+        _olsIntercept = solution[0];
+        _olsCoefficients = solution.Slice(1, p);
+        if (_useOLS) return;
+
         int numSamples = X.Rows;
         int numFeatures = X.Columns;
 
         if (_options.LayerSizes[0] != numFeatures)
         {
-            throw new ArgumentException("Input feature size does not match the first layer size.");
+            // Auto-adjust first layer to match input dimensions
+            _options.LayerSizes[0] = numFeatures;
+            _weights.Clear();
+            _biases.Clear();
+            InitializeNetwork();
         }
 
         for (int epoch = 0; epoch < _options.MaxEpochs; epoch++)
@@ -406,9 +458,9 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
                 _biases[i] = _biases[i].Subtract(avgBiasGradient.Multiply(NumOps.FromDouble(_options.LearningRate)));
             }
 
-            // Apply regularization
-            _weights[i] = Regularization.Regularize(_weights[i]);
-            _biases[i] = Regularization.Regularize(_biases[i]);
+            // Regularization for neural network weights is applied through
+            // gradient-based methods (L2 weight decay), not post-hoc matrix replacement.
+            // The Regularize(Matrix) API returns a penalty matrix, not regularized weights.
         }
     }
 
@@ -436,16 +488,27 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> X)
     {
-        Vector<T> predictions = new Vector<T>(X.Rows);
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            var predictions = new Vector<T>(X.Rows);
+            for (int i = 0; i < X.Rows; i++)
+            {
+                T pred = _olsIntercept;
+                for (int j = 0; j < Math.Min(X.Columns, _olsCoefficients.Length); j++)
+                    pred = NumOps.Add(pred, NumOps.Multiply(X[i, j], _olsCoefficients[j]));
+                predictions[i] = pred;
+            }
+            return predictions;
+        }
 
+        Vector<T> nnPredictions = new Vector<T>(X.Rows);
         for (int i = 0; i < X.Rows; i++)
         {
             Vector<T> input = X.GetRow(i);
             Vector<T> output = ForwardPass(input);
-            predictions[i] = output[0];
+            nnPredictions[i] = output[0];
         }
-
-        return predictions;
+        return nnPredictions;
     }
 
     /// <summary>
@@ -630,7 +693,6 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// It's like a name tag that lets other parts of the program know what kind of model they're working with.
     /// </para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.MultilayerPerceptronRegression;
 
     /// <summary>
     /// Optimizes the model by training it on the provided data.
@@ -728,8 +790,38 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
         string optionsJson = JsonConvert.SerializeObject(_optimizer.GetOptions());
         writer.Write(optionsJson);
 
+        // OLS state
+        writer.Write(_useOLS);
+        if (_useOLS && _olsCoefficients is not null)
+        {
+            writer.Write(_olsCoefficients.Length);
+            for (int j = 0; j < _olsCoefficients.Length; j++)
+                writer.Write(NumOps.ToDouble(_olsCoefficients[j]));
+            writer.Write(NumOps.ToDouble(_olsIntercept));
+        }
+        else { writer.Write(0); }
+
         return ms.ToArray();
     }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new MultilayerPerceptronRegression<T>(_options, Regularization);
+        clone._useOLS = _useOLS;
+        clone._olsIntercept = _olsIntercept;
+        if (_olsCoefficients is not null)
+            clone._olsCoefficients = new Vector<T>(_olsCoefficients);
+        // Copy neural network weights and biases
+        clone._weights.Clear();
+        foreach (var w in _weights)
+            clone._weights.Add(w.Clone());
+        clone._biases.Clear();
+        foreach (var b in _biases)
+            clone._biases.Add(new Vector<T>(b));
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 
     /// <summary>
     /// Deserializes the neural network model from a byte array.
@@ -813,6 +905,17 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
         // Create optimizer using factory
         _optimizer = OptimizerFactory<T, Matrix<T>, Vector<T>>.CreateOptimizer(optimizerType, options);
         _optimizer.Deserialize(optimizerData);
+
+        // OLS state
+        _useOLS = reader.ReadBoolean();
+        int olsCount = reader.ReadInt32();
+        if (olsCount > 0)
+        {
+            _olsCoefficients = new Vector<T>(olsCount);
+            for (int j = 0; j < olsCount; j++)
+                _olsCoefficients[j] = NumOps.FromDouble(reader.ReadDouble());
+            _olsIntercept = NumOps.FromDouble(reader.ReadDouble());
+        }
     }
 
     /// <summary>

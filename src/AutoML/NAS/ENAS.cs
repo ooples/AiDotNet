@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.AutoML.SearchSpace;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -16,6 +18,30 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "Efficient Neural Architecture Search via Parameter Sharing" (ICML 2018)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> ENAS makes architecture search 1000x faster by sharing
+    /// weights between candidate architectures. Instead of training each design from scratch,
+    /// all designs share the same trained parameters. A controller network learns to pick
+    /// good architectures, like a manager who assigns existing workers to different teams
+    /// rather than hiring new ones each time.</para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // Use AiModelBuilder facade with ENAS for neural architecture search
+    /// var builder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    ///     .ConfigureModel(new ENAS&lt;float&gt;(new SearchSpaceBase&lt;float&gt;(), numNodes: 4));
+    ///
+    /// var result = builder.Build(trainingData, trainingLabels);
+    /// var prediction = result.Predict(inputTensor);
+    /// </code>
+    /// </example>
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.Optimization)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     public class ENAS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;

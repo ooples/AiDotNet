@@ -29,7 +29,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 128, outputSize: 360);
 /// var model = new MelodyExtractor&lt;float&gt;(arch, "melody_extractor.onnx");
 /// var (hasPitch, pitch) = model.DetectPitch(audioFrame);
-/// Console.WriteLine($"Melody pitch: {pitch} Hz");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>
@@ -289,7 +289,6 @@ public class MelodyExtractor<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
         {
             Name = _useNativeMode ? "MelodyExtractor-Native" : "MelodyExtractor-ONNX",
             Description = "Neural melody extraction from polyphonic audio",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumLayers
         };
         m.AdditionalInfo["NumPitchBins"] = _options.NumPitchBins.ToString();

@@ -95,6 +95,16 @@ namespace AiDotNet.NER.SequenceLabeling;
 /// - You need fast training and inference compared to BERT-based models
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 512,
+///     outputSize: 9,
+///     hiddenLayers: new[] { 256, 128 },
+///     networkType: NetworkType.Classification);
+/// var cNNBiLSTMCRF = new CNNBiLSTMCRF&lt;float&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
@@ -467,7 +477,6 @@ public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         {
             Name = _useNativeMode ? "CNN-BiLSTM-CRF-Native" : "CNN-BiLSTM-CRF-ONNX",
             Description = $"CNN-BiLSTM-CRF {_options.Variant} sequence labeling NER (Ma and Hovy, ACL 2016)",
-            ModelType = ModelType.NamedEntityRecognition,
             Complexity = _options.NumLSTMLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

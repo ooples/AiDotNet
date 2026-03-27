@@ -44,6 +44,16 @@ namespace AiDotNet.Clustering.Density;
 /// - Provides cluster hierarchy
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Use AiModelBuilder facade for HDBSCAN clustering
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new HDBSCAN&lt;double&gt;(new HDBSCANOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(dataMatrix, labels);
+/// var predictions = result.Predict(newData);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -82,7 +92,6 @@ public class HDBSCAN<T> : ClusteringBase<T>
     public T[]? Probabilities => _probabilities;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -97,6 +106,41 @@ public class HDBSCAN<T> : ClusteringBase<T>
             Alpha = _options.Alpha,
             DistanceMetric = _options.DistanceMetric
         });
+    }
+
+    /// <inheritdoc />
+    public override bool SupportsParameterInitialization => false;
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
+    /// <inheritdoc />
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = (HDBSCAN<T>)CreateNewInstance();
+        clone._outlierScores = _outlierScores?.ToArray();
+        clone._probabilities = _probabilities?.ToArray();
+        clone._condensedTree = _condensedTree?.ToList();
+        clone.NumClusters = NumClusters;
+        clone.NumFeatures = NumFeatures;
+        clone.IsTrained = IsTrained;
+
+        if (Labels is not null)
+        {
+            clone.Labels = new Vector<T>(Labels.Length);
+            for (int i = 0; i < Labels.Length; i++)
+                clone.Labels[i] = Labels[i];
+        }
+
+        if (ClusterCenters is not null)
+        {
+            clone.ClusterCenters = new Matrix<T>(ClusterCenters.Rows, ClusterCenters.Columns);
+            for (int i = 0; i < ClusterCenters.Rows; i++)
+                for (int j = 0; j < ClusterCenters.Columns; j++)
+                    clone.ClusterCenters[i, j] = ClusterCenters[i, j];
+        }
+
+        return clone;
     }
 
     /// <inheritdoc />
@@ -194,15 +238,23 @@ public class HDBSCAN<T> : ClusteringBase<T>
 
     private T[,] ComputeDistanceMatrix(Matrix<T> x, int n, IDistanceMetric<T> metric)
     {
+        int d = x.Columns;
         var distMatrix = new T[n, n];
+
+        // Cache rows as arrays for allocation-free distance
+        var rowArrays = new T[n][];
+        for (int i = 0; i < n; i++)
+        {
+            rowArrays[i] = new T[d];
+            for (int c = 0; c < d; c++)
+                rowArrays[i][c] = x[i, c];
+        }
 
         for (int i = 0; i < n; i++)
         {
-            var pointI = GetRow(x, i);
             for (int j = i + 1; j < n; j++)
             {
-                var pointJ = GetRow(x, j);
-                T dist = metric.Compute(pointI, pointJ);
+                T dist = metric.ComputeInline(rowArrays[i], rowArrays[j], d);
                 distMatrix[i, j] = dist;
                 distMatrix[j, i] = dist;
             }

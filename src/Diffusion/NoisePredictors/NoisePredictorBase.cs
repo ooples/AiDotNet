@@ -65,6 +65,12 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
     /// <inheritdoc />
     public abstract int ParameterCount { get; }
 
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
+
     /// <inheritdoc />
     public abstract bool SupportsCFG { get; }
 
@@ -156,7 +162,6 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
         return new ModelMetadata<T>
         {
             Name = GetType().Name,
-            ModelType = Enums.ModelType.NeuralNetwork,
             FeatureCount = ParameterCount,
             Complexity = ParameterCount,
             Description = $"Noise predictor with {ParameterCount} parameters, {InputChannels} input channels, {BaseChannels} base channels."

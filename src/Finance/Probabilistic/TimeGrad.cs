@@ -16,7 +16,7 @@ using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Probabilistic;
 
@@ -63,6 +63,19 @@ namespace AiDotNet.Finance.Probabilistic;
 /// https://arxiv.org/abs/2101.12072
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TimeGrad model for autoregressive diffusion forecasting
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 100, inputWidth: 1, inputDepth: 1, outputSize: 24);
+/// var model = new TimeGrad&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for RNN-diffusion forecasting
+/// var onnxModel = new TimeGrad&lt;double&gt;(architecture, "timegrad.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.Diffusion)]
@@ -496,7 +509,7 @@ public class TimeGrad<T> : ForecastingModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), noise.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape));
+        Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -530,7 +543,6 @@ public class TimeGrad<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "TimeGrad" },
@@ -891,7 +903,7 @@ public class TimeGrad<T> : ForecastingModelBase<T>
     private (Tensor<T> noisyData, Tensor<T> noise) AddNoise(Tensor<T> data, int t)
     {
         var noise = GenerateNoise(data.Data.Length);
-        var noisyData = new Tensor<T>(data.Shape);
+        var noisyData = new Tensor<T>(data.Shape.ToArray());
 
         double sqrtAlphaBar = _sqrtAlphasCumprod[t];
         double sqrtOneMinusAlphaBar = _sqrtOneMinusAlphasCumprod[t];
@@ -920,7 +932,7 @@ public class TimeGrad<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> DenoisingStep(Tensor<T> noisySample, Tensor<T> predictedNoise, int t)
     {
-        var result = new Tensor<T>(noisySample.Shape);
+        var result = new Tensor<T>(noisySample.Shape.ToArray());
 
         double alpha = _alphas[t];
         double alphaBar = _alphasCumprod[t];
@@ -1044,7 +1056,7 @@ public class TimeGrad<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape)
+        foreach (var dim in input.Shape.ToArray())
         {
             totalSize *= dim;
         }
@@ -1140,7 +1152,7 @@ public class TimeGrad<T> : ForecastingModelBase<T>
         int inputLength = input.Data.Length;
         int predLength = Math.Min(prediction.Data.Length, inputLength);
 
-        var shifted = new Tensor<T>(input.Shape);
+        var shifted = new Tensor<T>(input.Shape.ToArray());
 
         for (int i = predLength; i < inputLength; i++)
         {

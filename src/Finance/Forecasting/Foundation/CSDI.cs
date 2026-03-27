@@ -27,10 +27,31 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// It conditions on observed values using a transformer-based denoiser and generates all missing
 /// values simultaneously.
 /// </para>
+/// <para><b>For Beginners:</b> CSDI fills in missing data points in time series and forecasts
+/// future values using a diffusion process. Think of it like an artist restoring a damaged
+/// painting: it looks at the intact parts and intelligently fills in the gaps. Unlike simpler
+/// methods that fill one gap at a time, CSDI fills all missing values simultaneously, which
+/// produces more consistent and realistic results.</para>
 /// <para>
 /// <b>Reference:</b> Tashiro et al., "CSDI: Conditional Score-based Diffusion Models for Probabilistic Time Series Imputation", NeurIPS 2021.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a CSDI conditional score-based diffusion model for time series imputation
+/// // Uses score-matching for probabilistic forecasting and missing value imputation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with conditional score-based diffusion
+/// var model = new CSDI&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new CSDI&lt;double&gt;(architecture, "csdi.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -245,7 +266,7 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
             var output = ForwardNative(input);
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
             _optimizer.UpdateParameters(Layers);
         }
         finally { SetTrainingMode(false); }
@@ -258,7 +279,6 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.NeuralNetwork,
         AdditionalInfo = new Dictionary<string, object>
         {
             { "NetworkType", "CSDI" }, { "SequenceLength", _sequenceLength },
@@ -337,7 +357,7 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         for (int b = 0; b < batchSize; b++)
         {
             T mean = NumOps.Zero;

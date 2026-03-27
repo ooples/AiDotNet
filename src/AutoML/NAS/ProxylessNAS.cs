@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.AutoML.SearchSpace;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -16,6 +18,28 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "ProxylessNAS: Direct Neural Architecture Search on Target Task and Hardware" (ICLR 2019)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> ProxylessNAS searches for architectures directly on the
+    /// target task and hardware, eliminating the need for proxy tasks. Most NAS methods
+    /// search on small datasets then transfer, but ProxylessNAS searches on the full task.
+    /// Think of it as test-driving cars on the actual roads you will drive rather than a
+    /// parking lot. It uses path binarization to keep memory usage manageable.</para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
+    /// var nas = new ProxylessNAS&lt;float&gt;(searchSpace, numNodes: 4, targetPlatform: HardwarePlatform.Mobile);
+    /// Architecture&lt;float&gt; architecture = nas.DeriveArchitecture();
+    /// HardwareCost&lt;float&gt; cost = nas.EstimateArchitectureCost(inputChannels: 32, spatialSize: 224);
+    /// </code>
+    /// </example>
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.Optimization)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     public class ProxylessNAS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;

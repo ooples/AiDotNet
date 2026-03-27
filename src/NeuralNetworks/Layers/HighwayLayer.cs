@@ -1,4 +1,6 @@
 using System.Linq;
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -30,6 +32,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Dense)]
+[LayerCategory(LayerCategory.Gating)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -343,7 +349,8 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// - Negative biases for the gates (initially favoring the transform path)
     /// </para>
     /// </remarks>
-    public HighwayLayer(int inputDimension, IActivationFunction<T>? transformActivation = null, IActivationFunction<T>? gateActivation = null)
+    public HighwayLayer(int inputDimension, IActivationFunction<T>? transformActivation = null, IActivationFunction<T>? gateActivation = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputDimension], [inputDimension], transformActivation ?? new TanhActivation<T>())
     {
         AuxiliaryLossWeight = NumOps.FromDouble(0.01);
@@ -356,6 +363,7 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         _transformActivation = transformActivation ?? new TanhActivation<T>();
         _gateActivation = gateActivation ?? new SigmoidActivation<T>();
+        InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
 
         InitializeParameters();
 
@@ -439,15 +447,14 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private void InitializeParameters()
     {
         int inputDimension = _transformWeights.Shape[0];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (inputDimension + inputDimension)));
-        InitializeTensor(_transformWeights, scale);
-        InitializeTensor(_gateWeights, scale);
+        InitializeLayerWeights(_transformWeights, inputDimension, inputDimension);
+        InitializeLayerWeights(_gateWeights, inputDimension, inputDimension);
+        InitializeLayerBiases(_transformBias);
 
-        for (int i = 0; i < _transformBias.Length; i++)
-        {
-            _transformBias[i] = NumOps.Zero;
-            _gateBias[i] = NumOps.FromDouble(-1.0); // Initialize gate bias to negative values to allow more information flow initially
-        }
+        // Gate bias initialized to -1.0 (not zero) to allow information flow initially
+        var gateBiasSpan = _gateBias.AsWritableSpan();
+        for (int i = 0; i < gateBiasSpan.Length; i++)
+            gateBiasSpan[i] = NumOps.FromDouble(-1.0);
     }
 
     /// <summary>
@@ -594,7 +601,7 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Apply default tanh
             var tanhBuffer = backend.AllocateBuffer(size);
             backend.Tanh(transformPreActivation.Buffer, tanhBuffer, size);
-            transformOutput = new GpuTensor<T>(backend, tanhBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+            transformOutput = new GpuTensor<T>(backend, tanhBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
         }
 
         // Gate path: gateLinear = input @ gateWeights + gateBias
@@ -617,7 +624,7 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Apply default sigmoid
             var sigmoidBuffer = backend.AllocateBuffer(size);
             backend.Sigmoid(gatePreActivation.Buffer, sigmoidBuffer, size);
-            gateOutput = new GpuTensor<T>(backend, sigmoidBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+            gateOutput = new GpuTensor<T>(backend, sigmoidBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
         }
 
         // Highway output: output = gate * (transform - input) + input
@@ -646,7 +653,7 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _gpuGateOutput = gateOutput;
             _gpuTransformPreActivation = transformPreActivation;
             _gpuGatePreActivation = gatePreActivation;
-            _gpuInputShape = input.Shape;
+            _gpuInputShape = input.Shape.ToArray();
 
             // Also cache CPU tensors for CPU backward compatibility
             _lastInput = input.ToTensor();
@@ -656,7 +663,7 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _lastGatePreActivation = gatePreActivation.ToTensor();
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, input.Shape, GpuTensorRole.Activation, ownsBuffer: true);
+        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -1039,7 +1046,7 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var inputGradFromTransform = transformGradient.MatrixMultiply(transformWeightsT);
 
         // (1 - gate) contribution
-        var ones = Tensor<T>.CreateDefault(_lastGateOutput.Shape, NumOps.One);
+        var ones = Tensor<T>.CreateDefault(_lastGateOutput.Shape.ToArray(), NumOps.One);
         var oneMinusGate = Engine.TensorSubtract(ones, _lastGateOutput);
         var bypassGradient = Engine.TensorMultiply(outputGradient, oneMinusGate);
 
@@ -1209,16 +1216,16 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         int index = 0;
 
-        _transformWeights = new Tensor<T>(_transformWeights.Shape, parameters.Slice(index, transformWeightsSize));
+        _transformWeights = new Tensor<T>(_transformWeights.Shape.ToArray(), parameters.Slice(index, transformWeightsSize));
         index += transformWeightsSize;
 
-        _transformBias = new Tensor<T>(_transformBias.Shape, parameters.Slice(index, _transformBias.Length));
+        _transformBias = new Tensor<T>(_transformBias.Shape.ToArray(), parameters.Slice(index, _transformBias.Length));
         index += _transformBias.Length;
 
-        _gateWeights = new Tensor<T>(_gateWeights.Shape, parameters.Slice(index, gateWeightsSize));
+        _gateWeights = new Tensor<T>(_gateWeights.Shape.ToArray(), parameters.Slice(index, gateWeightsSize));
         index += gateWeightsSize;
 
-        _gateBias = new Tensor<T>(_gateBias.Shape, parameters.Slice(index, _gateBias.Length));
+        _gateBias = new Tensor<T>(_gateBias.Shape.ToArray(), parameters.Slice(index, _gateBias.Length));
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_transformWeights);
@@ -1251,6 +1258,25 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// you should reset the state to prevent the new processing from being influenced by the previous batch.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_transformWeightsGradient == null || _transformBiasGradient == null ||
+            _gateWeightsGradient == null || _gateBiasGradient == null)
+            return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_transformWeightsGradient.ToArray()),
+            new Vector<T>(_transformBiasGradient.ToArray()),
+            new Vector<T>(_gateWeightsGradient.ToArray()),
+            new Vector<T>(_gateBiasGradient.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _transformWeightsGradient = null; _transformBiasGradient = null;
+        _gateWeightsGradient = null; _gateBiasGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

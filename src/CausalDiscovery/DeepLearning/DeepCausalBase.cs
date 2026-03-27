@@ -45,6 +45,31 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
     protected double EdgeThreshold { get; set; } = 0.1;
 
     /// <summary>
+    /// Initial log-variance for variational parameters.
+    /// </summary>
+    protected double InitialLogVariance { get; set; } = -4.0;
+
+    /// <summary>
+    /// Default KL divergence weight for variational regularization.
+    /// </summary>
+    protected double DefaultKlWeight { get; set; } = 0.01;
+
+    /// <summary>
+    /// Maximum KL divergence weight after warm-up schedule.
+    /// </summary>
+    protected double MaxKlWeight { get; set; } = 0.25;
+
+    /// <summary>
+    /// Whether to use KL weight warm-up schedule to prevent posterior collapse.
+    /// </summary>
+    protected bool UseKlWarmUp { get; set; } = true;
+
+    /// <summary>
+    /// Maximum penalty parameter (rho_max) for augmented Lagrangian methods.
+    /// </summary>
+    protected double MaxPenaltyValue { get; set; } = 1e+16;
+
+    /// <summary>
     /// Applies deep learning options.
     /// </summary>
     protected void ApplyDeepOptions(Models.Options.CausalDiscoveryOptions? options)
@@ -52,14 +77,62 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
         if (options == null) return;
         if (options.MaxIterations.HasValue) MaxEpochs = options.MaxIterations.Value;
         if (options.MaxEpochs.HasValue) MaxEpochs = options.MaxEpochs.Value;
-        if (options.LearningRate.HasValue) LearningRate = options.LearningRate.Value;
         if (options.HiddenUnits.HasValue)
         {
             if (options.HiddenUnits.Value <= 0)
                 throw new ArgumentException("HiddenUnits must be greater than 0.");
             HiddenUnits = options.HiddenUnits.Value;
         }
-        if (options.EdgeThreshold.HasValue) EdgeThreshold = options.EdgeThreshold.Value;
+        if (options.EdgeThreshold.HasValue)
+        {
+            if (double.IsNaN(options.EdgeThreshold.Value) || options.EdgeThreshold.Value < 0 || options.EdgeThreshold.Value > 1)
+                throw new ArgumentException("EdgeThreshold must be a finite value between 0 and 1.");
+            EdgeThreshold = options.EdgeThreshold.Value;
+        }
+        if (options.LearningRate.HasValue)
+        {
+            if (double.IsNaN(options.LearningRate.Value) || options.LearningRate.Value <= 0)
+                throw new ArgumentException("LearningRate must be a positive finite value.");
+            LearningRate = options.LearningRate.Value;
+        }
+        if (options.InitialLogVariance.HasValue) InitialLogVariance = options.InitialLogVariance.Value;
+        if (options.DefaultKlWeight.HasValue) DefaultKlWeight = options.DefaultKlWeight.Value;
+        if (options.MaxKlWeight.HasValue) MaxKlWeight = options.MaxKlWeight.Value;
+        if (options.UseKlWarmUp.HasValue) UseKlWarmUp = options.UseKlWarmUp.Value;
+        if (options.MaxPenalty.HasValue) MaxPenaltyValue = options.MaxPenalty.Value;
+    }
+
+    /// <summary>
+    /// Builds the final weighted adjacency matrix from learned edge probabilities and covariance.
+    /// Uses learned P for directionality when training converged, falls back to asymmetric
+    /// covariance ratio for directionality otherwise.
+    /// </summary>
+    /// <param name="learnedP">Learned edge probability matrix [d x d] (values in [0,1]).</param>
+    /// <param name="cov">Covariance matrix [d x d].</param>
+    /// <param name="d">Number of variables.</param>
+    /// <returns>Weighted adjacency matrix.</returns>
+    protected Matrix<T> BuildFinalAdjacency(double[,] learnedP, Matrix<T> cov, int d)
+    {
+        var result = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+            {
+                if (i == j) continue;
+                double varI = NumOps.ToDouble(cov[i, i]);
+                if (varI < 1e-10) continue;
+                double covIJ = NumOps.ToDouble(cov[i, j]);
+                double weight = covIJ / varI;
+                if (Math.Abs(weight) < EdgeThreshold) continue;
+
+                double varJ = NumOps.ToDouble(cov[j, j]);
+                double reverseWeight = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
+                bool learnedDirection = learnedP[i, j] >= learnedP[j, i];
+                bool statisticalDirection = Math.Abs(weight) >= reverseWeight;
+
+                if (learnedDirection || statisticalDirection)
+                    result[i, j] = NumOps.FromDouble(weight);
+            }
+        return result;
     }
 
 }

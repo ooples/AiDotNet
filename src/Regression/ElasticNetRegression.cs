@@ -42,6 +42,17 @@ namespace AiDotNet.Regression;
 /// ```
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new ElasticNetRegressionOptions&lt;double&gt;();
+/// var model = new ElasticNetRegression&lt;double&gt;(options);
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.1, 3.9, 6.2, 7.8, 10.1 });
+/// model.Train(features, targets);
+/// var prediction = model.Predict(Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 }));
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelCategory(ModelCategory.Regularization)]
@@ -170,12 +181,9 @@ public class ElasticNetRegression<T> : RegressionBase<T>
         var residuals = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
-            T prediction = NumOps.Zero;
-            for (int j = 0; j < p; j++)
-            {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(xProcessed[i, j], w[j]));
-            }
-            residuals[i] = NumOps.Subtract(y[i], prediction);
+            var row = new Vector<T>(p);
+            for (int j2 = 0; j2 < p; j2++) row[j2] = xProcessed[i, j2];
+            residuals[i] = NumOps.Subtract(y[i], Engine.DotProduct(row, w));
         }
 
         T alpha = NumOps.FromDouble(Options.Alpha);
@@ -199,12 +207,10 @@ public class ElasticNetRegression<T> : RegressionBase<T>
                     residuals[i] = NumOps.Add(residuals[i], NumOps.Multiply(xProcessed[i, j], oldW));
                 }
 
-                // Compute correlation with residuals
-                T rho = NumOps.Zero;
-                for (int i = 0; i < n; i++)
-                {
-                    rho = NumOps.Add(rho, NumOps.Multiply(xProcessed[i, j], residuals[i]));
-                }
+                // Compute correlation: rho = x[:,j]' * residuals
+                var xCol = new Vector<T>(n);
+                for (int i = 0; i < n; i++) xCol[i] = xProcessed[i, j];
+                T rho = Engine.DotProduct(xCol, residuals);
 
                 // Apply elastic net soft-thresholding (don't regularize intercept)
                 // Intercept or zero column gets no regularization; otherwise apply elastic net
@@ -315,14 +321,6 @@ public class ElasticNetRegression<T> : RegressionBase<T>
         return metadata;
     }
 
-    /// <summary>
-    /// Gets the model type identifier.
-    /// </summary>
-    /// <returns>The ModelType enumeration value for Elastic Net Regression.</returns>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.ElasticNetRegression;
-    }
 
     /// <summary>
     /// Creates a new instance of Elastic Net Regression with the same configuration.

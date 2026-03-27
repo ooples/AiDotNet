@@ -20,6 +20,14 @@ namespace AiDotNet.NeuralNetworks;
 /// competitive quality to Transformer models.</para>
 /// <para><b>Reference:</b> Peng et al., "RWKV-7 Goose with Expressive Dynamic State Evolution", 2025.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new RWKV7Options { VocabSize = 65536, ModelDim = 4096, NumLayers = 32 };
+/// var model = new RWKV7LanguageModel&lt;float&gt;(options);
+/// var tokens = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var logits = model.Predict(tokens);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -156,7 +164,6 @@ public class RWKV7LanguageModel<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Architecture", "RWKV-7-Goose" },

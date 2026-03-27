@@ -415,7 +415,6 @@ public class HunyuanVideoModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "HunyuanVideo",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "HunyuanVideo dual-stream DiT video generation with 3D causal VAE",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

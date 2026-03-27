@@ -42,7 +42,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 ///     confidenceScore: 0.8
 /// );
 /// var score = metric.Evaluate(answer);
-/// Console.WriteLine($"Robustness: {score} (higher means better at filtering noise)");
+/// // Result is available in the returned value
 /// ```
 /// 
 /// Why this matters:

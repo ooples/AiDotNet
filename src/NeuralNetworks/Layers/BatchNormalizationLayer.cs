@@ -1,3 +1,6 @@
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -36,6 +39,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for computations (e.g., float, double).</typeparam>
+[LayerCategory(LayerCategory.Normalization)]
+[LayerTask(LayerTask.ActivationNormalization)]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
 public class BatchNormalizationLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -343,7 +349,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for backward pass restoration
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         // Auto-reshape 1D input to [1, N] for batch normalization compatibility
         _inputWas1D = input.Shape.Length == 1;
@@ -383,8 +389,8 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
                     newVarData[i] = i < copyLen ? batchVariance.Data.Span[i] : varFillValue;
                 }
 
-                batchMean = new Tensor<T>(_runningMean.Shape, new Vector<T>(newMeanData));
-                batchVariance = new Tensor<T>(_runningVariance.Shape, new Vector<T>(newVarData));
+                batchMean = new Tensor<T>(_runningMean.Shape.ToArray(), new Vector<T>(newMeanData));
+                batchVariance = new Tensor<T>(_runningVariance.Shape.ToArray(), new Vector<T>(newVarData));
             }
 
             // Update running statistics using Exponential Moving Average (Vectorized)
@@ -413,7 +419,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             // output = gamma * (input - runningMean) / sqrt(runningVar + epsilon) + beta
 
             // Calculate scale and shift terms
-            var epsilonVec = Tensor<T>.CreateDefault(_runningVariance.Shape, _epsilon);
+            var epsilonVec = Tensor<T>.CreateDefault(_runningVariance.Shape.ToArray(), _epsilon);
             var variancePlusEps = Engine.TensorAdd(_runningVariance, epsilonVec);
             var stdDev = Engine.TensorSqrt(variancePlusEps);
 
@@ -458,7 +464,10 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         var inputData = input.Data.Span;
         var scaleData = scale.Data.Span;
         var shiftData = shift.Data.Span;
-        var outputData = new T[inputData.Length];
+
+        // Rent output tensor (fully overwritten) and write via Span
+        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
+        var outputData = output.Data.Span;
 
         for (int n = 0; n < batch; n++)
         {
@@ -477,7 +486,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             }
         }
 
-        return new Tensor<T>(input.Shape, new Vector<T>(outputData));
+        return output;
     }
 
     /// <summary>
@@ -650,7 +659,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         }
 
         // Save original shape for restoring at the end
-        int[] originalInputShape = _lastInput.Shape;
+        int[] originalInputShape = _lastInput.Shape.ToArray();
 
         // Ensure shapes match for backward pass
         var adjustedGradient = outputGradient;
@@ -685,8 +694,11 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
                 permuteOrder[d - 1] = d; // spatial dims
             permuteOrder[_lastInput.Shape.Length - 1] = 1; // C goes last
 
-            adjustedGradient = outputGradient.Transpose(permuteOrder).Reshape(batchSize, numFeatures);
-            adjustedInput = _lastInput.Transpose(permuteOrder).Reshape(batchSize, numFeatures);
+            // Clone after transpose to ensure contiguous memory layout before reshape.
+            // Transpose may return a non-contiguous view, and Reshape on non-contiguous
+            // data produces incorrect results (data elements are read in wrong order).
+            adjustedGradient = outputGradient.Transpose(permuteOrder).Clone().Reshape(batchSize, numFeatures);
+            adjustedInput = _lastInput.Transpose(permuteOrder).Clone().Reshape(batchSize, numFeatures);
         }
         else
         {
@@ -750,7 +762,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             {
                 meanData[i] = i < copyLen ? adjustedMean.Data.Span[i] : meanFillValue;
             }
-            adjustedMean = new Tensor<T>(_gamma.Shape, new Vector<T>(meanData));
+            adjustedMean = new Tensor<T>(_gamma.Shape.ToArray(), new Vector<T>(meanData));
         }
 
         if (adjustedVariance.Length != numFeatures)
@@ -762,7 +774,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             {
                 varData[i] = i < copyLen ? adjustedVariance.Data.Span[i] : varFillValue;
             }
-            adjustedVariance = new Tensor<T>(_gamma.Shape, new Vector<T>(varData));
+            adjustedVariance = new Tensor<T>(_gamma.Shape.ToArray(), new Vector<T>(varData));
         }
 
         // Use Engine for GPU/CPU accelerated Batch Normalization Backward
@@ -798,7 +810,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             inverseOrder[1] = originalInputShape.Length - 1; // C was last, goes to dim 1
             for (int d = 2; d < originalInputShape.Length; d++)
                 inverseOrder[d] = d - 1; // spatial dims shift right
-            inputGradient = inputGradient.Transpose(inverseOrder);
+            inputGradient = inputGradient.Transpose(inverseOrder).Clone();
         }
         else if (_inputWas1D && inputGradient.Shape.Length > 1)
         {
@@ -1064,13 +1076,13 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
 
             if (_gammaVelocity == null)
             {
-                _gammaVelocity = new Tensor<T>(_gamma.Shape);
+                _gammaVelocity = new Tensor<T>(_gamma.Shape.ToArray());
                 _gammaVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_gammaVelocity, PersistentTensorRole.OptimizerState);
             }
             if (_betaVelocity == null)
             {
-                _betaVelocity = new Tensor<T>(_beta.Shape);
+                _betaVelocity = new Tensor<T>(_beta.Shape.ToArray());
                 _betaVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_betaVelocity, PersistentTensorRole.OptimizerState);
             }
@@ -1131,6 +1143,20 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// long-term learning.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_gammaGradient == null || _betaGradient == null)
+            return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _gammaGradient = null;
+        _betaGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear CPU cached values

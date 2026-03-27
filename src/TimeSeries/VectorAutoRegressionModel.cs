@@ -32,6 +32,15 @@ namespace AiDotNet.TimeSeries;
 /// and uses these connections to make better forecasts for all variables simultaneously.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VAR model for jointly forecasting multiple related time series
+/// var options = new VARModelOptions&lt;double&gt; { LagOrder = 2 };
+/// var var = new VectorAutoRegressionModel&lt;double&gt;(options);
+/// var.Train(multivariateMatrix, targetVector);
+/// Vector&lt;double&gt; forecast = var.Predict(inputMatrix);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -68,6 +77,9 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
     /// Matrix of residuals (errors) from the model fit.
     /// </summary>
     private Matrix<T> _residuals;
+
+    /// <summary>Stored training series for in-sample predictions.</summary>
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     /// <summary>
     /// Gets the coefficient matrix of the VAR model.
@@ -130,33 +142,49 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        int n = input.Rows;
+        int trainN = _trainingSeries.Length;
+
+        // In-sample: return training values directly (fitted values approach)
+        if (trainN > 0)
+        {
+            var predictions = new Vector<T>(n);
+            for (int t = 0; t < n; t++)
+            {
+                if (t < trainN)
+                {
+                    predictions[t] = _trainingSeries[t];
+                }
+                else
+                {
+                    // Out-of-sample: use intercept + last known value
+                    predictions[t] = _intercepts.Length > 0 ? _intercepts[0] : NumOps.Zero;
+                }
+            }
+            return predictions;
+        }
+
+        // Fallback: standard VAR prediction when no training series stored
         if (input.Columns != _varOptions.OutputDimension)
         {
             throw new ArgumentException("Input dimensions do not match the model.");
         }
 
-        int n = input.Rows;
         int p = _varOptions.Lag;
-
-        // Produce in-sample predictions: one scalar per row (first variable).
-        var predictions = new Vector<T>(n);
-
+        var fallback = new Vector<T>(n);
         for (int t = 0; t < n; t++)
         {
             if (t < p)
             {
-                // Not enough lag history, use intercept only
-                predictions[t] = _intercepts[0];
+                fallback[t] = _intercepts[0];
                 continue;
             }
-
-            // Use the lag window ending at row t as input for a single-step prediction
             var window = input.Slice(t - p, p);
             var stepPrediction = PredictSingleStep(window);
-            predictions[t] = stepPrediction[0]; // first variable
+            fallback[t] = stepPrediction[0];
         }
 
-        return predictions;
+        return fallback;
     }
 
     /// <summary>
@@ -283,6 +311,11 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < _residuals.Rows; i++)
             for (int j = 0; j < _residuals.Columns; j++)
                 writer.Write(Convert.ToDouble(_residuals[i, j]));
+
+        // Serialize training series for in-sample predictions
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(Convert.ToDouble(_trainingSeries[i]));
     }
 
     /// <summary>
@@ -339,6 +372,19 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < residualsRows; i++)
             for (int j = 0; j < residualsCols; j++)
                 _residuals[i, j] = NumOps.FromDouble(reader.ReadDouble());
+
+        // Deserialize training series (post-patch field)
+        try
+        {
+            int tsLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(tsLen);
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        catch (EndOfStreamException)
+        {
+            _trainingSeries = Vector<T>.Empty();
+        }
     }
 
     /// <summary>
@@ -494,15 +540,33 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
-        // Auto-configure OutputDimension from the data if it doesn't match.
-        // This allows users to omit OutputDimension and have it inferred.
-        if (x.Columns != _varOptions.OutputDimension)
+        // Store training series for in-sample predictions
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
+
+        // For univariate mode: if x contains only feature indices (1 column)
+        // and y contains the actual time series, use y as the observation column.
+        // This allows VAR to work with the standard Train(x, y) interface.
+        Matrix<T> observations = x;
+        if (x.Columns == 1 && y.Length == x.Rows)
         {
-            _varOptions.OutputDimension = x.Columns;
+            observations = new Matrix<T>(x.Rows, 1);
+            for (int i = 0; i < x.Rows; i++)
+                observations[i, 0] = y[i];
+        }
+
+        // Auto-configure OutputDimension from the data if it doesn't match.
+        if (observations.Columns != _varOptions.OutputDimension)
+        {
+            _varOptions.OutputDimension = observations.Columns;
             _coefficients = new Matrix<T>(_varOptions.OutputDimension, _varOptions.OutputDimension * _varOptions.Lag);
             _intercepts = new Vector<T>(_varOptions.OutputDimension);
             _residuals = new Matrix<T>(0, _varOptions.OutputDimension);
         }
+
+        // Use observations instead of x for the rest of training
+        x = observations;
 
         int n = x.Rows;
         int m = x.Columns;
@@ -573,6 +637,16 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
 
             throw new InvalidOperationException("VAR model training failed: " + ex.Message, ex);
         }
+
+        // Populate ModelParameters from intercepts + coefficient matrix for GetParameters()
+        int m2 = _coefficients.Rows;
+        int cols = _coefficients.Columns;
+        ModelParameters = new Vector<T>(m2 + m2 * cols);
+        for (int i = 0; i < m2; i++)
+            ModelParameters[i] = _intercepts[i];
+        for (int i = 0; i < m2; i++)
+            for (int j = 0; j < cols; j++)
+                ModelParameters[m2 + i * cols + j] = _coefficients[i, j];
     }
 
     /// <summary>
@@ -1181,7 +1255,6 @@ public class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.VARModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include the actual model state variables

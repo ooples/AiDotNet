@@ -252,7 +252,6 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         {
             Name = _useNativeMode ? "SpikingFullSubNet-Native" : "SpikingFullSubNet-ONNX",
             Description = "Spiking-FullSubNet speech enhancement with spiking neural networks (2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumFreqBins,
             Complexity = _options.NumFullBandLayers + _options.NumSubBandLayers
         };
         m.AdditionalInfo["SpikingThreshold"] = _options.SpikingThreshold.ToString();
@@ -302,7 +301,7 @@ public class SpikingFullSubNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
     private Tensor<T> ApplyMask(Tensor<T> stft, Tensor<T> mask)
     {
-        var result = new Tensor<T>(stft.Shape);
+        var result = new Tensor<T>(stft.Shape.ToArray());
         for (int i = 0; i < Math.Min(stft.Length, mask.Length); i++)
             result[i] = NumOps.Multiply(stft[i], mask[i]);
         return result;

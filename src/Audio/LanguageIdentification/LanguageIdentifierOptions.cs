@@ -28,7 +28,7 @@ namespace AiDotNet.Audio.LanguageIdentification;
 /// };
 /// var model = new ECAPATDNNLanguageIdentifier&lt;float&gt;(options);
 /// var result = model.IdentifyLanguage(audio);
-/// Console.WriteLine($"Language: {result.LanguageCode} ({result.Confidence:P0})");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

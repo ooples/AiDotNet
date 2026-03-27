@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -60,6 +62,11 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerCategory(LayerCategory.Recurrent)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
 public class ExtendedLSTMLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
@@ -160,12 +167,15 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
         int sequenceLength,
         int modelDimension = 256,
         int numHeads = 8,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, modelDimension],
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         if (modelDimension <= 0)
             throw new ArgumentException($"Model dimension ({modelDimension}) must be positive.", nameof(modelDimension));
         if (numHeads <= 0)
@@ -211,17 +221,13 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
 
     private void InitializeTensor(Tensor<T> tensor)
     {
-        int fanIn = tensor.Shape[0];
-        int fanOut = tensor.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
     }
 
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -238,7 +244,7 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
 
         _lastInput = input3D;
 
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T scaleK = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
 
         // Matrix cell state per head: C[batch, head, headDim, headDim]
@@ -300,15 +306,14 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
 
                 for (int bi = 0; bi < batchSize; bi++)
                 {
-                    T iVal = iGate[new[] { bi, dimStart }];  // Use head-level gate
+                    // iGate is already exp(raw) from line 275 — don't double-apply exp
+                    T iVal = iGate[new[] { bi, dimStart }];
                     T fVal = fGate[new[] { bi, dimStart }];
                     T oVal = oGate[new[] { bi, dimStart }];
 
-                    // Clamp input gate pre-activation before exp to prevent overflow
-                    // exp(20) ≈ 4.85e8 which is safe; exp(>88) overflows float
-                    double iRaw = NumOps.ToDouble(iVal);
-                    double iClampedExp = Math.Exp(Math.Min(iRaw, 20.0));
-                    iVal = NumOps.FromDouble(iClampedExp);
+                    // Clamp exp gate to prevent overflow (already exp'd, just clamp the value)
+                    double iDouble = NumOps.ToDouble(iVal);
+                    if (iDouble > 4.85e8) iVal = NumOps.FromDouble(4.85e8); // exp(20) limit
 
                     // Matrix cell update: C = f * C + i * (v outer k)
                     for (int di = 0; di < _headDimension; di++)
@@ -439,7 +444,7 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
             .Reshape(batchSize, seqLen, _modelDimension);
 
         // Accumulate input gradient through all projection paths
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // Running cell/norm state gradients for BPTT
         var dCellState = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
@@ -574,7 +579,7 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
             var dIGateRaw = Engine.TensorMultiply(dIGate, iGate);
 
             // Sigmoid derivative: sig(x) * (1 - sig(x))
-            var ones = new Tensor<T>(fGate.Shape);
+            var ones = new Tensor<T>(fGate.Shape.ToArray());
             for (int idx = 0; idx < ones.Length; idx++) ones[idx] = NumOps.One;
             var fSigDeriv = Engine.TensorMultiply(fGate, Engine.TensorSubtract(ones, fGate));
             var dFGateRaw = Engine.TensorMultiply(dFGate, fSigDeriv);
@@ -678,6 +683,37 @@ public class ExtendedLSTMLayer<T> : LayerBase<T>
         _queryWeights, _keyWeights, _valueWeights,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_inputGateWeightsGradient == null) return new Vector<T>(ParameterCount);
+
+        Vector<T> G(Tensor<T>? grad, Tensor<T> param) =>
+            grad != null ? new Vector<T>(grad.ToArray()) : new Vector<T>(param.Length);
+
+        return Vector<T>.Concatenate(
+            G(_inputGateWeightsGradient, _inputGateWeights),
+            G(_inputGateBiasGradient, _inputGateBias),
+            G(_forgetGateWeightsGradient, _forgetGateWeights),
+            G(_forgetGateBiasGradient, _forgetGateBias),
+            G(_outputGateWeightsGradient, _outputGateWeights),
+            G(_outputGateBiasGradient, _outputGateBias),
+            G(_queryWeightsGradient, _queryWeights),
+            G(_keyWeightsGradient, _keyWeights),
+            G(_valueWeightsGradient, _valueWeights),
+            G(_outputProjectionWeightsGradient, _outputProjectionWeights),
+            G(_outputProjectionBiasGradient, _outputProjectionBias));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _inputGateWeightsGradient = null; _inputGateBiasGradient = null;
+        _forgetGateWeightsGradient = null; _forgetGateBiasGradient = null;
+        _outputGateWeightsGradient = null; _outputGateBiasGradient = null;
+        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

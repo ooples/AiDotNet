@@ -43,7 +43,7 @@ These values should prevent overfitting while capturing the key patterns.";
 
         // Act: Parse LLM response and apply to model
         var hyperparams = parser.Parse(llmResponse);
-        var result = applicator.Apply(model, ModelType.DecisionTree, hyperparams);
+        var result = applicator.Apply(model, typeof(AiDotNet.Regression.DecisionTreeRegression<>), hyperparams);
 
         // Assert: Verify hyperparameters were applied to the real options object
         Assert.True(result.HasAppliedParameters);
@@ -72,7 +72,7 @@ These values should prevent overfitting while capturing the key patterns.";
 
         // Act
         var hyperparams = parser.Parse(llmResponse);
-        var result = applicator.Apply(model, ModelType.GradientBoosting, hyperparams);
+        var result = applicator.Apply(model, typeof(AiDotNet.Regression.GradientBoostingRegression<>), hyperparams);
 
         // Assert: All 4 parameters should be applied
         Assert.True(result.HasAppliedParameters);
@@ -101,7 +101,7 @@ min_samples_split: 10";
 
         // Act
         var hyperparams = parser.Parse(llmResponse);
-        var result = applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         // Assert
         Assert.True(result.HasAppliedParameters);
@@ -126,7 +126,7 @@ min_samples_split: 10";
 
         // Act
         var hyperparams = parser.Parse(llmResponse);
-        var result = applicator.Apply(model, ModelType.KNearestNeighbors, hyperparams);
+        var result = applicator.Apply(model, typeof(AiDotNet.Regression.KNearestNeighborsRegression<>), hyperparams);
 
         // Assert
         Assert.True(result.HasAppliedParameters);
@@ -150,7 +150,7 @@ min_samples_split: 10";
 
         // Act
         var hyperparams = parser.Parse(llmResponse);
-        var result = applicator.Apply(model, ModelType.SupportVectorRegression, hyperparams);
+        var result = applicator.Apply(model, typeof(AiDotNet.Regression.SupportVectorRegression<>), hyperparams);
 
         // Assert
         Assert.True(result.HasAppliedParameters);
@@ -292,7 +292,7 @@ min_samples_split: 10";
         var applicator = new AgentHyperparameterApplicator<double>(registry);
 
         var hyperparams = parser.Parse(llmResponse);
-        var result = applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         // Values should still be applied (warnings, not errors)
         Assert.True(result.HasAppliedParameters);
@@ -327,7 +327,7 @@ min_samples_split: 10";
         var applicator = new AgentHyperparameterApplicator<double>(registry);
 
         var hyperparams = parser.Parse(llmResponse);
-        var result = applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         // Known params applied
         Assert.Equal(2, result.Applied.Count);
@@ -364,7 +364,7 @@ n_estimators: 150";
         Assert.IsType<int>(hyperparams["max_depth"]);
         Assert.IsType<int>(hyperparams["n_estimators"]);
 
-        var result = applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         Assert.True(result.HasAppliedParameters);
         Assert.Equal(8, options.MaxDepth);
@@ -386,7 +386,7 @@ n_estimators: 150";
         var applicator = new AgentHyperparameterApplicator<double>(registry);
 
         var hyperparams = parser.Parse(llmResponse);
-        var result = applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         Assert.True(result.HasAppliedParameters);
         Assert.Equal(8, options.MaxDepth);
@@ -408,7 +408,7 @@ n_estimators: 150";
         var applicator = new AgentHyperparameterApplicator<double>(registry);
 
         var hyperparams = parser.Parse(llmResponse);
-        var result = applicator.Apply(model, ModelType.GradientBoosting, hyperparams);
+        var result = applicator.Apply(model, typeof(AiDotNet.Regression.GradientBoostingRegression<>), hyperparams);
 
         Assert.True(result.HasAppliedParameters);
         Assert.Equal(1.0, options.LearningRate);
@@ -434,7 +434,7 @@ n_estimators: 150";
         var dtOptions = new DecisionTreeOptions();
         var dtModel = new DecisionTreeRegression<double>(dtOptions);
         var dtApplicator = new AgentHyperparameterApplicator<double>(registry);
-        var dtResult = dtApplicator.Apply(dtModel, ModelType.DecisionTree, hyperparams);
+        var dtResult = dtApplicator.Apply(dtModel, typeof(AiDotNet.Regression.DecisionTreeRegression<>), hyperparams);
         Assert.Equal(42, dtOptions.Seed);
         Assert.True(dtResult.HasAppliedParameters);
 
@@ -442,7 +442,7 @@ n_estimators: 150";
         var gbOptions = new GradientBoostingRegressionOptions();
         var gbModel = new GradientBoostingRegression<double>(gbOptions);
         var gbApplicator = new AgentHyperparameterApplicator<double>(registry);
-        var gbResult = gbApplicator.Apply(gbModel, ModelType.GradientBoosting, hyperparams);
+        var gbResult = gbApplicator.Apply(gbModel, typeof(AiDotNet.Regression.GradientBoostingRegression<>), hyperparams);
         Assert.Equal(42, gbOptions.Seed);
         Assert.True(gbResult.HasAppliedParameters);
 
@@ -450,7 +450,7 @@ n_estimators: 150";
         var knnOptions = new KNearestNeighborsOptions();
         var knnModel = new KNearestNeighborsRegression<double>(knnOptions);
         var knnApplicator = new AgentHyperparameterApplicator<double>(registry);
-        var knnResult = knnApplicator.Apply(knnModel, ModelType.KNearestNeighbors, hyperparams);
+        var knnResult = knnApplicator.Apply(knnModel, typeof(AiDotNet.Regression.KNearestNeighborsRegression<>), hyperparams);
         Assert.Equal(42, knnOptions.Seed);
         Assert.True(knnResult.HasAppliedParameters);
     }
@@ -477,7 +477,7 @@ n_estimators: 150";
         var applicator = new AgentHyperparameterApplicator<double>(registry);
 
         var hyperparams = parser.Parse(llmResponse);
-        var result = applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
         var summary = result.GetSummary();
 
         // Summary should mention applied params
@@ -515,7 +515,7 @@ n_estimators: 150";
 
         foreach (var (alias, expectedProp) in aliases)
         {
-            var propertyName = registry.GetPropertyName(ModelType.RandomForest, alias);
+            var propertyName = registry.GetPropertyName(typeof(AiDotNet.Regression.RandomForestRegression<>), alias);
             Assert.NotNull(propertyName);
             Assert.Equal(expectedProp, propertyName);
 
@@ -544,7 +544,7 @@ n_estimators: 150";
 
         foreach (var (alias, expectedProp) in aliases)
         {
-            var propertyName = registry.GetPropertyName(ModelType.GradientBoosting, alias);
+            var propertyName = registry.GetPropertyName(typeof(AiDotNet.Regression.GradientBoostingRegression<>), alias);
             Assert.NotNull(propertyName);
             Assert.Equal(expectedProp, propertyName);
 
@@ -569,7 +569,7 @@ n_estimators: 150";
 
         foreach (var (alias, expectedProp) in aliases)
         {
-            var propertyName = registry.GetPropertyName(ModelType.KNearestNeighbors, alias);
+            var propertyName = registry.GetPropertyName(typeof(AiDotNet.Regression.KNearestNeighborsRegression<>), alias);
             Assert.NotNull(propertyName);
 
             var prop = optionsType.GetProperty(propertyName);
@@ -594,7 +594,7 @@ n_estimators: 150";
 
         foreach (var (alias, expectedProp) in aliases)
         {
-            var propertyName = registry.GetPropertyName(ModelType.SupportVectorRegression, alias);
+            var propertyName = registry.GetPropertyName(typeof(AiDotNet.Regression.SupportVectorRegression<>), alias);
             Assert.NotNull(propertyName);
 
             var prop = optionsType.GetProperty(propertyName);
@@ -646,7 +646,7 @@ performance and adjusting if needed.";
         var applicator = new AgentHyperparameterApplicator<double>(registry);
 
         var hyperparams = parser.Parse(llmResponse);
-        var result = applicator.Apply(model, ModelType.GradientBoosting, hyperparams);
+        var result = applicator.Apply(model, typeof(AiDotNet.Regression.GradientBoostingRegression<>), hyperparams);
 
         Assert.True(result.HasAppliedParameters);
         Assert.Equal(500, options.NumberOfTrees);
@@ -676,7 +676,7 @@ I chose these values because your dataset has 50,000 rows and 30 features.";
         var applicator = new AgentHyperparameterApplicator<double>(registry);
 
         var hyperparams = parser.Parse(llmResponse);
-        var result = applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         Assert.True(result.HasAppliedParameters);
         Assert.Equal(250, options.NumberOfTrees);
@@ -733,7 +733,7 @@ I chose these values because your dataset has 50,000 rows and 30 features.";
         var registry = new HyperparameterRegistry();
         var applicator = new AgentHyperparameterApplicator<double>(registry);
 
-        var result = applicator.Apply(model, ModelType.RandomForest, recommendation.SuggestedHyperparameters);
+        var result = applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), recommendation.SuggestedHyperparameters);
         recommendation.HyperparameterApplicationResult = result;
 
         // Verify the result is stored on the recommendation
@@ -756,7 +756,7 @@ I chose these values because your dataset has 50,000 rows and 30 features.";
         var applicator = new AgentHyperparameterApplicator<double>(registry);
 
         var hyperparams = parser.Parse("");
-        var result = applicator.Apply(model, ModelType.RandomForest, hyperparams);
+        var result = applicator.Apply(model, typeof(AiDotNet.Regression.RandomForestRegression<>), hyperparams);
 
         // Model should remain unchanged
         Assert.False(result.HasAppliedParameters);
@@ -776,7 +776,7 @@ I chose these values because your dataset has 50,000 rows and 30 features.";
         var applicator = new AgentHyperparameterApplicator<double>(registry);
 
         var hyperparams = parser.Parse(llmResponse);
-        var result = applicator.Apply(model, ModelType.GradientBoosting, hyperparams);
+        var result = applicator.Apply(model, typeof(AiDotNet.Regression.GradientBoostingRegression<>), hyperparams);
 
         Assert.False(result.HasAppliedParameters);
         Assert.Equal(0.1, options.LearningRate);
@@ -800,7 +800,7 @@ I chose these values because your dataset has 50,000 rows and 30 features.";
         var applicator = new AgentHyperparameterApplicator<double>(registry);
 
         var hyperparams = parser.Parse(llmResponse);
-        var result = applicator.Apply(model, ModelType.GradientBoosting, hyperparams);
+        var result = applicator.Apply(model, typeof(AiDotNet.Regression.GradientBoostingRegression<>), hyperparams);
 
         Assert.True(result.HasAppliedParameters);
         Assert.Equal(0.001, options.LearningRate);

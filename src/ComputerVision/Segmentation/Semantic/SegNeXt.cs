@@ -41,6 +41,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 /// Semantic Segmentation", NeurIPS 2022.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SegNeXt model for convolutional semantic segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
+/// var model = new SegNeXt&lt;double&gt;(architecture, numClasses: 150);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var onnxModel = new SegNeXt&lt;double&gt;(architecture, "segnext.onnx", numClasses: 150);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Segmentation)]
@@ -415,7 +428,7 @@ public class SegNeXt<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = _onnxSession.InputMetadata;
 
         string inputName = inputMeta.Keys.FirstOrDefault() ?? "pixel_values";
@@ -641,7 +654,6 @@ public class SegNeXt<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

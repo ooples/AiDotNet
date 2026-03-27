@@ -406,7 +406,7 @@ public class AutoMLCoreComponentsIntegrationTests
         var original = new TrialResult
         {
             TrialId = 5,
-            CandidateModelType = ModelType.NeuralNetwork,
+            CandidateModelType = typeof(AiDotNet.NeuralNetworks.NeuralNetworkBase<>),
             Score = 0.95,
             Duration = TimeSpan.FromSeconds(30),
             Timestamp = new DateTime(2024, 6, 1, 12, 0, 0, DateTimeKind.Utc),
@@ -427,7 +427,7 @@ public class AutoMLCoreComponentsIntegrationTests
         var clone = original.Clone();
 
         Assert.Equal(5, clone.TrialId);
-        Assert.Equal(ModelType.NeuralNetwork, clone.CandidateModelType);
+        Assert.Equal(typeof(AiDotNet.NeuralNetworks.NeuralNetworkBase<>), clone.CandidateModelType);
         Assert.Equal(0.95, clone.Score);
         Assert.Equal(TimeSpan.FromSeconds(30), clone.Duration);
         Assert.True(clone.Success);

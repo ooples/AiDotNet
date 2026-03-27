@@ -22,10 +22,30 @@ namespace AiDotNet.Finance.NLP;
 /// <para>
 /// SEC-BERT is a BERT-based model specifically pretrained on SEC filings (10-K, 10-Q, etc.).
 /// </para>
+/// <para><b>For Beginners:</b> SEC-BERT is a language model trained exclusively on SEC
+/// filings (10-K annual reports, 10-Q quarterly reports, 8-K current reports). It understands
+/// the unique language and structure of regulatory documents, making it ideal for extracting
+/// information from corporate disclosures, identifying risk factors, and classifying
+/// financial statements.</para>
 /// <para>
 /// Reference: Loukas et al., "SEC-BERT: A Pre-trained Financial Language Model", 2022.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for SEC filing classification (512 tokens, 10 filing categories)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 10);
+///
+/// // Training mode: BERT pre-trained on SEC 10-K, 10-Q, and 8-K filings
+/// var model = new SECBERT&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained SEC-BERT model
+/// var onnxModel = new SECBERT&lt;double&gt;(architecture, "secbert.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -202,7 +222,7 @@ public class SECBERT<T> : FinancialNLPModelBase<T>
     {
         SetTrainingMode(true);
         var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(grad, output.Shape));
+        Backward(Tensor<T>.FromVector(grad, output.Shape.ToArray()));
         _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
     }

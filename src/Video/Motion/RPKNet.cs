@@ -25,6 +25,19 @@ namespace AiDotNet.Video.Motion;
 /// RPKNet uses recurrent partial kernel processing with separable large kernels for variable multi-scale feature extraction in optical flow.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an RPKNet model for partial kernel optical flow estimation
+/// var rpkNet = new RPKNet&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new RPKNet&lt;double&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -162,7 +175,7 @@ public class RPKNet<T> : OpticalFlowBase<T>
             throw new ArgumentException(
                 $"Expected output length {expectedOutput.Length} does not match model output length {output.Length}.",
                 nameof(expectedOutput));
-        var gradient = new Tensor<T>(output.Shape);
+        var gradient = new Tensor<T>(output.Shape.ToArray());
         for (int i = 0; i < output.Length; i++)
         {
             gradient.Data.Span[i] = NumOps.Subtract(output.Data.Span[i], expectedOutput.Data.Span[i]);
@@ -221,7 +234,6 @@ public class RPKNet<T> : OpticalFlowBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "RPKNet" },

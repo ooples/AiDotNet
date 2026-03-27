@@ -275,7 +275,7 @@ public class VideoExtendedIntegrationTests
         var model = new SlowFast<double>(arch, numClasses: 100);
         var metadata = model.GetModelMetadata();
 
-        Assert.Equal(ModelType.VideoActionRecognition, metadata.ModelType);
+
         Assert.Equal("SlowFast", metadata.AdditionalInfo["ModelName"]);
         Assert.Equal(100, metadata.AdditionalInfo["NumClasses"]);
     }
@@ -534,7 +534,7 @@ public class VideoExtendedIntegrationTests
         var arch = CreateArch();
         var model = new SlowFast<double>(arch);
         var metadata = model.GetModelMetadata();
-        Assert.Equal(ModelType.VideoActionRecognition, metadata.ModelType);
+
     }
 
     [Fact]

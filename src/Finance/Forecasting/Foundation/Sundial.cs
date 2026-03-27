@@ -28,11 +28,32 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// fewer parameters (4.71% average MSE reduction). It uses a GPT-style autoregressive
 /// architecture with patch-based tokenization and quantile forecasting.
 /// </para>
+/// <para><b>For Beginners:</b> Sundial is a time series forecasting model that works like
+/// GPT but for numbers instead of words. It groups data into patches (chunks) and predicts
+/// future patches one at a time. Despite using fewer parameters than competing models, it
+/// achieves better accuracy, making it a practical choice when you need strong forecasting
+/// performance without enormous computational resources.</para>
 /// <para>
 /// <b>Reference:</b> "Sundial: A Family of Highly Capable Time Series Foundation Models", 2025.
 /// https://arxiv.org/abs/2502.00816
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Sundial GPT-style foundation model for time series forecasting
+/// // Decoder-only architecture with patch tokenization and quantile forecasting
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with autoregressive patch prediction
+/// var model = new Sundial&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new Sundial&lt;double&gt;(architecture, "sundial.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -249,7 +270,7 @@ public class Sundial<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -270,7 +291,6 @@ public class Sundial<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "Sundial" },
@@ -408,7 +428,7 @@ public class Sundial<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {

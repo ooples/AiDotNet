@@ -830,7 +830,6 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         {
             Name = "VITS",
             Description = "Variational Inference with adversarial learning for end-to-end Text-to-Speech",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _maxPhonemeLength,
             Complexity = 3
         };

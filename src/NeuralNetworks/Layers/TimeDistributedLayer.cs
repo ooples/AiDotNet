@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -29,6 +31,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Structural)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = true)]
 public class TimeDistributedLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -124,7 +130,13 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     /// - The actual learning happens in the inner layer
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _innerLayer.ParameterCount;
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
+
+    public override void SetParameters(Vector<T> parameters) => _innerLayer.SetParameters(parameters);
+    public override Vector<T> GetParameterGradients() =>
+        _accumulatedGradients ?? _innerLayer.GetParameterGradients();
+    public override void ClearGradients() { base.ClearGradients(); _innerLayer.ClearGradients(); _accumulatedGradients = null; }
 
     /// <inheritdoc/>
     protected override bool SupportsGpuExecution => true;
@@ -140,7 +152,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
 
         int batch = input.Shape[0];
         int time = input.Shape[1];
-        int[] inputShape = input.Shape;
+        int[] inputShape = input.Shape.ToArray();
 
         int[] flattenedShape = new int[inputShape.Length - 1];
         flattenedShape[0] = batch * time;
@@ -150,7 +162,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         var reshapedInput = gpuEngine.ReshapeGpu(input, flattenedShape);
         var innerOutput = _innerLayer.ForwardGpu(reshapedInput);
 
-        int[] innerOutputShape = innerOutput.Shape;
+        int[] innerOutputShape = innerOutput.Shape.ToArray();
         int[] outputShape = new int[innerOutputShape.Length + 1];
         outputShape[0] = batch;
         outputShape[1] = time;
@@ -168,7 +180,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         {
             _lastInput = input.ToTensor();
             _lastOutput = output.ToTensor();
-            _originalInputShape = input.Shape;
+            _originalInputShape = input.Shape.ToArray();
         }
 
         return output;
@@ -209,7 +221,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         }
 
         // Flatten time dimension for inner layer backward
-        int[] gradShape = gradAfterActivation.Shape;
+        int[] gradShape = gradAfterActivation.Shape.ToArray();
         int[] flattenedGradShape = new int[gradShape.Length - 1];
         flattenedGradShape[0] = batch * time;
         Array.Copy(gradShape, 2, flattenedGradShape, 1, gradShape.Length - 2);
@@ -419,7 +431,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         if (rank < 2)
@@ -436,7 +448,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
 
         var innerOutputShape = _innerLayer.GetOutputShape();
         var outputShape = new[] { batchSize, timeSteps }.Concat(innerOutputShape).ToArray();
-        var output = new Tensor<T>(outputShape);
+        var output = TensorAllocator.Rent<T>(outputShape);
 
         for (int t = 0; t < timeSteps; t++)
         {
@@ -505,6 +517,8 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     /// through each time step and delegating to the inner layer's backward pass.
     /// </para>
     /// </remarks>
+    private Vector<T>? _accumulatedGradients;
+
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastOutput == null)
@@ -515,7 +529,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         int batchSize = _lastInput.Shape[0];
         int timeSteps = _lastInput.Shape[1];
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
         Tensor<T> outputGrad = outputGradient;
         Tensor<T> lastOutput = _lastOutput;
@@ -536,12 +550,35 @@ public class TimeDistributedLayer<T> : LayerBase<T>
             outputGrad = outputGrad.ElementwiseMultiply(VectorActivation.Derivative(lastOutput));
         }
 
+        // Accumulate inner layer gradients across timesteps
+        _accumulatedGradients = null;
+        _innerLayer.ClearGradients();
+
         for (int t = 0; t < timeSteps; t++)
         {
             var stepOutputGradient = outputGrad.Slice(1, t, t + 1);
             stepOutputGradient = SqueezeAxis(stepOutputGradient, 1);
+
+            // Re-forward this timestep to set inner layer's cached input
+            var stepInput = _lastInput.Slice(1, t, t + 1);
+            stepInput = SqueezeAxis(stepInput, 1);
+            _innerLayer.Forward(stepInput);
+
+            _innerLayer.ClearGradients();
             var stepInputGradient = _innerLayer.Backward(stepOutputGradient);
             inputGradient.SetSlice(1, t, stepInputGradient);
+
+            // Accumulate weight gradients
+            var stepGrads = _innerLayer.GetParameterGradients();
+            if (_accumulatedGradients == null)
+            {
+                _accumulatedGradients = stepGrads.Clone();
+            }
+            else
+            {
+                for (int i = 0; i < _accumulatedGradients.Length; i++)
+                    _accumulatedGradients[i] = NumOps.Add(_accumulatedGradients[i], stepGrads[i]);
+            }
         }
 
         if (_originalInputShape != null && _originalInputShape.Length == 2)
@@ -586,7 +623,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         int batchSize = _lastInput.Shape[0];
         int timeSteps = _lastInput.Shape[1];
 
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
         Tensor<T> outputGrad = outputGradient;
         Tensor<T> lastOutput = _lastOutput;

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -31,6 +33,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true)]
 public class RBFLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -138,6 +143,7 @@ public class RBFLayer<T> : LayerBase<T>
     /// automatically adjust to better match the patterns in your specific data.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -195,9 +201,11 @@ public class RBFLayer<T> : LayerBase<T>
     /// Each creates a different pattern of responsiveness around the neuron centers.
     /// </para>
     /// </remarks>
-    public RBFLayer(int inputSize, int outputSize, IRadialBasisFunction<T> rbf)
+    public RBFLayer(int inputSize, int outputSize, IRadialBasisFunction<T> rbf,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputSize], [outputSize])
     {
+        InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
         _inputSize = inputSize;
         _numCenters = outputSize;
         _centers = new Tensor<T>([outputSize, inputSize]);
@@ -235,13 +243,14 @@ public class RBFLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-
         // Handle unbatched input (1D) by adding batch dimension
         bool wasUnbatched = input.Rank == 1;
         var processedInput = wasUnbatched
             ? input.Reshape([1, input.Shape[0]])
             : input;
+
+        // Store 2D input for backward pass (RBFKernelBackward requires 2D)
+        _lastInput = processedInput;
 
         // Use Engine.RBFKernel for GPU/CPU acceleration
         // This computes exp(-epsilon * ||x - center||²) for Gaussian RBF
@@ -249,10 +258,11 @@ public class RBFLayer<T> : LayerBase<T>
         var epsilons = ComputeEpsilonsFromWidths();
         var output = Engine.RBFKernel(processedInput, _centers, epsilons);
 
-        // Remove batch dimension if input was unbatched
-        _lastOutput = wasUnbatched ? output.Reshape([output.Shape[1]]) : output;
+        // Store 2D output for backward pass
+        _lastOutput = output;
 
-        return _lastOutput;
+        // Remove batch dimension if input was unbatched
+        return wasUnbatched ? output.Reshape([output.Shape[1]]) : output;
     }
 
     /// <summary>
@@ -261,7 +271,7 @@ public class RBFLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ComputeEpsilonsFromWidths()
     {
-        var epsilons = new Tensor<T>(_widths.Shape);
+        var epsilons = new Tensor<T>(_widths.Shape.ToArray());
         var two = NumOps.FromDouble(2.0);
         for (int i = 0; i < _numCenters; i++)
         {
@@ -315,10 +325,16 @@ public class RBFLayer<T> : LayerBase<T>
         if (_lastInput == null || _lastOutput == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
+        // Ensure outputGradient is 2D for RBFKernelBackward
+        bool wasUnbatched = outputGradient.Rank == 1;
+        var grad2D = wasUnbatched
+            ? outputGradient.Reshape([1, outputGradient.Shape[0]])
+            : outputGradient;
+
         // Use Engine.RBFKernelBackward for GPU/CPU acceleration
         var epsilons = ComputeEpsilonsFromWidths();
         var (gradInput, gradCenters, gradEpsilons) = Engine.RBFKernelBackward(
-            outputGradient, _lastInput, _centers, epsilons, _lastOutput);
+            grad2D, _lastInput, _centers, epsilons, _lastOutput);
 
         _centersGradient = gradCenters;
 
@@ -327,7 +343,8 @@ public class RBFLayer<T> : LayerBase<T>
         // dL/dw = dL/depsilon * depsilon/dw = dL/depsilon * (-1/w³)
         _widthsGradient = ConvertEpsilonGradientsToWidthGradients(gradEpsilons);
 
-        return gradInput;
+        // Remove batch dimension if input was unbatched
+        return wasUnbatched ? gradInput.Reshape([gradInput.Shape[1]]) : gradInput;
     }
 
     /// <summary>
@@ -335,7 +352,7 @@ public class RBFLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ConvertEpsilonGradientsToWidthGradients(Tensor<T> gradEpsilons)
     {
-        var gradWidths = new Tensor<T>(_widths.Shape);
+        var gradWidths = new Tensor<T>(_widths.Shape.ToArray());
         for (int i = 0; i < _numCenters; i++)
         {
             // depsilon/dwidth = -1/width³
@@ -562,6 +579,38 @@ public class RBFLayer<T> : LayerBase<T>
         _widths = Tensor<T>.FromVector(widthsVector, [_numCenters]);
     }
 
+    /// <inheritdoc/>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["NumCenters"] = _numCenters.ToString();
+        metadata["InputSize"] = _inputSize.ToString();
+        return metadata;
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameterGradients()
+    {
+        int centersSize = _numCenters * _inputSize;
+        var gradients = new Vector<T>(centersSize + _numCenters);
+
+        if (_centersGradient != null)
+        {
+            var centersData = _centersGradient.ToArray();
+            for (int i = 0; i < centersData.Length; i++)
+                gradients[i] = centersData[i];
+        }
+
+        if (_widthsGradient != null)
+        {
+            var widthsData = _widthsGradient.ToArray();
+            for (int i = 0; i < widthsData.Length; i++)
+                gradients[centersSize + i] = widthsData[i];
+        }
+
+        return gradients;
+    }
+
     /// <summary>
     /// Resets the internal state of the RBF layer.
     /// </summary>
@@ -587,6 +636,13 @@ public class RBFLayer<T> : LayerBase<T>
     /// only the temporary state information.
     /// </para>
     /// </remarks>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _centersGradient = null;
+        _widthsGradient = null;
+    }
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
@@ -606,16 +662,12 @@ public class RBFLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_numCenters + _inputSize)));
-        for (int i = 0; i < _numCenters; i++)
-        {
-            for (int j = 0; j < _inputSize; j++)
-            {
-                _centers[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
-            }
+        InitializeLayerWeights(_centers, _inputSize, _numCenters);
 
-            _widths[i] = NumOps.FromDouble(Random.NextDouble());
-        }
+        // Widths are RBF-specific: random positive values, not Xavier
+        var widthSpan = _widths.AsWritableSpan();
+        for (int i = 0; i < widthSpan.Length; i++)
+            widthSpan[i] = NumOps.FromDouble(Random.NextDouble());
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

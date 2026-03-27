@@ -53,6 +53,12 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     /// - Found new equations in materials science
     /// - Discovered patterns in quantum mechanics
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var learner = new SymbolicPhysicsLearner&lt;double&gt;();
+    /// string equation = learner.Discover(inputData, outputData, maxComplexity: 10);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Science)]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.Optimization)]

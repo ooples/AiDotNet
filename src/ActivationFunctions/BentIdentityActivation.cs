@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -22,6 +24,9 @@ namespace AiDotNet.ActivationFunctions;
 /// - Has no upper or lower bounds (unlike sigmoid or tanh)
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.Medium)]
 public class BentIdentityActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

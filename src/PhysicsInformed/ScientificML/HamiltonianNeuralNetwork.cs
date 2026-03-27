@@ -70,6 +70,12 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     /// By encoding physics structure (Hamiltonian formulation), the network
     /// learns faster, generalizes better, and makes physically consistent predictions.
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var hnn = new HamiltonianNeuralNetwork&lt;float&gt;();
+    /// float[] derivatives = hnn.ComputeTimeDerivative(new float[] { 1.0f, 0.0f, 0.0f, 1.0f });
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Science)]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -368,7 +374,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             LastLoss = NumOps.Add(primaryLoss, auxiliaryLoss);
 
             var outputGradient = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction.Shape);
+            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction.Shape.ToArray());
 
             Backward(outputGradientTensor);
             _optimizer.UpdateParameters(Layers);
@@ -384,7 +390,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         {
             return new ModelMetadata<T>
             {
-                ModelType = ModelType.NeuralNetwork,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "StateDimension", _stateDim },

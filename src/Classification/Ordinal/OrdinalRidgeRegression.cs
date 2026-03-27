@@ -52,6 +52,32 @@ namespace AiDotNet.Classification.Ordinal;
 /// </list>
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create ordinal ridge regression with L2 regularization
+/// var options = new OrdinalRidgeRegressionOptions&lt;double&gt;();
+/// var classifier = new OrdinalRidgeRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features, ordinal labels
+/// var features = new Matrix&lt;double&gt;(6, 2);
+/// features[0, 0] = 1.0; features[0, 1] = 0.5;
+/// features[1, 0] = 1.5; features[1, 1] = 1.0;
+/// features[2, 0] = 2.0; features[2, 1] = 1.5;
+/// features[3, 0] = 2.5; features[3, 1] = 2.0;
+/// features[4, 0] = 3.0; features[4, 1] = 2.5;
+/// features[5, 0] = 3.5; features[5, 1] = 3.0;
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 1, 1, 2, 2 });
+///
+/// // Train with closed-form ridge solution and immediate-threshold method
+/// classifier.Train(features, labels);
+///
+/// // Predict ordinal class using learned thresholds
+/// var newSample = new Matrix&lt;double&gt;(1, 2);
+/// newSample[0, 0] = 2.2; newSample[0, 1] = 1.8;
+/// var prediction = classifier.Predict(newSample);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
@@ -127,7 +153,6 @@ public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>
     /// <para><b>For Beginners:</b> This identifier helps the system know what type of model
     /// this is, which is useful for serialization and model management.</para>
     /// </remarks>
-    protected override ModelType GetModelType() => ModelType.OrdinalRidgeRegression;
 
     /// <summary>
     /// Trains the ordinal ridge regression model.

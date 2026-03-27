@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -30,6 +31,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Transformer)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "8, 2, 16")]
 public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -280,6 +285,35 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override bool SupportsTraining => true;
 
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+        void Set(ILayer<T> layer)
+        {
+            int count = layer.ParameterCount;
+            layer.SetParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
+        Set(_selfAttention); Set(_norm1); Set(_feedForward1); Set(_feedForward2); Set(_norm2);
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        return Vector<T>.Concatenate(
+            _selfAttention.GetParameterGradients(),
+            _norm1.GetParameterGradients(),
+            _feedForward1.GetParameterGradients(),
+            _feedForward2.GetParameterGradients(),
+            _norm2.GetParameterGradients());
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _selfAttention.ClearGradients(); _norm1.ClearGradients();
+        _feedForward1.ClearGradients(); _feedForward2.ClearGradients(); _norm2.ClearGradients();
+    }
+
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
@@ -413,7 +447,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Handle any rank >= 2: last 2 dims are [seq, embed], earlier dims are batch-like
         int rank = input.Shape.Length;
         _inputWas2D = rank == 2;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         Tensor<T> input3D;
         if (_inputWas2D)
@@ -490,7 +524,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var input = inputs[0];
 
         // Get dimensions from input shape
-        int[] inputShape = input.Shape;
+        int[] inputShape = input.Shape.ToArray();
         int rank = inputShape.Length;
 
         IGpuTensor<T> input3D;
@@ -584,7 +618,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
 
         // If forward received 2D input, we need to reshape the gradient to 3D
-        int[] originalShape = outputGradient.Shape;
+        int[] originalShape = outputGradient.Shape.ToArray();
         bool gradWas2D = originalShape.Length == 2;
 
         IGpuTensor<T> grad3D;

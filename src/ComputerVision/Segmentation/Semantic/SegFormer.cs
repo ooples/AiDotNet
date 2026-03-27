@@ -42,6 +42,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 /// Segmentation with Transformers", NeurIPS 2021.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a SegFormer model for efficient semantic segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.MultiClassClassification,
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
+/// var model = new SegFormer&lt;double&gt;(architecture, numClasses: 150);
+///
+/// // Or load a pre-trained ONNX model for autonomous driving
+/// var onnxModel = new SegFormer&lt;double&gt;(architecture, "segformer_b0.onnx", numClasses: 150);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]
@@ -439,7 +452,7 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         }
 
         // Create ONNX input tensor
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = _onnxSession.InputMetadata;
 
         string inputName = inputMeta.Keys.FirstOrDefault() ?? "pixel_values";
@@ -681,7 +694,6 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -70,6 +72,10 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerCategory(LayerCategory.Recurrent)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
 public class MinLSTMLayer<T> : LayerBase<T>
 {
     // Configuration
@@ -181,12 +187,15 @@ public class MinLSTMLayer<T> : LayerBase<T>
         int sequenceLength,
         int modelDimension = 256,
         int expansionFactor = 1,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, modelDimension],
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         if (sequenceLength <= 0)
             throw new ArgumentException($"Sequence length ({sequenceLength}) must be positive.", nameof(sequenceLength));
         if (modelDimension <= 0)
@@ -245,17 +254,13 @@ public class MinLSTMLayer<T> : LayerBase<T>
     /// </summary>
     private void InitializeTensor2D(Tensor<T> tensor)
     {
-        int fanIn = tensor.Shape[0];
-        int fanOut = tensor.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
     }
 
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -302,7 +307,7 @@ public class MinLSTMLayer<T> : LayerBase<T>
         // Step 4: Normalize gates -- f' = f/(f+i), i' = i/(f+i)
         var gateSum = Engine.TensorAdd(forgetSigmoid, inputGateSigmoid);
         // Add small epsilon for numerical stability to avoid division by zero
-        var epsilon = new Tensor<T>(gateSum.Shape);
+        var epsilon = new Tensor<T>(gateSum.Shape.ToArray());
         epsilon.Fill(NumOps.FromDouble(1e-8));
         gateSum = Engine.TensorAdd(gateSum, epsilon);
 
@@ -363,7 +368,7 @@ public class MinLSTMLayer<T> : LayerBase<T>
         Tensor<T> forgetNorm, Tensor<T> inputNorm, Tensor<T> cellCandidate,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _expandedDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _expandedDimension });
         // Cell state: [batch, expandedDim] -- initialized to zero
         var cellState = new Tensor<T>(new[] { batchSize, _expandedDimension });
         // Store all cell states for backward pass: [batch, seqLen+1, expandedDim]
@@ -574,7 +579,7 @@ public class MinLSTMLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> CreateOnesLike(Tensor<T> template)
     {
-        var ones = new Tensor<T>(template.Shape);
+        var ones = new Tensor<T>(template.Shape.ToArray());
         ones.Fill(NumOps.One);
         return ones;
     }
@@ -630,6 +635,32 @@ public class MinLSTMLayer<T> : LayerBase<T>
         _cellCandidateWeights, _cellCandidateBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
+            new Vector<T>(_forgetGateWeightsGradient!.ToArray()),
+            new Vector<T>(_forgetGateBiasGradient!.ToArray()),
+            new Vector<T>(_inputGateWeightsGradient!.ToArray()),
+            new Vector<T>(_inputGateBiasGradient!.ToArray()),
+            new Vector<T>(_cellCandidateWeightsGradient!.ToArray()),
+            new Vector<T>(_cellCandidateBiasGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _inputProjectionWeightsGradient = null; _inputProjectionBiasGradient = null;
+        _forgetGateWeightsGradient = null; _forgetGateBiasGradient = null;
+        _inputGateWeightsGradient = null; _inputGateBiasGradient = null;
+        _cellCandidateWeightsGradient = null; _cellCandidateBiasGradient = null;
+        _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

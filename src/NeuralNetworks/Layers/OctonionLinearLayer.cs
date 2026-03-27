@@ -1,5 +1,7 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -30,6 +32,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (float or double).</typeparam>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.Projection)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 128", TestConstructorArgs = "16, 8")]
 public class OctonionLinearLayer<T> : LayerBase<T>
 {
     private readonly IAdvancedAlgebraEngine _engine;
@@ -205,7 +210,7 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     /// <returns>Output tensor with shape [outputFeatures * 8] or [batch, outputFeatures * 8].</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int batchSize;
         int inputLen;
@@ -334,7 +339,7 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         if (IsTrainingMode)
         {
             _gpuInput = input;
-            _gpuInputShape = input.Shape.ToArray();
+            _gpuInputShape = input.Shape.ToArray().ToArray();
         }
 
         // Flatten weights to GPU buffer: [outputFeatures * inputFeatures * 8]
@@ -650,8 +655,8 @@ public class OctonionLinearLayer<T> : LayerBase<T>
                 var weightGrad = CreateZeroOctonion();
                 for (int b = 0; b < batchSize; b++)
                 {
-                    // Weight gradient uses conjugate of gradient times input
-                    weightGrad = weightGrad + (gradOctonions[b, o].Conjugate() * _lastInput[b, i]);
+                    // Weight gradient: dL/dW = dL/dy * conj(x) for y = W * x
+                    weightGrad = weightGrad + (gradOctonions[b, o] * _lastInput[b, i].Conjugate());
                 }
                 _weightsGradient[o, i] = weightGrad;
             }
@@ -821,9 +826,58 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         }
     }
 
+    /// <inheritdoc/>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gradients = new Vector<T>(ParameterCount);
+        int idx = 0;
+
+        if (_weightsGradient != null)
+        {
+            for (int o = 0; o < OutputFeatures; o++)
+            {
+                for (int i = 0; i < InputFeatures; i++)
+                {
+                    var g = _weightsGradient[o, i];
+                    gradients[idx] = g.Scalar; gradients[idx + 1] = g.E1;
+                    gradients[idx + 2] = g.E2; gradients[idx + 3] = g.E3;
+                    gradients[idx + 4] = g.E4; gradients[idx + 5] = g.E5;
+                    gradients[idx + 6] = g.E6; gradients[idx + 7] = g.E7;
+                    idx += 8;
+                }
+            }
+        }
+        else
+        {
+            idx += OutputFeatures * InputFeatures * 8;
+        }
+
+        if (_biasesGradient != null)
+        {
+            for (int o = 0; o < OutputFeatures; o++)
+            {
+                var g = _biasesGradient[o];
+                gradients[idx] = g.Scalar; gradients[idx + 1] = g.E1;
+                gradients[idx + 2] = g.E2; gradients[idx + 3] = g.E3;
+                gradients[idx + 4] = g.E4; gradients[idx + 5] = g.E5;
+                gradients[idx + 6] = g.E6; gradients[idx + 7] = g.E7;
+                idx += 8;
+            }
+        }
+
+        return gradients;
+    }
+
     /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _weightsGradient = null;
+        _biasesGradient = null;
+    }
+
     public override void ResetState()
     {
         _lastInput = null;
@@ -941,7 +995,7 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> OctonionsToTensor(Octonion<T>[,] octonions, int batchSize, int features)
     {
-        var result = new Tensor<T>([batchSize, features * 8]);
+        var result = TensorAllocator.Rent<T>([batchSize, features * 8]);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -980,9 +1034,9 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         var derivative = DerivativeTensor(ScalarActivation, preActivationTensor);
 
         // Multiply output gradient element-wise by derivative
-        var result = new Tensor<T>(outputGradient.Shape);
+        var result = TensorAllocator.Rent<T>(outputGradient.Shape.ToArray());
         int totalElements = 1;
-        foreach (var dim in outputGradient.Shape)
+        foreach (var dim in outputGradient.Shape.ToArray())
             totalElements *= dim;
 
         for (int i = 0; i < totalElements; i++)

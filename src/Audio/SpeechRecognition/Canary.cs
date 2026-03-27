@@ -32,7 +32,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 80, outputSize: 32128);
 /// var model = new Canary&lt;float&gt;(arch, "canary_1b.onnx");
 /// var result = model.Transcribe(audio, "en");
-/// Console.WriteLine(result.Text);
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>
@@ -237,7 +237,6 @@ public class Canary<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Name = _useNativeMode ? "Canary-Native" : "Canary-ONNX",
             Description = $"Canary {_options.Variant} multilingual ASR/ST model (NVIDIA, 2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.EncoderDim,
             Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

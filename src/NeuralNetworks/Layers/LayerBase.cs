@@ -289,6 +289,19 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     protected bool IsTrainingMode = true;
 
     /// <summary>
+    /// When true, Forward() records operations to a computation graph instead of executing them.
+    /// Used by the JIT compiler to capture the full forward pass for compilation.
+    /// Set via <see cref="SetCaptureMode"/>.
+    /// </summary>
+    protected bool IsCapturing;
+
+    /// <summary>
+    /// The captured computation graph output node from the last capture-mode Forward() call.
+    /// Null when not capturing or when no graph has been captured yet.
+    /// </summary>
+    protected ComputationNode<T>? CapturedGraphOutput;
+
+    /// <summary>
     /// Tracks whether Dispose has been called.
     /// </summary>
     private bool _disposed;
@@ -627,6 +640,22 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         // Layers like GaussianNoiseLayer and DropoutLayer need training mode
         // to control their behavior even though they have no trainable parameters.
         IsTrainingMode = isTraining;
+    }
+
+    /// <summary>
+    /// Sets the graph capture mode for this layer.
+    /// When capturing, Forward() should record operations to a computation graph
+    /// instead of executing them. Used by the JIT compiler to capture the full
+    /// forward pass for compilation and optimization.
+    /// </summary>
+    /// <param name="isCapturing">True to enable capture mode, false to disable.</param>
+    public virtual void SetCaptureMode(bool isCapturing)
+    {
+        IsCapturing = isCapturing;
+        if (!isCapturing)
+        {
+            CapturedGraphOutput = null;
+        }
     }
 
     /// <summary>
@@ -1672,7 +1701,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
 
         // Create the output shape
         int[] outputShape = new int[inputs[0].Rank];
-        Array.Copy(inputs[0].Shape, outputShape, inputs[0].Rank);
+        Array.Copy(inputs[0].Shape.ToArray(), outputShape, inputs[0].Rank);
         outputShape[channelDimension] = totalChannels;
 
         // Create the output tensor
@@ -1696,12 +1725,23 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     }
 
     /// <summary>
-    /// Applies the activation function to a tensor.
+    /// Cached pre-activation input from the most recent ApplyActivation call.
+    /// Used by ApplyActivationDerivativeFromOutput when the activation doesn't implement
+    /// IOutputDerivative (e.g., GELU, SiLU, ELU). Without this, the fallback computes
+    /// f'(f(x)) instead of the correct f'(x).
+    /// </summary>
+    private Tensor<T>? _cachedPreActivationInput;
+
+    /// <summary>
+    /// Applies the activation function to a tensor and caches the pre-activation input
+    /// for correct derivative computation in the backward pass.
     /// </summary>
     /// <param name="input">The input tensor to activate.</param>
     /// <returns>The activated tensor.</returns>
     protected Tensor<T> ApplyActivation(Tensor<T> input)
     {
+        _cachedPreActivationInput = input;
+
         if (VectorActivation != null)
         {
             return VectorActivation.Activate(input);
@@ -1947,7 +1987,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     {
         if (activation == null)
         {
-            return Tensor<T>.CreateDefault(input.Shape, NumOps.One);
+            return Tensor<T>.CreateDefault(input.Shape.ToArray(), NumOps.One);
         }
 
         return activation.Derivative(input);
@@ -2050,7 +2090,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
                 }
             }
 
-            return flatInputGrad.Reshape(input.Shape);
+            return flatInputGrad.Reshape(input.Shape.ToArray());
         }
         else if (ScalarActivation != null)
         {
@@ -2063,6 +2103,26 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
             // Identity activation: derivative is just the output gradient
             return outputGradient;
         }
+    }
+
+    /// <summary>
+    /// Applies activation derivative given the POST-activation output value.
+    /// Use this when you have the output (y = f(x)) instead of the pre-activation input (x).
+    /// For sigmoid: derivative = y * (1 - y). For tanh: derivative = 1 - y^2.
+    /// Falls back to using the cached pre-activation input if the activation doesn't implement
+    /// IOutputDerivative (e.g., GELU, SiLU, ELU, CELU).
+    /// </summary>
+    protected Tensor<T> ApplyActivationDerivativeFromOutput(Tensor<T> output, Tensor<T> outputGradient)
+    {
+        if (ScalarActivation is IOutputDerivative<T> outputDeriv)
+        {
+            return outputDeriv.DerivativeFromOutput(output).ElementwiseMultiply(outputGradient);
+        }
+        // Use cached pre-activation input if available, otherwise fall back to output.
+        // This prevents computing f'(f(x)) instead of f'(x) for activations like GELU
+        // that don't implement IOutputDerivative.
+        var preActivationInput = _cachedPreActivationInput ?? output;
+        return ApplyActivationDerivative(preActivationInput, outputGradient);
     }
 
     /// <summary>
@@ -2215,10 +2275,11 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </remarks>
     public virtual void Serialize(BinaryWriter writer)
     {
-        writer.Write(ParameterCount);
-        for (int i = 0; i < ParameterCount; i++)
+        var parameters = GetParameters();
+        writer.Write(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
         {
-            writer.Write(Convert.ToDouble(Parameters[i]));
+            writer.Write(Convert.ToDouble(parameters[i]));
         }
     }
 
@@ -2245,11 +2306,12 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     public virtual void Deserialize(BinaryReader reader)
     {
         int count = reader.ReadInt32();
-        Parameters = new Vector<T>(count);
+        var parameters = new Vector<T>(count);
         for (int i = 0; i < count; i++)
         {
-            Parameters[i] = NumOps.FromDouble(reader.ReadDouble());
+            parameters[i] = NumOps.FromDouble(reader.ReadDouble());
         }
+        SetParameters(parameters);
     }
 
     /// <summary>
@@ -3101,7 +3163,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         }
 
         // Validate shape
-        var actualShape = value.Shape;
+        var actualShape = value.Shape.ToArray();
         if (actualShape.Length != expectedShape.Length)
         {
             throw new ArgumentException(
@@ -3143,13 +3205,13 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         if (string.Equals(name, WeightParameterName, StringComparison.OrdinalIgnoreCase))
         {
             var weights = GetWeights();
-            return weights?.Shape;
+            return weights?.Shape.ToArray() ?? Array.Empty<int>();
         }
 
         if (string.Equals(name, BiasParameterName, StringComparison.OrdinalIgnoreCase))
         {
             var biases = GetBiases();
-            return biases?.Shape;
+            return biases?.Shape.ToArray() ?? Array.Empty<int>();
         }
 
         return null;
@@ -3275,6 +3337,46 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         }
 
         return result;
+    }
+
+    #endregion
+
+    #region Shared Weight Initialization
+
+    /// <summary>
+    /// Initializes a weight tensor using the given strategy, or Xavier uniform by default.
+    /// Uses the IInitializationStrategy pattern for extensibility — users can provide
+    /// any custom strategy (He, LeCun, Orthogonal, etc.) via the layer constructor.
+    /// </summary>
+    /// <param name="tensor">The tensor to initialize in-place.</param>
+    /// <param name="fanIn">Number of input units.</param>
+    /// <param name="fanOut">Number of output units.</param>
+    /// <param name="strategy">Optional strategy. If null, uses Xavier uniform (industry standard default).</param>
+    // Cached default strategy (Xavier/Glorot — industry standard for sigmoid/tanh)
+    private static readonly Lazy<IInitializationStrategy<T>> DefaultStrategy =
+        new(() => new Initialization.EagerInitializationStrategy<T>());
+
+    /// <summary>
+    /// Initializes weights using this layer's <see cref="InitializationStrategy"/>,
+    /// falling back to Xavier/Glorot normal if none was set.
+    /// Layers should set <see cref="InitializationStrategy"/> in their constructor
+    /// to the appropriate default for their activation function.
+    /// </summary>
+    protected void InitializeLayerWeights(Tensor<T> tensor, int fanIn, int fanOut)
+    {
+        (InitializationStrategy ?? DefaultStrategy.Value).InitializeWeights(tensor, fanIn, fanOut);
+    }
+
+    /// <summary>
+    /// Initializes biases using this layer's <see cref="InitializationStrategy"/>,
+    /// falling back to zero initialization if none was set.
+    /// </summary>
+    protected void InitializeLayerBiases(Tensor<T> tensor)
+    {
+        if (InitializationStrategy is not null)
+            InitializationStrategy.InitializeBiases(tensor);
+        else
+            tensor.AsWritableSpan().Clear();
     }
 
     #endregion

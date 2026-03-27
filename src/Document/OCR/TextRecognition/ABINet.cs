@@ -38,7 +38,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 /// <code>
 /// var model = new ABINet&lt;float&gt;(architecture);
 /// var result = model.RecognizeText(textImage);
-/// Console.WriteLine(result.Text);
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// <para>
@@ -359,7 +359,7 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private Tensor<T> PreprocessTextImage(Tensor<T> image)
     {
         var processed = EnsureBatchDimension(image);
-        var normalized = new Tensor<T>(processed.Shape);
+        var normalized = new Tensor<T>(processed.Shape.ToArray());
 
         for (int i = 0; i < processed.Data.Length; i++)
         {
@@ -435,7 +435,6 @@ public class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         return new ModelMetadata<T>
         {
             Name = "ABINet",
-            ModelType = ModelType.NeuralNetwork,
             Description = "ABINet for robust text recognition (CVPR 2021)",
             FeatureCount = _visionDim,
             Complexity = _visionLayers + _languageLayers,

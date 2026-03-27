@@ -284,7 +284,7 @@ public class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        var result = new Tensor<T>(modelOutput.Shape);
+        var result = new Tensor<T>(modelOutput.Shape.ToArray());
         for (int i = 0; i < modelOutput.Length; i++)
         {
             double logit = NumOps.ToDouble(modelOutput[i]);
@@ -299,7 +299,6 @@ public class FDYSED<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         {
             Name = _useNativeMode ? "FDY-SED-Native" : "FDY-SED-ONNX",
             Description = $"FDY-SED: Frequency Dynamic Sound Event Detection {_options.Variant} (Nam et al., ICASSP 2022)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = ClassLabels.Count,
             Complexity = _options.CNNChannels.Length + _options.NumRNNLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

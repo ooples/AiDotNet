@@ -24,8 +24,30 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "DeepSeek-VL2: Mixture-of-Experts Vision-Language Models for Advanced Multimodal Understanding" (Wu et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> DeepSeekVL2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> DeepSeek-VL2 is a major upgrade that combines Mixture-of-Experts
+/// with dynamic image tiling. It has 64 total experts but only activates 6 per token, making
+/// it efficient despite its large capacity. Dynamic tiling lets it handle images at variable
+/// resolutions by splitting them into appropriately-sized tiles. It also uses multi-head latent
+/// attention (MLA) to compress the key-value cache, reducing memory usage during inference.
+/// Available in 1.8B, 4.5B, and 27B sizes for different compute budgets. Default values follow
+/// the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DeepSeek-VL2 model for advanced multimodal understanding
+/// // using MoE architecture with dynamic tiling and MLA attention
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new DeepSeekVL2&lt;double&gt;(architecture, "deepseekvl2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new DeepSeekVL2&lt;double&gt;(architecture, new DeepSeekVL2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -118,7 +140,7 @@ public class DeepSeekVL2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "DeepSeek-VL2-Native" : "DeepSeek-VL2-ONNX", Description = "DeepSeek-VL2: Mixture-of-Experts Vision-Language Models for Advanced Multimodal Understanding (Wu et al., 2024)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "DeepSeek-VL2"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["NumExperts"] = _options.NumExperts.ToString(); m.AdditionalInfo["NumActiveExperts"] = _options.NumActiveExperts.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "DeepSeek-VL2-Native" : "DeepSeek-VL2-ONNX", Description = "DeepSeek-VL2: Mixture-of-Experts Vision-Language Models for Advanced Multimodal Understanding (Wu et al., 2024)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "DeepSeek-VL2"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["NumExperts"] = _options.NumExperts.ToString(); m.AdditionalInfo["NumActiveExperts"] = _options.NumActiveExperts.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.DecoderDim); writer.Write(_options.ProjectionDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.EnableDynamicTiling); writer.Write(_options.NumExperts); writer.Write(_options.NumActiveExperts); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.ProjectionDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.EnableDynamicTiling = reader.ReadBoolean(); _options.NumExperts = reader.ReadInt32(); _options.NumActiveExperts = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new DeepSeekVL2<T>(Architecture, mp, _options); return new DeepSeekVL2<T>(Architecture, _options); }

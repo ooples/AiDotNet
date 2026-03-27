@@ -31,6 +31,23 @@ namespace AiDotNet.Diffusion.Control;
 /// Reference: Peng et al., "ControlNeXt: Powerful and Efficient Control for Image and Video Generation", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a ControlNeXt model for efficient spatial control
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 4,
+///     Height = 512,
+///     Width = 512,
+///     NumInferenceSteps = 20
+/// };
+/// var model = new ControlNeXtModel&lt;float&gt;(options, ControlType.Depth);
+///
+/// // Guide image generation with a depth map
+/// var depthMap = Tensor&lt;float&gt;.Random(new[] { 1, 1, 512, 512 });
+/// var generated = model.Predict(depthMap);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -128,7 +145,7 @@ public class ControlNeXtModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "ControlNeXt", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "ControlNeXt", Version = "1.0",
             Description = "Parameter-efficient control with cross-normalization for improved generalization",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

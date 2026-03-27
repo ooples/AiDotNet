@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -41,6 +43,9 @@ public enum SpatialTransformerDataFormat
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, 4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
@@ -346,6 +351,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// The spatial transformer will gradually learn the best transformations for the task at hand.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -505,7 +511,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var scaledTensor = Engine.TensorMultiplyScalar(centeredTensor, scale);
 
         // Copy back to original tensor (preserving shape)
-        var reshapedResult = scaledTensor.Reshape(tensor.Shape);
+        var reshapedResult = scaledTensor.Reshape(tensor.Shape.ToArray());
         Array.Copy(reshapedResult.ToArray(), tensor.ToArray(), totalElements);
     }
 
@@ -538,7 +544,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
         if (rank < 2)
             throw new ArgumentException("SpatialTransformerLayer expects at least 2D input [height, width].", nameof(input));
@@ -824,8 +830,23 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int batchSize = _lastInput.Shape[0];
 
         // Build theta tensor replicated across batch using Engine ops
-        var thetaExpanded = Engine.TensorExpandDims(_lastTransformationMatrix, 0); // [1, 2, 3]
-        var theta = Engine.TensorTile(thetaExpanded, [batchSize, 1, 1]); // [batch, 2, 3]
+        Tensor<T> theta;
+        if (_lastTransformationMatrix.Rank == 2)
+        {
+            // [2, 3] → expand to [1, 2, 3] → tile to [batch, 2, 3]
+            var thetaExpanded = Engine.TensorExpandDims(_lastTransformationMatrix, 0);
+            theta = Engine.TensorTile(thetaExpanded, [batchSize, 1, 1]);
+        }
+        else if (_lastTransformationMatrix.Shape[0] == batchSize)
+        {
+            // Already batched [batch, 2, 3]
+            theta = _lastTransformationMatrix;
+        }
+        else
+        {
+            // [1, 2, 3] → tile to [batch, 2, 3]
+            theta = Engine.TensorTile(_lastTransformationMatrix, [batchSize, 1, 1]);
+        }
 
         // Autodiff graph for sampling backward
         var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "st_input", requiresGradient: true);
@@ -863,7 +884,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
             else
             {
-                activationDeriv = new Tensor<T>(lastLoc1.Shape);
+                activationDeriv = new Tensor<T>(lastLoc1.Shape.ToArray());
                 activationDeriv.Fill(NumOps.One);
             }
 
@@ -878,7 +899,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Input gradient contribution from localization network
             var weights1T = Engine.TensorTranspose(_localizationWeights1);
             var inputLocGradFlat = Engine.TensorMatMul(loc1Grad, weights1T);
-            var inputLocGrad = inputLocGradFlat.Reshape(_lastInput.Shape);
+            var inputLocGrad = inputLocGradFlat.Reshape(_lastInput.Shape.ToArray());
 
             if (inputNode.Gradient != null)
             {
@@ -1336,6 +1357,34 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// An error is thrown if the input vector doesn't have the expected number of parameters.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gW1 = _localizationWeights1Gradient != null
+            ? new Vector<T>(_localizationWeights1Gradient.ToArray())
+            : new Vector<T>(_localizationWeights1.Length);
+        var gB1 = _localizationBias1Gradient != null
+            ? new Vector<T>(_localizationBias1Gradient.ToArray())
+            : new Vector<T>(_localizationBias1.Length);
+        var gW2 = _localizationWeights2Gradient != null
+            ? new Vector<T>(_localizationWeights2Gradient.ToArray())
+            : new Vector<T>(_localizationWeights2.Length);
+        var gB2 = _localizationBias2Gradient != null
+            ? new Vector<T>(_localizationBias2Gradient.ToArray())
+            : new Vector<T>(_localizationBias2.Length);
+
+        return Vector<T>.Concatenate(
+            Vector<T>.Concatenate(gW1, gB1),
+            Vector<T>.Concatenate(gW2, gB2));
+    }
+
+    public override void ClearGradients()
+    {
+        _localizationWeights1Gradient = null;
+        _localizationBias1Gradient = null;
+        _localizationWeights2Gradient = null;
+        _localizationBias2Gradient = null;
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int w1Size = _localizationWeights1.Shape[0] * _localizationWeights1.Shape[1];
@@ -1486,7 +1535,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Step 1: Preprocess input to NHWC format (CPU for shape handling, then upload)
         // Input shape handling requires dynamic shape analysis - do on CPU, upload result
         var inputTensor = inputGpu.ToTensor();
-        _originalInputShape = inputTensor.Shape;
+        _originalInputShape = inputTensor.Shape.ToArray();
         int rank = inputTensor.Shape.Length;
 
         if (rank < 2)

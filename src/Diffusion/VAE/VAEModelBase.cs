@@ -73,6 +73,12 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <inheritdoc />
     public abstract int ParameterCount { get; }
 
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
+
     /// <inheritdoc />
     public virtual bool SupportsTiling => false;
 
@@ -116,9 +122,9 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         // std = exp(0.5 * logVariance)
 
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
-        var epsilon = SampleNoise(mean.Shape, rng);
+        var epsilon = SampleNoise(mean.Shape.ToArray(), rng);
 
-        var result = new Tensor<T>(mean.Shape);
+        var result = new Tensor<T>(mean.Shape.ToArray());
         var meanSpan = mean.AsSpan();
         var logVarSpan = logVariance.AsSpan();
         var epsilonSpan = epsilon.AsSpan();
@@ -194,7 +200,6 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         return new ModelMetadata<T>
         {
             Name = GetType().Name,
-            ModelType = Enums.ModelType.NeuralNetwork,
             FeatureCount = ParameterCount,
             Complexity = ParameterCount,
             Description = $"VAE with {ParameterCount} parameters, {InputChannels} input channels, " +

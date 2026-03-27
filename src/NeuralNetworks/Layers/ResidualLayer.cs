@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -30,6 +32,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Residual)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = false, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 1, 4 }, (AiDotNet.Interfaces.ILayer<double>?)null, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class ResidualLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -187,8 +192,7 @@ public class ResidualLayer<T> : LayerBase<T>
 
             var innerOutputGpu = new GpuTensor<T>(
                 backend,
-                innerOutputCpu.Data.ToArray(),
-                innerOutputCpu.Shape,
+                innerOutputCpu,
                 GpuTensorRole.Intermediate);
 
             result = gpuEngine.AddGpu(input, innerOutputGpu);
@@ -634,9 +638,46 @@ public class ResidualLayer<T> : LayerBase<T>
     /// - Advanced optimization techniques
     /// </para>
     /// </remarks>
+    /// <inheritdoc/>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        _innerLayer?.SetTrainingMode(isTraining);
+    }
+
+    /// <summary>
+    /// Returns metadata for serialization including inner layer dimensions.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        if (_innerLayer != null)
+        {
+            metadata["InnerLayerType"] = _innerLayer.GetType().AssemblyQualifiedName ?? _innerLayer.GetType().FullName ?? string.Empty;
+            metadata["InnerInputSize"] = _innerLayer.GetInputShape()[0].ToString();
+            metadata["InnerOutputSize"] = _innerLayer.GetOutputShape()[0].ToString();
+        }
+        return metadata;
+    }
+
+    /// <inheritdoc/>
+    public override int ParameterCount => _innerLayer?.ParameterCount ?? 0;
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameterGradients()
+    {
+        return _innerLayer?.GetParameterGradients() ?? new Vector<T>(0);
+    }
+
     public override Vector<T> GetParameters()
     {
         return _innerLayer?.GetParameters() ?? Vector<T>.Empty();
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        _innerLayer?.SetParameters(parameters);
     }
 
     /// <summary>
@@ -745,5 +786,11 @@ public class ResidualLayer<T> : LayerBase<T>
         var activatedOutput = ApplyActivationToGraph(resultNode);
 
         return activatedOutput;
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _innerLayer?.ClearGradients();
     }
 }

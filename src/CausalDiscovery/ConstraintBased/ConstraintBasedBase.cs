@@ -119,7 +119,15 @@ public abstract class ConstraintBasedBase<T> : CausalDiscoveryBase<T>
             syy += dj * dj;
         }
 
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
+        if (sxx < 1e-10 || syy < 1e-10)
+        {
+            // Near-zero residual variance means the conditioning set perfectly predicts
+            // one or both variables. Partial correlation is undefined — return 0 (no evidence
+            // of direct association beyond what the conditioning set explains).
+            return 0;
+        }
+
+        return sxy / Math.Sqrt(sxx * syy);
     }
 
     /// <summary>

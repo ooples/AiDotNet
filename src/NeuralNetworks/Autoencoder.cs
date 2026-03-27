@@ -35,6 +35,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Anomaly detection (unusual data is reconstructed poorly)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new AutoencoderOptions { InputSize = 784, LatentSize = 32 };
+/// var model = new Autoencoder&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
+/// var reconstructed = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -108,6 +116,8 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     private int _epochs;
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 
     /// <summary>
     /// The size of each batch used in training.
@@ -480,7 +490,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         Vector<T> gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
 
         // Reshape the gradient back to the original tensor shape
-        return new Tensor<T>(predicted.Shape, gradientVector);
+        return new Tensor<T>(predicted.Shape.ToArray(), gradientVector);
     }
 
     /// <summary>
@@ -626,7 +636,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         scalingFactor = NumOps.Multiply(scalingFactor, AuxiliaryLossWeight);
 
         // Create gradient tensor with the same shape as encoder activations
-        var gradient = new Tensor<T>(_lastEncoderActivations.Shape);
+        var gradient = new Tensor<T>(_lastEncoderActivations.Shape.ToArray());
         for (int i = 0; i < gradient.Length; i++)
         {
             gradient[i] = scalingFactor;
@@ -723,6 +733,16 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        SetTrainingMode(true);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(true);
+
+        // Normalize to 2D [batch, features] if needed
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+        if (expectedOutput.Rank == 1)
+            expectedOutput = expectedOutput.Reshape([1, expectedOutput.Shape[0]]);
+
         // Basic validation
         if (input.Shape[1] != Layers[0].GetInputShape()[0])
         {
@@ -743,8 +763,20 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             for (int i = 0; i < input.Shape[0]; i += _batchSize)
             {
                 int currentBatchSize = Math.Min(_batchSize, input.Shape[0] - i);
-                var batchInput = input.Slice(0, i, 0, i + currentBatchSize);
-                var batchExpected = expectedOutput.Slice(0, i, 0, i + currentBatchSize);
+                Tensor<T> batchInput;
+                Tensor<T> batchExpected;
+                if (input.Shape[0] == 1 || currentBatchSize == input.Shape[0])
+                {
+                    // Single sample or full batch — use as-is
+                    batchInput = input;
+                    batchExpected = expectedOutput;
+                }
+                else
+                {
+                    // Mini-batch: slice rows [i, i+batchSize) across all features
+                    batchInput = input.Slice(i, 0, i + currentBatchSize, input.Shape[1]);
+                    batchExpected = expectedOutput.Slice(i, 0, i + currentBatchSize, expectedOutput.Shape[1]);
+                }
 
                 // Forward pass
                 var current = batchInput;
@@ -801,13 +833,14 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                     outputGradient = Layers[j].Backward(outputGradient);
                 }
 
-                // Update parameters
-                for (int j = 0; j < Layers.Count; j++)
+                // Update parameters using Adam optimizer
+                _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+                var paramGrads = GetParameterGradients();
+                var currentParams = GetParameters();
+                if (paramGrads.Length > 0 && currentParams.Length == paramGrads.Length)
                 {
-                    if (Layers[j].SupportsTraining)
-                    {
-                        Layers[j].UpdateParameters(_learningRate);
-                    }
+                    var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
+                    UpdateParameters(updatedParams);
                 }
             }
 
@@ -962,7 +995,6 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.Autoencoder,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputDimension", Layers[0].GetInputShape()[0] },

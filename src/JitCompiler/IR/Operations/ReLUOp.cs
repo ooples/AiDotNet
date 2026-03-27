@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 namespace AiDotNet.JitCompiler.IR.Operations;
 
 /// <summary>
@@ -16,8 +17,10 @@ namespace AiDotNet.JitCompiler.IR.Operations;
 /// Very common in neural networks because it's simple and effective.
 /// </para>
 /// </remarks>
-public class ReLUOp : IROp
+public class ReLUOp : IROp, IFusableActivation
 {
+    public FusedActivationType FusedType => FusedActivationType.ReLU;
+
     public override bool Validate()
     {
         if (!base.Validate()) return false;

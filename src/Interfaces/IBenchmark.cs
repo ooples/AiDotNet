@@ -28,7 +28,7 @@ namespace AiDotNet.Interfaces;
 /// ```csharp
 /// var benchmark = new GSM8KBenchmark&lt;double&gt;();
 /// var results = await benchmark.EvaluateAsync(reasoner, sampleSize: 100);
-/// Console.WriteLine($"Accuracy: {results.Accuracy:P1}"); // "Accuracy: 87.5%"
+/// // Result is available in the returned value // "Accuracy: 87.5%"
 /// ```
 /// </para>
 /// </remarks>

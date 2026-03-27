@@ -550,7 +550,7 @@ public class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>, ITex
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
     {
         var image = EnsureBatchDimension(rawImage);
-        var normalized = new Tensor<T>(image.Shape);
+        var normalized = new Tensor<T>(image.Shape.ToArray());
         double[] means = [0.485, 0.456, 0.406];
         double[] stds = [0.229, 0.224, 0.225];
 
@@ -593,7 +593,6 @@ public class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<T>, ITex
         return new ModelMetadata<T>
         {
             Name = "TRIE",
-            ModelType = ModelType.NeuralNetwork,
             Description = "TRIE for end-to-end text reading and information extraction (ACM MM 2020)",
             FeatureCount = _graphDim,
             Complexity = Layers.Count,

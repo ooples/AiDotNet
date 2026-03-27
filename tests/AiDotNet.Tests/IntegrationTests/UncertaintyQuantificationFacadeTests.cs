@@ -42,7 +42,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Medium,
             inputSize: 2,
             outputSize: 1);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
 
@@ -73,16 +73,16 @@ public sealed class UncertaintyQuantificationFacadeTests
             .ConfigureDataLoader(DataLoaders.FromTensors(x, y))
             .BuildAsync();
 
-        var trainedModel = Assert.IsType<NeuralNetworkModel<double>>(result.OptimizationResult.BestSolution);
-        var injectedMcDropoutLayers = trainedModel.Network.LayersReadOnly.OfType<MCDropoutLayer<double>>().ToList();
+        var trainedModel = Assert.IsType<NeuralNetwork<double>>(result.OptimizationResult.BestSolution);
+        var injectedMcDropoutLayers = trainedModel.Layers.OfType<MCDropoutLayer<double>>().ToList();
         Assert.NotEmpty(injectedMcDropoutLayers);
 
-        var parameters = trainedModel.Network.GetParameters();
+        var parameters = trainedModel.GetParameters();
         for (int i = 0; i < parameters.Length; i++)
         {
             parameters[i] = (i + 1) * 0.01;
         }
-        trainedModel.Network.UpdateParameters(parameters);
+        trainedModel.UpdateParameters(parameters);
 
         // Sanity-check: MC mode should yield stochastic predictions.
         foreach (var layer in injectedMcDropoutLayers)
@@ -97,12 +97,12 @@ public sealed class UncertaintyQuantificationFacadeTests
         }
         var sample1Tensor = ConversionsHelper.ConvertToTensor<double>(sample1);
         var sample2Tensor = ConversionsHelper.ConvertToTensor<double>(sample2);
-        Assert.Equal(sample1Tensor.Shape, sample2Tensor.Shape);
+        Assert.Equal(sample1Tensor.Shape.ToArray(), sample2Tensor.Shape.ToArray());
 
         var uqResult = result.PredictWithUncertainty(x, numSamples: 16);
 
         Assert.NotNull(uqResult.Variance);
-        Assert.Equal(uqResult.Prediction.Shape, uqResult.Variance!.Shape);
+        Assert.Equal(uqResult.Prediction.Shape.ToArray(), uqResult.Variance!.Shape.ToArray());
         Assert.True(uqResult.Metrics.ContainsKey("predictive_entropy"));
         Assert.True(uqResult.Metrics.ContainsKey("mutual_information"));
     }
@@ -116,7 +116,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Medium,
             inputSize: 2,
             outputSize: 1);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
 
@@ -142,13 +142,13 @@ public sealed class UncertaintyQuantificationFacadeTests
         var result = await builder
             .ConfigureDataLoader(DataLoaders.FromTensors(x, y))
             .BuildAsync();
-        var trainedModel = Assert.IsType<NeuralNetworkModel<double>>(result.OptimizationResult.BestSolution);
-        var parameters = trainedModel.Network.GetParameters();
+        var trainedModel = Assert.IsType<NeuralNetwork<double>>(result.OptimizationResult.BestSolution);
+        var parameters = trainedModel.GetParameters();
         for (int i = 0; i < parameters.Length; i++)
         {
             parameters[i] = (i + 1) * 0.01;
         }
-        trainedModel.Network.UpdateParameters(parameters);
+        trainedModel.UpdateParameters(parameters);
 
         var first = result.PredictWithUncertainty(x);
         var second = result.PredictWithUncertainty(x);
@@ -191,7 +191,7 @@ public sealed class UncertaintyQuantificationFacadeTests
 
     private static void AssertTensorEqual(Tensor<double> left, Tensor<double> right)
     {
-        Assert.Equal(left.Shape, right.Shape);
+        Assert.Equal(left.Shape.ToArray(), right.Shape.ToArray());
         var leftVector = left.ToVector();
         var rightVector = right.ToVector();
         Assert.Equal(leftVector.Length, rightVector.Length);
@@ -210,7 +210,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Medium,
             inputSize: 1,
             outputSize: 1);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
 
@@ -270,7 +270,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Simple,
             inputSize: 2,
             outputSize: 3);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new DeterministicNeuralNetworkParameterOptimizer<Tensor<double>, Tensor<double>>(model);
 
@@ -336,7 +336,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Simple,
             inputSize: 2,
             outputSize: 3);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new DeterministicNeuralNetworkParameterOptimizer<Tensor<double>, Tensor<double>>(model);
 
@@ -388,7 +388,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Simple,
             inputSize: 2,
             outputSize: 2);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new DeterministicNeuralNetworkParameterOptimizer<Tensor<double>, Tensor<double>>(model);
 
@@ -445,7 +445,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Simple,
             inputSize: 1,
             outputSize: 1);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
 
@@ -485,7 +485,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         var uq = result.PredictWithUncertainty(xCal);
         Assert.Equal(UncertaintyQuantificationMethod.LaplaceApproximation, uq.MethodUsed);
         Assert.NotNull(uq.Variance);
-        Assert.Equal(ConversionsHelper.ConvertToTensor<double>(uq.Prediction).Shape, ConversionsHelper.ConvertToTensor<double>(uq.Variance!).Shape);
+        Assert.Equal(ConversionsHelper.ConvertToTensor<double>(uq.Prediction).Shape.ToArray(), ConversionsHelper.ConvertToTensor<double>(uq.Variance!).Shape.ToArray());
     }
 
     [Fact]
@@ -497,7 +497,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Simple,
             inputSize: 2,
             outputSize: 2);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new DeterministicNeuralNetworkParameterOptimizer<Tensor<double>, Tensor<double>>(model);
 
@@ -555,7 +555,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Simple,
             inputSize: 1,
             outputSize: 1);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
 
@@ -599,7 +599,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         var uq = result.PredictWithUncertainty(xCal);
         Assert.Equal(UncertaintyQuantificationMethod.Swag, uq.MethodUsed);
         Assert.NotNull(uq.Variance);
-        Assert.Equal(ConversionsHelper.ConvertToTensor<double>(uq.Prediction).Shape, ConversionsHelper.ConvertToTensor<double>(uq.Variance!).Shape);
+        Assert.Equal(ConversionsHelper.ConvertToTensor<double>(uq.Prediction).Shape.ToArray(), ConversionsHelper.ConvertToTensor<double>(uq.Variance!).Shape.ToArray());
     }
 
     [Fact]
@@ -611,7 +611,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Simple,
             inputSize: 2,
             outputSize: 3);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new DeterministicNeuralNetworkParameterOptimizer<Tensor<double>, Tensor<double>>(model);
 
@@ -666,7 +666,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Medium,
             inputSize: 1,
             outputSize: 1);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
 
         var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
 
@@ -694,7 +694,7 @@ public sealed class UncertaintyQuantificationFacadeTests
 
         var uq = result.PredictWithUncertainty(x);
         Assert.NotNull(uq.Variance);
-        Assert.Equal(uq.Prediction.Shape, uq.Variance!.Shape);
+        Assert.Equal(uq.Prediction.Shape.ToArray(), uq.Variance!.Shape.ToArray());
 
         var varianceVector = uq.Variance!.ToVector();
         Assert.Contains(varianceVector, v => v > 0.0);
@@ -740,7 +740,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         var uq = result.PredictWithUncertainty(x);
 
         Assert.NotNull(uq.Variance);
-        Assert.Equal(uq.Prediction.Shape, uq.Variance!.Shape);
+        Assert.Equal(uq.Prediction.Shape.ToArray(), uq.Variance!.Shape.ToArray());
         Assert.True(uq.Metrics.ContainsKey("predictive_entropy"));
         Assert.True(uq.Metrics.ContainsKey("mutual_information"));
     }
@@ -754,7 +754,7 @@ public sealed class UncertaintyQuantificationFacadeTests
             complexity: NetworkComplexity.Medium,
             inputSize: 2,
             outputSize: 1);
-        var model = new NeuralNetworkModel<double>(architecture);
+        var model = new NeuralNetwork<double>(architecture);
         var optimizer = new PassthroughOptimizer<double, Tensor<double>, Tensor<double>>(model);
 
         var xTrain = Tensor<double>.FromMatrix(new Matrix<double>(new double[,]
@@ -792,7 +792,7 @@ public sealed class UncertaintyQuantificationFacadeTests
         Assert.All(results, r =>
         {
             Assert.NotNull(r.Variance);
-            Assert.Equal(r.Prediction.Shape, r.Variance!.Shape);
+            Assert.Equal(r.Prediction.Shape.ToArray(), r.Variance!.Shape.ToArray());
             Assert.True(r.Metrics.ContainsKey("predictive_entropy"));
             Assert.True(r.Metrics.ContainsKey("mutual_information"));
         });

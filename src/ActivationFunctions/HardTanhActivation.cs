@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
@@ -30,6 +32,9 @@ namespace AiDotNet.ActivationFunctions;
 /// or resource-constrained environments.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = true, IsDifferentiable = false, Cost = ComputeCost.Low)]
 public class HardTanhActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

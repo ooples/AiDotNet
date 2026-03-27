@@ -38,7 +38,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 80, outputSize: 5000);
 /// var model = new FastConformer&lt;float&gt;(arch, "fast_conformer_medium.onnx");
 /// var result = model.Transcribe(audioWaveform);
-/// Console.WriteLine(result.Text); // "hello world"
+/// // Result is available in the returned value // "hello world"
 /// </code>
 /// </para>
 /// </remarks>
@@ -211,7 +211,6 @@ public class FastConformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Name = _useNativeMode ? "FastConformer-Native" : "FastConformer-ONNX",
             Description = $"Fast Conformer {_options.Variant} ASR (Rekesh et al., 2023, NVIDIA NeMo)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

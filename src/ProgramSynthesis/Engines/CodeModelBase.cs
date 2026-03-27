@@ -102,7 +102,7 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
         LastLoss = LossFunction.CalculateLoss(output.ToVector(), expectedOutput.ToVector());
 
         var outputGradient = LossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector());
-        var gradient = new Tensor<T>(output.Shape, outputGradient);
+        var gradient = new Tensor<T>(output.Shape.ToArray(), outputGradient);
 
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
@@ -147,7 +147,6 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.Transformer,
             AdditionalInfo = info,
             ModelData = Serialize()
         };

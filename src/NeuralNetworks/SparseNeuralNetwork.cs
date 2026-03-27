@@ -35,6 +35,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Pruned networks from neural architecture search
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new SparseNeuralNetworkOptions { InputSize = 784, HiddenSize = 1024, Sparsity = 0.9 };
+/// var model = new SparseNeuralNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
@@ -126,15 +134,18 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
         else
         {
             var inputShape = Architecture.GetInputShape();
-            var outputShape = Architecture.GetOutputShape();
             var hiddenSizes = Architecture.GetHiddenLayerSizes();
 
             int inputFeatures = inputShape[0];
-            int outputFeatures = outputShape[0];
+            int outputFeatures = Architecture.OutputSize;
 
             if (hiddenSizes.Length == 0)
             {
-                Layers.Add(new SparseLinearLayer<T>(inputFeatures, outputFeatures, _sparsity));
+                // Per Mocanu et al. (2018), sparse networks need hidden layers for
+                // sparse-to-sparse connectivity. Single-layer sparse → dead ReLU neurons.
+                int hiddenSize = Math.Max(32, (inputFeatures + outputFeatures) / 2);
+                Layers.Add(new SparseLinearLayer<T>(inputFeatures, hiddenSize, _sparsity));
+                Layers.Add(new SparseLinearLayer<T>(hiddenSize, outputFeatures, _sparsity));
             }
             else
             {
@@ -289,7 +300,6 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.FeedForwardNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "SparseNeuralNetwork" },

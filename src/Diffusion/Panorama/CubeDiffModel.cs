@@ -29,6 +29,14 @@ namespace AiDotNet.Diffusion.Panorama;
 /// VR or game backgrounds.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 30 };
+/// var model = new CubeDiffModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 6, 4, 64, 64 });
+/// var panorama = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -106,7 +114,7 @@ public class CubeDiffModel<T> : LatentDiffusionModelBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = "CubeDiff", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+        var m = new ModelMetadata<T> { Name = "CubeDiff", Version = "1.0",
             Description = "Cubemap 360x180 panorama with cross-face attention consistency",
             FeatureCount = ParameterCount, Complexity = ParameterCount };
         m.SetProperty("architecture", "cubemap-cross-face-panorama");

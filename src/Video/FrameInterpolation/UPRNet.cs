@@ -40,6 +40,19 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// refines its predictions until they're good enough, like iterating on a drawing.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a UPR-Net model for lightweight pyramid-based frame interpolation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new UPRNetOptions();
+/// var uprNet = new UPRNet&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var uprNetOnnx = new UPRNet&lt;double&gt;(architecture, "uprnet_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -170,7 +183,6 @@ public class UPRNet<T> : FrameInterpolationBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.FrameInterpolation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "UPRNet" },

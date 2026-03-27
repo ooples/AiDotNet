@@ -22,6 +22,19 @@ namespace AiDotNet.SpeechRecognition.Multilingual;
 /// Omnilingual ASR builds on MMS with improved pre-training using 500k+ hours of multilingual data and a more efficient adapter mechanism. The model uses a language-agnostic encoder with lightweight language-specific projection heads. It supports seamless code-switching between languages within a single utterance, enabled by a shared multilingual vocabulary and joint language-identification CTC auxiliary loss.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Omnilingual ASR model for universal multilingual recognition
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+/// var model = new OmnilangualASR&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for code-switching multilingual ASR
+/// var onnxModel = new OmnilangualASR&lt;double&gt;(architecture, "omnilangual.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelCategory(ModelCategory.FoundationModel)]
@@ -87,7 +100,7 @@ public class OmnilangualASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "OmnilangualASR-Native" : "OmnilangualASR-ONNX", Description = "Omnilingual ASR: universal multilingual recognition (Meta, 2024)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers };
+    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "OmnilangualASR-Native" : "OmnilangualASR-ONNX", Description = "Omnilingual ASR: universal multilingual recognition (Meta, 2024)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers };
     protected override void SerializeNetworkSpecificData(BinaryWriter w) { w.Write(_useNativeMode); w.Write(_options.ModelPath ?? string.Empty); w.Write(_options.SampleRate); w.Write(_options.MaxAudioLengthSeconds); w.Write(_options.EncoderDim); w.Write(_options.NumEncoderLayers); w.Write(_options.NumAttentionHeads); w.Write(_options.NumMels); w.Write(_options.VocabSize); w.Write(_options.MaxTextLength); w.Write(_options.DropoutRate); w.Write(_options.Language); }
     protected override void DeserializeNetworkSpecificData(BinaryReader r) { _useNativeMode = r.ReadBoolean(); string mp = r.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.SampleRate = r.ReadInt32(); _options.MaxAudioLengthSeconds = r.ReadInt32(); _options.EncoderDim = r.ReadInt32(); _options.NumEncoderLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32(); _options.NumMels = r.ReadInt32(); _options.VocabSize = r.ReadInt32(); _options.MaxTextLength = r.ReadInt32(); _options.DropoutRate = r.ReadDouble(); _options.Language = r.ReadString(); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new OmnilangualASR<T>(Architecture, mp, _options); return new OmnilangualASR<T>(Architecture, _options); }

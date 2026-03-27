@@ -54,6 +54,13 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     /// - Aerospace (satellite dynamics)
     /// - Any mechanical system
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var lnn = new LagrangianNeuralNetwork&lt;float&gt;();
+    /// float[] acceleration = lnn.ComputeAcceleration(
+    ///     new float[] { 1.0f, 0.5f }, new float[] { 0.1f, -0.2f });
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Science)]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -335,7 +342,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             LastLoss = NumOps.Add(primaryLoss, auxiliaryLoss);
 
             var outputGradient = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction.Shape);
+            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction.Shape.ToArray());
 
             Backward(outputGradientTensor);
             _optimizer.UpdateParameters(Layers);
@@ -351,7 +358,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         {
             return new ModelMetadata<T>
             {
-                ModelType = ModelType.NeuralNetwork,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "ConfigurationDimension", _configurationDim },

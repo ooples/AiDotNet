@@ -29,6 +29,14 @@ namespace AiDotNet.NeuralNetworks;
 /// as having the potential to explore many possible solutions simultaneously rather than one at a time.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new QuantumNeuralNetworkOptions { NumQubits = 4, NumLayers = 6 };
+/// var model = new QuantumNeuralNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelDomain(ModelDomain.Science)]
@@ -230,7 +238,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
         int inputElements = input.Length;
 
         // If element counts match, reshape to expected shape
-        if (inputElements == expectedElements && !input.Shape.SequenceEqual(expectedShape))
+        if (inputElements == expectedElements && !input.Shape.ToArray().SequenceEqual(expectedShape))
         {
             workingInput = input.Reshape(expectedShape);
         }
@@ -272,6 +280,11 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Set training mode on all layers for proper gradient storage
+        SetTrainingMode(true);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(true);
+
         // Forward pass
         var prediction = Predict(input);
 
@@ -304,7 +317,6 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.QuantumNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputShape", Architecture.GetInputShape() },
@@ -494,14 +506,18 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private void UpdateQuantumParameters(List<Tensor<T>> gradients)
     {
-        if (gradients.Count != Layers.Count)
-            throw new ArgumentException("Number of gradient tensors must match number of layers.");
-
-        for (int i = 0; i < Layers.Count; i++)
+        // Use standard per-layer parameter gradients (from Backward) with Adam optimizer
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        var paramGrads = GetParameterGradients();
+        var currentParams = GetParameters();
+        if (paramGrads.Length > 0 && currentParams.Length == paramGrads.Length)
         {
-            Layers[i].UpdateParameters(gradients[i].ToVector());
+            var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
+            UpdateParameters(updatedParams);
         }
     }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 
     /// <summary>
     /// Converts a real-valued tensor to a complex-valued tensor.
@@ -520,7 +536,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<Complex<T>> ConvertToComplexTensor(Tensor<T> realTensor)
     {
-        var complexTensor = new Tensor<Complex<T>>(realTensor.Shape);
+        var complexTensor = new Tensor<Complex<T>>(realTensor.Shape.ToArray());
         for (int i = 0; i < realTensor.Length; i++)
         {
             complexTensor[i] = new Complex<T>(realTensor[i], NumOps.Zero);
@@ -567,7 +583,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Tensor<T> ExtractRealPart(Tensor<Complex<T>> complexTensor)
     {
-        var realTensor = new Tensor<T>(complexTensor.Shape);
+        var realTensor = new Tensor<T>(complexTensor.Shape.ToArray());
         for (int i = 0; i < complexTensor.Length; i++)
         {
             realTensor[i] = complexTensor[i].Real;

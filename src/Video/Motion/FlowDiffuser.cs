@@ -25,6 +25,19 @@ namespace AiDotNet.Video.Motion;
 /// FlowDiffuser applies diffusion models to optical flow estimation with iterative refinement, producing accurate and smooth flow fields.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FlowDiffuser model for diffusion-based optical flow estimation
+/// var flowDiffuser = new FlowDiffuser&lt;double&gt;();
+///
+/// // Or configure with custom parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new FlowDiffuser&lt;double&gt;(architecture);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -153,7 +166,7 @@ public class FlowDiffuser<T> : OpticalFlowBase<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         var output = Predict(input);
-        var gradient = new Tensor<T>(output.Shape);
+        var gradient = new Tensor<T>(output.Shape.ToArray());
         for (int i = 0; i < output.Length; i++)
         {
             gradient.Data.Span[i] = NumOps.Subtract(output.Data.Span[i], expectedOutput.Data.Span[i]);
@@ -215,7 +228,6 @@ public class FlowDiffuser<T> : OpticalFlowBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "FlowDiffuser" },

@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -32,6 +34,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Graph)]
+[LayerTask(LayerTask.GraphProcessing)]
+[LayerTask(LayerTask.Projection)]
+[LayerProperty(IsTrainable = true, ChangesShape = true)]
 public class ReadoutLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -127,6 +133,7 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// automatically adjust to better recognize patterns specific to your data.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -160,9 +167,12 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// The layer starts with small random weights and zero biases that will be refined during training.
     /// </para>
     /// </remarks>
-    public ReadoutLayer(int inputSize, int outputSize, IActivationFunction<T> scalarActivation)
+    public ReadoutLayer(int inputSize, int outputSize, IActivationFunction<T> scalarActivation,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputSize], [outputSize], scalarActivation)
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         _weights = new Tensor<T>([outputSize, inputSize]);
         _bias = new Tensor<T>([outputSize]);
         _weightGradients = new Tensor<T>([outputSize, inputSize]);
@@ -202,9 +212,12 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// The layer starts with small random weights and zero biases that will be refined during training.
     /// </para>
     /// </remarks>
-    public ReadoutLayer(int inputSize, int outputSize, IVectorActivationFunction<T> vectorActivation)
+    public ReadoutLayer(int inputSize, int outputSize, IVectorActivationFunction<T> vectorActivation,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base([inputSize], [outputSize], vectorActivation)
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         _weights = new Tensor<T>([outputSize, inputSize]);
         _bias = new Tensor<T>([outputSize]);
         _weightGradients = new Tensor<T>([outputSize, inputSize]);
@@ -244,7 +257,7 @@ public class ReadoutLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int inputSize = input.Shape[^1];
         if (inputSize != InputShape[0])
@@ -319,7 +332,7 @@ public class ReadoutLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int inputSize = input.Shape[^1];
         if (inputSize != InputShape[0])
@@ -572,7 +585,7 @@ public class ReadoutLayer<T> : LayerBase<T>
         {
             if (outputGradient.Length == _lastPreActivation.Length)
             {
-                normalizedOutputGradient = outputGradient.Reshape(_lastPreActivation.Shape);
+                normalizedOutputGradient = outputGradient.Reshape(_lastPreActivation.Shape.ToArray());
             }
             else
             {
@@ -678,7 +691,7 @@ public class ReadoutLayer<T> : LayerBase<T>
         {
             if (outputGradient.Length == _lastPreActivation.Length)
             {
-                normalizedOutputGradient = outputGradient.Reshape(_lastPreActivation.Shape);
+                normalizedOutputGradient = outputGradient.Reshape(_lastPreActivation.Shape.ToArray());
             }
             else
             {
@@ -889,6 +902,19 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// An error is thrown if the input vector doesn't have the expected number of parameters.
     /// </para>
     /// </remarks>
+    public override Vector<T> GetParameterGradients()
+    {
+        var flatWeightGrads = new Vector<T>(_weightGradients.ToArray());
+        var flatBiasGrads = new Vector<T>(_biasGradients.ToArray());
+        return Vector<T>.Concatenate(flatWeightGrads, flatBiasGrads);
+    }
+
+    public override void ClearGradients()
+    {
+        _weightGradients = new Tensor<T>(_weights.Shape.ToArray());
+        _biasGradients = new Tensor<T>(_bias.Shape.ToArray());
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int outputSize = _weights.Shape[0];
@@ -975,17 +1001,8 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters(int inputSize, int outputSize)
     {
-        // Initialize weights with small random values centered around zero
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                _weights[i, j] = NumOps.FromDouble((Random.NextDouble() - 0.5) * 0.1);
-            }
-        }
-
-        // Initialize biases to zero
-        _bias.Fill(NumOps.Zero);
+        InitializeLayerWeights(_weights, outputSize, inputSize);
+        InitializeLayerBiases(_bias);
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

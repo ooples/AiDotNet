@@ -27,8 +27,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// <item>Paper: "Combined Scaling for Zero-shot Transfer Learning" (Pham et al., 2022)</item>
 /// </list>
 /// </para>
-/// <para><b>For Beginners:</b> BASIC is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> BASIC achieves state-of-the-art zero-shot ImageNet accuracy
+/// (85.7%) by combining a CoAtNet hybrid CNN-Transformer vision encoder with massive-scale
+/// contrastive training on 6.6 billion image-text pairs. It demonstrates that scaling both
+/// model size and data together yields the best results for vision-language alignment.
+/// Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a BASIC model for large-scale contrastive vision-language alignment
+/// // using CoAtNet hybrid CNN-Transformer encoder trained on 6.6B pairs
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new BASIC&lt;double&gt;(architecture, "basic.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new BASIC&lt;double&gt;(architecture, new BASICOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -183,7 +203,7 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var meta = new ModelMetadata<T> { Name = _useNativeMode ? "BASIC-Native" : "BASIC-ONNX", Description = "BASIC: Combined Scaling for Zero-shot Transfer Learning (Pham et al., 2022)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers };
+        var meta = new ModelMetadata<T> { Name = _useNativeMode ? "BASIC-Native" : "BASIC-ONNX", Description = "BASIC: Combined Scaling for Zero-shot Transfer Learning (Pham et al., 2022)", FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers };
         meta.AdditionalInfo["Architecture"] = "BASIC";
         meta.AdditionalInfo["VisionEncoder"] = "CoAtNet";
         meta.AdditionalInfo["ProjectionDim"] = _options.ProjectionDim.ToString();

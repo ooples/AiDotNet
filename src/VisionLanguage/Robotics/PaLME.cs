@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// PaLM-E (Google, 2023) is a 562 billion parameter embodied multimodal language model that
+/// integrates vision, language, and robot control. It injects continuous sensor observations
+/// (images, point clouds, robot state) as tokens into the PaLM language model, enabling
+/// embodied reasoning, task planning, and real-world robotic manipulation from natural language.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "PaLM-E: An Embodied Multimodal Language Model (Google, 2023)"</item></list></para>
-/// <para><b>For Beginners:</b> PaLME is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> PaLM-E is a massive embodied vision-language model from Google
+/// for robotic planning and multimodal reasoning. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PaLM-E model for embodied multimodal robotic planning
+/// // 562B parameter model integrating vision, language, and robot control
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new PaLME&lt;double&gt;(architecture, "palme.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new PaLME&lt;double&gt;(architecture, new PaLMEOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Robotics)]
@@ -187,7 +211,7 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "PaLM-E-Native" : "PaLM-E-ONNX", Description = "PaLM-E: 562B embodied multimodal language model for robotic planning.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "PaLM-E-Native" : "PaLM-E-ONNX", Description = "PaLM-E: 562B embodied multimodal language model for robotic planning.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "PaLM-E";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

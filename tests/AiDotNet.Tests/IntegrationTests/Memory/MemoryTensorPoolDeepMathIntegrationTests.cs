@@ -581,7 +581,7 @@ public class MemoryTensorPoolDeepMathIntegrationTests
         using var pool = new TensorPool<double>();
         var tensor = pool.Rent(new[] { 7 });
 
-        Assert.Single(tensor.Shape);
+        Assert.Single(tensor.Shape.ToArray());
         Assert.Equal(7, tensor.Shape[0]);
     }
 

@@ -25,8 +25,28 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "OBELICS: An Open Web-Scale Filtered Dataset of Interleaved Image-Text Documents" (Laurencon et al., NeurIPS 2023)</item></list></para>
-/// <para><b>For Beginners:</b> IDEFICS is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> IDEFICS is an 80 billion parameter open-source model that
+/// replicates DeepMind's Flamingo architecture. It processes interleaved sequences of images
+/// and text using gated cross-attention layers inserted into a LLaMA decoder, with a perceiver
+/// resampler compressing visual features. Trained on the OBELICS web-scraped dataset, it
+/// excels at few-shot multimodal tasks. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an IDEFICS model for 80B Flamingo-style interleaved generation
+/// // with perceiver resampler and gated cross-attention in LLaMA decoder
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new IDEFICS&lt;double&gt;(architecture, "idefics.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new IDEFICS&lt;double&gt;(architecture, new IDEFICSOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -118,7 +138,7 @@ public class IDEFICS<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageM
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "IDEFICS-Native" : "IDEFICS-ONNX", Description = "IDEFICS: Open-Source 80B Reproduction of Flamingo (Laurencon et al., NeurIPS 2023)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumPerceiverLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "IDEFICS"; m.AdditionalInfo["GenerativeType"] = _options.ArchitectureType.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "IDEFICS-Native" : "IDEFICS-ONNX", Description = "IDEFICS: Open-Source 80B Reproduction of Flamingo (Laurencon et al., NeurIPS 2023)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumPerceiverLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "IDEFICS"; m.AdditionalInfo["GenerativeType"] = _options.ArchitectureType.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.PerceiverDim); writer.Write(_options.DecoderDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumPerceiverLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.PerceiverDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumPerceiverLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new IDEFICS<T>(Architecture, mp, _options); return new IDEFICS<T>(Architecture, _options); }

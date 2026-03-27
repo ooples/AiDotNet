@@ -34,6 +34,14 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: Zheng et al., "Trajectory Consistency Distillation", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 4 };
+/// var model = new TCDModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -141,7 +149,7 @@ public class TCDModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "Trajectory Consistency Distillation (TCD)", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Trajectory Consistency Distillation (TCD)", Version = "1.0",
             Description = "Trajectory-aware consistency distillation with stochastic noise injection for high-quality few-step generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

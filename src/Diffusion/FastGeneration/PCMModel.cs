@@ -34,6 +34,14 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// Reference: Wang et al., "Phased Consistency Model", NeurIPS 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 512, Width = 512, NumInferenceSteps = 4 };
+/// var model = new PCMModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -151,7 +159,7 @@ public class PCMModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "Phased Consistency Model (PCM)", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Phased Consistency Model (PCM)", Version = "1.0",
             Description = "Phase-based consistency training for flexible 1-16 step generation without quality degradation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

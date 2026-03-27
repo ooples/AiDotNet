@@ -25,8 +25,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "MiniGPT-4: Enhancing Vision-Language Understanding with Advanced Large Language Models" (Zhu et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> MiniGPT4 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> MiniGPT-4 was one of the first models to show that you can
+/// connect a frozen image understanding system (ViT + Q-Former from BLIP-2) to a powerful
+/// language model (Vicuna) with just a single linear projection layer and get impressive
+/// results. Its two-stage training is simple: first learn on millions of image-text pairs
+/// to align visual and text features, then fine-tune on a small set of curated instructions.
+/// This minimal approach unlocked capabilities like detailed image descriptions, creative
+/// writing from images, and visual reasoning that surprised the research community. Default
+/// values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a MiniGPT-4 model for visual instruction following
+/// // using frozen ViT + Q-Former with Vicuna decoder
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new MiniGPT4&lt;double&gt;(architecture, "minigpt4.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new MiniGPT4&lt;double&gt;(architecture, new MiniGPT4Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -129,7 +152,7 @@ public class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "MiniGPT-4-Native" : "MiniGPT-4-ONNX", Description = "MiniGPT-4: Enhancing Vision-Language Understanding with Advanced Large Language Models (Zhu et al., 2023)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumQFormerLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "MiniGPT-4"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "MiniGPT-4-Native" : "MiniGPT-4-ONNX", Description = "MiniGPT-4: Enhancing Vision-Language Understanding with Advanced Large Language Models (Zhu et al., 2023)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumQFormerLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "MiniGPT-4"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.QFormerDim); writer.Write(_options.DecoderDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumQFormerLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.NumQueryTokens); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.QFormerDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumQFormerLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.NumQueryTokens = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new MiniGPT4<T>(Architecture, mp, _options); return new MiniGPT4<T>(Architecture, _options); }

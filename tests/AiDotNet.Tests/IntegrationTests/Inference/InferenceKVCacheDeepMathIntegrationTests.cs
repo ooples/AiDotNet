@@ -82,7 +82,7 @@ public class InferenceKVCacheDeepMathIntegrationTests
 
         var (cachedKeys, cachedValues) = cache.Append(0, keys, values);
 
-        Assert.Equal(new[] { 1, 1, 1, 2 }, cachedKeys.Shape);
+        Assert.Equal(new[] { 1, 1, 1, 2 }, cachedKeys.Shape.ToArray());
         Assert.Equal(3.14, cachedKeys[new[] { 0, 0, 0, 0 }], Tolerance);
         Assert.Equal(3.14, cachedKeys[new[] { 0, 0, 0, 1 }], Tolerance);
         Assert.Equal(2.71, cachedValues[new[] { 0, 0, 0, 0 }], Tolerance);
@@ -105,7 +105,7 @@ public class InferenceKVCacheDeepMathIntegrationTests
         var (cachedKeys, cachedValues) = cache.Append(0, k2, v2);
 
         // Should have 2 sequence positions
-        Assert.Equal(new[] { 1, 1, 2, 2 }, cachedKeys.Shape);
+        Assert.Equal(new[] { 1, 1, 2, 2 }, cachedKeys.Shape.ToArray());
         Assert.Equal(1.0, cachedKeys[new[] { 0, 0, 0, 0 }], Tolerance); // token 0
         Assert.Equal(2.0, cachedKeys[new[] { 0, 0, 1, 0 }], Tolerance); // token 1
         Assert.Equal(10.0, cachedValues[new[] { 0, 0, 0, 0 }], Tolerance);

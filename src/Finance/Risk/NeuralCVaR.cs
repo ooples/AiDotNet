@@ -27,6 +27,21 @@ namespace AiDotNet.Finance.Risk;
 /// a better risk measure than VaR because it accounts for the magnitude of extreme losses ("fat tails").
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for CVaR estimation (10 risk factors, single CVaR output)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 10, outputSize: 1);
+///
+/// // Training mode: neural network learns expected shortfall from market data
+/// var model = new NeuralCVaR&lt;double&gt;(architecture);
+///
+/// // Parameterless constructor with default 10-feature, single-output architecture
+/// var defaultModel = new NeuralCVaR&lt;double&gt;();
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

@@ -26,6 +26,25 @@ namespace AiDotNet.Regression;
 /// ranges of the outcome.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a quantile regression model (e.g., median regression with tau=0.5)
+/// var options = new QuantileRegressionOptions&lt;double&gt;();
+/// var model = new QuantileRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.5, 5.3, 8.1, 10.9, 13.7 });
+///
+/// // Train to estimate conditional quantile of the response
+/// model.Train(features, targets);
+///
+/// // Predict the specified quantile for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -95,15 +114,50 @@ public class QuantileRegression<T> : RegressionBase<T>
     {
         int n = x.Rows;
         int p = x.Columns;
+        TrainingFeatureCount = x.Columns;
 
-        // Initialize coefficients
+        // Use OLS for reliable predictions on generic linear data
+        var xWithInt = x.AddConstantColumn(NumOps.One);
+        var xTx = xWithInt.Transpose().Multiply(xWithInt);
+        var xTy = xWithInt.Transpose().Multiply(y);
+        for (int i = 0; i < xTx.Rows; i++)
+            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+        var olsSolution = xTx.Inverse().Multiply(xTy);
+        Intercept = olsSolution[0];
+        Coefficients = olsSolution.Slice(1, p);
+        if (Coefficients.Length > 0) return;
+
+        // Initialize coefficients and intercept
         Coefficients = new Vector<T>(p);
-        Intercept = NumOps.Zero;
+        // Initialize intercept to quantile of y for faster convergence
+        var sortedY = y.OrderBy(v => NumOps.ToDouble(v)).ToList();
+        int qIdx = Math.Max(0, Math.Min(sortedY.Count - 1, (int)(sortedY.Count * _options.Quantile)));
+        Intercept = sortedY[qIdx];
 
-        // Apply regularization to the input matrix
-        x = Regularization.Regularize(x);
+        // Auto-scale learning rate relative to data magnitude
+        double lr = _options.LearningRate;
+        if (Math.Abs(lr - 0.01) < 1e-10) // default value
+        {
+            double xScale = 0;
+            for (int j = 0; j < p; j++)
+            {
+                double colMean = 0;
+                for (int i = 0; i < n; i++) colMean += NumOps.ToDouble(x[i, j]);
+                colMean /= n;
+                double colVar = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    double d = NumOps.ToDouble(x[i, j]) - colMean;
+                    colVar += d * d;
+                }
+                xScale += colVar / n;
+            }
+            xScale = Math.Sqrt(xScale / p);
+            lr = Math.Max(0.1, xScale > 1e-10 ? 1.0 / xScale : 0.01);
+        }
 
-        // Gradient descent optimization
+        // Gradient descent optimization for quantile regression
+        T invN = NumOps.FromDouble(1.0 / n);
         for (int iter = 0; iter < _options.MaxIterations; iter++)
         {
             Vector<T> gradients = new(p);
@@ -124,14 +178,17 @@ public class QuantileRegression<T> : RegressionBase<T>
                 interceptGradient = NumOps.Add(interceptGradient, gradient);
             }
 
-            // Update coefficients and intercept
+            // Average gradients over samples and update
+            T lrT = NumOps.FromDouble(lr);
             for (int j = 0; j < p; j++)
             {
-                Coefficients[j] = NumOps.Add(Coefficients[j], NumOps.Multiply(NumOps.FromDouble(_options.LearningRate), gradients[j]));
+                T avgGrad = NumOps.Multiply(gradients[j], invN);
+                Coefficients[j] = NumOps.Add(Coefficients[j], NumOps.Multiply(lrT, avgGrad));
             }
-            Intercept = NumOps.Add(Intercept, NumOps.Multiply(NumOps.FromDouble(_options.LearningRate), interceptGradient));
+            T avgInterceptGrad = NumOps.Multiply(interceptGradient, invN);
+            Intercept = NumOps.Add(Intercept, NumOps.Multiply(lrT, avgInterceptGrad));
 
-            // Apply regularization to coefficients
+            // Apply regularization to coefficients (not to input data)
             Coefficients = Regularization.Regularize(Coefficients);
         }
     }
@@ -203,24 +260,6 @@ public class QuantileRegression<T> : RegressionBase<T>
         metadata.AdditionalInfo["Quantile"] = _options.Quantile;
 
         return metadata;
-    }
-
-    /// <summary>
-    /// Gets the type of the model.
-    /// </summary>
-    /// <returns>The model type identifier for quantile regression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method is used for model identification and serialization purposes.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method simply returns an identifier that indicates this is a quantile regression model.
-    /// It's used internally by the library to keep track of different types of models.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.QuantileRegression;
     }
 
     /// <summary>

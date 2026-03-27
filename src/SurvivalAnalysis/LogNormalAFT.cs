@@ -36,6 +36,13 @@ namespace AiDotNet.SurvivalAnalysis;
 /// <para><b>Reference:</b> Lawless (2003), Statistical Models and Methods for Lifetime Data</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <example>
+/// <code>
+/// var model = new LogNormalAFT&lt;double&gt;(maxIterations: 100, tolerance: 1e-6);
+/// model.Fit(times, events, features);
+/// double medianSurvival = model.PredictMedianSurvivalTime(newPatientFeatures);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Healthcare)]
 [ModelCategory(ModelCategory.SurvivalModel)]
@@ -389,7 +396,6 @@ public class LogNormalAFT<T> : SurvivalModelBase<T>
     }
 
     /// <inheritdoc />
-    public override ModelType GetModelType() => ModelType.LogNormalAFT;
 
     /// <inheritdoc />
     public override byte[] Serialize()

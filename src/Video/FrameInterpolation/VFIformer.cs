@@ -42,6 +42,19 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// especially for complex scenes.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a VFIformer model for transformer-based frame interpolation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new VFIformerOptions();
+/// var vfiFormer = new VFIformer&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var vfiFormerOnnx = new VFIformer&lt;double&gt;(architecture, "vfiformer_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -173,7 +186,6 @@ public class VFIformer<T> : FrameInterpolationBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.FrameInterpolation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "VFIformer" },

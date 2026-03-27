@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
 
@@ -23,6 +25,9 @@ namespace AiDotNet.ActivationFunctions;
 /// full exponential function, which can be faster but slightly less accurate.
 /// </para>
 /// </remarks>
+[ActivationCategory(ActivationCategory.Normalization)]
+[ActivationTask(ActivationTask.NormalizationOutput)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = true, IsVectorActivation = true, Cost = ComputeCost.High)]
 public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

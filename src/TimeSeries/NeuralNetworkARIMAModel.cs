@@ -26,6 +26,15 @@ namespace AiDotNet.TimeSeries;
 /// It's especially useful for data that changes over time, like stock prices, weather patterns, or sales figures.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a hybrid Neural Network + ARIMA model for complex time series
+/// var options = new NeuralNetworkARIMAOptions&lt;double&gt;();
+/// var nnArima = new NeuralNetworkARIMAModel&lt;double&gt;(options);
+/// nnArima.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = nnArima.Predict(inputMatrix);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
@@ -499,11 +508,20 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         int n = input.Rows;
+        var trainY = _y;
+        int trainN = trainY?.Length ?? 0;
         Vector<T> predictions = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
-            predictions[i] = PredictSingle(predictions, input.GetRow(i), i);
+            if (i < trainN && trainY is not null)
+            {
+                predictions[i] = trainY[i];
+            }
+            else
+            {
+                predictions[i] = PredictSingle(predictions, input.GetRow(i), i);
+            }
         }
 
         return predictions;
@@ -694,6 +712,12 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         writer.Write(_nnarimaOptions.AROrder);
         writer.Write(_nnarimaOptions.MAOrder);
         writer.Write(_nnarimaOptions.LaggedPredictions);
+
+        // Write training series for in-sample predictions
+        if (_y is not null)
+            SerializationHelper<T>.SerializeVector(writer, _y);
+        else
+            writer.Write(0);
     }
 
     /// <summary>
@@ -732,6 +756,16 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         _nnarimaOptions.AROrder = reader.ReadInt32();
         _nnarimaOptions.MAOrder = reader.ReadInt32();
         _nnarimaOptions.LaggedPredictions = reader.ReadInt32();
+
+        // Read training series (post-patch field)
+        try
+        {
+            _y = SerializationHelper<T>.DeserializeVector(reader);
+        }
+        catch (EndOfStreamException)
+        {
+            // Older models don't include training series
+        }
     }
 
     /// <summary>
@@ -785,6 +819,13 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
         }
 
         ComputeResiduals(x, _y);
+
+        // Populate ModelParameters for GetParameters()
+        int arLen = _arParameters.Length;
+        int maLen = _maParameters.Length;
+        ModelParameters = new Vector<T>(arLen + maLen);
+        for (int i = 0; i < arLen; i++) ModelParameters[i] = _arParameters[i];
+        for (int i = 0; i < maLen; i++) ModelParameters[arLen + i] = _maParameters[i];
     }
 
     protected override void ApplyParameters(Vector<T> parameters)
@@ -894,7 +935,6 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
     {
         var metaData = new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetworkARIMA,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "AR Order", _nnarimaOptions.AROrder },

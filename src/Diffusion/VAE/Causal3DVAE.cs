@@ -34,6 +34,13 @@ namespace AiDotNet.Diffusion.VAE;
 /// - Typical compression: 8x spatial, 4x temporal
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var vae = new Causal3DVAE&lt;float&gt;(inputChannels: 3, latentChannels: 16, baseChannels: 128);
+/// var video = Tensor&lt;float&gt;.Random(new[] { 1, 3, 16, 256, 256 });
+/// var latent = vae.Encode(video);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.FeatureExtraction)]
@@ -130,10 +137,10 @@ public class Causal3DVAE<T> : VAEModelBase<T>
 
         // Split into mean and log variance
         int halfLen = x.Shape[^1] / 2;
-        var meanShape = GetReducedShape(x.Shape, halfLen);
+        var meanShape = GetReducedShape(x.Shape.ToArray(), halfLen);
         var mean = new Tensor<T>(meanShape);
         var logVar = new Tensor<T>(meanShape);
-        int elements = mean.Shape.Aggregate(1, (a, b) => a * b);
+        int elements = mean.Length;
         for (int i = 0; i < elements; i++)
         {
             mean[i] = x[i];

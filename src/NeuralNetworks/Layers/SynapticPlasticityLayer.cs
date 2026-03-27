@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -30,6 +32,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Other)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, SupportsBackpropagation = false, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
 public class SynapticPlasticityLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -335,6 +340,7 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// biologically-inspired learning rules that modify connection strengths based on experience.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _weights.Length;
     public override bool SupportsTraining => true;
 
     private IGpuTensor<T>? _lastInputGpu;

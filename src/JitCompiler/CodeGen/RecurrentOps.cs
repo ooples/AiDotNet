@@ -101,7 +101,7 @@ public static class RecurrentOps
             }
         }
 
-        return new Tensor<T>(h.Shape, new Vector<T>(hNewData));
+        return new Tensor<T>(h.Shape.ToArray(), new Vector<T>(hNewData));
     }
 
     /// <summary>
@@ -200,7 +200,7 @@ public static class RecurrentOps
         // Return concatenated h_new and c_new (caller can split if needed)
         // For simplicity, we return just h_new - the caller should manage c_new separately
         // In a full implementation, this would return a tuple or composite tensor
-        return new Tensor<T>(h.Shape, new Vector<T>(hNewData));
+        return new Tensor<T>(h.Shape.ToArray(), new Vector<T>(hNewData));
     }
 
     // Helper methods for tensor operations

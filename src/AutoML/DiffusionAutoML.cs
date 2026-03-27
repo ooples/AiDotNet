@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using AiDotNet.Attributes;
 using System.Threading;
 using System.Threading.Tasks;
 using AiDotNet.Diffusion;
@@ -192,6 +193,23 @@ namespace AiDotNet.AutoML
     /// </para>
     /// </remarks>
     /// <typeparam name="T">The numeric type used for calculations (typically float or double).</typeparam>
+    /// <example>
+    /// <code>
+    /// var automl = new DiffusionAutoML&lt;float&gt;(imageSize: 256, channels: 3);
+    /// var bestModel = await automl.SearchAsync(
+    ///     trainImages, trainLabels,
+    ///     valImages, valLabels,
+    ///     maxTrials: 10,
+    ///     timeLimit: TimeSpan.FromHours(1));
+    /// </code>
+    /// </example>
+    [ModelDomain(ModelDomain.Generative)]
+    [ModelCategory(ModelCategory.Diffusion)]
+    [ModelCategory(ModelCategory.Optimization)]
+    [ModelTask(ModelTask.Generation)]
+    [ModelTask(ModelTask.TextToImage)]
+    [ModelComplexity(ModelComplexity.VeryHigh)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     public class DiffusionAutoML<T> : AutoMLModelBase<T, Tensor<T>, Tensor<T>>
     {
         private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
@@ -276,7 +294,7 @@ namespace AiDotNet.AutoML
                     try
                     {
                         // Create and evaluate model
-                        var model = await CreateModelAsync(ModelType.NeuralNetwork, parameters);
+                        var model = await CreateModelAsync(typeof(NeuralNetworks.NeuralNetworkBase<T>), parameters);
 
                         // Train model if training data provided
                         if (inputs.Shape[0] > 0)
@@ -314,7 +332,7 @@ namespace AiDotNet.AutoML
                 {
                     // Create a default model if no successful trials
                     var defaultParams = GetDefaultParameters();
-                    BestModel = await CreateModelAsync(ModelType.NeuralNetwork, defaultParams);
+                    BestModel = await CreateModelAsync(typeof(NeuralNetworks.NeuralNetworkBase<T>), defaultParams);
                     BestConfig = DiffusionTrialConfig<T>.FromDictionary(defaultParams);
                 }
 
@@ -380,7 +398,7 @@ namespace AiDotNet.AutoML
         /// Creates a diffusion model based on the specified parameters.
         /// </summary>
         protected override async Task<IFullModel<T, Tensor<T>, Tensor<T>>> CreateModelAsync(
-            ModelType modelType,
+            Type modelType,
             Dictionary<string, object> parameters)
         {
             return await Task.Run(() =>
@@ -415,8 +433,9 @@ namespace AiDotNet.AutoML
         /// <summary>
         /// Gets the default search space for diffusion models.
         /// </summary>
-        protected override Dictionary<string, ParameterRange> GetDefaultSearchSpace(ModelType modelType)
+        protected override Dictionary<string, ParameterRange> GetDefaultSearchSpace(Type modelType)
         {
+            _ = modelType; // Diffusion models use a fixed search space independent of model type
             return GetDefaultDiffusionSearchSpace();
         }
 
@@ -734,10 +753,28 @@ namespace AiDotNet.AutoML
     /// Wrapper model that combines diffusion components into an IFullModel.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    internal class DiffusionAutoMLModel<T> : IFullModel<T, Tensor<T>, Tensor<T>>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This model wraps a complete diffusion pipeline (noise predictor,
+    /// VAE encoder/decoder, noise scheduler, and conditioning) into a single model object.
+    /// It is automatically created by the DiffusionAutoML search process after finding the
+    /// best configuration. You typically do not create this directly - use DiffusionAutoML
+    /// to search for and build the optimal diffusion model.</para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // DiffusionAutoMLModel is typically created by DiffusionAutoML.SearchAsync()
+    /// // Use the model for generation after search:
+    /// Tensor&lt;float&gt; generated = model.Predict(noiseTensor);
+    /// </code>
+    /// </example>
+    [ModelDomain(ModelDomain.Generative)]
+    [ModelCategory(ModelCategory.Diffusion)]
+    [ModelTask(ModelTask.Generation)]
+    [ModelTask(ModelTask.Denoising)]
+    [ModelComplexity(ModelComplexity.VeryHigh)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    internal class DiffusionAutoMLModel<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     {
-        private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-        private static IEngine Engine => AiDotNetEngine.Current;
         private readonly UNetNoisePredictor<T> _noisePredictor;
         private readonly StandardVAE<T> _vae;
         private readonly INoiseScheduler<T> _scheduler;
@@ -746,15 +783,14 @@ namespace AiDotNet.AutoML
         private readonly int? _seed;
         private Random _random;
 
-        public ModelType Type => ModelType.NeuralNetwork;
 
-        public int ParameterCount => _noisePredictor.ParameterCount + _vae.ParameterCount;
+        public override int ParameterCount => _noisePredictor.ParameterCount + _vae.ParameterCount;
 
         public string[] FeatureNames { get; set; } = Array.Empty<string>();
 
-        public bool SupportsJitCompilation => false;
+        public override bool SupportsJitCompilation => false;
 
-        public ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+        public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
 
         public DiffusionAutoMLModel(
             UNetNoisePredictor<T> noisePredictor,
@@ -775,7 +811,7 @@ namespace AiDotNet.AutoML
                 : RandomHelper.CreateSecureRandom();
         }
 
-        public Tensor<T> Predict(Tensor<T> input)
+        public override Tensor<T> Predict(Tensor<T> input)
         {
             // Encode conditioning
             var condition = _conditioner.Encode(input);
@@ -813,7 +849,7 @@ namespace AiDotNet.AutoML
                 var newLatentVec = _scheduler.Step(noisePredVec, t, latentVec, eta);
 
                 // Convert back to tensor
-                var newLatent = new Tensor<T>(latent.Shape);
+                var newLatent = new Tensor<T>(latent.Shape.ToArray());
                 var newLatentSpan = newLatent.AsWritableSpan();
                 for (int j = 0; j < newLatentVec.Length && j < newLatentSpan.Length; j++)
                     newLatentSpan[j] = newLatentVec[j];
@@ -824,7 +860,7 @@ namespace AiDotNet.AutoML
             return _vae.Decode(latent);
         }
 
-        public void Train(Tensor<T> input, Tensor<T> expectedOutput)
+        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
         {
             // Encode target to latent space
             var latent = _vae.Encode(expectedOutput);
@@ -834,7 +870,7 @@ namespace AiDotNet.AutoML
             int t = _random.Next(1, maxT + 1);
 
             // Sample noise and add to latent
-            var noise = SampleNoise(latent.Shape);
+            var noise = SampleNoise(latent.Shape.ToArray());
             var noisyLatent = AddNoise(latent, noise, t);
 
             // Encode conditioning
@@ -849,7 +885,7 @@ namespace AiDotNet.AutoML
             // Gradient computation would happen here in a full implementation
         }
 
-        public Vector<T> GetParameters()
+        public override Vector<T> GetParameters()
         {
             var noisePredParams = _noisePredictor.GetParameters();
             var vaeParams = _vae.GetParameters();
@@ -866,7 +902,7 @@ namespace AiDotNet.AutoML
             return new Vector<T>(combined);
         }
 
-        public void SetParameters(Vector<T> parameters)
+        public override void SetParameters(Vector<T> parameters)
         {
             var noisePredLen = _noisePredictor.ParameterCount;
             var noisePredParams = new T[noisePredLen];
@@ -882,14 +918,14 @@ namespace AiDotNet.AutoML
             _vae.SetParameters(new Vector<T>(vaeParams));
         }
 
-        public IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+        public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
         {
             var copy = DeepCopy();
             copy.SetParameters(parameters);
             return copy;
         }
 
-        public IFullModel<T, Tensor<T>, Tensor<T>> Clone()
+        public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
         {
             return new DiffusionAutoMLModel<T>(
                 _noisePredictor,
@@ -900,7 +936,7 @@ namespace AiDotNet.AutoML
                 _seed);
         }
 
-        public IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+        public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
         {
             return new DiffusionAutoMLModel<T>(
                 (UNetNoisePredictor<T>)_noisePredictor.DeepCopy(),
@@ -911,34 +947,43 @@ namespace AiDotNet.AutoML
                 _seed);
         }
 
-        public Dictionary<string, T> GetFeatureImportance()
+        /// <summary>
+        /// Returns empty because diffusion models operate on latent space noise, not
+        /// named tabular features, so per-feature importance is not meaningful.
+        /// </summary>
+        public override Dictionary<string, T> GetFeatureImportance()
         {
             return new Dictionary<string, T>();
         }
 
-        public IEnumerable<int> GetActiveFeatureIndices()
+        public override IEnumerable<int> GetActiveFeatureIndices()
         {
             return Enumerable.Range(0, _config.LatentDim);
         }
 
-        public bool IsFeatureUsed(int featureIndex)
+        public override bool IsFeatureUsed(int featureIndex)
         {
             return featureIndex >= 0 && featureIndex < _config.LatentDim;
         }
 
-        public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
+        /// <summary>
+        /// Feature selection is not applicable to diffusion models. All latent dimensions
+        /// are required for coherent generation.
+        /// </summary>
+        /// <exception cref="NotSupportedException">Always thrown. Diffusion models require all latent dimensions.</exception>
+        public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
         {
-            // Not applicable for diffusion models
+            throw new NotSupportedException(
+                "Feature selection is not supported for diffusion models. All latent dimensions are required for coherent generation.");
         }
 
-        public ModelMetadata<T> GetModelMetadata()
+        public override ModelMetadata<T> GetModelMetadata()
         {
             var metadata = new ModelMetadata<T>
             {
                 Name = "DiffusionAutoMLModel",
                 Description = "Diffusion model created by AutoML search",
                 Version = "1.0",
-                ModelType = ModelType.NeuralNetwork,
                 Complexity = ParameterCount
             };
 
@@ -952,7 +997,7 @@ namespace AiDotNet.AutoML
             return metadata;
         }
 
-        public void SaveModel(string filePath)
+        public override void SaveModel(string filePath)
         {
             Helpers.ModelPersistenceGuard.EnforceBeforeSave();
             using (Helpers.ModelPersistenceGuard.InternalOperation())
@@ -962,7 +1007,7 @@ namespace AiDotNet.AutoML
             }
         }
 
-        public void LoadModel(string filePath)
+        public override void LoadModel(string filePath)
         {
             Helpers.ModelPersistenceGuard.EnforceBeforeLoad();
             using (Helpers.ModelPersistenceGuard.InternalOperation())
@@ -972,7 +1017,7 @@ namespace AiDotNet.AutoML
             }
         }
 
-        public byte[] Serialize()
+        public override byte[] Serialize()
         {
             Helpers.ModelPersistenceGuard.EnforceBeforeSerialize();
             // Serialize parameters as doubles for portability across numeric types.
@@ -999,7 +1044,7 @@ namespace AiDotNet.AutoML
             return data;
         }
 
-        public void Deserialize(byte[] data)
+        public override void Deserialize(byte[] data)
         {
             Helpers.ModelPersistenceGuard.EnforceBeforeDeserialize();
 
@@ -1028,7 +1073,7 @@ namespace AiDotNet.AutoML
             SetParameters(new Vector<T>(parameters));
         }
 
-        public void SaveState(Stream stream)
+        public override void SaveState(Stream stream)
         {
             if (stream is null)
                 throw new ArgumentNullException(nameof(stream));
@@ -1041,7 +1086,7 @@ namespace AiDotNet.AutoML
             }
         }
 
-        public void LoadState(Stream stream)
+        public override void LoadState(Stream stream)
         {
             if (stream is null)
                 throw new ArgumentNullException(nameof(stream));
@@ -1055,14 +1100,51 @@ namespace AiDotNet.AutoML
             }
         }
 
-        public Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
+        public override Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
         {
-            // Simplified gradient computation
+            var loss = lossFunction ?? DefaultLossFunction;
             var parameters = GetParameters();
-            return new Vector<T>(new T[parameters.Length]);
+            var gradients = new T[parameters.Length];
+            T epsilon = NumOps.FromDouble(1e-5);
+            T twoEps = NumOps.FromDouble(2e-5);
+
+            // Compute loss at current parameters
+            var prediction = Predict(input);
+            T baseLoss = loss.ComputeLoss(prediction, target);
+
+            // SPSA gradient estimation: 2 forward passes regardless of parameter count.
+            // Per-parameter finite differences don't work for diffusion models because
+            // Predict uses random noise — each call measures sampling noise, not parameter sensitivity.
+            var rng = RandomHelper.CreateSecureRandom();
+            var delta = new Vector<T>(parameters.Length);
+            var perturbedParams = new Vector<T>(parameters.Length);
+            for (int i = 0; i < parameters.Length; i++)
+                delta[i] = NumOps.FromDouble(rng.NextDouble() < 0.5 ? -1.0 : 1.0);
+
+            // f(x + eps*delta)
+            for (int i = 0; i < parameters.Length; i++)
+                perturbedParams[i] = NumOps.Add(parameters[i], NumOps.Multiply(epsilon, delta[i]));
+            SetParameters(perturbedParams);
+            var predPlus = Predict(input);
+            T lossPlus = loss.ComputeLoss(predPlus, target);
+
+            // f(x - eps*delta)
+            for (int i = 0; i < parameters.Length; i++)
+                perturbedParams[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(epsilon, delta[i]));
+            SetParameters(perturbedParams);
+            var predMinus = Predict(input);
+            T lossMinus = loss.ComputeLoss(predMinus, target);
+
+            // SPSA gradient: g_i = (f+ - f-) / (2*eps*delta_i)
+            T lossDiff = NumOps.Subtract(lossPlus, lossMinus);
+            for (int i = 0; i < parameters.Length; i++)
+                gradients[i] = NumOps.Divide(lossDiff, NumOps.Multiply(twoEps, delta[i]));
+
+            SetParameters(parameters);
+            return new Vector<T>(gradients);
         }
 
-        public void ApplyGradients(Vector<T> gradients, T learningRate)
+        public override void ApplyGradients(Vector<T> gradients, T learningRate)
         {
             var parameters = GetParameters();
             if (gradients.Length != parameters.Length)
@@ -1075,7 +1157,7 @@ namespace AiDotNet.AutoML
             SetParameters(Engine.Subtract(parameters, Engine.Multiply(gradients, learningRate)));
         }
 
-        public ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+        public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
         {
             throw new NotSupportedException("JIT compilation not supported for diffusion models");
         }
@@ -1109,7 +1191,7 @@ namespace AiDotNet.AutoML
             double alpha = 1.0 - t;
             double sigma = t;
 
-            var result = new Tensor<T>(latent.Shape);
+            var result = new Tensor<T>(latent.Shape.ToArray());
             var resultSpan = result.AsWritableSpan();
             var latentSpan = latent.AsSpan();
             var noiseSpan = noise.AsSpan();

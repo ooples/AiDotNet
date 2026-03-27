@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -33,6 +35,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.Projection)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class FullyConnectedLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -132,6 +138,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T>? _lastOutput;
+    private Tensor<T>? _lastPreActivation;
 
     /// <summary>
     /// The gradients for the weights, computed during backpropagation.
@@ -342,25 +349,8 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // === Vectorized Weight/Bias Initialization (Phase B: US-GPU-015) ===
-        // Initialize weights and biases (e.g., Xavier/Glorot initialization)
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_weights.Shape[0] + _weights.Shape[1])));
-
-        // Vectorized weight initialization using Engine operations
-        for (int i = 0; i < _weights.Shape[0]; i++)
-        {
-            for (int j = 0; j < _weights.Shape[1]; j++)
-            {
-                // Xavier/Glorot uniform: sample in [-scale, scale]
-                _weights[i, j] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() * 2.0 - 1.0), scale);
-            }
-        }
-
-        // Initialize biases to zero
-        for (int i = 0; i < _biases.Shape[0]; i++)
-        {
-            _biases[i] = NumOps.Zero;
-        }
+        InitializeLayerWeights(_weights, _weights.Shape[0], _weights.Shape[1]);
+        InitializeLayerBiases(_biases);
     }
 
     /// <summary>
@@ -422,6 +412,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         // Only store for backward pass during training - skip during inference
         if (IsTrainingMode)
         {
+            _lastPreActivation = biasedOutput;
             _lastOutput = result;
         }
 
@@ -502,7 +493,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
             }
         }
 
-        var delta = ApplyActivationDerivative(_lastOutput, grad);
+        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, grad);
 
         // Calculate gradients using Engine operations
         // weightsGradient = delta^T * input
@@ -912,6 +903,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         // Clear cached values from forward and backward passes
         _lastInput = null;
         _lastOutput = null;
+        _lastPreActivation = null;
         _weightsGradient = null;
         _biasesGradient = null;
 
@@ -992,7 +984,7 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         }
 
         var input = inputs[0];
-        int[] inputShape = input.Shape;
+        int[] inputShape = input.Shape.ToArray();
 
         // FullyConnectedLayer stores weights as [outputSize, inputSize]
         // We need to transpose for FusedLinearGpu which expects [inputSize, outputSize]

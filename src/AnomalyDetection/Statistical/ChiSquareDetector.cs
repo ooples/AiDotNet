@@ -194,13 +194,7 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
             }
 
             // D^2 = diff' * temp
-            T mahalanobisSquared = NumOps.Zero;
-            for (int j = 0; j < p; j++)
-            {
-                mahalanobisSquared = NumOps.Add(mahalanobisSquared, NumOps.Multiply(diff[j], temp[j]));
-            }
-
-            scores[i] = mahalanobisSquared;
+            scores[i] = Engine.DotProduct(diff, temp);
         }
 
         return scores;

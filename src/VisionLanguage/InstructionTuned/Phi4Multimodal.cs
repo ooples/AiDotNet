@@ -24,8 +24,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Phi-4-Multimodal Technical Report" (Microsoft, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> Phi4Multimodal is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Phi-4-Multimodal from Microsoft extends the Phi-4 language model
+/// to natively handle images, audio, and text in a single unified framework. Rather than having
+/// separate models for different input types, Phi-4-Multimodal processes all modalities through
+/// one architecture. It uses a SigLIP vision encoder with MLP projection for images and adds
+/// audio understanding capabilities. This unified approach means a single model can answer
+/// questions about photos, transcribe and understand speech, and process text — all without
+/// switching between different specialized models. Default values follow the original paper
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Phi-4-Multimodal model for unified vision + audio + text
+/// // using SigLIP encoder with Phi-4 backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Phi4Multimodal&lt;double&gt;(architecture, "phi4multimodal.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Phi4Multimodal&lt;double&gt;(architecture, new Phi4MultimodalOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -115,7 +138,7 @@ public class Phi4Multimodal<T> : VisionLanguageModelBase<T>, IInstructionTunedVL
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "Phi-4-Multimodal-Native" : "Phi-4-Multimodal-ONNX", Description = "Phi-4-Multimodal: Unified Vision + Audio + Text Framework (Microsoft, 2025)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "Phi-4-Multimodal"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["EnableAudio"] = _options.EnableAudio.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "Phi-4-Multimodal-Native" : "Phi-4-Multimodal-ONNX", Description = "Phi-4-Multimodal: Unified Vision + Audio + Text Framework (Microsoft, 2025)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "Phi-4-Multimodal"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; m.AdditionalInfo["EnableAudio"] = _options.EnableAudio.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.DecoderDim); writer.Write(_options.ProjectionDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.EnableAudio); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.ProjectionDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.EnableAudio = reader.ReadBoolean(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new Phi4Multimodal<T>(Architecture, mp, _options); return new Phi4Multimodal<T>(Architecture, _options); }

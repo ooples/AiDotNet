@@ -28,11 +28,32 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// granularities based on local information density. A learned router decides which patch
 /// size is optimal for each segment, making the model parameter-efficient and adaptive.
 /// </para>
+/// <para><b>For Beginners:</b> Kairos is a time series forecasting model that automatically
+/// adjusts how it reads data based on complexity. In simple, steady periods it takes big
+/// chunks at a time (like skimming a boring chapter), but in volatile periods it zooms in
+/// and reads fine details (like carefully studying a plot twist). This adaptive approach
+/// makes it both efficient and accurate across different types of data.</para>
 /// <para>
 /// <b>Reference:</b> "Kairos: Towards Adaptive and Generalizable Time Series Foundation Models", 2025.
 /// https://arxiv.org/abs/2509.25826
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Kairos model with Mixture-of-Size Encoder for adaptive tokenization
+/// // Automatically adjusts patch size based on local information density
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with adaptive multi-granularity patching
+/// var model = new Kairos&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new Kairos&lt;double&gt;(architecture, "kairos.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -255,7 +276,7 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
             var output = ForwardNative(input);
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
             _optimizer.UpdateParameters(Layers);
         }
         finally
@@ -275,7 +296,6 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "Kairos" },
@@ -411,7 +431,7 @@ public class Kairos<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         for (int b = 0; b < batchSize; b++)
         {
             T mean = NumOps.Zero;

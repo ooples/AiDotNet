@@ -173,7 +173,6 @@ public class RealViformer<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "RealViformer-Native" : "RealViformer-ONNX",
             Description = $"RealViformer {_options.Variant} channel attention real-world VSR (Zhang and Yao, ECCV 2024)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumResBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

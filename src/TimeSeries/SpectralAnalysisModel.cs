@@ -27,6 +27,16 @@ namespace AiDotNet.TimeSeries;
 /// showing you how strong each frequency component is in your data.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Analyze frequency components in a time series signal
+/// var options = new SpectralAnalysisOptions&lt;double&gt;();
+/// var spectral = new SpectralAnalysisModel&lt;double&gt;(options);
+/// spectral.Train(signalMatrix, signalVector);
+/// Vector&lt;double&gt; frequencies = spectral.GetFrequencies();
+/// Vector&lt;double&gt; periodogram = spectral.GetPeriodogram();
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.SignalProcessing)]
@@ -78,8 +88,15 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // Spectral analysis doesn't typically make predictions, but we can return the periodogram
-        return _periodogram;
+        // Generate sinusoidal predictions using the dominant frequency component
+        // for each input row (time index). This provides a time-domain reconstruction
+        // from the spectral analysis.
+        var predictions = new Vector<T>(input.Rows);
+        for (int i = 0; i < input.Rows; i++)
+        {
+            predictions[i] = PredictSingle(input.GetRow(i));
+        }
+        return predictions;
     }
 
     /// <summary>
@@ -430,6 +447,11 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
                 _frequencies[i] = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(nfft));
             }
         }
+
+        // Populate ModelParameters from periodogram for GetParameters()
+        ModelParameters = new Vector<T>(_periodogram.Length);
+        for (int i = 0; i < _periodogram.Length; i++)
+            ModelParameters[i] = _periodogram[i];
     }
 
     /// <summary>
@@ -568,7 +590,6 @@ public class SpectralAnalysisModel<T> : TimeSeriesModelBase<T>
         // Create a new metadata object
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.SpectralAnalysisModel,
             AdditionalInfo = new Dictionary<string, object>()
         };
 

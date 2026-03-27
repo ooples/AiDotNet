@@ -31,6 +31,15 @@ namespace AiDotNet.Diffusion.FastGeneration;
 /// the structured generation of autoregressive models and the smooth outputs of diffusion.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an AR-Diffusion model for autoregressive latent diffusion
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 8, Height = 256, Width = 256, NumInferenceSteps = 20 };
+/// var model = new ARDiffusionModel&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 8, 32, 32 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -136,7 +145,7 @@ public class ARDiffusionModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "AR-Diffusion", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "AR-Diffusion", Version = "1.0",
             Description = "Autoregressive diffusion combining sequential token generation with continuous diffusion",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

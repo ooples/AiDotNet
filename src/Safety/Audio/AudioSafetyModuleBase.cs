@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Safety;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Audio;
@@ -22,6 +23,11 @@ namespace AiDotNet.Safety.Audio;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public abstract class AudioSafetyModuleBase<T> : IAudioSafetyModule<T>
 {
+    /// <summary>
+    /// Gets the hardware-accelerated computation engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     private readonly int _defaultSampleRate;
 
     /// <inheritdoc />

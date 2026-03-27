@@ -13,16 +13,32 @@ namespace AiDotNet.ReinforcementLearning.Agents.MonteCarlo;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// Monte Carlo ES ensures exploration by starting each episode from a randomly
-/// chosen state-action pair, then following the greedy policy thereafter.
+/// <para>Monte Carlo ES ensures exploration by starting each episode from a randomly
+/// chosen state-action pair, then following the greedy policy thereafter.</para>
+/// <para><b>For Beginners:</b> Exploring Starts solves the exploration problem by guaranteeing
+/// every state-action pair has a chance of being the starting point. After the random start,
+/// the agent acts greedily (always picks the best known action). This ensures all state-action
+/// pairs are eventually tried, which is required for convergence. The downside is that random
+/// starts may not be possible in all real-world environments.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Monte Carlo Exploring Starts agent
+/// var options = new MonteCarloExploringStartsOptions&lt;double&gt; { StateSize = 4, ActionSize = 2 };
+/// var agent = new MonteCarloExploringStartsAgent&lt;double&gt;(options);
+///
+/// // Select an action (random on first step, greedy thereafter)
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Reinforcement Learning: An Introduction",
-    "http://incompleteideas.net/book/the-book-2nd.html",
+    "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<T>
@@ -236,7 +252,6 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ReinforcementLearning,
         };
     }
 

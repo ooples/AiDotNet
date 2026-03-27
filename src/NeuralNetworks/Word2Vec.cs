@@ -39,6 +39,14 @@ namespace AiDotNet.NeuralNetworks
     /// </list>
     /// </para>
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var options = new Word2VecOptions { EmbeddingDim = 300, VocabSize = 50000, WindowSize = 5 };
+    /// var model = new Word2Vec&lt;float&gt;(options);
+    /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 50 });
+    /// var embedding = model.Predict(input);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Language)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.EmbeddingModel)]
@@ -159,7 +167,7 @@ namespace AiDotNet.NeuralNetworks
                 inputType: Enums.InputType.OneDimensional,
                 taskType: Enums.NeuralNetworkTaskType.Regression,
                 inputSize: 768,
-                outputSize: 768))
+                outputSize: 10000)) // Must match default vocabSize=10000
         {
         }
 
@@ -350,7 +358,7 @@ namespace AiDotNet.NeuralNetworks
             LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
             var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+            var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
 
             var gradients = new List<Tensor<T>>();
             var currentGradient = outputGradientTensor;
@@ -482,7 +490,6 @@ namespace AiDotNet.NeuralNetworks
             return new ModelMetadata<T>
             {
                 Name = "Word2Vec",
-                ModelType = ModelType.NeuralNetwork,
                 Description = $"Word2Vec ({_type}) embedding model",
                 Complexity = ParameterCount,
                 AdditionalInfo = new Dictionary<string, object>

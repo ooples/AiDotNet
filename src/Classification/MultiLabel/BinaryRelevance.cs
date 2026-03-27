@@ -43,6 +43,18 @@ namespace AiDotNet.Classification.MultiLabel;
 /// For problems where labels are correlated, consider using Classifier Chains or Label Powerset instead.
 /// </para>
 /// </remarks>
+/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
+/// <example>
+/// <code>
+/// // Use AiModelBuilder facade for binaryrelevance classification
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new BinaryRelevance&lt;double&gt;(
+///         new BinaryRelevanceOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(features, labels);
+/// var prediction = result.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelTask(ModelTask.Classification)]
@@ -289,21 +301,6 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
     #endregion
 
     #region Abstract Method Implementations
-
-    /// <summary>
-    /// Gets the model type identifier.
-    /// </summary>
-    /// <returns>The ModelType enum value for Binary Relevance.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This identifies what kind of model this is within the
-    /// AiDotNet library's type system.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.BinaryRelevanceClassifier;
-    }
 
     /// <summary>
     /// Gets all learnable parameters of the model as a single vector.

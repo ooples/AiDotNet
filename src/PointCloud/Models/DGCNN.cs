@@ -77,6 +77,17 @@ namespace AiDotNet.PointCloud.Models;
 /// by Wang et al., ACM Transactions on Graphics 2019
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a DGCNN model for point cloud classification with dynamic edge convolution
+/// var dgcnn = new DGCNN&lt;float&gt;(
+///     numClasses: 40,
+///     knnK: 20,
+///     edgeConvChannels: new[] { 64, 64, 128, 256 },
+///     useDropout: true,
+///     dropoutRate: 0.5);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -507,7 +518,6 @@ public class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointCloudCl
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "DGCNN" },

@@ -13,6 +13,24 @@ namespace AiDotNet.ReinforcementLearning.Agents.Planning;
 /// Prioritized Sweeping agent that focuses planning on high-priority state-actions.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <remarks>
+/// <para><b>For Beginners:</b> Prioritized Sweeping is like Dyna-Q but smarter about which
+/// simulated updates to do. Instead of replaying random past experiences, it prioritizes
+/// updates where the biggest changes happened. Think of it like studying: focus on the
+/// topics where you got the most wrong. A priority queue tracks which state-actions need
+/// the most urgent updates, making planning much more efficient.</para>
+/// </remarks>
+/// <example>
+/// <code>
+/// // Create a Prioritized Sweeping agent for efficient planning
+/// var options = new PrioritizedSweepingOptions&lt;double&gt; { PlanningSteps = 10, StateSize = 4, ActionSize = 2 };
+/// var agent = new PrioritizedSweepingAgent&lt;double&gt;(options);
+///
+/// // Select an action and update priorities based on TD error
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
@@ -187,7 +205,7 @@ public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
-    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { ModelType = ModelType.ReinforcementLearning, FeatureCount = this.FeatureCount, Complexity = ParameterCount };
+    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     public override int ParameterCount => _qTable.Count * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;
     public override byte[] Serialize()

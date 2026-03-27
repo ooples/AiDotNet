@@ -119,36 +119,11 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <c>PreprocessingRegistry</c> approach, which caused race conditions when
     /// multiple models were built concurrently.
     /// </para>
-    /// <para><b>For Beginners:</b> Subclasses can assign this property in their constructor to
-    /// customize how images are processed before the model processes them. Otherwise, the model
+    /// <para><b>For Beginners:</b> If you want to customize how images are processed
+    /// before being fed into this model, set this property. Otherwise, the model
     /// uses its own industry-standard defaults automatically.</para>
     /// </remarks>
     protected IDataTransformer<T, Tensor<T>, Tensor<T>>? PreprocessingTransformer { get; set; }
-
-    /// <summary>
-    /// Gets or sets the instance-level postprocessing transformer for this model.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// When set, <see cref="PostprocessOutput"/> uses this transformer instead of
-    /// <see cref="ApplyDefaultPostprocessing"/>. This replaces the former static
-    /// <c>PostprocessingRegistry</c> approach, which caused race conditions when
-    /// multiple models were built concurrently.
-    /// </para>
-    /// </remarks>
-    protected IDataTransformer<T, Tensor<T>, Tensor<T>>? PostprocessingTransformer { get; set; }
-
-    /// <summary>
-    /// Configures the preprocessing and postprocessing transformers for this model.
-    /// Called by <c>AiModelBuilder</c> to wire instance-level transformers.
-    /// </summary>
-    internal void ConfigureTransformers(
-        IDataTransformer<T, Tensor<T>, Tensor<T>>? preprocessing,
-        IDataTransformer<T, Tensor<T>, Tensor<T>>? postprocessing)
-    {
-        PreprocessingTransformer = preprocessing;
-        PostprocessingTransformer = postprocessing;
-    }
 
     #endregion
 
@@ -212,14 +187,8 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     {
         // Priority 1: Instance-level transformer (set explicitly on this model)
         var transformer = PreprocessingTransformer;
-        if (transformer is not null)
+        if (transformer is not null && transformer.IsFitted)
         {
-            if (!transformer.IsFitted)
-            {
-                throw new InvalidOperationException(
-                    "A preprocessing transformer was configured but has not been fitted. " +
-                    "Call Fit() or FitTransform() on the transformer before using it for prediction.");
-            }
             return transformer.Transform(rawImage);
         }
 
@@ -251,26 +220,25 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// <para>
     /// <b>Priority Order:</b>
-    /// 1. If an instance-level PostprocessingTransformer is set (via ConfigureTransformers) → use it
+    /// 1. If user configured a pipeline via AiModelBuilder.ConfigurePostprocessing() → use it
     /// 2. Otherwise → use industry-standard defaults for this specific model type
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Model outputs often need to be transformed into a usable format.
     /// You can either let the model use its industry-standard defaults (recommended for most cases),
-    /// or configure custom postprocessing via AiModelBuilder.ConfigurePostprocessing().
-    /// The builder will automatically wire the postprocessing transformer onto the model.
+    /// or configure custom postprocessing:
+    /// <code>
+    /// var result = new AiModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+    ///     .ConfigurePostprocessing(pipeline => pipeline
+    ///         .Add(new SoftmaxTransformer&lt;double&gt;())
+    ///         .Add(new LabelDecoder&lt;double&gt;(labels)))
+    ///     .Build(X, y);
+    /// </code>
     /// </para>
     /// </remarks>
     protected Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
-        // Priority 1: Instance-level transformer (set explicitly on this model)
-        var transformer = PostprocessingTransformer;
-        if (transformer is not null)
-        {
-            return transformer.Transform(modelOutput);
-        }
-
-        // Priority 2: Model-specific industry-standard defaults
+        // Model-specific industry-standard defaults
         return ApplyDefaultPostprocessing(modelOutput);
     }
 

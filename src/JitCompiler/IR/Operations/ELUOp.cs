@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 namespace AiDotNet.JitCompiler.IR.Operations;
 
 /// <summary>
@@ -9,12 +10,14 @@ namespace AiDotNet.JitCompiler.IR.Operations;
 /// Smoother than ReLU for negative values.
 /// </para>
 /// </remarks>
-public class ELUOp : IROp
+public class ELUOp : IROp, IFusableActivation
 {
     /// <summary>
     /// The alpha parameter for negative values. Default is 1.0.
     /// </summary>
     public double Alpha { get; set; } = 1.0;
+
+    public FusedActivationType FusedType => FusedActivationType.ELU;
 
     public override bool Validate()
     {

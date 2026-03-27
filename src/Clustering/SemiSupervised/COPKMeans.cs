@@ -41,6 +41,14 @@ namespace AiDotNet.Clustering.SemiSupervised;
 /// - Data linkage: "These records refer to the same entity"
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new COPKMeansOptions&lt;double&gt;();
+/// var cOPKMeans = new COPKMeans&lt;double&gt;(options);
+/// cOPKMeans.Train(dataMatrix);
+/// Vector<double> labels = cOPKMeans.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -77,7 +85,6 @@ public class COPKMeans<T> : ClusteringBase<T>
     public int ConstraintViolations { get; private set; }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -133,10 +140,14 @@ public class COPKMeans<T> : ClusteringBase<T>
             changed = false;
             iterations++;
 
+            // Cache point array for allocation-free distance
+            var pointArr = new T[d];
+
             // Assign points to clusters respecting constraints
             for (int i = 0; i < n; i++)
             {
-                var point = GetRow(x, i);
+                for (int j = 0; j < d; j++)
+                    pointArr[j] = x[i, j];
                 int bestCluster = -1;
                 T bestDist = NumOps.MaxValue;
 
@@ -148,13 +159,7 @@ public class COPKMeans<T> : ClusteringBase<T>
                         continue;
                     }
 
-                    var center = new Vector<T>(d);
-                    for (int j = 0; j < d; j++)
-                    {
-                        center[j] = centers[c][j];
-                    }
-
-                    T dist = metric.Compute(point, center);
+                    T dist = metric.ComputeInline(pointArr, centers[c], d);
                     if (NumOps.LessThan(dist, bestDist))
                     {
                         bestDist = dist;
@@ -183,12 +188,13 @@ public class COPKMeans<T> : ClusteringBase<T>
 
             for (int i = 0; i < n; i++)
             {
-                if (labels[i] >= 0)
+                int li = (int)labels[i];
+                if (li >= 0)
                 {
-                    counts[labels[i]]++;
+                    counts[li]++;
                     for (int j = 0; j < d; j++)
                     {
-                        newCenters[labels[i]][j] = NumOps.Add(newCenters[labels[i]][j], x[i, j]);
+                        newCenters[li][j] = NumOps.Add(newCenters[li][j], x[i, j]);
                     }
                 }
             }
@@ -224,6 +230,18 @@ public class COPKMeans<T> : ClusteringBase<T>
         for (int i = 0; i < n; i++)
         {
             Labels[i] = NumOps.FromDouble(labels[i]);
+        }
+
+        MergeDegenerateClusters(x);
+
+        // Recompute constraint status after merge since labels may have changed
+        if (Labels is not null)
+        {
+            var mergedLabels = new int[Labels.Length];
+            for (int i = 0; i < Labels.Length; i++)
+                mergedLabels[i] = (int)Math.Round(NumOps.ToDouble(Labels[i]));
+            ConstraintViolations = CountViolations(mergedLabels);
+            ConstraintsSatisfied = ConstraintViolations == 0;
         }
 
         IsTrained = true;

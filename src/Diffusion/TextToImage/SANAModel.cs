@@ -306,7 +306,7 @@ public class SANAModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var predictorCount = _predictor.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != predictorCount + vaeCount)
         {
@@ -369,7 +369,6 @@ public class SANAModel<T> : LatentDiffusionModelBase<T>
         {
             Name = $"SANA {variantName}",
             Version = variantName,
-            ModelType = ModelType.NeuralNetwork,
             Description = $"SANA {variantName} linear DiT with DC-AE (32x compression) and Gemma text encoder for efficient high-resolution generation",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

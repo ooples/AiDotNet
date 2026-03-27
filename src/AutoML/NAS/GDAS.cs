@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.AutoML.SearchSpace;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -16,6 +18,27 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "Searching for A Robust Neural Architecture in Four GPU Hours" (CVPR 2019)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> GDAS finds good neural network architectures in just
+    /// 4 GPU hours using Gumbel-Softmax sampling. This technique makes discrete architecture
+    /// choices (which layer type to use) differentiable, so gradient descent can optimize
+    /// them directly. Think of it as using calculus to navigate a menu of design choices
+    /// rather than trying them all one by one.</para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// var searchSpace = new SearchSpaceBase&lt;float&gt;();
+    /// var gdas = new GDAS&lt;float&gt;(searchSpace, numNodes: 4);
+    /// Architecture&lt;float&gt; architecture = gdas.DeriveArchitecture();
+    /// </code>
+    /// </example>
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.Optimization)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     public class GDAS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;

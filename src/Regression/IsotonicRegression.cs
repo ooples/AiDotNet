@@ -31,6 +31,23 @@ namespace AiDotNet.Regression;
 /// while still maintaining this "never decreasing" property.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an isotonic regression with monotonically non-decreasing constraint
+/// var model = new IsotonicRegression&lt;double&gt;();
+///
+/// // Prepare training data: 5 samples with 1 feature (single sorted predictor)
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 1, new double[] { 1, 2, 3, 4, 5 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 1.2, 2.8, 2.5, 4.1, 5.3 });
+///
+/// // Train with pool adjacent violators algorithm
+/// model.Train(features, targets);
+///
+/// // Predict for a new sample (output is monotonically non-decreasing)
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 1, new double[] { 3.5 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -48,6 +65,9 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
     /// The target values corresponding to the sorted input values.
     /// </summary>
     private Vector<T> _yValues;
+    private int _trainingFeatureCount;
+    private Vector<T>? _olsCoefficients;
+    private T _olsIntercept;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="IsotonicRegression{T}"/> class.
@@ -81,7 +101,14 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
     {
         _xValues = Vector<T>.Empty();
         _yValues = Vector<T>.Empty();
+        _olsIntercept = NumOps.Zero;
     }
+
+    /// <summary>
+    /// Isotonic regression learns a monotonic step function — no optimizer parameter injection.
+    /// Returning 0 makes SupportsParameterInitialization return false.
+    /// </summary>
+    public override int ParameterCount => 0;
 
     /// <summary>
     /// Trains the Isotonic Regression model using the provided input features and target values.
@@ -115,11 +142,51 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidateInputs(x, y);
+        _trainingFeatureCount = x.Columns;
 
-        // Note: Isotonic regression doesn't use traditional regularization -
-        // the monotonicity constraint itself acts as a form of regularization
-        _xValues = x.GetColumn(0); // Isotonic regression typically works with 1D input
-        _yValues = y;
+        // Compute 1D projection using OLS for ordering (handles multi-feature data)
+        // For single-feature data this degenerates to using that feature directly
+        Vector<T> xProjection;
+        if (x.Columns == 1)
+        {
+            xProjection = x.GetColumn(0);
+            _olsCoefficients = null;
+            _olsIntercept = NumOps.Zero;
+        }
+        else
+        {
+            // Compute OLS coefficients: beta = (X'X + λI)^-1 X'y
+            var xWithInt = x.AddConstantColumn(NumOps.One);
+            var xTx = xWithInt.Transpose().Multiply(xWithInt);
+            var xTy = xWithInt.Transpose().Multiply(y);
+            for (int i = 0; i < xTx.Rows; i++)
+                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-10));
+            var solution = xTx.Inverse().Multiply(xTy);
+            _olsIntercept = solution[0];
+            _olsCoefficients = solution.Slice(1, x.Columns);
+
+            // Project training data: x_proj = X * beta + intercept
+            xProjection = new Vector<T>(x.Rows);
+            for (int i = 0; i < x.Rows; i++)
+            {
+                T val = _olsIntercept;
+                for (int j = 0; j < x.Columns; j++)
+                    val = NumOps.Add(val, NumOps.Multiply(x[i, j], _olsCoefficients[j]));
+                xProjection[i] = val;
+            }
+        }
+
+        // Sort by projected x values for PAV algorithm
+        var indices = Enumerable.Range(0, xProjection.Length)
+            .OrderBy(i => NumOps.ToDouble(xProjection[i]))
+            .ToArray();
+        _xValues = new Vector<T>(xProjection.Length);
+        _yValues = new Vector<T>(y.Length);
+        for (int i = 0; i < indices.Length; i++)
+        {
+            _xValues[i] = xProjection[indices[i]];
+            _yValues[i] = y[indices[i]];
+        }
 
         OptimizeModel(x, _yValues);
     }
@@ -151,44 +218,71 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {
-        // Implement Pool Adjacent Violators (PAV) algorithm
+        // Single-pass Pool Adjacent Violators (PAV) algorithm using block sums
+        // to avoid weight overflow that occurs with repeated multi-pass merging
         var n = y.Length;
-        var yhat = new Vector<T>(n);
-        var w = new Vector<T>(n);
+        if (n == 0)
+        {
+            SupportVectors = new Matrix<T>(0, 1);
+            Alphas = new Vector<T>(0);
+            return;
+        }
+
+        // Track blocks by their sum and count (avoids large weight * value products)
+        var blockSum = new double[n];
+        var blockCount = new int[n];
+        var blockEnd = new int[n]; // blockEnd[i] = last index in block starting at i
 
         for (int i = 0; i < n; i++)
         {
-            yhat[i] = y[i];
-            w[i] = NumOps.One;
+            blockSum[i] = NumOps.ToDouble(y[i]);
+            blockCount[i] = 1;
+            blockEnd[i] = i;
         }
 
-        bool changed;
-        do
+        // Single-pass PAV: scan left-to-right, merge backward when violation found
+        var blocks = new List<(int start, int end, double sum, int count)>();
+        blocks.Add((0, 0, blockSum[0], 1));
+
+        for (int i = 1; i < n; i++)
         {
-            changed = false;
-            for (int i = 0; i < n - 1; i++)
+            double yi = NumOps.ToDouble(y[i]);
+            blocks.Add((i, i, yi, 1));
+
+            // Merge backward while monotonicity is violated
+            while (blocks.Count > 1)
             {
-                if (NumOps.LessThan(yhat[i + 1], yhat[i]))
-                {
-                    var weightedMean = NumOps.Divide(
-                        NumOps.Add(NumOps.Multiply(w[i], yhat[i]), NumOps.Multiply(w[i + 1], yhat[i + 1])),
-                        NumOps.Add(w[i], w[i + 1])
-                    );
-                    yhat[i] = weightedMean;
-                    yhat[i + 1] = weightedMean;
-                    w[i] = NumOps.Add(w[i], w[i + 1]);
-                    w[i + 1] = w[i];
-                    changed = true;
-                }
+                var last = blocks[^1];
+                var prev = blocks[^2];
+                double lastMean = last.sum / last.count;
+                double prevMean = prev.sum / prev.count;
+
+                if (prevMean <= lastMean)
+                    break;
+
+                // Merge last two blocks
+                blocks.RemoveAt(blocks.Count - 1);
+                blocks[^1] = (prev.start, last.end, prev.sum + last.sum, prev.count + last.count);
             }
-        } while (changed);
+        }
+
+        // Expand blocks back to per-element predictions
+        var yhat = new double[n];
+        foreach (var (start, end, sum, count) in blocks)
+        {
+            double mean = sum / count;
+            for (int i = start; i <= end; i++)
+                yhat[i] = mean;
+        }
 
         SupportVectors = new Matrix<T>(n, 1);
+        var alphas = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
             SupportVectors[i, 0] = _xValues[i];
+            alphas[i] = NumOps.FromDouble(yhat[i]);
         }
-        Alphas = yhat;
+        Alphas = alphas;
     }
 
     /// <summary>
@@ -253,8 +347,25 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     protected override T PredictSingle(Vector<T> input)
     {
-        var x = input[0]; // Isotonic regression typically works with 1D input
+        if (Alphas.Length == 0)
+            return NumOps.Zero;
+
+        // Project input to 1D using the same OLS projection used during training
+        T x;
+        if (_olsCoefficients is not null)
+        {
+            x = _olsIntercept;
+            int featureCount = Math.Min(input.Length, _olsCoefficients.Length);
+            for (int j = 0; j < featureCount; j++)
+                x = NumOps.Add(x, NumOps.Multiply(input[j], _olsCoefficients[j]));
+        }
+        else
+        {
+            x = input[0]; // Single-feature fallback
+        }
+
         int index = FindNearestIndex(x);
+        index = Math.Max(0, Math.Min(index, Alphas.Length - 1));
         return Alphas[index];
     }
 
@@ -300,15 +411,6 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
         }
 
         return Math.Max(0, left - 1);
-    }
-
-    /// <summary>
-    /// Gets the model type of the Isotonic Regression model.
-    /// </summary>
-    /// <returns>The model type enumeration value.</returns>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.IsotonicRegression;
     }
 
     /// <summary>
@@ -454,6 +556,25 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
     /// you'd want each test to use a model with identical settings.
     /// </para>
     /// </remarks>
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new IsotonicRegression<T>(Options, Regularization);
+        if (SupportVectors.Rows > 0)
+            clone.SupportVectors = SupportVectors.Clone();
+        if (Alphas.Length > 0)
+            clone.Alphas = new Vector<T>(Alphas);
+        clone.B = B;
+        clone._xValues = new Vector<T>(_xValues);
+        clone._yValues = new Vector<T>(_yValues);
+        clone._trainingFeatureCount = _trainingFeatureCount;
+        clone._olsIntercept = _olsIntercept;
+        if (_olsCoefficients is not null)
+            clone._olsCoefficients = new Vector<T>(_olsCoefficients);
+        return clone;
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
+
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new IsotonicRegression<T>(Options, Regularization);

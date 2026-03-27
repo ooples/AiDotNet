@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 
 namespace AiDotNet.Genetics;
 
@@ -29,6 +31,22 @@ namespace AiDotNet.Genetics;
 /// Use this when you want to directly evolve machine learning models using genetic algorithms.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a genetic individual wrapping a model, evolved via gene-to-model factory
+/// var genes = new List&lt;RealGene&lt;double&gt;&gt; { new(0.5), new(1.2), new(-0.3) };
+/// Func&lt;ICollection&lt;RealGene&lt;double&gt;&gt;, IFullModel&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;&gt; factory =
+///     g =&gt; new VectorModel&lt;double&gt;(new Vector&lt;double&gt;(g.Select(x =&gt; x.Value).ToArray()));
+/// var individual = new ModelIndividual&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;, RealGene&lt;double&gt;&gt;(genes, factory);
+/// Vector&lt;double&gt; prediction = individual.Predict(inputMatrix);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.MachineLearning)]
+[ModelCategory(ModelCategory.Optimization)]
+[ModelTask(ModelTask.Regression)]
+[ModelTask(ModelTask.Classification)]
+[ModelComplexity(ModelComplexity.Medium)]
+[ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 public class ModelIndividual<T, TInput, TOutput, TGene> :
     IEvolvable<TGene, T>,
     IFullModel<T, TInput, TOutput>
@@ -300,6 +318,12 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     private int? _parameterCountCache;
     public virtual int ParameterCount
         => _parameterCountCache ??= _innerModel.GetParameters()?.Length ?? 0;
+
+    /// <inheritdoc/>
+    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 
     public virtual void SaveModel(string filePath)
     {

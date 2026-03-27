@@ -23,6 +23,25 @@ namespace AiDotNet.Regression;
 /// variance increases with the mean, which is common in count data.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Poisson regression for count data
+/// var options = new PoissonRegressionOptions&lt;double&gt;();
+/// var model = new PoissonRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 5 samples with 2 features, count targets
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3, 8, 15, 25, 40 });
+///
+/// // Train with log link function (predictions always non-negative)
+/// model.Train(features, targets);
+///
+/// // Predict count for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 11, 12 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelCategory(ModelCategory.Linear)]
@@ -38,6 +57,11 @@ public class PoissonRegression<T> : RegressionBase<T>
     /// Contains settings like maximum iterations and convergence tolerance.
     /// </value>
     private readonly PoissonRegressionOptions<T> _options;
+
+    /// <summary>
+    /// Shift applied to y to make it positive (0 if y was already positive).
+    /// </summary>
+    private double _yShift;
 
     /// <summary>
     /// Initializes a new instance of the PoissonRegression class with the specified options and regularization.
@@ -90,11 +114,32 @@ public class PoissonRegression<T> : RegressionBase<T>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidationHelper<T>.ValidateInputData(x, y);
-        ValidationHelper<T>.ValidatePoissonData(y);
+
+        // Poisson requires positive targets. Shift if needed and store the shift
+        // so we can adjust predictions back.
+        _yShift = 0.0;
+        double minY = double.MaxValue;
+        for (int i = 0; i < y.Length; i++)
+        {
+            double yi = NumOps.ToDouble(y[i]);
+            if (yi < minY) minY = yi;
+        }
+        if (minY <= 0)
+        {
+            _yShift = Math.Abs(minY) + 1.0;
+            var yShifted = new Vector<T>(y.Length);
+            for (int i = 0; i < y.Length; i++)
+                yShifted[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + _yShift);
+            y = yShifted;
+        }
 
         int numFeatures = x.Columns;
         Coefficients = new Vector<T>(numFeatures);
-        Intercept = NumOps.Zero;
+        // Initialize intercept to log(mean(y)) for better convergence
+        double meanY = 0;
+        for (int i = 0; i < y.Length; i++) meanY += NumOps.ToDouble(y[i]);
+        meanY /= y.Length;
+        Intercept = NumOps.FromDouble(Math.Log(Math.Max(meanY, 1e-10)));
 
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
 
@@ -157,7 +202,14 @@ public class PoissonRegression<T> : RegressionBase<T>
     /// </remarks>
     private Vector<T> PredictMean(Matrix<T> x, Vector<T> coefficients)
     {
-        return x.Multiply(coefficients).Transform(NumOps.Exp);
+        var linearPredictor = x.Multiply(coefficients);
+        // Clamp linear predictor to prevent exp() overflow
+        return linearPredictor.Transform(v =>
+        {
+            double d = NumOps.ToDouble(v);
+            d = Math.Max(-20.0, Math.Min(20.0, d)); // exp(20) ≈ 5e8, safe range
+            return NumOps.FromDouble(Math.Exp(d));
+        });
     }
 
     /// <summary>
@@ -257,7 +309,16 @@ public class PoissonRegression<T> : RegressionBase<T>
         }
         coefficientsWithIntercept[Coefficients.Length] = Intercept;
 
-        return PredictMean(xWithIntercept, coefficientsWithIntercept);
+        var predictions = PredictMean(xWithIntercept, coefficientsWithIntercept);
+
+        // Undo the y-shift applied during training
+        if (_yShift > 0)
+        {
+            for (int i = 0; i < predictions.Length; i++)
+                predictions[i] = NumOps.Subtract(predictions[i], NumOps.FromDouble(_yShift));
+        }
+
+        return predictions;
     }
 
     /// <summary>
@@ -322,25 +383,6 @@ public class PoissonRegression<T> : RegressionBase<T>
         // Deserialize PoissonRegression specific options
         _options.MaxIterations = reader.ReadInt32();
         _options.Tolerance = Convert.ToDouble(reader.ReadDouble());
-    }
-
-    /// <summary>
-    /// Gets the type of the model.
-    /// </summary>
-    /// <returns>The model type identifier for Poisson regression.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method is used for model identification and serialization purposes.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// This method simply returns an identifier that indicates this is a Poisson regression model.
-    /// It's used internally by the library to keep track of different types of models.
-    /// </para>
-    /// </remarks>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.PoissonRegression;
     }
 
     /// <summary>

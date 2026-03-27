@@ -56,6 +56,24 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// ```
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a link prediction model for graph edge prediction
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 16,   // node feature dimension
+///     outputSize: 1,   // edge score
+///     hiddenSizes: new[] { 64, 32 });
+/// var model = new LinkPredictionModel&lt;float&gt;(architecture);
+///
+/// // Prepare graph data
+/// var adjacency = new Tensor&lt;float&gt;(new[] { 100, 100 }); // 100-node graph
+/// var nodeFeatures = new Tensor&lt;float&gt;(new[] { 100, 16 });
+///
+/// // Predict edge likelihood between node pairs
+/// var scores = model.Predict(nodeFeatures);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Regression)]
@@ -468,7 +486,7 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
             throw new InvalidOperationException("Node embeddings not computed.");
         }
 
-        var gradient = new Tensor<T>(_nodeEmbeddings.Shape);
+        var gradient = new Tensor<T>(_nodeEmbeddings.Shape.ToArray());
         int numPos = posEdges.Shape[0];
         int numNeg = negEdges.Shape[0];
 
@@ -642,7 +660,7 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
 
         if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
         {
-            gradOutput = gradOutput.Reshape(predictions.Shape);
+            gradOutput = gradOutput.Reshape(predictions.Shape.ToArray());
         }
 
         Backward(gradOutput);
@@ -661,7 +679,6 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GraphNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["NetworkType"] = "LinkPredictionModel",

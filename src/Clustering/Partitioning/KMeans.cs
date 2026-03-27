@@ -38,6 +38,14 @@ namespace AiDotNet.Clustering.Partitioning;
 /// - Data doesn't have many outliers
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new KMeansOptions&lt;double&gt;();
+/// var kMeans = new KMeans&lt;double&gt;(options);
+/// kMeans.Fit(dataMatrix);
+/// int[] labels = kMeans.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -81,7 +89,6 @@ public class KMeans<T> : ClusteringBase<T>
     public int NumIterations => _numIterations;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -110,6 +117,7 @@ public class KMeans<T> : ClusteringBase<T>
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidateInputData(x);
+        NumFeatures = x.Columns;
 
         Matrix<T>? bestCenters = null;
         Vector<T>? bestLabels = null;
@@ -134,6 +142,7 @@ public class KMeans<T> : ClusteringBase<T>
         ClusterCenters = bestCenters;
         Labels = bestLabels;
         Inertia = bestInertia;
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 
@@ -307,7 +316,7 @@ public class KMeans<T> : ClusteringBase<T>
             T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
-            for (int k = 0; k < _options.NumClusters; k++)
+            for (int k = 0; k < centers.Rows; k++)
             {
                 var center = GetRow(centers, k);
                 T dist = distanceMetric.Compute(point, center);
@@ -406,7 +415,7 @@ public class KMeans<T> : ClusteringBase<T>
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
-            for (int k = 0; k < _options.NumClusters; k++)
+            for (int k = 0; k < centers.Rows; k++)
             {
                 var center = GetRow(centers, k);
                 distances[i, k] = distanceMetric.Compute(point, center);

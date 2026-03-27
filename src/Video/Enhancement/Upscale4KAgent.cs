@@ -178,7 +178,6 @@ public class Upscale4KAgent<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "Upscale4KAgent-Native" : "Upscale4KAgent-ONNX",
             Description = $"Upscale4KAgent {_options.Variant} agentic multi-model 4K pipeline (2025)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumResBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

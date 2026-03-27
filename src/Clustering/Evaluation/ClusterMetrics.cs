@@ -18,14 +18,14 @@ namespace AiDotNet.Clustering.Evaluation;
 /// <code>
 /// var metrics = new ClusterMetrics&lt;double&gt;();
 /// var scores = metrics.Evaluate(data, predictedLabels);
-/// Console.WriteLine($"Silhouette: {scores.Silhouette}");
-/// Console.WriteLine($"Davies-Bouldin: {scores.DaviesBouldin}");
+/// // Result is available in the returned value
+/// // Result is available in the returned value
 /// </code>
 ///
 /// If you have ground truth labels:
 /// <code>
 /// var scores = metrics.Evaluate(data, predictedLabels, trueLabels);
-/// Console.WriteLine($"ARI: {scores.AdjustedRandIndex}");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>

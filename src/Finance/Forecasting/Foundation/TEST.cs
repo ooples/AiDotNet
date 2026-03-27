@@ -28,10 +28,31 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// language model knowledge. It translates seasonal/trend patterns into text descriptions
 /// and aligns time series embeddings to these text prototypes via contrastive learning.
 /// </para>
+/// <para><b>For Beginners:</b> TEST bridges the gap between language models and time series
+/// by creating text descriptions of temporal patterns (like "rising trend with weekly
+/// seasonality") and teaching the model to align numerical patterns with these descriptions.
+/// This lets a language model understand time series without converting numbers to text,
+/// combining the best of both worlds.</para>
 /// <para>
 /// <b>Reference:</b> Sun et al., "TEST: Text Prototype Aligned Embedding to Activate LLM's Ability for Time Series", 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a TEST model that aligns time series embeddings with text prototypes
+/// // Bridges language models and time series via contrastive learning on pattern descriptions
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with text-prototype alignment
+/// var model = new TEST&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new TEST&lt;double&gt;(architecture, "test_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -247,7 +268,7 @@ public class TEST<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape));
+            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -268,7 +289,6 @@ public class TEST<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "TEST" },
@@ -411,7 +431,7 @@ public class TEST<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {

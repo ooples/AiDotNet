@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -30,6 +32,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Other)]
+[LayerTask(LayerTask.FeatureExtraction)]
+[LayerProperty(IsTrainable = true, SupportsBackpropagation = false, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, 2")]
 public class QuantumLayer<T> : LayerBase<T>
 {
     private readonly int _numQubits;
@@ -44,6 +49,13 @@ public class QuantumLayer<T> : LayerBase<T>
     private int[]? _originalInputShape;
     private Tensor<T> _rotationAngles;
     private Tensor<T> _angleGradients;
+
+    /// <summary>
+    /// Cached result amplitudes from Forward for use in Backward.
+    /// Shape: [batch, dimension] for real and imaginary parts.
+    /// </summary>
+    private Tensor<T>? _lastResultReal;
+    private Tensor<T>? _lastResultImag;
     private readonly INumericOperations<Complex<T>> _complexOps;
 
     /// <summary>
@@ -69,6 +81,7 @@ public class QuantumLayer<T> : LayerBase<T>
     /// automatically adjust to better process your specific data.
     /// </para>
     /// </remarks>
+    public override int ParameterCount => _rotationAngles.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -149,7 +162,7 @@ public class QuantumLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
 
         // Handle any-rank tensor: collapse to 2D for processing
@@ -198,12 +211,12 @@ public class QuantumLayer<T> : LayerBase<T>
             realState = Engine.TensorSlice(processInput, [0, 0], [batchSize, dimension]);
         }
 
-        var imagState = new Tensor<T>(realState.Shape);
+        var imagState = new Tensor<T>(realState.Shape.ToArray());
 
         // Normalize each batch item: divide by sqrt(sum(|state|^2) + eps)
         var magnitudeSquared = Engine.ComplexMagnitudeSquared(realState, imagState);
         var normPerBatch = Engine.ReduceSum(magnitudeSquared, [1], keepDims: true);
-        var epsilonTensor = new Tensor<T>(normPerBatch.Shape);
+        var epsilonTensor = new Tensor<T>(normPerBatch.Shape.ToArray());
         epsilonTensor.Fill(NumOps.FromDouble(1e-10));
         var safeDenom = Engine.TensorAdd(normPerBatch, epsilonTensor);
         var denomExpanded = Engine.TensorRepeatElements(safeDenom, dimension, axis: 1);
@@ -216,6 +229,10 @@ public class QuantumLayer<T> : LayerBase<T>
 
         // Apply quantum circuit using complex matrix multiplication
         var (resultRealT, resultImagT) = Engine.ComplexMatMul(_circuitReal, _circuitImag, normalizedRealT, normalizedImagT);
+
+        // Cache amplitudes for Backward (transpose to [batch, dimension])
+        _lastResultReal = Engine.TensorTranspose(resultRealT);
+        _lastResultImag = Engine.TensorTranspose(resultImagT);
 
         // Convert amplitudes to probabilities and transpose back to [batch, dimension]
         var probabilitiesT = Engine.ComplexMagnitudeSquared(resultRealT, resultImagT);
@@ -457,49 +474,89 @@ public class QuantumLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Backward called before Forward.");
         }
 
-        int batchSize = outputGradient.Shape[0];
+        int batchSize = _lastInput.Shape[0];
         int dimension = 1 << _numQubits;
         int inputDimension = _lastInput.Shape[1];
 
+        // Ensure outputGradient is 2D
+        Tensor<T> outGrad2D;
+        if (outputGradient.Shape.Length == 1)
+        {
+            outGrad2D = outputGradient.Reshape([1, outputGradient.Shape[0]]);
+        }
+        else
+        {
+            outGrad2D = outputGradient;
+        }
+
         // Create input gradient tensor
         var inputGradient = new Tensor<T>([batchSize, inputDimension]);
+        var two = NumOps.FromDouble(2.0);
 
         for (int b = 0; b < batchSize; b++)
         {
-            // Convert output gradient to complex form
-            var gradientState = new Tensor<Complex<T>>([dimension]);
+            // Recompute the forward for this batch item to get amplitudes
+            // (avoids Engine tensor immutability issues with cached values)
+            var state = new Complex<T>[dimension];
             for (int i = 0; i < dimension; i++)
             {
-                gradientState[i] = new Complex<T>(outputGradient[b, i], NumOps.Zero);
+                T realVal = i < inputDimension ? _lastInput[b, i] : NumOps.Zero;
+                state[i] = new Complex<T>(realVal, NumOps.Zero);
             }
 
-            // Backpropagate through quantum circuit
-            var backpropGradient = new Tensor<Complex<T>>([dimension]);
+            // Normalize
+            T normSq = NumOps.Zero;
+            for (int i = 0; i < dimension; i++)
+                normSq = NumOps.Add(normSq, NumOps.Multiply(state[i].Real, state[i].Real));
+            T norm = NumOps.Sqrt(NumOps.Add(normSq, NumOps.FromDouble(1e-10)));
+            for (int i = 0; i < dimension; i++)
+                state[i] = new Complex<T>(NumOps.Divide(state[i].Real, norm), NumOps.Zero);
+
+            // Apply circuit: amp = Circuit * state
+            var amplitudes = new Complex<T>[dimension];
+            for (int i = 0; i < dimension; i++)
+            {
+                amplitudes[i] = new Complex<T>(NumOps.Zero, NumOps.Zero);
+                for (int j = 0; j < dimension; j++)
+                {
+                    amplitudes[i] = _complexOps.Add(amplitudes[i],
+                        _complexOps.Multiply(_quantumCircuit[i, j], state[j]));
+                }
+            }
+
+            // Backpropagate through measurement: prob[i] = |amp[i]|^2
+            // dL/d(amp_real[i]) = dL/d(prob[i]) * 2 * amp_real[i]
+            // dL/d(amp_imag[i]) = dL/d(prob[i]) * 2 * amp_imag[i]
+            var ampGradient = new Tensor<Complex<T>>([dimension]);
+            for (int i = 0; i < dimension; i++)
+            {
+                var dLdProb = outGrad2D[b, i];
+                var gradReal = NumOps.Multiply(NumOps.Multiply(two, dLdProb), amplitudes[i].Real);
+                var gradImag = NumOps.Multiply(NumOps.Multiply(two, dLdProb), amplitudes[i].Imaginary);
+                ampGradient[i] = new Complex<T>(gradReal, gradImag);
+            }
+
+            // Backpropagate through quantum circuit: amp = Circuit * state
+            // dL/d(state) = Circuit^H * dL/d(amp)
+            var backpropGradient = new Complex<T>[dimension];
             for (int i = 0; i < dimension; i++)
             {
                 backpropGradient[i] = new Complex<T>(NumOps.Zero, NumOps.Zero);
                 for (int j = 0; j < dimension; j++)
                 {
-                    // Use the Conjugate method from Complex<T> directly
                     var conjugate = _quantumCircuit[j, i].Conjugate();
                     backpropGradient[i] = _complexOps.Add(backpropGradient[i],
-                        _complexOps.Multiply(conjugate, gradientState[j]));
+                        _complexOps.Multiply(conjugate, ampGradient[j]));
                 }
             }
 
-            // Update parameter gradients
-            UpdateAngleGradients(gradientState, b);
+            // Update parameter gradients using amplitude gradient
+            UpdateAngleGradients(ampGradient, b);
 
-            // Copy gradients to output tensor
+            // Copy gradients to output tensor (real part of backpropagated gradient)
             for (int i = 0; i < Math.Min(inputDimension, dimension); i++)
             {
-                // Calculate magnitude manually from the complex number
-                var complex = backpropGradient[i];
-                var magnitudeSquared = NumOps.Add(
-                    NumOps.Multiply(complex.Real, complex.Real),
-                    NumOps.Multiply(complex.Imaginary, complex.Imaginary)
-                );
-                inputGradient[b, i] = NumOps.Sqrt(magnitudeSquared);
+                inputGradient[b, i] = backpropGradient[i].Real;
             }
         }
 
@@ -526,7 +583,7 @@ public class QuantumLayer<T> : LayerBase<T>
         int batchSize = _lastInput.Shape[0];
         int dimension = 1 << _numQubits;
         int inputSize = _lastInput.Shape[1];
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
         // Reset angle gradients
         _angleGradients.Fill(NumOps.Zero);
@@ -665,6 +722,14 @@ public class QuantumLayer<T> : LayerBase<T>
     /// potentially unstable learning.
     /// </para>
     /// </remarks>
+    /// <inheritdoc/>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["NumQubits"] = _numQubits.ToString();
+        return metadata;
+    }
+
     public override void UpdateParameters(T learningRate)
     {
         // Use Engine operations for gradient update
@@ -716,6 +781,17 @@ public class QuantumLayer<T> : LayerBase<T>
         return new Vector<T>(_rotationAngles.ToArray());
     }
 
+    public override Vector<T> GetParameterGradients()
+    {
+        return new Vector<T>(_angleGradients.ToArray());
+    }
+
+    public override void ClearGradients()
+    {
+        _angleGradients = new Tensor<T>([_numQubits]);
+        _angleGradients.Fill(NumOps.Zero);
+    }
+
     /// <summary>
     /// Sets the trainable parameters of the quantum layer.
     /// </summary>
@@ -759,6 +835,17 @@ public class QuantumLayer<T> : LayerBase<T>
         {
             ApplyRotation(i, _rotationAngles[i]);
         }
+
+        // Rebuild circuit tensors from updated _quantumCircuit for Forward to use
+        int dim = 1 << _numQubits;
+        for (int i = 0; i < dim; i++)
+        {
+            for (int j = 0; j < dim; j++)
+            {
+                _circuitReal[i, j] = _quantumCircuit[i, j].Real;
+                _circuitImag[i, j] = _quantumCircuit[i, j].Imaginary;
+            }
+        }
     }
 
     /// <summary>
@@ -790,6 +877,8 @@ public class QuantumLayer<T> : LayerBase<T>
     {
         // Clear cached values from forward pass
         _lastInput = null;
+        _lastResultReal = null;
+        _lastResultImag = null;
 
         // Reset angle gradients
         _angleGradients = new Tensor<T>([_numQubits]);
@@ -826,6 +915,16 @@ public class QuantumLayer<T> : LayerBase<T>
         {
             _rotationAngles[i] = NumOps.FromDouble(Random.NextDouble() * 2 * Math.PI);
             ApplyRotation(i, _rotationAngles[i]);
+        }
+
+        // Update circuit tensors to match the rotated _quantumCircuit
+        for (int i = 0; i < dimension; i++)
+        {
+            for (int j = 0; j < dimension; j++)
+            {
+                _circuitReal[i, j] = _quantumCircuit[i, j].Real;
+                _circuitImag[i, j] = _quantumCircuit[i, j].Imaginary;
+            }
         }
     }
 

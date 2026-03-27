@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.VideoLanguage;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// LLaVA-NeXT-Video (ByteDance, 2024) extends LLaVA-NeXT to video understanding using average
+/// pooling for efficient frame token reduction. It processes video frames through a shared image
+/// encoder and pools temporal tokens to reduce sequence length, enabling zero-shot video
+/// question answering and temporal reasoning without video-specific training.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "LLaVA-NeXT: A Strong Zero-shot Video Understanding Model" (ByteDance, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> LLaVANeXTVideo is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> LLaVA-NeXT-Video is a video understanding model that extends
+/// image LLMs to video through efficient frame token pooling. Default values follow the
+/// original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a LLaVA-NeXT-Video model for zero-shot video understanding
+/// // with average pooling for efficient frame token reduction
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LLaVANeXTVideo&lt;double&gt;(architecture, "llavanextvideo.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LLaVANeXTVideo&lt;double&gt;(architecture, new LLaVANeXTVideoOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Video)]
@@ -140,7 +164,7 @@ public class LLaVANeXTVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageModel
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LLaVA-NeXT-Video-Native" : "LLaVA-NeXT-Video-ONNX", Description = "LLaVA-NeXT-Video: average pooling for frame token reduction.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "LLaVA-NeXT-Video-Native" : "LLaVA-NeXT-Video-ONNX", Description = "LLaVA-NeXT-Video: average pooling for frame token reduction.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "LLaVA-NeXT-Video";
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
         return m;

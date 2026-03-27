@@ -39,7 +39,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 80, outputSize: 5000);
 /// var model = new RNNTransducer&lt;float&gt;(arch, "rnnt_medium.onnx");
 /// var result = model.Transcribe(audioWaveform);
-/// Console.WriteLine(result.Text); // "hello world"
+/// // Result is available in the returned value // "hello world"
 /// </code>
 /// </para>
 /// </remarks>
@@ -212,7 +212,6 @@ public class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         {
             Name = _useNativeMode ? "RNN-T-Native" : "RNN-T-ONNX",
             Description = $"RNN-Transducer {_options.Variant} streaming ASR (Graves, 2012; He et al., 2019)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumMels,
             Complexity = _options.NumEncoderLayers + _options.NumPredictionLayers
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

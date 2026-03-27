@@ -36,6 +36,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Solving certain optimization problems
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new HopfieldNetworkOptions { PatternSize = 100, MaxPatterns = 10 };
+/// var model = new HopfieldNetwork&lt;float&gt;(options);
+/// var pattern = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
+/// var recalled = model.Predict(pattern);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -189,18 +197,18 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private void InitializeWeights()
     {
+        // Initialize with small symmetric random weights (Xavier-like scaling).
+        // Zero weights make the network unable to distinguish any inputs.
+        // Symmetric weights (w_ij = w_ji) preserve the energy function property.
+        var scale = 1.0 / Math.Sqrt(_size);
         for (int i = 0; i < _size; i++)
         {
-            for (int j = 0; j < _size; j++)
+            _weights[i, i] = NumOps.Zero; // No self-connections
+            for (int j = i + 1; j < _size; j++)
             {
-                if (i != j)
-                {
-                    _weights[i, j] = NumOps.Zero;
-                }
-                else
-                {
-                    _weights[i, j] = NumOps.Zero;
-                }
+                var w = NumOps.FromDouble((Random.NextDouble() * 2.0 - 1.0) * scale);
+                _weights[i, j] = w;
+                _weights[j, i] = w; // Symmetric
             }
         }
     }
@@ -293,17 +301,21 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     public Vector<T> Recall(Vector<T> input, int maxIterations = 100)
     {
         var current = input;
+        // Convert weights to Tensor for Engine-accelerated MatMul
+        var weightsTensor = Tensor<T>.FromMatrix(_weights);
+
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
+            // VECTORIZED: next = activation(W @ current)
+            var currentTensor = Tensor<T>.FromVector(current).Reshape([_size, 1]);
+            var product = Engine.TensorMatMul(weightsTensor, currentTensor);
+            var productVec = product.Reshape([_size]).ToVector();
+
+            // Apply activation element-wise
             var next = new Vector<T>(_size);
             for (int i = 0; i < _size; i++)
             {
-                T sum = NumOps.Zero;
-                for (int j = 0; j < _size; j++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_weights[i, j], current[j]));
-                }
-                next[i] = _activationFunction.Activate(sum);
+                next[i] = _activationFunction.Activate(productVec[i]);
             }
 
             if (current.Equals(next))
@@ -420,6 +432,40 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// the underlying mechanism is quite different.
     /// </para>
     /// </remarks>
+    /// <inheritdoc/>
+    public override bool SupportsTraining => true;
+
+    /// <summary>
+    /// Returns the weight matrix state as a named activation (Hopfield has no layers).
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var output = Predict(input);
+        return new Dictionary<string, Tensor<T>>
+        {
+            ["WeightMatrix"] = Tensor<T>.FromMatrix(_weights),
+            ["Output"] = output
+        };
+    }
+
+    /// <inheritdoc/>
+    public override int ParameterCount => _size * _size;
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        return _weights.ToVector();
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+        for (int i = 0; i < _size; i++)
+            for (int j = 0; j < _size; j++)
+                _weights[i, j] = parameters[idx++];
+    }
+
     public override Tensor<T> Predict(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
@@ -435,8 +481,27 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentException($"Input vector length ({inputVector.Length}) does not match network size ({_size})");
         }
 
-        // Perform pattern recall
-        Vector<T> recalledPattern = Recall(inputVector);
+        // Normalize input to bipolar [-1, +1] range.
+        // Hopfield networks operate on bipolar patterns; raw [0,1] inputs
+        // all have the same sign and produce identical sign() output.
+        // Standard normalization: x_bipolar = 2*x - 1 maps [0,1] → [-1,+1]
+        var bipolarInput = new Vector<T>(inputVector.Length);
+        var two = NumOps.FromDouble(2.0);
+        for (int i = 0; i < inputVector.Length; i++)
+        {
+            bipolarInput[i] = NumOps.Subtract(NumOps.Multiply(two, inputVector[i]), NumOps.One);
+        }
+
+        // Perform pattern recall on bipolar input
+        Vector<T> bipolarResult = Recall(bipolarInput);
+
+        // Denormalize back to [0,1] range: x = (x_bipolar + 1) / 2
+        var half = NumOps.FromDouble(0.5);
+        Vector<T> recalledPattern = new Vector<T>(bipolarResult.Length);
+        for (int i = 0; i < bipolarResult.Length; i++)
+        {
+            recalledPattern[i] = NumOps.Multiply(NumOps.Add(bipolarResult[i], NumOps.One), half);
+        }
 
         // Convert the recalled pattern back to a tensor with the same shape as the input
         Tensor<T> result = Tensor<T>.FromVector(recalledPattern);
@@ -445,7 +510,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
         // reshape the result to match the input shape
         if (input.Shape.Length > 1 || (input.Shape.Length == 1 && input.Shape[0] == recalledPattern.Length))
         {
-            result = result.Reshape(input.Shape);
+            result = result.Reshape(input.Shape.ToArray());
         }
 
         return result;
@@ -480,17 +545,22 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Extract patterns from the input tensor
-        // Each row of the input tensor is treated as a separate pattern
+        // Handle 1D input: treat as single pattern
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+
+        // Extract patterns and normalize to bipolar [-1, +1] range.
+        // Hopfield networks learn bipolar patterns via Hebbian rule.
+        var two = NumOps.FromDouble(2.0);
         List<Vector<T>> patterns = new List<Vector<T>>();
 
         for (int i = 0; i < input.Shape[0]; i++)
         {
-            // Extract the i-th pattern from the input tensor
             var pattern = new Vector<T>(_size);
             for (int j = 0; j < _size; j++)
             {
-                pattern[j] = input[i, j];
+                // x_bipolar = 2*x - 1 maps [0,1] → [-1,+1]
+                pattern[j] = NumOps.Subtract(NumOps.Multiply(two, input[i, j]), NumOps.One);
             }
 
             patterns.Add(pattern);
@@ -549,7 +619,6 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.HopfieldNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Size", _size },

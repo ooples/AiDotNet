@@ -2,8 +2,10 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LoRA.Adapters;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -57,6 +59,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Any task where graph structure similarity matters
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new GraphIsomorphismNetworkOptions { NodeFeatureSize = 16, HiddenSize = 64, NumLayers = 5 };
+/// var model = new GraphIsomorphismNetwork&lt;float&gt;(options);
+/// var nodeFeatures = Tensor&lt;float&gt;.Random(new[] { 20, 16 });
+/// var output = model.Predict(nodeFeatures);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.GraphAnalysis)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.GraphNetwork)]
@@ -161,9 +171,10 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0,
+        ILearningRateScheduler? learningRateScheduler = null,
         GraphIsomorphismNetworkOptions? options = null)
         : base(architecture,
-               lossFunction ?? new CrossEntropyLoss<T>(),
+               lossFunction ?? new MeanSquaredErrorLoss<T>(),
                maxGradNorm)
     {
         _options = options ?? new GraphIsomorphismNetworkOptions();
@@ -173,8 +184,15 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
         MlpHiddenDim = mlpHiddenDim;
         NumLayers = numLayers;
 
-        _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        var adamOpts = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = 0.001,
+            LearningRateScheduler = learningRateScheduler ?? new ExponentialLRScheduler(
+                baseLearningRate: 0.001, gamma: 0.99),
+            SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+        };
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOpts);
 
         InitializeLayers();
     }
@@ -191,8 +209,15 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultGraphIsomorphismLayers(
-                Architecture, MlpHiddenDim, NumLayers, LearnEpsilon, InitialEpsilon));
+            // Graph networks need per-node activation, not global softmax.
+            // Filter out trailing SoftmaxActivation.
+            foreach (var layer in LayerHelper<T>.CreateDefaultGraphIsomorphismLayers(
+                Architecture, MlpHiddenDim, NumLayers, LearnEpsilon, InitialEpsilon))
+            {
+                if (layer is ActivationLayer<T>)
+                    continue;
+                Layers.Add(layer);
+            }
         }
     }
 
@@ -438,7 +463,7 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> ComputeLossGradient(Tensor<T> predictions, Tensor<T> labels, bool[]? mask)
     {
-        var gradient = new Tensor<T>(predictions.Shape);
+        var gradient = new Tensor<T>(predictions.Shape.ToArray());
         int numNodes = predictions.Shape[0];
         int numClasses = predictions.Shape[1];
         int count = 0;
@@ -491,7 +516,7 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> ComputeGraphLossGradient(Tensor<T> predictions, Tensor<T> labels)
     {
-        var gradient = new Tensor<T>(predictions.Shape);
+        var gradient = new Tensor<T>(predictions.Shape.ToArray());
         int numClasses = predictions.Shape[1];
 
         // Compute softmax probabilities
@@ -851,18 +876,38 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        if (_cachedAdjacencyMatrix == null)
-        {
-            throw new InvalidOperationException(
-                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Predict.");
-        }
+        // Ensure 2D input [numNodes, features]
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+
+        var adjacencyMatrix = EnsureAdjacencyMatrix(input);
 
         foreach (var layer in Layers)
         {
             layer.SetTrainingMode(false);
         }
 
-        return Forward(input, _cachedAdjacencyMatrix);
+        return Forward(input, adjacencyMatrix);
+    }
+
+    private Tensor<T> EnsureAdjacencyMatrix(Tensor<T> input)
+    {
+        int numNodes = input.Shape[0];
+
+        if (_cachedAdjacencyMatrix != null &&
+            _cachedAdjacencyMatrix.Shape[0] == numNodes &&
+            _cachedAdjacencyMatrix.Shape[1] == numNodes)
+        {
+            return _cachedAdjacencyMatrix;
+        }
+
+        var adj = new Tensor<T>([numNodes, numNodes]);
+        for (int i = 0; i < numNodes; i++)
+            for (int j = 0; j < numNodes; j++)
+                adj[i, j] = NumOps.One;
+
+        _cachedAdjacencyMatrix = adj;
+        return adj;
     }
 
     /// <summary>
@@ -878,11 +923,11 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (_cachedAdjacencyMatrix == null)
-        {
-            throw new InvalidOperationException(
-                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Train.");
-        }
+        // Ensure 2D input [numNodes, features]
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+
+        var adjacencyMatrix = EnsureAdjacencyMatrix(input);
 
         // Set all layers to training mode
         foreach (var layer in Layers)
@@ -891,23 +936,23 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Forward pass
-        var predictions = Forward(input, _cachedAdjacencyMatrix);
+        var predictions = Forward(input, adjacencyMatrix);
 
         // Flatten tensors for loss function (which works on vectors)
         var flattenedPredictions = predictions.ToVector();
         var flattenedExpected = expectedOutput.ToVector();
 
         // Compute loss
-        LastLoss = _lossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
+        LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
 
         // Compute loss gradient
-        var outputGradients = _lossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
+        var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
         var gradOutput = Tensor<T>.FromVector(outputGradients);
 
         // Reshape gradient back to tensor shape if needed
         if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
         {
-            gradOutput = gradOutput.Reshape(predictions.Shape);
+            gradOutput = gradOutput.Reshape(predictions.Shape.ToArray());
         }
 
         // Backward pass through all layers
@@ -916,14 +961,48 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
         // Get parameter gradients for all trainable layers and update
         Vector<T> parameterGradients = GetParameterGradients();
 
+        // Clip gradients to prevent exploding gradients
+        parameterGradients = ClipGradient(parameterGradients);
+
+
+        // Fresh optimizer per step for stable convergence (no momentum oscillation).
+        var stepOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
 
         // Update parameters using the optimizer
-        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
+        Vector<T> updatedParameters = stepOptimizer.UpdateParameters(currentParameters, parameterGradients);
 
         // Apply updated parameters
         UpdateParameters(updatedParameters);
+    }
+
+    /// <summary>
+    /// Gets the intermediate activations from each layer, ensuring adjacency is set for graph layers.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+
+        var adjacencyMatrix = EnsureAdjacencyMatrix(input);
+
+        foreach (var layer in Layers)
+        {
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+        }
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = input;
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
     }
 
     /// <summary>
@@ -933,7 +1012,6 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GraphNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["NetworkType"] = "GraphIsomorphismNetwork",

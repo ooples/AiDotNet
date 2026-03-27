@@ -34,6 +34,14 @@ namespace AiDotNet.NeuralNetworks
     /// recognition or "find similar" search systems.
     /// </para>
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var options = new SiameseNeuralNetworkOptions { InputSize = 784, EmbeddingSize = 128 };
+    /// var model = new SiameseNeuralNetwork&lt;float&gt;(options);
+    /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
+    /// var embedding = model.Predict(input);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.General)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.EmbeddingModel)]
@@ -347,8 +355,8 @@ namespace AiDotNet.NeuralNetworks
                 var (grad1, grad2) = contrastiveLoss.CalculateDerivative(emb1, emb2, label);
 
                 // Backpropagate through both branches (shared parameters)
-                Backpropagate(new Tensor<T>(prediction1.Shape, grad1));
-                Backpropagate(new Tensor<T>(prediction2.Shape, grad2));
+                Backpropagate(new Tensor<T>(prediction1.Shape.ToArray(), grad1));
+                Backpropagate(new Tensor<T>(prediction2.Shape.ToArray(), grad2));
             }
             else
             {
@@ -357,7 +365,7 @@ namespace AiDotNet.NeuralNetworks
                 LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
                 var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-                Backpropagate(new Tensor<T>(prediction.Shape, outputGradient));
+                Backpropagate(new Tensor<T>(prediction.Shape.ToArray(), outputGradient));
             }
 
             _optimizer.UpdateParameters(Layers);
@@ -405,7 +413,6 @@ namespace AiDotNet.NeuralNetworks
             return new ModelMetadata<T>
             {
                 Name = "SiameseNeuralNetwork",
-                ModelType = ModelType.SiameseNetwork,
                 Description = "Standardized Siamese dual-encoder high-performance network",
                 Complexity = ParameterCount,
                 AdditionalInfo = new Dictionary<string, object>

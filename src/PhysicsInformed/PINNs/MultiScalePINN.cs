@@ -56,6 +56,17 @@ namespace AiDotNet.PhysicsInformed.PINNs
     /// - Multi-physics problems (thermal + mechanical + chemical)
     /// - Climate modeling (global + regional + local scales)
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+    ///     inputType: InputType.OneDimensional,
+    ///     taskType: NeuralNetworkTaskType.Regression,
+    ///     inputSize: 2, outputSize: 1);
+    /// var pde = new MultiScaleReactionDiffusion&lt;float&gt;();
+    /// var bc = new IBoundaryCondition&lt;float&gt;[] { dirichletBC };
+    /// var msPinn = new MultiScalePINN&lt;float&gt;(architecture, pde, bc);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Science)]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -587,10 +598,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 var gradients = _scaleNetworks[scale].GetGradients();
                 T magnitude = NumOps.Zero;
 
-                for (int i = 0; i < gradients.Length; i++)
-                {
-                    magnitude = NumOps.Add(magnitude, NumOps.Multiply(gradients[i], gradients[i]));
-                }
+                magnitude = NumOps.Add(magnitude, Engine.DotProduct(gradients, gradients));
 
                 gradientMagnitudes[scale] = NumOps.Sqrt(magnitude);
             }
@@ -676,7 +684,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
                 // Backpropagate through all active scale networks
                 var outputGradientVector = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-                var outputGradient = new Tensor<T>(prediction.Shape, outputGradientVector);
+                var outputGradient = new Tensor<T>(prediction.Shape.ToArray(), outputGradientVector);
 
                 // Distribute gradients to each scale network
                 for (int scale = 0; scale < _currentActiveScales; scale++)
@@ -740,7 +748,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
         {
             return new ModelMetadata<T>
             {
-                ModelType = ModelType.NeuralNetwork,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "NetworkType", "MultiScalePINN" },

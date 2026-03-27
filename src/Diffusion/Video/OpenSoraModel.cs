@@ -413,7 +413,6 @@ public class OpenSoraModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "Open-Sora",
             Version = "1.2",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Open-Sora STDiT video generation with rectified flow training",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

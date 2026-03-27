@@ -31,7 +31,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 81, outputSize: 1);
 /// var model = new MadmomBeatTracker&lt;float&gt;(arch, "madmom_beat.onnx");
 /// var result = model.Track(audioTensor);
-/// Console.WriteLine($"Tempo: {result.Tempo} BPM, {result.NumBeats} beats");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>
@@ -235,7 +235,6 @@ public class MadmomBeatTracker<T> : AudioNeuralNetworkBase<T>, IBeatTracker<T>
         {
             Name = _useNativeMode ? "MadmomBeatTracker-Native" : "MadmomBeatTracker-ONNX",
             Description = "Madmom neural beat tracker (Bock et al., 2016)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumBands,
             Complexity = _options.NumRnnLayers
         };
         m.AdditionalInfo["RnnHiddenSize"] = _options.RnnHiddenSize.ToString();

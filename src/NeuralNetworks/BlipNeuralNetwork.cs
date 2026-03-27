@@ -50,6 +50,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Image organization (auto-tag photos)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new BlipOptions { ImageSize = 384, MaxTextLength = 128 };
+/// var model = new BlipNeuralNetwork&lt;float&gt;(options);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 384, 384 });
+/// var output = model.Predict(image);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Multimodal)]
@@ -1880,7 +1888,6 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.Blip,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "EmbeddingDimension", _embeddingDimension },

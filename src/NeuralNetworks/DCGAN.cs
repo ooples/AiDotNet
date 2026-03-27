@@ -31,6 +31,14 @@ namespace AiDotNet.NeuralNetworks;
 /// Generative Adversarial Networks" (2015)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new DCGANOptions { LatentSize = 100, ImageSize = 64 };
+/// var model = new DCGAN&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 100 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Generative)]

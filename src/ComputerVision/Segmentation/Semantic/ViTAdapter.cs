@@ -40,6 +40,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Semantic;
 /// ICLR 2023 Spotlight.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a ViT-Adapter model for dense prediction with a plain ViT backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
+/// var model = new ViTAdapter&lt;double&gt;(architecture, numClasses: 150);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var onnxModel = new ViTAdapter&lt;double&gt;(architecture, "vitadapter.onnx", numClasses: 150);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Segmentation)]
@@ -278,7 +291,7 @@ public class ViTAdapter<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         if (!hasBatch) input = AddBatchDimension(input);
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "pixel_values";
         using var results = _onnxSession.Run(new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) });
         var outputTensor = results.First().AsTensor<float>();
@@ -393,7 +406,6 @@ public class ViTAdapter<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.SemanticSegmentation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "ViTAdapter" }, { "Description", "ViT-Adapter Semantic Segmentation" },

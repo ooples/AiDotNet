@@ -42,6 +42,14 @@ namespace AiDotNet.Clustering.Hierarchical;
 /// - Radius = sqrt((SS/N) - (LS/N)²)
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new BIRCHOptions&lt;double&gt;();
+/// var bIRCH = new BIRCH&lt;double&gt;(options);
+/// bIRCH.Fit(dataMatrix);
+/// int[] labels = bIRCH.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
 [ModelTask(ModelTask.Clustering)]
@@ -73,7 +81,6 @@ public class BIRCH<T> : ClusteringBase<T>
     public IReadOnlyList<CFEntry>? LeafEntries => _leafEntries?.AsReadOnly();
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -490,10 +497,13 @@ public class BIRCH<T> : ClusteringBase<T>
 
         var labels = new Vector<T>(x.Rows);
         var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        int d = x.Columns;
 
         for (int i = 0; i < x.Rows; i++)
         {
-            var point = GetRow(x, i);
+            var pointArr = new T[d];
+            var centerArr = new T[d];
+            for (int j = 0; j < d; j++) pointArr[j] = x[i, j];
             T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
@@ -501,8 +511,8 @@ public class BIRCH<T> : ClusteringBase<T>
             {
                 for (int k = 0; k < NumClusters; k++)
                 {
-                    var center = GetRow(ClusterCenters, k);
-                    T dist = metric.Compute(point, center);
+                    for (int j = 0; j < d; j++) centerArr[j] = ClusterCenters[k, j];
+                    T dist = metric.ComputeInline(pointArr, centerArr, d);
 
                     if (NumOps.LessThan(dist, minDist))
                     {

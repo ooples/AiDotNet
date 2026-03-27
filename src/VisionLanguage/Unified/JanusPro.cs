@@ -17,10 +17,33 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Janus-Pro (DeepSeek, 2025) scales the Janus architecture with larger models and optimized
+/// training strategies. It maintains the decoupled visual encoding design while improving
+/// both understanding and generation quality through expanded training data, curriculum learning,
+/// and architectural refinements to the cross-modal interaction layers.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Janus-Pro: Unified Multimodal Understanding and Generation with Data and Model Scaling" (DeepSeek, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> JanusPro is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Janus-Pro is an improved version of Janus with better performance
+/// through data and model scaling. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Janus-Pro model for scaled multimodal understanding and generation
+/// // with optimized training strategy and data scaling from DeepSeek
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new JanusPro&lt;double&gt;(architecture, "januspro.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new JanusPro&lt;double&gt;(architecture, new JanusProOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Multimodal)]
@@ -193,7 +216,7 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Janus-Pro-Native" : "Janus-Pro-ONNX", Description = "Janus-Pro: scaled data and model with optimized training strategy.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Janus-Pro-Native" : "Janus-Pro-ONNX", Description = "Janus-Pro: scaled data and model with optimized training strategy.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Janus-Pro";
         m.AdditionalInfo["SupportsGeneration"] = _options.SupportsGeneration.ToString();
         m.AdditionalInfo["DecoupledEncoding"] = _options.EnableDecoupledEncoding.ToString();

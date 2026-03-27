@@ -39,6 +39,19 @@ namespace AiDotNet.Video.Inpainting;
 /// ICCV 2023.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a ProPainter model for video object removal and inpainting
+/// var proPainter = new ProPainter&lt;double&gt;();
+///
+/// // Or configure with custom transformer and feature parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
+/// var model = new ProPainter&lt;double&gt;(architecture, numFeatures: 128, numTransformerBlocks: 6);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -240,7 +253,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         // For single-frame prediction, use zero mask (no inpainting)
-        var mask = new Tensor<T>(input.Shape);
+        var mask = new Tensor<T>(input.Shape.ToArray());
         return InpaintFrame(input, mask, input, input, mask, mask);
     }
 
@@ -344,7 +357,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
 
             // Multi-head self-attention
             var qkv = _transformerQKV[i].Forward(normed);
-            var attended = MultiHeadSelfAttention(qkv, transformedFeatures.Shape);
+            var attended = MultiHeadSelfAttention(qkv, transformedFeatures.Shape.ToArray());
             attended = _transformerProj[i].Forward(attended);
 
             // Residual connection
@@ -438,7 +451,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var result = new Tensor<T>(image.Shape);
+        var result = new Tensor<T>(image.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -471,7 +484,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var result = new Tensor<T>(image.Shape);
+        var result = new Tensor<T>(image.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -500,7 +513,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         int height = original.Shape[2];
         int width = original.Shape[3];
 
-        var result = new Tensor<T>(original.Shape);
+        var result = new Tensor<T>(original.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -592,7 +605,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         int height = input.Shape[2];
         int width = input.Shape[3];
 
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         const double eps = 1e-5;
 
         for (int b = 0; b < batchSize; b++)
@@ -911,7 +924,6 @@ public class ProPainter<T> : VideoInpaintingBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoInpainting,
             AdditionalInfo = additionalInfo,
             ModelData = this.Serialize()
         };

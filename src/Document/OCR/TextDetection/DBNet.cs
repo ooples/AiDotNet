@@ -388,7 +388,7 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     private Tensor<T> ComputeBinaryMap(Tensor<T> probMap, Tensor<T> threshMap)
     {
         // Differentiable binarization: B = 1 / (1 + exp(-k * (P - T)))
-        var binaryMap = new Tensor<T>(probMap.Shape);
+        var binaryMap = new Tensor<T>(probMap.Shape.ToArray());
 
         for (int i = 0; i < probMap.Data.Length; i++)
         {
@@ -542,7 +542,7 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape);
+        var normalized = new Tensor<T>(image.Shape.ToArray());
 
         // ImageNet normalization
         double[] means = [0.485, 0.456, 0.406];
@@ -588,7 +588,6 @@ public class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         return new ModelMetadata<T>
         {
             Name = "DBNet",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Differentiable Binarization Network for real-time text detection (AAAI 2020)",
             FeatureCount = _innerChannels,
             Complexity = Layers.Count,

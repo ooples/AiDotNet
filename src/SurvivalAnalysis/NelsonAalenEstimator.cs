@@ -36,6 +36,13 @@ namespace AiDotNet.SurvivalAnalysis;
 /// <para><b>Reference:</b> Nelson (1972), Aalen (1978)</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
+/// <example>
+/// <code>
+/// var estimator = new NelsonAalenEstimator&lt;double&gt;();
+/// estimator.Fit(times, events);
+/// double cumulativeHazard = estimator.PredictCumulativeHazard(timePoint);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelDomain(ModelDomain.Healthcare)]
 [ModelCategory(ModelCategory.SurvivalModel)]
@@ -276,7 +283,6 @@ public class NelsonAalenEstimator<T> : SurvivalModelBase<T>
     }
 
     /// <inheritdoc />
-    public override ModelType GetModelType() => ModelType.NelsonAalenEstimator;
 
     /// <inheritdoc />
     public override byte[] Serialize()

@@ -13,7 +13,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Transformers;
 
@@ -42,6 +42,22 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// Time-Series Forecasting", AAAI 2021 (Best Paper). https://arxiv.org/abs/2012.07436
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Informer for efficient long-sequence time series forecasting
+/// // Uses ProbSparse attention for O(L log L) complexity (AAAI 2021 Best Paper)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 96, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with ProbSparse self-attention and distilling
+/// var model = new Informer&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new Informer&lt;double&gt;(architecture, "informer_etth1.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -393,7 +409,7 @@ public class Informer<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        Backward(Tensor<T>.FromVector(outputGradient, prediction.Shape));
+        Backward(Tensor<T>.FromVector(outputGradient, prediction.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -431,7 +447,6 @@ public class Informer<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "Informer" },
@@ -743,7 +758,7 @@ public class Informer<T> : ForecastingModelBase<T>
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputName = OnnxSession.InputMetadata.Keys.First();
-        var inputShape = input.Shape.Select(d => (long)d).ToArray();
+        var inputShape = input.Shape.ToArray().Select(d => (long)d).ToArray();
         var onnxInput = new OnnxTensors.DenseTensor<float>(
             input.ToArray().Select(x => Convert.ToSingle(x)).ToArray(),
             inputShape.Select(d => (int)d).ToArray());
@@ -782,7 +797,7 @@ public class Informer<T> : ForecastingModelBase<T>
             _instanceMean = new Tensor<T>(new[] { batchSize, 1, features });
             _instanceStd = new Tensor<T>(new[] { batchSize, 1, features });
 
-            var normalized = new Tensor<T>(input.Shape);
+            var normalized = new Tensor<T>(input.Shape.ToArray());
             T epsilon = NumOps.FromDouble(1e-5);
 
             for (int b = 0; b < batchSize; b++)
@@ -820,7 +835,7 @@ public class Informer<T> : ForecastingModelBase<T>
             if (_instanceMean is null || _instanceStd is null)
                 return input;
 
-            var denormalized = new Tensor<T>(input.Shape);
+            var denormalized = new Tensor<T>(input.Shape.ToArray());
             int batchSize = input.Shape[0];
             int horizonLen = input.Shape[1];
             int features = input.Shape[2];

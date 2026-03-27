@@ -181,7 +181,6 @@ public class IFRNet<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "IFRNet-Native" : "IFRNet-ONNX",
             Description = $"IFRNet {_options.Variant} intermediate feature refinement (Kong et al., CVPR 2022)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumRefineBlocks * _options.NumPyramidLevels
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

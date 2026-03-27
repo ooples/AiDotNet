@@ -51,6 +51,12 @@ public class DBSCANOptions<T> : ClusteringOptions<T>
     public double Epsilon { get; set; } = 0.5;
 
     /// <summary>
+    /// When true, automatically estimates epsilon from the data using the k-distance method.
+    /// Overrides the Epsilon value. Default is false for backward compatibility.
+    /// </summary>
+    public bool AutoEpsilon { get; set; }
+
+    /// <summary>
     /// Gets or sets the minimum number of points to form a dense region.
     /// </summary>
     /// <value>Minimum number of neighbors (including the point itself). Default is 5.</value>

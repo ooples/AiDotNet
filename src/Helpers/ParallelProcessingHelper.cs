@@ -30,23 +30,33 @@ public static class ParallelProcessingHelper
     /// </remarks>
     public static async Task<List<T>> ProcessTasksInParallel<T>(IEnumerable<Func<T>> taskFunctions, int? maxDegreeOfParallelism = null)
     {
-        var results = new List<T>();
         var processorCount = maxDegreeOfParallelism ?? Environment.ProcessorCount;
-        var taskList = new List<Task<T>>();
+        var allFunctions = taskFunctions.ToList();
 
-        foreach (var taskFunction in taskFunctions)
+        // Use indexed tasks to preserve submission order regardless of completion order
+        var indexedTasks = new Task<(int index, T result)>[allFunctions.Count];
+        using var semaphore = new SemaphoreSlim(processorCount);
+
+        for (int i = 0; i < allFunctions.Count; i++)
         {
-            if (taskList.Count >= processorCount)
+            var func = allFunctions[i];
+            var idx = i;
+            await semaphore.WaitAsync();
+            indexedTasks[i] = Task.Run(() =>
             {
-                var completedTask = await Task.WhenAny(taskList);
-                taskList.Remove(completedTask);
-                results.Add(await completedTask);
-            }
-            taskList.Add(Task.Run(taskFunction));
+                try
+                {
+                    return (idx, func());
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
         }
 
-        results.AddRange(await Task.WhenAll(taskList));
-        return results;
+        var completedResults = await Task.WhenAll(indexedTasks);
+        return completedResults.OrderBy(r => r.index).Select(r => r.result).ToList();
     }
 
     /// <summary>

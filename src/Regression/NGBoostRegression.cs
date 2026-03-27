@@ -35,6 +35,25 @@ namespace AiDotNet.Regression;
 /// Prediction" (2019). https://arxiv.org/abs/1910.03225
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an NGBoost model for probabilistic regression
+/// var options = new NGBoostRegressionOptions&lt;double&gt;();
+/// var model = new NGBoostRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features each
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 3.0, 7.1, 11.0, 15.2, 19.0, 23.1 });
+///
+/// // Train to predict full probability distributions
+/// model.Train(features, targets);
+///
+/// // Predict distribution parameters (mean and uncertainty)
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
@@ -76,6 +95,12 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private int _numParams;
 
+    /// <summary>
+    /// Y standardization parameters for scale-invariant training.
+    /// </summary>
+    private double _yMean;
+    private double _yStd = 1.0;
+
     /// <inheritdoc/>
     public override int NumberOfTrees => _trees.Count * _numParams;
 
@@ -112,6 +137,25 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;
+
+        // Standardize y for scale-invariant training
+        double yMean = 0, yStd = 0;
+        for (int i = 0; i < n; i++) yMean += NumOps.ToDouble(y[i]);
+        yMean /= n;
+        for (int i = 0; i < n; i++)
+        {
+            double d = NumOps.ToDouble(y[i]) - yMean;
+            yStd += d * d;
+        }
+        yStd = Math.Sqrt(yStd / n);
+        if (yStd < 1e-10) yStd = 1.0;
+        _yMean = yMean;
+        _yStd = yStd;
+
+        var yStandardized = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+            yStandardized[i] = NumOps.FromDouble((NumOps.ToDouble(y[i]) - yMean) / yStd);
+        y = yStandardized;
 
         // Initialize distribution and get number of parameters
         var initialDist = CreateDistribution(y);
@@ -262,7 +306,9 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int i = 0; i < input.Rows; i++)
         {
-            predictions[i] = distributions[i].Mean;
+            // Denormalize: prediction = standardized_mean * yStd + yMean
+            double mean = NumOps.ToDouble(distributions[i].Mean);
+            predictions[i] = NumOps.FromDouble(mean * _yStd + _yMean);
         }
 
         return predictions;
@@ -717,7 +763,6 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NGBoost,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NumberOfIterations", _trees.Count },
@@ -748,6 +793,10 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         writer.Write((int)_options.DistributionType);
         writer.Write((int)_options.ScoringRule);
         writer.Write(_options.UseNaturalGradient);
+
+        // Y standardization
+        writer.Write(_yMean);
+        writer.Write(_yStd);
 
         // Initial parameters
         writer.Write(_numParams);
@@ -789,6 +838,10 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _options.ScoringRule = (NGBoostScoringRuleType)reader.ReadInt32();
         _options.UseNaturalGradient = reader.ReadBoolean();
 
+        // Y standardization
+        _yMean = reader.ReadDouble();
+        _yStd = reader.ReadDouble();
+
         // Initial parameters
         _numParams = reader.ReadInt32();
         _initialParameters = new Vector<T>(_numParams);
@@ -818,5 +871,12 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         return new NGBoostRegression<T>(_options, Regularization);
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new NGBoostRegression<T>(_options, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
     }
 }

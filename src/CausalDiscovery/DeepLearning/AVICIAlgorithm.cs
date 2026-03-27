@@ -104,6 +104,7 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                 features[idx, 3] = cov[j, j];
             }
 
+        double prevHW = 0; // Initial h(W) = 0 (no edges yet = acyclic)
         for (int epoch = 0; epoch < MaxEpochs; epoch++)
         {
             // Compute Q, K, V for each pair
@@ -131,6 +132,11 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
             var attended = new Matrix<T>(numPairs, headDim);
             var attnWeights = new Matrix<T>(numPairs, d); // attention weights for backprop
 
+            // Pre-allocate reusable vectors outside the attention loop
+            var scores = new Vector<T>(d);
+            var qRow = new Vector<T>(headDim);
+            var kRow = new Vector<T>(headDim);
+
             for (int j = 0; j < d; j++)
             {
                 // Pairs targeting j: indices i*d+j for i in [0..d)
@@ -141,14 +147,13 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
 
                     // Compute attention scores against all keys for target j
                     T maxScore = NumOps.FromDouble(-1e10);
-                    var scores = new T[d];
+                    // Extract Q row for this query
+                    for (int k = 0; k < headDim; k++) qRow[k] = Q[qIdx, k];
                     for (int ki = 0; ki < d; ki++)
                     {
                         int kIdx = ki * d + j;
-                        T score = NumOps.Zero;
-                        for (int k = 0; k < headDim; k++)
-                            score = NumOps.Add(score, NumOps.Multiply(Q[qIdx, k], K[kIdx, k]));
-                        score = NumOps.Multiply(score, headScale);
+                        for (int k = 0; k < headDim; k++) kRow[k] = K[kIdx, k];
+                        T score = NumOps.Multiply(Engine.DotProduct(qRow, kRow), headScale);
                         scores[ki] = score;
                         if (NumOps.GreaterThan(score, maxScore)) maxScore = score;
                     }
@@ -249,8 +254,16 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                     T pij = P[i, j];
                     T absCorr2 = NumOps.Abs(corr[i, j]);
                     T dataGrad2 = NumOps.Subtract(pij, absCorr2);
+                    // NOTEARS acyclicity gradient: (α + ρ·h(W)) · ∂h/∂W_ij
+                    // where ∂h/∂W_ij = 2·W_ij·[e^{W⊙W}]_ji (Zheng et al. 2018)
+                    // Approximation: use 2·pij as proxy for ∂h/∂W_ij (ignores matrix exponential)
+                    // Use consistent acyclicity formula: (alpha + rho * pij) * 2 * pij
+                    // (matches the main path at line 213, not prevHW)
+                    T acycGrad2 = NumOps.Multiply(NumOps.Add(alpha, NumOps.Multiply(rho, pij)),
+                        NumOps.Multiply(NumOps.FromDouble(2), pij));
+                    T totalGrad2 = NumOps.Add(dataGrad2, acycGrad2);
                     T sigDeriv2 = NumOps.Multiply(pij, NumOps.Subtract(NumOps.One, pij));
-                    T dLogit2 = NumOps.Multiply(dataGrad2, sigDeriv2);
+                    T dLogit2 = NumOps.Multiply(totalGrad2, sigDeriv2);
 
                     // dLogit/dAttended * dAttended/dAttnWeights * dAttnWeights/dScores * dScores/dQ,K
                     for (int ki = 0; ki < d; ki++)
@@ -265,15 +278,18 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                         // softmax jacobian (simplified): attn * (1-attn) for diagonal term
                         T dScore = NumOps.Multiply(dAttnW, NumOps.Multiply(aw, NumOps.Subtract(NumOps.One, aw)));
                         dScore = NumOps.Multiply(dScore, headScale);
-                        // dScore/dQ = K, dScore/dK = Q
-                        for (int f = 0; f < featDim; f++)
+                        // dScore/dQ[h] = K[h], dScore/dK[h] = Q[h]
+                        for (int h = 0; h < headDim; h++)
                         {
-                            gWq[f, 0] = NumOps.Add(gWq[f, 0],
-                                NumOps.Multiply(dScore,
-                                    NumOps.Multiply(features[idx, f], K[kIdx2, 0])));
-                            gWk[f, 0] = NumOps.Add(gWk[f, 0],
-                                NumOps.Multiply(dScore,
-                                    NumOps.Multiply(features[kIdx2, f], Q[idx, 0])));
+                            for (int f = 0; f < featDim; f++)
+                            {
+                                gWq[f, h] = NumOps.Add(gWq[f, h],
+                                    NumOps.Multiply(dScore,
+                                        NumOps.Multiply(features[idx, f], K[kIdx2, h])));
+                                gWk[f, h] = NumOps.Add(gWk[f, h],
+                                    NumOps.Multiply(dScore,
+                                        NumOps.Multiply(features[kIdx2, f], Q[idx, h])));
+                            }
                         }
                     }
                 }
@@ -299,13 +315,18 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
             for (int i = 0; i < d; i++)
                 hVal = NumOps.Add(hVal, expPSq[i, i]);
             hVal = NumOps.Subtract(hVal, NumOps.FromDouble(d));
+            prevHW = NumOps.ToDouble(hVal);
             alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
             if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
-                rho = NumOps.Multiply(rho, NumOps.FromDouble(10));
+            {
+                T newRho = NumOps.Multiply(rho, NumOps.FromDouble(10));
+                T rhoMax = NumOps.FromDouble(MaxPenaltyValue);
+                rho = NumOps.GreaterThan(newRho, rhoMax) ? rhoMax : newRho;
+            }
         }
 
         // Final inference using trained parameters
-        var result = new Matrix<T>(d, d);
+        var learnedP = new double[d, d];
         // Re-run forward pass with trained Wq, Wk, Wv, Wo
         var Qf = new Matrix<T>(d * d, headDim);
         var Kf = new Matrix<T>(d * d, headDim);
@@ -362,19 +383,10 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                     logit = NumOps.Add(logit, NumOps.Multiply(att[k], Wo[k, 0]));
                 double sv2 = NumOps.ToDouble(logit);
                 double prob = sv2 > 20 ? 1.0 : sv2 < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv2));
-                if (prob > 0.5)
-                {
-                    T varI = cov[i, i];
-                    if (NumOps.GreaterThan(varI, eps))
-                    {
-                        T weight = NumOps.Divide(cov[i, j], varI);
-                        if (NumOps.GreaterThan(NumOps.Abs(weight), NumOps.FromDouble(0.1)))
-                            result[i, j] = weight;
-                    }
-                }
+                learnedP[i, j] = prob;
             }
 
-        return result;
+        return BuildFinalAdjacency(learnedP, cov, d);
     }
 
 }

@@ -15,6 +15,18 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// <summary>
     /// Multi-modal policy using mixture of Gaussians for complex action distributions.
     /// </summary>
+    /// <example>
+    /// <code>
+    /// // Create a multi-modal policy with mixture of Gaussians
+    /// var network = new NeuralNetwork&lt;double&gt;();
+    /// var policy = new MultiModalPolicy&lt;double&gt;(network, actionSize: 2, numComponents: 3,
+    ///     new EpsilonGreedyExploration&lt;double&gt;());
+    ///
+    /// // Sample an action from the mixture distribution
+    /// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+    /// var action = policy.SelectAction(state, training: true);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
     [ModelCategory(ModelCategory.NeuralNetwork)]

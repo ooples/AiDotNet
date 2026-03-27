@@ -152,29 +152,101 @@ public class RFCIAlgorithm<T> : ConstraintBasedBase<T>
             }
         }
 
-        // Phase 3: Detect possible latent confounders via discriminating path logic.
-        // For adjacent pairs where both directions were oriented (i→j AND j→i),
-        // this indicates conflicting evidence — mark as bidirected (latent confounder).
-        // Also: for edges where neither direction is oriented after v-structure phase,
-        // if both endpoints have a common collider child, mark as potential latent confounding.
+        // Phase 3: Detect possible latent confounders.
+        // 3a: Contradictory orientations indicate latent confounding.
         for (int i = 0; i < d; i++)
         {
             for (int j = i + 1; j < d; j++)
             {
                 if (!adj[i, j]) continue;
 
-                // If both directions were oriented during v-structure phase,
-                // this is contradictory → evidence of latent confounding
-                bool iToJ = oriented[i, j];
-                bool jToI = oriented[j, i];
-
-                if (iToJ && jToI)
+                if (oriented[i, j] && oriented[j, i])
                 {
-                    // Bidirected edge: i ↔ j (latent confounder)
                     bidirected[i, j] = true;
                     bidirected[j, i] = true;
                     oriented[i, j] = false;
                     oriented[j, i] = false;
+                }
+            }
+        }
+
+        // 3b: Discriminating path rule (bounded to length-4 paths for efficiency).
+        // NOTE: The full RFCI algorithm requires searching for discriminating paths of
+        // arbitrary length. This implementation only checks 4-node paths (a → v → b → c)
+        // which is a sound but incomplete approximation — it may miss some orientations
+        // that require longer discriminating paths. For most practical DAGs with moderate
+        // density, this produces correct results.
+        for (int b = 0; b < d; b++)
+        {
+            for (int c = 0; c < d; c++)
+            {
+                if (b == c || !adj[b, c]) continue;
+                if (bidirected[b, c]) continue;
+
+                // Search for discriminating paths ending at (b, c)
+                // A discriminating path <a, ..., v, b, c> requires:
+                //   - a is not adjacent to c
+                //   - every intermediate node between a and b is a collider (both neighbors oriented toward it)
+                //     and is a parent of c
+                //   - b is adjacent to c
+                // Use BFS from b backward to find valid discriminating paths
+                bool foundPath = false;
+                foreach (int v in GetAdjacencies(adj, b, c, d))
+                {
+                    if (!oriented[v, c]) continue;     // v must be parent of c (v → c)
+                    if (!adj[b, v]) continue;           // b adjacent to v
+                    if (!oriented[v, b] && !oriented[b, v] && !bidirected[b, v]) continue; // must be oriented or bidirected edge
+                    // v must be a collider: needs an incoming edge from the previous node AND oriented[v,b]
+                    // For a 2-node path (path = <a, v, b, c>), v is a collider if a→v and b→v (or bidirected)
+
+                    foreach (int a in GetAdjacencies(adj, v, b, d))
+                    {
+                        if (a == c || a == b || adj[a, c]) continue;
+                        if (!oriented[a, v]) continue; // a → v must be oriented
+
+                        // Check v is a collider: a → v ← b (or at least a→v and v adjacent to b)
+                        // v is a collider if oriented[a,v] AND (oriented[b,v] or bidirected[b,v])
+                        if (!oriented[b, v] && !bidirected[b, v]) continue;
+
+                        if (sepSets.TryGetValue((a, c), out var sepAC))
+                        {
+                            if (sepAC.Contains(b))
+                            {
+                                // b is non-collider → orient b → c
+                                if (oriented[c, b])
+                                {
+                                    // Conflict with existing c→b → bidirected
+                                    bidirected[b, c] = true;
+                                    bidirected[c, b] = true;
+                                    oriented[b, c] = false;
+                                    oriented[c, b] = false;
+                                }
+                                else if (!oriented[b, c])
+                                {
+                                    oriented[b, c] = true;
+                                }
+                            }
+                            else
+                            {
+                                // b is collider → orient c → b
+                                if (oriented[b, c])
+                                {
+                                    // Conflict with existing b→c → bidirected
+                                    bidirected[b, c] = true;
+                                    bidirected[c, b] = true;
+                                    oriented[b, c] = false;
+                                    oriented[c, b] = false;
+                                }
+                                else if (!oriented[c, b])
+                                {
+                                    oriented[c, b] = true;
+                                }
+                            }
+                            foundPath = true;
+                            break;
+                        }
+                    }
+                    if (foundPath) break;
                 }
             }
         }

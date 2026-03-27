@@ -37,6 +37,14 @@ namespace AiDotNet.NeuralNetworks;
 ///
 /// Based on "Self-Attention Generative Adversarial Networks" by Zhang et al. (2019)
 /// </summary>
+/// <example>
+/// <code>
+/// var options = new SAGANOptions { LatentSize = 128, NumClasses = 1000, ImageSize = 128 };
+/// var model = new SAGAN&lt;float&gt;(options);
+/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 128 });
+/// var generated = model.Predict(noise);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for computations (e.g., double, float)</typeparam>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Generative)]
@@ -681,7 +689,7 @@ public class SAGAN<T> : NeuralNetworkBase<T>
             var loss = CalculateLoss(predictedCpu.ToVector(), actualCpu.ToVector());
             var gradientCpu = CalculateDerivative(predictedCpu.ToVector(), actualCpu.ToVector());
 
-            var gradientTensor = new Tensor<TLoss>(predictedCpu.Shape);
+            var gradientTensor = new Tensor<TLoss>(predictedCpu.Shape.ToArray());
             Array.Copy(gradientCpu.ToArray(), gradientTensor.Data.ToArray(), gradientCpu.Length);
 
             var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;

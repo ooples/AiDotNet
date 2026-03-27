@@ -22,8 +22,28 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Florence-2: Advancing a Unified Representation for a Variety of Vision Tasks" (Xiao et al., 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Florence2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Florence-2 from Microsoft is a lightweight vision model
+/// (0.23B-0.77B parameters) that handles many tasks through text prompts — captioning,
+/// object detection, grounding, OCR, and segmentation — all in a single unified model.
+/// It uses DaViT (Dual Attention ViT) as its vision encoder and generates structured
+/// text output for each task. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Florence-2 model for unified multi-task vision understanding
+/// // handling captioning, detection, grounding, OCR, and segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Florence2&lt;double&gt;(architecture, "florence2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Florence2&lt;double&gt;(architecture, new Florence2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -53,7 +73,7 @@ public class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "Florence-2-Native" : "Florence-2-ONNX", Description = "Florence-2: Unified Vision Foundation Model (Xiao et al., 2024)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.EmbeddingDim, Complexity = _options.NumLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "Florence-2"; m.AdditionalInfo["ModelSize"] = _options.ModelSize.ToString(); m.AdditionalInfo["UseDaViT"] = _options.UseDaViT.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "Florence-2-Native" : "Florence-2-ONNX", Description = "Florence-2: Unified Vision Foundation Model (Xiao et al., 2024)", FeatureCount = _options.EmbeddingDim, Complexity = _options.NumLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "Florence-2"; m.AdditionalInfo["ModelSize"] = _options.ModelSize.ToString(); m.AdditionalInfo["UseDaViT"] = _options.UseDaViT.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.EmbeddingDim); writer.Write(_options.NumLayers); writer.Write(_options.NumHeads); writer.Write(_options.DecoderEmbeddingDim); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumDecoderHeads); writer.Write((int)_options.ModelSize); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.EmbeddingDim = reader.ReadInt32(); _options.NumLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.DecoderEmbeddingDim = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumDecoderHeads = reader.ReadInt32(); _options.ModelSize = (Florence2ModelSize)reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new Florence2<T>(Architecture, mp, _options); return new Florence2<T>(Architecture, _options); }

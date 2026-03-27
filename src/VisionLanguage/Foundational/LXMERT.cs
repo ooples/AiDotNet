@@ -26,6 +26,22 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// <list type="bullet"><item>Paper: "LXMERT: Learning Cross-Modality Encoder Representations from Transformers" (Tan and Bansal, EMNLP 2019)</item></list></para>
 /// <para><b>For Beginners:</b> LXMERT is a vision-language model. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an LXMERT model with three-encoder cross-modality architecture
+/// // for visual question answering and visual reasoning
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new LXMERT&lt;double&gt;(architecture, "lxmert.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new LXMERT&lt;double&gt;(architecture, new LXMERTOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -132,7 +148,7 @@ public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "LXMERT-Native" : "LXMERT-ONNX", Description = "LXMERT: Learning Cross-Modality Encoder Representations from Transformers (Tan and Bansal, EMNLP 2019)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.FusionDim, Complexity = _options.NumRelationshipLayers + _options.NumTextLayers + _options.NumCrossModalityLayers }; m.AdditionalInfo["Architecture"] = "LXMERT"; m.AdditionalInfo["FusionType"] = _options.FusionType.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "LXMERT-Native" : "LXMERT-ONNX", Description = "LXMERT: Learning Cross-Modality Encoder Representations from Transformers (Tan and Bansal, EMNLP 2019)", FeatureCount = _options.FusionDim, Complexity = _options.NumRelationshipLayers + _options.NumTextLayers + _options.NumCrossModalityLayers }; m.AdditionalInfo["Architecture"] = "LXMERT"; m.AdditionalInfo["FusionType"] = _options.FusionType.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.TextDim); writer.Write(_options.FusionDim); writer.Write(_options.NumRelationshipLayers); writer.Write(_options.NumTextLayers); writer.Write(_options.NumCrossModalityLayers); writer.Write(_options.NumHeads); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.TextDim = reader.ReadInt32(); _options.FusionDim = reader.ReadInt32(); _options.NumRelationshipLayers = reader.ReadInt32(); _options.NumTextLayers = reader.ReadInt32(); _options.NumCrossModalityLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); if (_useNativeMode) ComputeCrossModalBoundaries(); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new LXMERT<T>(Architecture, mp, _options); return new LXMERT<T>(Architecture, _options); }

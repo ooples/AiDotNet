@@ -17,10 +17,33 @@ namespace AiDotNet.VisionLanguage.Unified;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// OmniGen2 (THU, 2025) advances unified image generation with a dual-path architecture that
+/// decouples understanding and generation parameters. One path handles visual comprehension
+/// while the other specializes in image generation via diffusion, allowing each path to be
+/// independently optimized while sharing a common language backbone for instruction following.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "OmniGen2: Advancing Unified Image Generation with Dual-Path Architecture" (THU, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> OmniGen2 is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> OmniGen2 is a unified model for image generation using dual-path
+/// architecture with parameter decoupling. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an OmniGen2 model for unified image generation
+/// // with dual-path architecture and parameter decoupling
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new OmniGen2&lt;double&gt;(architecture, "omnigen2.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new OmniGen2&lt;double&gt;(architecture, new OmniGen2Options());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Multimodal)]
@@ -207,7 +230,7 @@ public class OmniGen2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "OmniGen2-Native" : "OmniGen2-ONNX", Description = "OmniGen2: dual-path architecture with parameter decoupling.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "OmniGen2-Native" : "OmniGen2-ONNX", Description = "OmniGen2: dual-path architecture with parameter decoupling.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "OmniGen2";
         m.AdditionalInfo["SupportsGeneration"] = _options.SupportsGeneration.ToString();
         m.AdditionalInfo["DualPath"] = _options.EnableDualPath.ToString();

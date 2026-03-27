@@ -44,6 +44,14 @@ namespace AiDotNet.Clustering.Density;
 /// - Can be slow for large datasets
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new MeanShiftOptions&lt;double&gt;();
+/// var meanShift = new MeanShift&lt;double&gt;(options);
+/// meanShift.Train(dataMatrix);
+/// Vector<double> labels = meanShift.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Kernel)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -75,7 +83,6 @@ public class MeanShift<T> : ClusteringBase<T>
     public T Bandwidth => _bandwidth;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -190,14 +197,16 @@ public class MeanShift<T> : ClusteringBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            var point = GetRow(x, i);
+            var pointArr = new T[d];
+            var centerArr = new T[d];
+            for (int j = 0; j < d; j++) pointArr[j] = x[i, j];
             T minDist = NumOps.MaxValue;
             int nearestCluster = 0;
 
             for (int k = 0; k < NumClusters; k++)
             {
-                var center = GetRow(ClusterCenters, k);
-                T dist = metric.Compute(point, center);
+                for (int j = 0; j < d; j++) centerArr[j] = ClusterCenters[k, j];
+                T dist = metric.ComputeInline(pointArr, centerArr, d);
 
                 if (NumOps.LessThan(dist, minDist))
                 {
@@ -312,15 +321,17 @@ public class MeanShift<T> : ClusteringBase<T>
         T totalWeight = NumOps.Zero;
         for (int j = 0; j < d; j++) newCenter[j] = NumOps.Zero;
 
+        var centerVec = new Vector<T>(center);
+
         for (int i = 0; i < n; i++)
         {
-            // Compute squared distance
-            T distSq = NumOps.Zero;
+            // Compute squared distance using Engine.DotProduct
+            var diff = new Vector<T>(d);
             for (int j = 0; j < d; j++)
             {
-                T diff = NumOps.Subtract(data[i, j], center[j]);
-                distSq = NumOps.Add(distSq, NumOps.Multiply(diff, diff));
+                diff[j] = NumOps.Subtract(data[i, j], centerVec[j]);
             }
+            T distSq = Engine.DotProduct(diff, diff);
 
             // Gaussian kernel weight (only within bandwidth)
             if (!NumOps.GreaterThan(distSq, bandwidthSq))
@@ -368,12 +379,12 @@ public class MeanShift<T> : ClusteringBase<T>
             {
                 if (used[j]) continue;
 
-                T distSq = NumOps.Zero;
+                var mergeDiff = new Vector<T>(d);
                 for (int k = 0; k < d; k++)
                 {
-                    T diff = NumOps.Subtract(centers[i][k], centers[j][k]);
-                    distSq = NumOps.Add(distSq, NumOps.Multiply(diff, diff));
+                    mergeDiff[k] = NumOps.Subtract(centers[i][k], centers[j][k]);
                 }
+                T distSq = Engine.DotProduct(mergeDiff, mergeDiff);
 
                 if (NumOps.LessThan(NumOps.Sqrt(distSq), threshold))
                 {

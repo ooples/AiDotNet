@@ -25,8 +25,29 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "OpenFlamingo: An Open-Source Framework for Training Large Autoregressive Vision-Language Models" (Awadalla et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> OpenFlamingo is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> OpenFlamingo is an open-source reproduction of DeepMind's
+/// proprietary Flamingo model. It uses a perceiver resampler to compress visual features into
+/// a fixed number of latent tokens, then injects them into an LLM decoder (LLaMA or MPT) via
+/// gated cross-attention layers. This architecture excels at few-shot visual tasks — given a
+/// few image-text examples, it can generalize to new queries. Default values follow the
+/// original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an OpenFlamingo model for few-shot multimodal generation
+/// // with perceiver resampler and gated cross-attention in LLM decoder
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new OpenFlamingo&lt;double&gt;(architecture, "openflamingo.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new OpenFlamingo&lt;double&gt;(architecture, new OpenFlamingoOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -120,7 +141,7 @@ public class OpenFlamingo<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "OpenFlamingo-Native" : "OpenFlamingo-ONNX", Description = "OpenFlamingo: An Open-Source Framework for Training Large Autoregressive Vision-Language Models (Awadalla et al., 2023)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumPerceiverLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "OpenFlamingo"; m.AdditionalInfo["GenerativeType"] = _options.ArchitectureType.ToString(); return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "OpenFlamingo-Native" : "OpenFlamingo-ONNX", Description = "OpenFlamingo: An Open-Source Framework for Training Large Autoregressive Vision-Language Models (Awadalla et al., 2023)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumPerceiverLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "OpenFlamingo"; m.AdditionalInfo["GenerativeType"] = _options.ArchitectureType.ToString(); return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.PerceiverDim); writer.Write(_options.DecoderDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumPerceiverLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.PerceiverDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumPerceiverLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new OpenFlamingo<T>(Architecture, mp, _options); return new OpenFlamingo<T>(Architecture, _options); }

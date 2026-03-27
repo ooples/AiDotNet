@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Audio.Fingerprinting;
@@ -31,6 +32,11 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// </remarks>
 public abstract class AudioFingerprinterBase<T> : IAudioFingerprinter<T>
 {
+    /// <summary>
+    /// Gets the hardware-accelerated computation engine for vectorized operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
     /// <summary>
     /// Operations for the numeric type T.
     /// </summary>

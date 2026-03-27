@@ -13,7 +13,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Foundation;
 
@@ -75,6 +75,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// Create separate instances for concurrent usage scenarios.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Chronos foundation model for zero-shot time series forecasting
+/// // Tokenizes continuous values and uses a T5-style language model for prediction
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 1, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with tokenization-based forecasting
+/// var model = new Chronos&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained Chronos model
+/// var onnxModel = new Chronos&lt;double&gt;(architecture, "chronos_t5_base.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -504,7 +520,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(logits.ToVector(), targetTokens.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(logits.ToVector(), targetTokens.ToVector());
-            Backward(Tensor<T>.FromVector(gradient, logits.Shape));
+            Backward(Tensor<T>.FromVector(gradient, logits.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -536,7 +552,6 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "Chronos" },
@@ -921,7 +936,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1180,7 +1195,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
-        var newInput = new Tensor<T>(input.Shape);
+        var newInput = new Tensor<T>(input.Shape.ToArray());
 
         // Clamp stepsUsed to prevent negative indices
         int clampedSteps = Math.Min(stepsUsed, _contextLength);

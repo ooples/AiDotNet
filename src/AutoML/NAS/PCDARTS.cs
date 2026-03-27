@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Attributes;
 using AiDotNet.AutoML.SearchSpace;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -16,6 +18,30 @@ namespace AiDotNet.AutoML.NAS
     /// Reference: "PC-DARTS: Partial Channel Connections for Memory-Efficient Architecture Search" (ICLR 2020)
     /// </summary>
     /// <typeparam name="T">The numeric type for calculations</typeparam>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> PC-DARTS makes architecture search more memory-efficient
+    /// by only using a subset of channels during the search phase. Regular DARTS uses all
+    /// channels which requires huge GPU memory. PC-DARTS samples partial channels, like
+    /// tasting a few spoonfuls from a pot instead of drinking the whole thing to judge
+    /// the flavor. This enables searching on larger datasets and bigger architectures.</para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// // Use AiModelBuilder facade with PC-DARTS for neural architecture search
+    /// var builder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    ///     .ConfigureModel(new PCDARTS&lt;float&gt;(new SearchSpaceBase&lt;float&gt;(), numNodes: 4));
+    ///
+    /// var result = builder.Build(trainingData, trainingLabels);
+    /// var prediction = result.Predict(inputTensor);
+    /// </code>
+    /// </example>
+    [ModelDomain(ModelDomain.MachineLearning)]
+    [ModelCategory(ModelCategory.NeuralNetwork)]
+    [ModelCategory(ModelCategory.Optimization)]
+    [ModelTask(ModelTask.Classification)]
+    [ModelTask(ModelTask.FeatureExtraction)]
+    [ModelComplexity(ModelComplexity.High)]
+    [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     public class PCDARTS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;

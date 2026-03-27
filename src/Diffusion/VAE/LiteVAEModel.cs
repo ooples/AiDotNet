@@ -31,6 +31,13 @@ namespace AiDotNet.Diffusion.VAE;
 /// for Latent Diffusion Models", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var vae = new LiteVAEModel&lt;float&gt;(inputChannels: 3, latentChannels: 4, baseChannels: 64);
+/// var image = Tensor&lt;float&gt;.Random(new[] { 1, 3, 512, 512 });
+/// var latent = vae.Encode(image);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Generative)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.FeatureExtraction)]
@@ -167,7 +174,7 @@ public class LiteVAEModel<T> : VAEModelBase<T>
         // Split into mean and log-variance (last encoder layer outputs 2x channels)
         int halfLength = x.AsSpan().Length / 2;
         var meanShape = new int[x.Shape.Length];
-        Array.Copy(x.Shape, meanShape, x.Shape.Length);
+        Array.Copy(x.Shape.ToArray(), meanShape, x.Shape.Length);
         if (meanShape.Length > 1)
             meanShape[meanShape.Length - 3] = _latentChannels;
 

@@ -273,7 +273,7 @@ public class Imagen3Model<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var predictorCount = _predictor.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != predictorCount + vaeCount)
         {
@@ -332,7 +332,6 @@ public class Imagen3Model<T> : LatentDiffusionModelBase<T>
         {
             Name = "Imagen 3",
             Version = "3.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Google DeepMind's cascaded SiT with Gemma text encoder and human feedback alignment",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

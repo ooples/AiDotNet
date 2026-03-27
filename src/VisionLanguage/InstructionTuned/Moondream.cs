@@ -17,10 +17,40 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Moondream (Korrapati, 2024) is an extremely compact vision-language model designed for
+/// resource-constrained environments. Despite having fewer than 2 billion parameters, it
+/// achieves surprisingly capable visual understanding by using an efficient SigLIP vision
+/// encoder with a compact Phi-based language model. Its small footprint makes it suitable
+/// for edge deployment, embedded systems, and scenarios where larger models would be
+/// impractical due to memory or compute limitations.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Moondream: A Tiny Vision Language Model" (Vikhyat Korrapati, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Moondream is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Moondream is one of the smallest usable vision-language models
+/// available — with under 2 billion parameters, it can run on devices with very limited
+/// memory and compute. Despite its tiny size, it can describe images, answer questions about
+/// photos, and perform basic visual reasoning. It uses a SigLIP vision encoder paired with
+/// a compact Phi-based language model. Think of it as the model you use when you need
+/// on-device visual AI but have very limited resources — like a Raspberry Pi or an
+/// embedded system. Default values follow the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Moondream model for lightweight on-device visual AI
+/// // using compact SigLIP + Phi architecture under 2B parameters
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Moondream&lt;double&gt;(architecture, "moondream.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Moondream&lt;double&gt;(architecture, new MoondreamOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -93,7 +123,7 @@ public class Moondream<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Moondream-Native" : "Moondream-ONNX", Description = "Moondream: tiny yet capable VLM for resource-constrained environments.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Moondream-Native" : "Moondream-ONNX", Description = "Moondream: tiny yet capable VLM for resource-constrained environments.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Moondream";
         m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

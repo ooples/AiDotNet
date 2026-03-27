@@ -40,6 +40,17 @@ namespace AiDotNet.Regression;
 /// ```
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LassoRegressionOptions&lt;double&gt;();
+/// var model = new LassoRegression&lt;double&gt;(options);
+/// var features = Matrix&lt;double&gt;.Build.Dense(5, 3, new double[] {
+///     1, 2, 0,  3, 4, 0,  5, 6, 0,  7, 8, 0,  9, 10, 0 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 2.1, 3.9, 6.2, 7.8, 10.1 });
+/// model.Train(features, targets);
+/// var prediction = model.Predict(Matrix&lt;double&gt;.Build.Dense(1, 3, new double[] { 11, 12, 0 }));
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Linear)]
 [ModelCategory(ModelCategory.Regularization)]
@@ -166,14 +177,12 @@ public class LassoRegression<T> : RegressionBase<T>
 
         // Compute initial residuals
         var residuals = new Vector<T>(n);
+        // Compute initial residuals: residuals = y - X*w using Engine
         for (int i = 0; i < n; i++)
         {
-            T prediction = NumOps.Zero;
-            for (int j = 0; j < p; j++)
-            {
-                prediction = NumOps.Add(prediction, NumOps.Multiply(xProcessed[i, j], w[j]));
-            }
-            residuals[i] = NumOps.Subtract(y[i], prediction);
+            var row = new Vector<T>(p);
+            for (int j2 = 0; j2 < p; j2++) row[j2] = xProcessed[i, j2];
+            residuals[i] = NumOps.Subtract(y[i], Engine.DotProduct(row, w));
         }
 
         T alpha = NumOps.FromDouble(Options.Alpha);
@@ -195,12 +204,10 @@ public class LassoRegression<T> : RegressionBase<T>
                     residuals[i] = NumOps.Add(residuals[i], NumOps.Multiply(xProcessed[i, j], oldW));
                 }
 
-                // Compute correlation with residuals
-                T rho = NumOps.Zero;
-                for (int i = 0; i < n; i++)
-                {
-                    rho = NumOps.Add(rho, NumOps.Multiply(xProcessed[i, j], residuals[i]));
-                }
+                // Compute correlation with residuals: rho = x[:,j]' * residuals
+                var xCol = new Vector<T>(n);
+                for (int i = 0; i < n; i++) xCol[i] = xProcessed[i, j];
+                T rho = Engine.DotProduct(xCol, residuals);
 
                 // Apply soft-thresholding (don't regularize intercept)
                 // Intercept or zero column gets no regularization; otherwise apply L1 soft-thresholding
@@ -297,14 +304,6 @@ public class LassoRegression<T> : RegressionBase<T>
         return metadata;
     }
 
-    /// <summary>
-    /// Gets the model type identifier.
-    /// </summary>
-    /// <returns>The ModelType enumeration value for Lasso Regression.</returns>
-    protected override ModelType GetModelType()
-    {
-        return ModelType.LassoRegression;
-    }
 
     /// <summary>
     /// Creates a new instance of Lasso Regression with the same configuration.

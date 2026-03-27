@@ -201,11 +201,11 @@ public class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     }
 
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => _melSpectrogram?.Forward(rawAudio) ?? throw new InvalidOperationException("MelSpectrogram not initialized.");
-    protected override Tensor<T> PostprocessOutput(Tensor<T> o) { var r = new Tensor<T>(o.Shape); for (int i = 0; i < o.Length; i++) { double l = NumOps.ToDouble(o[i]); r[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-l))); } return r; }
+    protected override Tensor<T> PostprocessOutput(Tensor<T> o) { var r = new Tensor<T>(o.Shape.ToArray()); for (int i = 0; i < o.Length; i++) { double l = NumOps.ToDouble(o[i]); r[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-l))); } return r; }
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "AudioMAE-Native" : "AudioMAE-ONNX", Description = "Audio-MAE: Masked Autoencoders that Listen (Xu et al., NeurIPS 2022)", ModelType = ModelType.NeuralNetwork, FeatureCount = ClassLabels.Count, Complexity = _options.NumEncoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "AudioMAE-Native" : "AudioMAE-ONNX", Description = "Audio-MAE: Masked Autoencoders that Listen (Xu et al., NeurIPS 2022)", FeatureCount = ClassLabels.Count, Complexity = _options.NumEncoderLayers };
         m.AdditionalInfo["Architecture"] = "Audio-MAE"; m.AdditionalInfo["EncoderEmbeddingDim"] = _options.EncoderEmbeddingDim.ToString();
         m.AdditionalInfo["NumEncoderLayers"] = _options.NumEncoderLayers.ToString(); m.AdditionalInfo["MaskRatio"] = _options.MaskRatio.ToString("F2");
         m.AdditionalInfo["NumClasses"] = ClassLabels.Count.ToString();

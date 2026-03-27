@@ -36,6 +36,19 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 /// <b>Reference:</b> Ren et al., "PixelLM: Pixel Reasoning with Large Multimodal Model", CVPR 2024.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a PixelLM model for multi-target reasoning segmentation
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.BinaryClassification,
+///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
+/// var model = new PixelLM&lt;double&gt;(architecture, numClasses: 1);
+///
+/// // Or load a pre-trained ONNX model for pixel-level reasoning
+/// var onnxModel = new PixelLM&lt;double&gt;(architecture, "pixellm.onnx", numClasses: 1);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -199,7 +212,7 @@ public class PixelLM<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = _onnxSession.Run(inputs);
@@ -268,7 +281,6 @@ public class PixelLM<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
     /// </remarks>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        ModelType = ModelType.SemanticSegmentation,
         AdditionalInfo = new Dictionary<string, object> { { "ModelName", "PixelLM" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
         ModelData = this.Serialize()
     };

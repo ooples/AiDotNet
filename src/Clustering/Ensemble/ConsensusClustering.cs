@@ -43,6 +43,14 @@ namespace AiDotNet.Clustering.Ensemble;
 /// - Can combine different algorithms
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new ConsensusClusteringOptions&lt;double&gt;();
+/// var consensusClustering = new ConsensusClustering&lt;double&gt;(options);
+/// consensusClustering.Train(dataMatrix);
+/// Vector<double> labels = consensusClustering.Labels;
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -76,7 +84,6 @@ public class ConsensusClustering<T> : ClusteringBase<T>
     public double[,]? CoAssociationMatrix => _coAssociationMatrix;
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.Clustering;
 
     /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -137,6 +144,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
         // Compute cluster centers
         ComputeClusterCenters(x, finalLabels, n, d);
 
+        MergeDegenerateClusters(x);
         IsTrained = true;
     }
 

@@ -9,58 +9,45 @@ namespace AiDotNet.Preprocessing;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This class replaces ValueTuple to ensure reliable JSON serialization
-/// of pipeline steps, since ValueTuples do not serialize properly with Newtonsoft.Json.
+/// This class replaces ValueTuples for pipeline steps to ensure proper JSON serialization.
+/// ValueTuples do not serialize reliably with Newtonsoft.Json, so this class provides
+/// explicit property names and serialization attributes.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
-/// <typeparam name="TInput">The input data type.</typeparam>
+/// <typeparam name="TInput">The input/output data type for intermediate steps.</typeparam>
 public class PipelineStep<T, TInput>
 {
     /// <summary>
-    /// Gets the name of this pipeline step.
+    /// Gets or sets the name of this pipeline step.
     /// </summary>
     [JsonProperty]
-    public string Name { get; private set; }
+    public string Name { get; set; }
 
     /// <summary>
-    /// Gets the transformer for this pipeline step.
+    /// Gets or sets the transformer for this pipeline step.
     /// </summary>
-    /// <remarks>
-    /// Set via the constructor or JSON deserialization. Guaranteed non-null after
-    /// construction through the parameterized constructor or successful deserialization.
-    /// </remarks>
-    [JsonProperty]
-    public IDataTransformer<T, TInput, TInput> Transformer { get; private set; }
+    [JsonProperty(TypeNameHandling = TypeNameHandling.Auto)]
+    public IDataTransformer<T, TInput, TInput> Transformer { get; set; }
+
+    /// <summary>
+    /// Creates a new pipeline step. Parameterless constructor for deserialization.
+    /// </summary>
+    public PipelineStep()
+    {
+        Name = string.Empty;
+        Transformer = null!;
+    }
 
     /// <summary>
     /// Creates a new pipeline step with the specified name and transformer.
     /// </summary>
-    /// <param name="name">The step name. Must not be null or whitespace.</param>
-    /// <param name="transformer">The transformer. Must not be null.</param>
-    /// <exception cref="ArgumentException">Thrown if name is null or whitespace.</exception>
-    /// <exception cref="ArgumentNullException">Thrown if transformer is null.</exception>
-    [JsonConstructor]
+    /// <param name="name">The step name.</param>
+    /// <param name="transformer">The transformer.</param>
     public PipelineStep(string name, IDataTransformer<T, TInput, TInput> transformer)
     {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            throw new ArgumentException("Pipeline step name cannot be null or whitespace.", nameof(name));
-        }
-
         Name = name;
-        Transformer = transformer ?? throw new ArgumentNullException(nameof(transformer),
-            "Pipeline step transformer cannot be null.");
-    }
-
-    /// <summary>
-    /// Deconstructs this step into its name and transformer components,
-    /// allowing tuple-style destructuring for backward compatibility.
-    /// </summary>
-    public void Deconstruct(out string name, out IDataTransformer<T, TInput, TInput> transformer)
-    {
-        name = Name;
-        transformer = Transformer;
+        Transformer = transformer;
     }
 }
 
@@ -90,7 +77,7 @@ public class PreprocessingPipeline<T, TInput, TOutput> : IDataTransformer<T, TIn
     [JsonProperty]
     private readonly List<PipelineStep<T, TInput>> _steps;
 
-    [JsonProperty]
+    [JsonProperty(TypeNameHandling = TypeNameHandling.Auto)]
     private IDataTransformer<T, TInput, TOutput>? _finalTransformer;
 
     [JsonProperty]
@@ -137,9 +124,10 @@ public class PreprocessingPipeline<T, TInput, TOutput> : IDataTransformer<T, TIn
     public int Count => _steps.Count + (_finalTransformer is not null ? 1 : 0);
 
     /// <summary>
-    /// Gets the pipeline steps as a read-only list.
+    /// Gets the named steps in the pipeline.
     /// </summary>
-    public IReadOnlyList<PipelineStep<T, TInput>> Steps => _steps.AsReadOnly();
+    public IReadOnlyList<(string Name, IDataTransformer<T, TInput, TInput> Transformer)> Steps =>
+        _steps.Select(s => (s.Name, s.Transformer)).ToList().AsReadOnly();
 
     /// <summary>
     /// Creates a new empty preprocessing pipeline.

@@ -307,7 +307,7 @@ public class XMem<T> : NeuralNetworkBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = _onnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -341,7 +341,7 @@ public class XMem<T> : NeuralNetworkBase<T>
         LastLoss = loss;
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
 
         var currentGradient = outputGradientTensor;
         for (int i = Layers.Count - 1; i >= 0; i--)
@@ -373,7 +373,7 @@ public class XMem<T> : NeuralNetworkBase<T>
         if (_useNativeMode)
         {
             var queryFeatures = EncodeFrame(frame);
-            var sensoryResponse = QueryMemory(_sensoryMemory, queryFeatures.Shape);
+            var sensoryResponse = QueryMemory(_sensoryMemory, queryFeatures.Shape.ToArray());
             var workingResponse = QueryMemory(_workingMemory, [queryFeatures.Shape[0], _numFeatures / 2, queryFeatures.Shape[2], queryFeatures.Shape[3]]);
             var longTermResponse = QueryMemory(_longTermMemory, [queryFeatures.Shape[0], _numFeatures / 4, queryFeatures.Shape[2], queryFeatures.Shape[3]]);
 
@@ -430,7 +430,7 @@ public class XMem<T> : NeuralNetworkBase<T>
         int height = features.Shape[2];
         int width = features.Shape[3];
 
-        var masked = new Tensor<T>(features.Shape);
+        var masked = new Tensor<T>(features.Shape.ToArray());
         for (int b = 0; b < batchSize; b++)
             for (int c = 0; c < channels; c++)
                 for (int h = 0; h < height; h++)
@@ -682,7 +682,6 @@ public class XMem<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoObjectSegmentation,
             AdditionalInfo = additionalInfo,
             ModelData = _useNativeMode ? this.Serialize() : Array.Empty<byte>()
         };

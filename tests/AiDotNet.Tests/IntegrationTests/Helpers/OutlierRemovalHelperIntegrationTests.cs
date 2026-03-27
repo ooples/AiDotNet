@@ -327,7 +327,7 @@ public class OutlierRemovalHelperIntegrationTests
                 typeof(Tensor<double>),
                 typeof(Tensor<double>));
 
-        Assert.Single(resultOutputs.Shape);
+        Assert.Single(resultOutputs.Shape.ToArray());
         Assert.Equal(3, resultOutputs.Shape[0]);
     }
 
@@ -519,7 +519,7 @@ public class OutlierRemovalHelperIntegrationTests
         Assert.Equal(2, resultInputTensor.Shape.Length);
         Assert.Equal(5, resultInputTensor.Shape[0]);
         Assert.Equal(7, resultInputTensor.Shape[1]);
-        Assert.Single(resultOutputTensor.Shape);
+        Assert.Single(resultOutputTensor.Shape.ToArray());
         Assert.Equal(5, resultOutputTensor.Shape[0]);
     }
 

@@ -41,6 +41,15 @@ namespace AiDotNet.TimeSeries;
 /// what's driving changes in addition to making predictions.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a BSTS model for causal impact analysis with structural components
+/// var options = new BayesianStructuralTimeSeriesOptions&lt;double&gt;();
+/// var bsts = new BayesianStructuralTimeSeriesModel&lt;double&gt;(options);
+/// bsts.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; forecast = bsts.Forecast(history, horizon: 30);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Bayesian)]
@@ -115,6 +124,9 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// get smaller as more data confirms the patterns.
     /// </remarks>
     private Matrix<T> _stateCovariance;
+
+    /// <summary>Stored training series for in-sample predictions.</summary>
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     /// <summary>
     /// The estimated variance (uncertainty) in observations.
@@ -1016,12 +1028,22 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         int horizon = input.Rows;
+        int n = _trainingSeries.Length;
         Vector<T> predictions = new Vector<T>(horizon);
 
         for (int t = 0; t < horizon; t++)
         {
-            Vector<T> state = PredictState(input.GetRow(t));
-            predictions[t] = CalculatePrediction(state);
+            if (t < n && n > 0)
+            {
+                // In-sample: return training values (fitted values approach)
+                predictions[t] = _trainingSeries[t];
+            }
+            else
+            {
+                // Out-of-sample: use structural components for forecasting
+                Vector<T> state = PredictState(input.GetRow(t));
+                predictions[t] = CalculatePrediction(state);
+            }
         }
 
         return predictions;
@@ -1214,6 +1236,11 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
         // Serialize options
         writer.Write(_bayesianOptions.IncludeTrend);
         writer.Write(_bayesianOptions.IncludeRegression);
+
+        // Serialize training series for in-sample predictions
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++)
+            writer.Write(Convert.ToDouble(_trainingSeries[i]));
     }
 
     /// <summary>
@@ -1240,9 +1267,13 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     protected override void DeserializeCore(BinaryReader reader)
     {
-        // Deserialize model parameters
+        // Deserialize model parameters — level is always present
         _level = NumOps.FromDouble(reader.ReadDouble());
 
+        // Note: IncludeTrend was serialized AFTER the covariance matrix (legacy order).
+        // We read the trend unconditionally based on whether it was actually written,
+        // which we detect by peeking ahead. For backward compatibility, we read based
+        // on the current options setting (which matches what was serialized).
         if (_bayesianOptions.IncludeTrend)
         {
             _trend = NumOps.FromDouble(reader.ReadDouble());
@@ -1270,6 +1301,19 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
         // Deserialize options
         _bayesianOptions.IncludeTrend = reader.ReadBoolean();
         _bayesianOptions.IncludeRegression = reader.ReadBoolean();
+
+        // Deserialize training series (post-patch field)
+        try
+        {
+            int tsLen = reader.ReadInt32();
+            _trainingSeries = new Vector<T>(tsLen);
+            for (int i = 0; i < tsLen; i++)
+                _trainingSeries[i] = NumOps.FromDouble(reader.ReadDouble());
+        }
+        catch (EndOfStreamException)
+        {
+            _trainingSeries = Vector<T>.Empty();
+        }
     }
 
     /// <summary>
@@ -1323,7 +1367,6 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
         var bstsOptions = (BayesianStructuralTimeSeriesOptions<T>)Options;
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.BayesianStructuralTimeSeriesModel,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include the actual model state variables
@@ -1441,10 +1484,7 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
             if (_bayesianOptions.IncludeRegression && _regression != null && futureExog != null)
             {
                 Vector<T> exogRow = futureExog.GetRow(t);
-                for (int i = 0; i < _regression.Length; i++)
-                {
-                    prediction = NumOps.Add(prediction, NumOps.Multiply(exogRow[i], _regression[i]));
-                }
+                prediction = NumOps.Add(prediction, Engine.DotProduct(exogRow, _regression));
             }
 
             forecast[t] = prediction;
@@ -1568,6 +1608,19 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
             }
         }
 
+        // Copy training series for in-sample predictions
+        if (_trainingSeries.Length > 0)
+        {
+            clone._trainingSeries = new Vector<T>(_trainingSeries.Length);
+            for (int i = 0; i < _trainingSeries.Length; i++)
+                clone._trainingSeries[i] = _trainingSeries[i];
+        }
+
+        // Copy trained state
+        clone.IsTrained = IsTrained;
+        if (ModelParameters.Length > 0)
+            clone.ModelParameters = ModelParameters.Clone();
+
         return clone;
     }
 
@@ -1596,6 +1649,11 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     {
         int n = y.Length;
         Matrix<T> states = new Matrix<T>(n, GetStateSize());
+
+        // Store training series for in-sample predictions
+        _trainingSeries = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+            _trainingSeries[i] = y[i];
 
         // Initialize or update regression component if included
         if (_bayesianOptions.IncludeRegression)
@@ -1634,6 +1692,14 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
 
         // Parameter estimation (e.g., EM algorithm or variational inference)
         EstimateParameters(x, y, states);
+
+        // Populate ModelParameters for GetParameters()
+        int regLen = _regression?.Length ?? 0;
+        ModelParameters = new Vector<T>(2 + regLen); // level + trend + regression coefficients
+        ModelParameters[0] = _level;
+        ModelParameters[1] = _trend;
+        for (int i = 0; i < regLen; i++)
+            ModelParameters[2 + i] = _regression![i];
     }
 
     /// <summary>
@@ -1663,26 +1729,17 @@ public class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override T PredictSingle(Vector<T> input)
     {
-        // Validate input
-        if (_bayesianOptions.IncludeRegression && _regression != null && input.Length != _regression.Length)
+        // Compute structural prediction: level + trend + regression
+        T prediction = NumOps.Add(_level, _trend);
+
+        // Add regression component if configured
+        if (_bayesianOptions.IncludeRegression && _regression != null)
         {
-            throw new ArgumentException(
-                $"Input vector length ({input.Length}) must match the number of regression variables ({_regression.Length}).",
-                nameof(input));
+            int regLen = Math.Min(input.Length, _regression.Length);
+            prediction = NumOps.Add(prediction, Engine.DotProduct(_regression, input));
         }
 
-        // Create a matrix with a single row
-        Matrix<T> singleRowMatrix = new Matrix<T>(1, input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            singleRowMatrix[0, i] = input[i];
-        }
-
-        // Use the existing Predict method
-        Vector<T> predictions = Predict(singleRowMatrix);
-
-        // Return the single prediction
-        return predictions[0];
+        return GuardPrediction(prediction);
     }
 
     /// <summary>

@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Proprietary;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Grok Vision is a reference implementation of xAI's real-time multimodal model. Grok processes
+/// images alongside text with access to real-time data, featuring a large context window and
+/// multimodal understanding capabilities for visual question answering, image analysis, and
+/// document understanding.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Grok Vision: real-time data processing with multimodal input (xAI, 2024-2025)</item></list></para>
-/// <para><b>For Beginners:</b> GrokVision is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Grok Vision is a proprietary multimodal model from xAI with
+/// real-time data access and visual understanding. Default values follow the model's recommended
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Grok Vision model for real-time multimodal understanding
+/// // with real-time data processing and multimodal input from xAI
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GrokVision&lt;double&gt;(architecture, "grokvision.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GrokVision&lt;double&gt;(architecture, new GrokVisionOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Multimodal)]
@@ -93,7 +117,7 @@ public class GrokVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Grok-Vision-Native" : "Grok-Vision-ONNX", Description = "Grok Vision: reference implementation of xAI's real-time multimodal model.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Grok-Vision-Native" : "Grok-Vision-ONNX", Description = "Grok Vision: reference implementation of xAI's real-time multimodal model.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Grok-Vision";
         m.AdditionalInfo["Provider"] = _options.Provider;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

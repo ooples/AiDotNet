@@ -275,5 +275,62 @@ public enum ModelTask
     /// Transforms an existing video into a modified version.
     /// Example: changing the style of a video or editing specific elements while preserving motion.
     /// </summary>
-    VideoToVideo
+    VideoToVideo,
+
+    /// <summary>Detects and classifies objects in images.</summary>
+    ObjectDetection,
+
+    /// <summary>Estimates body joint positions from images or video.</summary>
+    PoseEstimation,
+
+    /// <summary>Generates audio content (music, sound effects, speech).</summary>
+    AudioGeneration,
+
+    /// <summary>Generates music compositions.</summary>
+    MusicGeneration,
+
+    /// <summary>Generates source code from natural language or other code.</summary>
+    CodeGeneration,
+
+    /// <summary>Generates text from prompts or context.</summary>
+    TextGeneration,
+
+    /// <summary>Condenses long text into shorter summaries.</summary>
+    Summarization,
+
+    /// <summary>Answers questions based on given context or knowledge.</summary>
+    QuestionAnswering,
+
+    /// <summary>Determines the emotional tone of text.</summary>
+    SentimentAnalysis,
+
+    /// <summary>Identifies named entities (people, places, organizations) in text.</summary>
+    NamedEntityRecognition,
+
+    /// <summary>Finds relevant documents or passages for a query.</summary>
+    SemanticSearch,
+
+    /// <summary>Predicts properties of molecular structures.</summary>
+    MolecularGeneration,
+
+    /// <summary>Predicts protein 3D structures from amino acid sequences.</summary>
+    ProteinFolding,
+
+    /// <summary>Discovers or designs new drug molecules.</summary>
+    DrugDiscovery,
+
+    /// <summary>Predicts labels or properties of nodes in a graph.</summary>
+    NodeClassification,
+
+    /// <summary>Classifies entire graphs into categories.</summary>
+    GraphClassification,
+
+    /// <summary>Predicts missing edges between nodes in a graph.</summary>
+    LinkPrediction,
+
+    /// <summary>Predicts outcomes from tabular/structured data.</summary>
+    TabularPrediction,
+
+    /// <summary>Filters and recommends items based on user preferences.</summary>
+    RecommendationFiltering
 }

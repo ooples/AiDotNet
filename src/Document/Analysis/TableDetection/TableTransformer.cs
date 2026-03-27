@@ -950,7 +950,7 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape);
+        var normalized = new Tensor<T>(image.Shape.ToArray());
 
         // COCO/ImageNet normalization (industry standard for TableTransformer)
         double[] means = [0.485, 0.456, 0.406];
@@ -1014,7 +1014,6 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         return new ModelMetadata<T>
         {
             Name = "TableTransformer",
-            ModelType = ModelType.NeuralNetwork,
             Description = "DETR-style table detection and structure recognition (CVPR 2022)",
             FeatureCount = _hiddenDim,
             Complexity = _numEncoderLayers + _numDecoderLayers,

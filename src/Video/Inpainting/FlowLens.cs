@@ -28,6 +28,19 @@ namespace AiDotNet.Video.Inpainting;
 /// consistent inpainting.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FlowLens model for optical-flow-guided video inpainting
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 3);
+/// var options = new FlowLensOptions();
+/// var flowLens = new FlowLens&lt;double&gt;(architecture, options);
+///
+/// // Or load a pre-trained ONNX model for inference
+/// var flowLensOnnx = new FlowLens&lt;double&gt;(architecture, "flowlens_model.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -162,7 +175,6 @@ public class FlowLens<T> : VideoInpaintingBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VideoInpainting,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "FlowLens" },

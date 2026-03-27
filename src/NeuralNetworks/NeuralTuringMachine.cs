@@ -30,6 +30,14 @@ namespace AiDotNet.NeuralNetworks;
 /// partial results and carry digits, similar to how humans solve addition problems.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new NeuralTuringMachineOptions { InputSize = 8, MemorySize = 128, MemoryWordSize = 20 };
+/// var model = new NeuralTuringMachine&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 10, 8 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.RecurrentNetwork)]
@@ -557,8 +565,24 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
         // For 1D input: treat as single sample, no sequence
         // For 2D input [batch, features]: no sequence dimension
         // For 3D+ input [batch, sequence, ...]: use second dimension as sequence
-        int batchSize = input.Rank >= 1 ? input.Shape[0] : 1;
-        int sequenceLength = input.Rank >= 3 ? input.Shape[1] : 1;
+        // Handle 1D/2D input: treat as single sample with no sequence
+        int batchSize;
+        int sequenceLength;
+        if (input.Rank <= 1)
+        {
+            batchSize = 1;
+            sequenceLength = 1;
+        }
+        else if (input.Rank == 2)
+        {
+            batchSize = input.Shape[0];
+            sequenceLength = 1;
+        }
+        else
+        {
+            batchSize = input.Shape[0];
+            sequenceLength = input.Shape[1];
+        }
 
         // Setup memories for this batch
         SetupBatchMemories(batchSize);
@@ -635,7 +659,7 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
             resultShape[i + 1] = remainingDims[i];
         }
 
-        var result = new Tensor<T>(resultShape);
+        var result = TensorAllocator.Rent<T>(resultShape);
 
         // Copy data for this time step
         int featureSize = 1;
@@ -691,6 +715,12 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <returns>The controller output.</returns>
     private Tensor<T> ProcessController(Tensor<T> input)
     {
+        // Handle 1D input [features] → [1, features]
+        if (input.Rank == 1)
+        {
+            input = input.Reshape([1, input.Shape[0]]);
+        }
+
         int batchSize = input.Shape[0];
 
         // Read from memories based on previous weights
@@ -806,6 +836,18 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <returns>A vector containing the data for the specified batch element.</returns>
     private Vector<T> ExtractVector(Tensor<T> tensor, int batchIndex)
     {
+        // Handle 1D tensor (no batch dimension)
+        if (tensor.Rank <= 1)
+        {
+            return tensor.Length > 0 ? tensor.ToVector() : new Vector<T>(0);
+        }
+
+        // Handle case where batchIndex exceeds actual batch size
+        if (batchIndex >= tensor.Shape[0])
+        {
+            return new Vector<T>(tensor.Shape[1]);
+        }
+
         int vectorSize = tensor.Shape[1];
         var vector = new Vector<T>(vectorSize);
 
@@ -1034,7 +1076,9 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
                 memoryRow[i] = memory[m, i];
             }
 
-            similarities[m] = StatisticsHelper<T>.CosineSimilarity(key, memoryRow);
+            // CosineSimilarity returns NaN for zero vectors — use 0 for stability
+            var sim = StatisticsHelper<T>.CosineSimilarity(key, memoryRow);
+            similarities[m] = NumOps.IsNaN(sim) ? NumOps.Zero : sim;
         }
 
         // Apply key strength (focus factor)
@@ -1121,7 +1165,7 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     private Tensor<T> ReadFromMemories()
     {
         int batchSize = _memories.Count;
-        var result = new Tensor<T>([batchSize, _memoryVectorSize]);
+        var result = TensorAllocator.Rent<T>([batchSize, _memoryVectorSize]);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -1324,6 +1368,10 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <param name="expectedOutput">The expected output tensor.</param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Handle 1D input/output: reshape to [1, features]
+        if (input.Rank == 1) input = input.Reshape([1, input.Length]);
+        if (expectedOutput.Rank == 1) expectedOutput = expectedOutput.Reshape([1, expectedOutput.Length]);
+
         if (input.Shape[0] != expectedOutput.Shape[0])
         {
             throw new ArgumentException("Input and expected output must have the same batch size");
@@ -1343,7 +1391,7 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
 
         // Calculate output gradients
         var gradVector = LossFunction.CalculateDerivative(predVector, expectedVector);
-        var outputGradients = new Tensor<T>(predictions.Shape);
+        var outputGradients = new Tensor<T>(predictions.Shape.ToArray());
 
         // Copy gradient values to tensor
         int index = 0;
@@ -1451,7 +1499,6 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralTuringMachine,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "MemorySize", _memorySize },

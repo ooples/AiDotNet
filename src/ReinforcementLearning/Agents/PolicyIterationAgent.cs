@@ -14,16 +14,33 @@ namespace AiDotNet.ReinforcementLearning.Agents.DynamicProgramming;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// Policy Iteration alternates between policy evaluation and policy improvement
-/// until convergence to the optimal policy.
+/// <para>Policy Iteration alternates between policy evaluation and policy improvement
+/// until convergence to the optimal policy.</para>
+/// <para><b>For Beginners:</b> Policy Iteration works in two repeating steps:
+/// 1) Evaluate: calculate how good the current strategy is for every state
+/// 2) Improve: update the strategy to be greedy with respect to the evaluation
+/// These steps repeat until the strategy stops changing (convergence). It requires a
+/// complete model of the environment (transition probabilities and rewards) and works best
+/// for small, fully-known environments like grid worlds or simple games.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Policy Iteration agent for environments with known dynamics
+/// var options = new PolicyIterationOptions&lt;double&gt; { StateSize = 4, ActionSize = 2 };
+/// var agent = new PolicyIterationAgent&lt;double&gt;(options);
+///
+/// // Select an action using the current policy
+/// var state = new Vector&lt;double&gt;(new double[] { 0.5, -0.3, 1.0, 0.2 });
+/// var action = agent.SelectAction(state);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Reinforcement Learning: An Introduction",
-    "http://incompleteideas.net/book/the-book-2nd.html",
+    "https://incompleteideas.net/book/the-book-2nd.html",
     Year = 2018,
     Authors = "Sutton, R. S. & Barto, A. G.")]
 public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
@@ -279,7 +296,6 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ReinforcementLearning,
         };
     }
 

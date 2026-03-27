@@ -386,7 +386,7 @@ public static class SerializationHelper<T>
     public static void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor.Shape)
+        foreach (var dim in tensor.Shape.ToArray())
         {
             writer.Write(dim);
         }

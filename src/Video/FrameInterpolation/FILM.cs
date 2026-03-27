@@ -38,6 +38,19 @@ namespace AiDotNet.Video.FrameInterpolation;
 /// ECCV 2022.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a FILM model for frame interpolation with large motion handling
+/// var film = new FILM&lt;double&gt;();
+///
+/// // Or configure with custom multi-scale feature pyramid settings
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 256, inputWidth: 256, inputDepth: 6, outputSize: 3);
+/// var model = new FILM&lt;double&gt;(architecture, numScales: 7, numFeatures: 64);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -495,7 +508,7 @@ public class FILM<T> : FrameInterpolationBase<T>
         int height = features.Shape[2];
         int width = features.Shape[3];
 
-        var warped = new Tensor<T>(features.Shape);
+        var warped = new Tensor<T>(features.Shape.ToArray());
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -902,10 +915,10 @@ public class FILM<T> : FrameInterpolationBase<T>
         ComputeFusionGradients(Tensor<T> gradOutput, Tensor<T> warped1, Tensor<T> warped2,
             Tensor<T> occ1, Tensor<T> occ2, double timestep)
     {
-        var gradWarped1 = new Tensor<T>(warped1.Shape);
-        var gradWarped2 = new Tensor<T>(warped2.Shape);
-        var gradOcc1 = new Tensor<T>(occ1.Shape);
-        var gradOcc2 = new Tensor<T>(occ2.Shape);
+        var gradWarped1 = new Tensor<T>(warped1.Shape.ToArray());
+        var gradWarped2 = new Tensor<T>(warped2.Shape.ToArray());
+        var gradOcc1 = new Tensor<T>(occ1.Shape.ToArray());
+        var gradOcc2 = new Tensor<T>(occ2.Shape.ToArray());
 
         int batchSize = warped1.Shape[0];
         int channels = warped1.Shape[1];
@@ -959,8 +972,8 @@ public class FILM<T> : FrameInterpolationBase<T>
     private (Tensor<T> gradFeatures, Tensor<T> gradFlow) WarpFeaturesBackward(
         Tensor<T> gradOutput, Tensor<T> features, Tensor<T> flow)
     {
-        var gradFeatures = new Tensor<T>(features.Shape);
-        var gradFlow = new Tensor<T>(flow.Shape);
+        var gradFeatures = new Tensor<T>(features.Shape.ToArray());
+        var gradFlow = new Tensor<T>(flow.Shape.ToArray());
 
         int batchSize = features.Shape[0];
         int channels = features.Shape[1];
@@ -1070,7 +1083,7 @@ public class FILM<T> : FrameInterpolationBase<T>
         int height = gradOutput.Shape[2];
         int width = gradOutput.Shape[3];
 
-        var result = new Tensor<T>(gradOutput.Shape);
+        var result = new Tensor<T>(gradOutput.Shape.ToArray());
         for (int b = 0; b < batchSize; b++)
         {
             for (int h = 0; h < height; h++)
@@ -1282,7 +1295,6 @@ public class FILM<T> : FrameInterpolationBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.FrameInterpolation,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ModelName", "FILM" },

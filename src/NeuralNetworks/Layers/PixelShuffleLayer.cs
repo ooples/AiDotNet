@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -33,6 +35,10 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// This is commonly used in super-resolution models like Real-ESRGAN and ESPCN.
 /// </para>
 /// </remarks>
+[LayerCategory(LayerCategory.Upsampling)]
+[LayerTask(LayerTask.UpSampling)]
+[LayerTask(LayerTask.SpatialProcessing)]
+[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 4, 4", TestConstructorArgs = "new[] { 4, 4, 4 }, 2")]
 public class PixelShuffleLayer<T> : LayerBase<T>
 {
     #region Fields
@@ -232,8 +238,8 @@ public class PixelShuffleLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
-        var shape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
+        var shape = input.Shape.ToArray();
 
         // For 4D tensors (batch, channels, height, width), use Engine directly
         if (shape.Length == 4)
@@ -307,7 +313,7 @@ public class PixelShuffleLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
         int r = _upscaleFactor;
         int r2 = r * r;
 
@@ -409,7 +415,7 @@ public class PixelShuffleLayer<T> : LayerBase<T>
         if (_gpuCachedInputShape == null)
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
 
-        var gradShape = outputGradient.Shape;
+        var gradShape = outputGradient.Shape.ToArray();
         int r = _upscaleFactor;
         int r2 = r * r;
 
@@ -476,7 +482,7 @@ public class PixelShuffleLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        var inShape = _lastInput.Shape;
+        var inShape = _lastInput.Shape.ToArray();
 
         // For 4D tensors, use Engine directly
         if (_originalInputShape.Length == 4)

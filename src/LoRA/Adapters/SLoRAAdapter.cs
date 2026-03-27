@@ -531,7 +531,7 @@ public class SLoRAAdapter<T> : LoRAAdapterBase<T>
             Tensor<T> loraOutput = entry.Layer.Forward(input);
 
             // Combine base and adapter outputs
-            Tensor<T> result = new Tensor<T>(baseOutput.Shape);
+            Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
             for (int i = 0; i < baseOutput.Length; i++)
             {
                 result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);
@@ -664,7 +664,7 @@ public class SLoRAAdapter<T> : LoRAAdapterBase<T>
                     Tensor<T> loraOutput = entry.Layer.Forward(inputs[idx]);
 
                     // Combine base and adapter outputs
-                    Tensor<T> result = new Tensor<T>(baseOutput.Shape);
+                    Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
                     for (int i = 0; i < baseOutput.Length; i++)
                     {
                         result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);
@@ -713,9 +713,9 @@ public class SLoRAAdapter<T> : LoRAAdapterBase<T>
     /// var rank16Adapters = slora.GetRankCluster(16); // Maybe 300 adapters
     /// var rank32Adapters = slora.GetRankCluster(32); // Maybe 200 adapters
     ///
-    /// Console.WriteLine($"Rank 8: {rank8Adapters.Count} adapters");
-    /// Console.WriteLine($"Rank 16: {rank16Adapters.Count} adapters");
-    /// Console.WriteLine($"Rank 32: {rank32Adapters.Count} adapters");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     /// ```
     ///
     /// This helps optimize batch sizes and resource allocation!
@@ -753,9 +753,9 @@ public class SLoRAAdapter<T> : LoRAAdapterBase<T>
     /// ```csharp
     /// var stats = slora.GetStatistics();
     ///
-    /// Console.WriteLine($"Total adapters: {stats["TotalAdapters"]}");
-    /// Console.WriteLine($"Loaded adapters: {stats["LoadedAdapters"]}");
-    /// Console.WriteLine($"Cache utilization: {stats["CacheUtilization"]}%");
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
+    /// // Result is available in the returned value
     ///
     /// // Alert if cache too small
     /// if ((double)stats["CacheUtilization"] &gt; 95)

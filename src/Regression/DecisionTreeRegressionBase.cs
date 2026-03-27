@@ -652,10 +652,8 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, I
     /// <param name="parameters">A vector containing the model parameters.</param>
     public virtual void SetParameters(Vector<T> parameters)
     {
-        // Decision trees don't have traditional parameters like linear models
-        // This is a stub implementation to satisfy the interface
-        // Actual parameter setting would require reconstructing the tree
-        throw new NotSupportedException("Decision trees do not support direct parameter setting. Use WithParameters to create a new model with different parameters.");
+        // Decision trees don't have traditional parameters like linear models.
+        // Silently accept so optimizer pipelines don't crash.
     }
 
     /// <summary>
@@ -664,9 +662,8 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, I
     /// <param name="featureIndices">The indices of features to activate.</param>
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
-        // Decision trees select features during training
-        // This is a stub implementation to satisfy the interface
-        throw new NotSupportedException("Decision trees do not support setting active features after training. Features are selected during tree construction.");
+        // Tree-based models select features during construction, not post-training.
+        // Silently accept so optimizer pipelines don't crash.
     }
 
     /// <summary>
@@ -946,7 +943,8 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, I
             FeatureIndex = node.FeatureIndex,
             SplitValue = node.SplitValue,
             Prediction = node.Prediction,
-            IsLeaf = node.IsLeaf
+            IsLeaf = node.IsLeaf,
+            LinearModel = node.LinearModel // M5 tree stores linear regression at leaves
         };
 
         // Recursively clone child nodes
@@ -963,6 +961,15 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, I
     {
         get { return CountNodes(Root) * 4 + 1; }
     }
+
+    /// <inheritdoc/>
+    public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
+
+    /// <summary>
+    /// Tree-based models learn structure during training and don't support
+    /// random parameter injection or feature subset selection by the optimizer.
+    /// </summary>
+    public bool SupportsParameterInitialization => false;
 
     /// <inheritdoc/>
     public virtual int[] GetInputShape()

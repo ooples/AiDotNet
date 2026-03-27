@@ -13,6 +13,16 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
     /// Maintains Beta distributions for each action and samples from posteriors.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
+    /// <example>
+    /// <code>
+    /// // Create Thompson Sampling exploration with uniform Beta priors
+    /// var exploration = new ThompsonSamplingExploration&lt;double&gt;(priorAlpha: 1.0, priorBeta: 1.0);
+    ///
+    /// // Sample from posterior Beta distributions to select actions
+    /// var policyAction = new Vector&lt;double&gt;(new double[] { 0.0, 1.0, 0.0 });
+    /// var action = exploration.GetExplorationAction(state, policyAction, actionSpaceSize: 3, random);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
     [ModelCategory(ModelCategory.Bayesian)]

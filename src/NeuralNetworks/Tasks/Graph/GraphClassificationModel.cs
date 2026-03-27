@@ -63,6 +63,24 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// ```
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a graph classification model for molecular property prediction
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputSize: 16,   // node feature dimension
+///     outputSize: 2,   // number of classes (e.g., toxic / non-toxic)
+///     hiddenSizes: new[] { 64, 32 });
+/// var model = new GraphClassificationModel&lt;float&gt;(architecture);
+///
+/// // Prepare graph data (adjacency + node features as tensors)
+/// var adjacency = new Tensor&lt;float&gt;(new[] { 10, 10 }); // 10-node graph
+/// var nodeFeatures = new Tensor&lt;float&gt;(new[] { 10, 16 });
+///
+/// // Classify the entire graph
+/// var prediction = model.Predict(nodeFeatures);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
@@ -647,7 +665,7 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
 
         if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
         {
-            gradOutput = gradOutput.Reshape(predictions.Shape);
+            gradOutput = gradOutput.Reshape(predictions.Shape.ToArray());
         }
 
         Backward(gradOutput);
@@ -666,7 +684,6 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.GraphNeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["NetworkType"] = "GraphClassificationModel",

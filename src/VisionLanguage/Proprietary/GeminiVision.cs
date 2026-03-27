@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Proprietary;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Gemini Vision is a reference implementation of Google's natively multimodal Mixture of Experts
+/// model. The Gemini family processes interleaved text, image, audio, and video tokens natively
+/// with 1M+ token context windows, using a sparse MoE architecture for efficient scaling across
+/// multiple modalities.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Gemini: Google's natively multimodal model family with 1M+ token context (Google, 2024-2026)</item></list></para>
-/// <para><b>For Beginners:</b> GeminiVision is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Gemini Vision is a proprietary multimodal model from Google that
+/// natively handles images, text, audio, and video. Default values follow the model's recommended
+/// settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Gemini Vision model for natively multimodal understanding
+/// // with Mixture of Experts architecture and 1M+ token context
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new GeminiVision&lt;double&gt;(architecture, "geminivision.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new GeminiVision&lt;double&gt;(architecture, new GeminiVisionOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.Multimodal)]
@@ -95,7 +119,7 @@ public class GeminiVision<T> : VisionLanguageModelBase<T>, IProprietaryVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Gemini-Vision-Native" : "Gemini-Vision-ONNX", Description = "Gemini Vision: reference implementation of Google's native multimodal Mixture of Experts model.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Gemini-Vision-Native" : "Gemini-Vision-ONNX", Description = "Gemini Vision: reference implementation of Google's native multimodal Mixture of Experts model.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Gemini-Vision";
         m.AdditionalInfo["Provider"] = _options.Provider;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

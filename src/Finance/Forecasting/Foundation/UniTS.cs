@@ -13,7 +13,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
-
+
 using AiDotNet.Finance.Base;
 namespace AiDotNet.Finance.Forecasting.Foundation;
 
@@ -55,6 +55,22 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 /// https://arxiv.org/abs/2403.00131
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a UniTS unified model for multi-task time series processing
+/// // Handles forecasting, classification, anomaly detection, and imputation from a single backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 512, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///
+/// // Training mode with multi-scale temporal convolution and task-specific heads
+/// var model = new UniTS&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode with pre-trained model
+/// var onnxModel = new UniTS&lt;double&gt;(architecture, "units_base.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -458,7 +474,7 @@ public class UniTS<T> : ForecastingModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape));
+        Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -486,7 +502,6 @@ public class UniTS<T> : ForecastingModelBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "UniTS" },
@@ -781,7 +796,7 @@ public class UniTS<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -891,7 +906,7 @@ public class UniTS<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
-        var result = new Tensor<T>(input.Shape);
+        var result = new Tensor<T>(input.Shape.ToArray());
         int contextLen = _contextLength;
         int steps = Math.Min(stepsUsed, contextLen);
 
@@ -986,7 +1001,7 @@ public class UniTS<T> : ForecastingModelBase<T>
         var reconstruction = _useNativeMode ? Forward(input) : ForecastOnnx(input);
 
         // Compute reconstruction error as anomaly score
-        var anomalyScores = new Tensor<T>(input.Shape);
+        var anomalyScores = new Tensor<T>(input.Shape.ToArray());
         for (int i = 0; i < input.Length && i < reconstruction.Length; i++)
         {
             var diff = NumOps.Subtract(input.Data.Span[i], reconstruction.Data.Span[i]);
@@ -1021,7 +1036,7 @@ public class UniTS<T> : ForecastingModelBase<T>
         // If mask provided, only replace missing values
         if (mask is not null)
         {
-            var result = new Tensor<T>(input.Shape);
+            var result = new Tensor<T>(input.Shape.ToArray());
             for (int i = 0; i < input.Length; i++)
             {
                 // Use imputed value where mask is 0 (missing), original where mask is 1 (present)
@@ -1051,7 +1066,7 @@ public class UniTS<T> : ForecastingModelBase<T>
     {
         if (input.Length == 0)
         {
-            return new Tensor<T>(input.Shape);
+            return new Tensor<T>(input.Shape.ToArray());
         }
 
         return Engine.Softmax(input, -1);

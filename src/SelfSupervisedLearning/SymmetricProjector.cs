@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
@@ -37,6 +38,7 @@ namespace AiDotNet.SelfSupervisedLearning;
 public class SymmetricProjector<T> : IProjectorHead<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly int _inputDim;
     private readonly int _hiddenDim;
@@ -388,14 +390,22 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         // gradInput = gradOutput @ weight.T
         for (int b = 0; b < batchSize; b++)
         {
+            // Extract gradOutput row for this batch
+            var gradRow = new Vector<T>(outDim);
+            for (int j = 0; j < outDim; j++)
+            {
+                gradRow[j] = gradOutput[b, j];
+            }
+
             for (int i = 0; i < inDim; i++)
             {
-                T sum = NumOps.Zero;
+                // Extract weight row (contiguous in flat array: weight[i*outDim .. i*outDim+outDim])
+                var weightRow = new Vector<T>(outDim);
                 for (int j = 0; j < outDim; j++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(gradOutput[b, j], weight[i * outDim + j]));
+                    weightRow[j] = weight[i * outDim + j];
                 }
-                gradInput[b * inDim + i] = sum;
+                gradInput[b * inDim + i] = Engine.DotProduct(gradRow, weightRow);
             }
         }
 
@@ -516,15 +526,23 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         // Compute gradients for projWeight2: cachedH1Relu.T @ gradBeforeBn2
         for (int i = 0; i < _hiddenDim; i++)
         {
+            // Extract column i from cachedH1Relu (all batches)
+            var h1Col = new Vector<T>(batchSize);
+            for (int b = 0; b < batchSize; b++)
+            {
+                h1Col[b] = cachedH1Relu[b, i];
+            }
+
             for (int j = 0; j < _projectionDim; j++)
             {
-                T sum = NumOps.Zero;
+                // Extract column j from gradBeforeBn2 (all batches)
+                var gradCol = new Vector<T>(batchSize);
                 for (int b = 0; b < batchSize; b++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(cachedH1Relu[b, i], gradBeforeBn2[b, j]));
+                    gradCol[b] = gradBeforeBn2[b, j];
                 }
                 grads[offset + _projWeight1.Length + _projBias1.Length + _projBn1Gamma.Length + _projBn1Beta.Length + i * _projectionDim + j] =
-                    NumOps.Multiply(sum, invBatchSize);
+                    NumOps.Multiply(Engine.DotProduct(h1Col, gradCol), invBatchSize);
             }
         }
 
@@ -547,14 +565,22 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         // Compute gradients for projWeight1: cachedInput.T @ gradAtH1
         for (int i = 0; i < _inputDim; i++)
         {
+            // Extract column i from cachedInput (all batches)
+            var inputCol = new Vector<T>(batchSize);
+            for (int b = 0; b < batchSize; b++)
+            {
+                inputCol[b] = cachedInput[b, i];
+            }
+
             for (int j = 0; j < _hiddenDim; j++)
             {
-                T sum = NumOps.Zero;
+                // Extract column j from gradAtH1 (all batches)
+                var gradCol = new Vector<T>(batchSize);
                 for (int b = 0; b < batchSize; b++)
                 {
-                    sum = NumOps.Add(sum, NumOps.Multiply(cachedInput[b, i], gradAtH1[b, j]));
+                    gradCol[b] = gradAtH1[b, j];
                 }
-                grads[offset + i * _hiddenDim + j] = NumOps.Multiply(sum, invBatchSize);
+                grads[offset + i * _hiddenDim + j] = NumOps.Multiply(Engine.DotProduct(inputCol, gradCol), invBatchSize);
             }
         }
 
@@ -609,14 +635,22 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             {
                 for (int i = 0; i < _predictorHiddenDim; i++)
                 {
+                    // Extract column i from CachedPredH1Relu (all batches)
+                    var predH1Col = new Vector<T>(batchSize);
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        predH1Col[b] = ctx.CachedPredH1Relu[b, i];
+                    }
+
                     for (int j = 0; j < _projectionDim; j++)
                     {
-                        T sum = NumOps.Zero;
+                        // Extract column j from originalGradOutput (all batches)
+                        var origGradCol = new Vector<T>(batchSize);
                         for (int b = 0; b < batchSize; b++)
                         {
-                            sum = NumOps.Add(sum, NumOps.Multiply(ctx.CachedPredH1Relu[b, i], originalGradOutput[b, j]));
+                            origGradCol[b] = originalGradOutput[b, j];
                         }
-                        grads[predWeight2Offset + i * _projectionDim + j] = NumOps.Multiply(sum, invBatchSize);
+                        grads[predWeight2Offset + i * _projectionDim + j] = NumOps.Multiply(Engine.DotProduct(predH1Col, origGradCol), invBatchSize);
                     }
                 }
 
@@ -644,14 +678,22 @@ public class SymmetricProjector<T> : IProjectorHead<T>
 
                 for (int i = 0; i < _projectionDim; i++)
                 {
+                    // Extract column i from CachedPredictorInput (all batches)
+                    var predInputCol = new Vector<T>(batchSize);
+                    for (int b = 0; b < batchSize; b++)
+                    {
+                        predInputCol[b] = ctx.CachedPredictorInput[b, i];
+                    }
+
                     for (int j = 0; j < _predictorHiddenDim; j++)
                     {
-                        T sum = NumOps.Zero;
+                        // Extract column j from gradAtPredH1 (all batches)
+                        var gradPredCol = new Vector<T>(batchSize);
                         for (int b = 0; b < batchSize; b++)
                         {
-                            sum = NumOps.Add(sum, NumOps.Multiply(ctx.CachedPredictorInput[b, i], gradAtPredH1[b, j]));
+                            gradPredCol[b] = gradAtPredH1[b, j];
                         }
-                        grads[predWeight1Offset + i * _predictorHiddenDim + j] = NumOps.Multiply(sum, invBatchSize);
+                        grads[predWeight1Offset + i * _predictorHiddenDim + j] = NumOps.Multiply(Engine.DotProduct(predInputCol, gradPredCol), invBatchSize);
                     }
                 }
 
@@ -839,16 +881,29 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         var batchSize = input.Shape[0];
         var output = new T[batchSize * outDim];
 
+        // Pre-extract weight columns for Engine.DotProduct
+        var weightCols = new Vector<T>[outDim];
+        for (int j = 0; j < outDim; j++)
+        {
+            weightCols[j] = new Vector<T>(inDim);
+            for (int i = 0; i < inDim; i++)
+            {
+                weightCols[j][i] = weight[i * outDim + j];
+            }
+        }
+
         for (int b = 0; b < batchSize; b++)
         {
+            // Extract input row
+            var inputRow = new Vector<T>(inDim);
+            for (int i = 0; i < inDim; i++)
+            {
+                inputRow[i] = input[b, i];
+            }
+
             for (int j = 0; j < outDim; j++)
             {
-                T sum = bias[j];
-                for (int i = 0; i < inDim; i++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(input[b, i], weight[i * outDim + j]));
-                }
-                output[b * outDim + j] = sum;
+                output[b * outDim + j] = NumOps.Add(bias[j], Engine.DotProduct(inputRow, weightCols[j]));
             }
         }
 
@@ -913,6 +968,6 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             output[i] = NumOps.GreaterThan(val, NumOps.Zero) ? val : NumOps.Zero;
         }
 
-        return new Tensor<T>(output, input.Shape);
+        return new Tensor<T>(output, input.Shape.ToArray());
     }
 }

@@ -1,5 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -28,6 +30,20 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 /// Reference: Gao et al., "Lumina-T2X: Transforming Text into Any Modality with Flow Matching", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var predictor = new FlagDiTPredictor&lt;float&gt;(inputChannels: 4, hiddenSize: 4096, numLayers: 32, numHeads: 32);
+/// var noisyLatent = Tensor&lt;float&gt;.Random(new[] { 1, 4, 128, 128 });
+/// var predicted = predictor.PredictNoise(noisyLatent, timestep: 500);
+/// </code>
+/// </example>
+[ModelDomain(ModelDomain.Generative)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelCategory(ModelCategory.Transformer)]
+[ModelTask(ModelTask.Denoising)]
+[ModelTask(ModelTask.TextToImage)]
+[ModelComplexity(ModelComplexity.VeryHigh)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 public class FlagDiTPredictor<T> : NoisePredictorBase<T>
 {
     private readonly int _inputChannels;

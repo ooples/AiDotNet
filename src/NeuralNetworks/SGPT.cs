@@ -34,6 +34,14 @@ namespace AiDotNet.NeuralNetworks
     /// SGPT uses that summary as the coordinate (embedding) for the whole sentence.
     /// </para>
     /// </remarks>
+    /// <example>
+    /// <code>
+    /// var options = new SGPTOptions { EmbeddingDim = 768, MaxSequenceLength = 512 };
+    /// var model = new SGPT&lt;float&gt;(options);
+    /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 512 });
+    /// var embedding = model.Predict(input);
+    /// </code>
+    /// </example>
     [ModelDomain(ModelDomain.Language)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Transformer)]

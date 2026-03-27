@@ -292,7 +292,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
         /// Example:
         /// <code>
         /// var allDocs = store.GetAll().ToList();
-        /// Console.WriteLine($"Total documents in hybrid store: {allDocs.Count}");
+        /// // Result is available in the returned value
         /// </code>
         /// </para>
         /// </remarks>
@@ -321,7 +321,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
         /// Example:
         /// <code>
         /// store.Clear();
-        /// Console.WriteLine($"Documents remaining: {store.DocumentCount}"); // 0
+        /// // Result is available in the returned value // 0
         /// </code>
         /// </para>
         /// </remarks>

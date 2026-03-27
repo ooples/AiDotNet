@@ -184,7 +184,6 @@ public class DualXVSR<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "DualXVSR-Native" : "DualXVSR-ONNX",
             Description = $"DualX-VSR {_options.Variant} dual axial spatial-temporal transformer VSR (2025)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumAxialBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

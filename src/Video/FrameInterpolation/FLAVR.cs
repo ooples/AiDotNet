@@ -172,7 +172,6 @@ public class FLAVR<T> : FrameInterpolationBase<T>
         {
             Name = _useNativeMode ? "FLAVR-Native" : "FLAVR-ONNX",
             Description = $"FLAVR {_options.Variant} flow-agnostic 3D conv interpolation (Kalluri et al., CVPR 2023)",
-            ModelType = ModelType.FrameInterpolation,
             Complexity = _options.NumResBlocks * _options.NumLevels
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

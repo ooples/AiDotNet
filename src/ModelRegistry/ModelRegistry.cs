@@ -96,7 +96,7 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
                 Version = version,
                 CreatedAt = registeredModel.CreatedAt,
                 ParentVersion = null, // First version has no parent
-                TrainingDataSource = metadata?.ModelType.ToString() // Basic tracking
+                TrainingDataSource = metadata?.Name ?? "Unknown" // Basic tracking
             };
 
             return registeredModel.ModelId;
@@ -149,7 +149,7 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
                 CreatedAt = registeredModel.CreatedAt,
                 ParentVersion = version - 1, // Previous version is the parent
                 ParentModel = modelName, // Same model, previous version
-                TrainingDataSource = metadata?.ModelType.ToString() // Basic tracking
+                TrainingDataSource = metadata?.Name ?? "Unknown" // Basic tracking
             };
 
             return version;
@@ -571,9 +571,9 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
                     comparison.MetadataDifferences["Complexity"] = (model1.Metadata.Complexity, model2.Metadata.Complexity);
                 }
 
-                if (model1.Metadata.ModelType != model2.Metadata.ModelType)
+                if (model1.Metadata.Name != model2.Metadata.Name)
                 {
-                    comparison.MetadataDifferences["ModelType"] = (model1.Metadata.ModelType, model2.Metadata.ModelType);
+                    comparison.MetadataDifferences["Name"] = (model1.Metadata.Name, model2.Metadata.Name);
                     comparison.ArchitectureChanged = true;
                 }
 
@@ -742,7 +742,7 @@ public class ModelRegistry<T, TInput, TOutput> : ModelRegistryBase<T, TInput, TO
                 Version = $"{version}.0.0",
                 Date = model.CreatedAt,
                 Developers = developers ?? string.Empty,
-                ModelType = model.Metadata?.ModelType.ToString() ?? "Unknown"
+                ModelType = model.Metadata?.Name ?? "Unknown"
             };
 
             // Extract performance metrics from metadata

@@ -28,6 +28,16 @@ namespace AiDotNet.TimeSeries;
 /// The model offers different algorithms (standard, robust, and fast) to handle various types of data.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Decompose a time series into trend, seasonal, and residual components
+/// var options = new STLDecompositionOptions&lt;double&gt; { SeasonalPeriod = 12 };
+/// var stl = new STLDecomposition&lt;double&gt;(options);
+/// stl.Train(trainingMatrix, trainingLabels);
+/// Vector&lt;double&gt; trend = stl.GetTrend();
+/// Vector&lt;double&gt; seasonal = stl.GetSeasonal();
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
 [ModelCategory(ModelCategory.TimeSeriesModel)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -786,22 +796,35 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
             throw new InvalidOperationException("Model has not been trained.");
 
         int forecastHorizon = input.Rows;
+        int n = _trend.Length;
+        int seasonLength = _stlOptions.SeasonalPeriod;
         Vector<T> forecast = new Vector<T>(forecastHorizon);
 
-        // Extend trend using last trend value
-        T lastTrendValue = _trend[_trend.Length - 1];
-
         // Use last full season for seasonal component
-        int seasonLength = _stlOptions.SeasonalPeriod;
+        int seasonStart = Math.Max(0, _seasonal.Length - seasonLength);
         Vector<T> lastSeason = new Vector<T>(seasonLength);
-        for (int i = 0; i < seasonLength; i++)
+        for (int i = 0; i < seasonLength && seasonStart + i < _seasonal.Length; i++)
         {
-            lastSeason[i] = _seasonal[_seasonal.Length - seasonLength + i];
+            lastSeason[i] = _seasonal[seasonStart + i];
         }
 
         for (int i = 0; i < forecastHorizon; i++)
         {
-            forecast[i] = NumOps.Add(lastTrendValue, lastSeason[i % seasonLength]);
+            T trendValue;
+            if (i < n)
+            {
+                // In-sample: use the decomposed trend at this time point
+                trendValue = _trend[i];
+            }
+            else
+            {
+                // Out-of-sample: linear extrapolation from last two trend values
+                T lastTrend = _trend[n - 1];
+                T slope = n > 1 ? NumOps.Subtract(_trend[n - 1], _trend[n - 2]) : NumOps.Zero;
+                trendValue = NumOps.Add(lastTrend, NumOps.Multiply(slope, NumOps.FromDouble(i - n + 1)));
+            }
+
+            forecast[i] = NumOps.Add(trendValue, lastSeason[i % seasonLength]);
         }
 
         return forecast;
@@ -1020,7 +1043,6 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            ModelType = ModelType.STLDecomposition,
             AdditionalInfo = new Dictionary<string, object>
             {
                 // Include configuration options
@@ -1229,6 +1251,12 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
             // Re-throw with more context
             throw new InvalidOperationException($"STL decomposition failed: {ex.Message}", ex);
         }
+
+        // Populate ModelParameters from seasonal pattern (one period) for GetParameters()
+        int period = _stlOptions.SeasonalPeriod;
+        ModelParameters = new Vector<T>(period);
+        for (int i = 0; i < period && i < _seasonal.Length; i++)
+            ModelParameters[i] = _seasonal[i];
     }
 
     /// <summary>
@@ -1399,26 +1427,32 @@ public class STLDecomposition<T> : TimeSeriesModelBase<T>
             throw new InvalidOperationException("Model has not been trained. Call Train before making predictions.");
         }
 
-        // Extract the forecast horizon from the input
-        int horizon;
-        if (input.Length == 0)
+        // Extract the time index from the input
+        int t = input.Length > 0 ? Math.Max(0, Convert.ToInt32(input[0])) : 0;
+        int n = _trend.Length;
+        int period = _stlOptions.SeasonalPeriod;
+
+        // Determine trend component
+        T trendComponent;
+        if (t < n)
         {
-            // Default to one-step-ahead forecast if no horizon specified
-            horizon = 1;
+            // In-sample: use the decomposed trend directly
+            trendComponent = _trend[t];
         }
         else
         {
-            // Use the first element as the forecast horizon
-            horizon = Math.Max(1, Convert.ToInt32(input[0]));
+            // Out-of-sample: linear extrapolation from the last two trend values
+            T lastTrend = _trend[n - 1];
+            T prevTrend = n > 1 ? _trend[n - 2] : lastTrend;
+            T slope = NumOps.Subtract(lastTrend, prevTrend);
+            trendComponent = NumOps.Add(lastTrend, NumOps.Multiply(slope, NumOps.FromDouble(t - n + 1)));
         }
 
-        // Use the last trend value (assuming trend persists)
-        T trendComponent = _trend[_trend.Length - 1];
-
-        // Add the appropriate seasonal component
-        int seasonalIndex = (_seasonal.Length - 1 + horizon) % _stlOptions.SeasonalPeriod;
-        int seasonStart = _seasonal.Length - _stlOptions.SeasonalPeriod;
-        T seasonalComponent = _seasonal[seasonStart + seasonalIndex];
+        // Determine seasonal component (cyclically repeat the last full period)
+        int seasonalIndex = t % period;
+        int seasonStart = n - period;
+        if (seasonStart < 0) seasonStart = 0;
+        T seasonalComponent = _seasonal[seasonStart + (seasonalIndex % (n - seasonStart))];
 
         // Return the sum (residual component is assumed to be zero for forecasting)
         return NumOps.Add(trendComponent, seasonalComponent);

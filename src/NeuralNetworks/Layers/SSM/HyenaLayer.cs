@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -61,6 +63,10 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.TemporalProcessing)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 256", TestConstructorArgs = "4")]
 public class HyenaLayer<T> : LayerBase<T>
 {
     private readonly int _sequenceLength;
@@ -201,12 +207,15 @@ public class HyenaLayer<T> : LayerBase<T>
         int modelDimension = 256,
         int order = 2,
         int filterDim = 64,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, modelDimension],
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         if (sequenceLength <= 0)
             throw new ArgumentException($"Sequence length ({sequenceLength}) must be positive.", nameof(sequenceLength));
         if (modelDimension <= 0)
@@ -275,17 +284,13 @@ public class HyenaLayer<T> : LayerBase<T>
 
     private void InitializeTensor2D(Tensor<T> tensor)
     {
-        int fanIn = tensor.Shape[0];
-        int fanOut = tensor.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
     }
 
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -440,7 +445,7 @@ public class HyenaLayer<T> : LayerBase<T>
         // input: [batch, seqLen, modelDim]
         // filter: [seqLen, modelDim] (implicit filter, same for all batches)
         // output: [batch, seqLen, modelDim]
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         for (int bi = 0; bi < batchSize; bi++)
         {
@@ -721,7 +726,7 @@ public class HyenaLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape);
+        var ones = new Tensor<T>(x.Shape.ToArray());
         ones.Fill(NumOps.One);
         var oneMinusSig = Engine.TensorSubtract(ones, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
@@ -788,6 +793,84 @@ public class HyenaLayer<T> : LayerBase<T>
             for (int i = 0; i < tensor.Length; i++)
                 parameters[index++] = tensor[i];
         return parameters;
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameterGradients()
+    {
+        var result = new Vector<T>(ParameterCount);
+        int index = 0;
+
+        // Input projections — same order as GetAllTensors()
+        for (int i = 0; i <= _order; i++)
+        {
+            var wGrad = _inputProjectionWeightsGradients?[i];
+            var bGrad = _inputProjectionBiasesGradients?[i];
+
+            if (wGrad != null)
+                for (int j = 0; j < wGrad.Length; j++) result[index++] = wGrad[j];
+            else
+                index += _inputProjectionWeights[i].Length;
+
+            if (bGrad != null)
+                for (int j = 0; j < bGrad.Length; j++) result[index++] = bGrad[j];
+            else
+                index += _inputProjectionBiases[i].Length;
+        }
+
+        // Filter networks
+        for (int i = 0; i < _order; i++)
+        {
+            var fw1Grad = _filterWeights1Gradients?[i];
+            var fb1Grad = _filterBiases1Gradients?[i];
+            var fw2Grad = _filterWeights2Gradients?[i];
+            var fb2Grad = _filterBiases2Gradients?[i];
+
+            if (fw1Grad != null)
+                for (int j = 0; j < fw1Grad.Length; j++) result[index++] = fw1Grad[j];
+            else
+                index += _filterWeights1[i].Length;
+
+            if (fb1Grad != null)
+                for (int j = 0; j < fb1Grad.Length; j++) result[index++] = fb1Grad[j];
+            else
+                index += _filterBiases1[i].Length;
+
+            if (fw2Grad != null)
+                for (int j = 0; j < fw2Grad.Length; j++) result[index++] = fw2Grad[j];
+            else
+                index += _filterWeights2[i].Length;
+
+            if (fb2Grad != null)
+                for (int j = 0; j < fb2Grad.Length; j++) result[index++] = fb2Grad[j];
+            else
+                index += _filterBiases2[i].Length;
+        }
+
+        // Output projection
+        if (_outputProjectionWeightsGradient != null)
+            for (int j = 0; j < _outputProjectionWeightsGradient.Length; j++) result[index++] = _outputProjectionWeightsGradient[j];
+        else
+            index += _outputProjectionWeights.Length;
+
+        if (_outputProjectionBiasGradient != null)
+            for (int j = 0; j < _outputProjectionBiasGradient.Length; j++) result[index++] = _outputProjectionBiasGradient[j];
+
+        return result;
+    }
+
+    /// <inheritdoc />
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _inputProjectionWeightsGradients = null;
+        _inputProjectionBiasesGradients = null;
+        _filterWeights1Gradients = null;
+        _filterBiases1Gradients = null;
+        _filterWeights2Gradients = null;
+        _filterBiases2Gradients = null;
+        _outputProjectionWeightsGradient = null;
+        _outputProjectionBiasGradient = null;
     }
 
     /// <inheritdoc />

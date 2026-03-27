@@ -28,6 +28,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Understanding room layouts from depth sensors
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new VoxelCNNOptions { InputChannels = 1, GridSize = 32, NumClasses = 40 };
+/// var model = new VoxelCNN&lt;float&gt;(options);
+/// var voxels = Tensor&lt;float&gt;.Random(new[] { 1, 1, 32, 32, 32 });
+/// var output = model.Predict(voxels);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.ThreeD)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
@@ -269,7 +277,7 @@ public class VoxelCNN<T> : NeuralNetworkBase<T>
         LastLoss = loss;
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape, outputGradient);
+        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
 
         var gradients = new List<Tensor<T>>();
         var currentGradient = outputGradientTensor;
@@ -315,7 +323,6 @@ public class VoxelCNN<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.VoxelCNN,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "VoxelResolution", VoxelResolution },

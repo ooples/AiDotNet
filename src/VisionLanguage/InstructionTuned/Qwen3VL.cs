@@ -25,8 +25,31 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Qwen3-VL Technical Report" (2025)</item></list></para>
-/// <para><b>For Beginners:</b> Qwen3VL is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Qwen3-VL is the latest generation of Alibaba's Qwen vision-language
+/// models, available in 2B, 4B, 8B, and 32B sizes to fit different compute budgets. It builds
+/// on the innovations from Qwen2-VL (dynamic resolution, M-RoPE) with improved training data
+/// and model optimization using the Qwen3 language backbone. The cross-attention resampler
+/// efficiently compresses visual tokens before feeding them to the language model, keeping
+/// inference fast even for high-resolution images. The range of sizes means you can pick the
+/// right trade-off between performance and cost for your application. Default values follow
+/// the original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Qwen3-VL model for latest-generation visual understanding
+/// // available in 2B/4B/8B/32B sizes with Qwen3 backbone
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new Qwen3VL&lt;double&gt;(architecture, "qwen3vl.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new Qwen3VL&lt;double&gt;(architecture, new Qwen3VLOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -129,7 +152,7 @@ public class Qwen3VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "Qwen3-VL-Native" : "Qwen3-VL-ONNX", Description = "Qwen3-VL: Latest Qwen Vision-Language Model Series (2025)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumResamplerLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "Qwen3-VL"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; return m; }
+    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "Qwen3-VL-Native" : "Qwen3-VL-ONNX", Description = "Qwen3-VL: Latest Qwen Vision-Language Model Series (2025)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumResamplerLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "Qwen3-VL"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; return m; }
     protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.ResamplerDim); writer.Write(_options.DecoderDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumResamplerLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.NumResamplerHeads); }
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.ResamplerDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumResamplerLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.NumResamplerHeads = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new Qwen3VL<T>(Architecture, mp, _options); return new Qwen3VL<T>(Architecture, _options); }

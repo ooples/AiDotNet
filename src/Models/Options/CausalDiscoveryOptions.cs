@@ -204,6 +204,15 @@ public class CausalDiscoveryOptions
     public double? SobolevWeight { get; set; }
 
     /// <summary>
+    /// Maximum number of segments for nonstationary time-series methods. Default: null (3).
+    /// </summary>
+    /// <remarks>
+    /// <para>Used by NTS-NOTEARS for change-point-based partitioning.
+    /// Higher values allow more regime changes to be detected.</para>
+    /// </remarks>
+    public int? MaxSegments { get; set; }
+
+    /// <summary>
     /// Maximum number of training epochs for deep learning-based methods. Default: null (algorithm-specific).
     /// </summary>
     /// <remarks>
@@ -211,4 +220,40 @@ public class CausalDiscoveryOptions
     /// more training but risk overfitting on small datasets.</para>
     /// </remarks>
     public int? MaxEpochs { get; set; }
+
+    /// <summary>
+    /// Initial log-variance for variational parameters in GAE and similar methods. Default: null (-4.0).
+    /// </summary>
+    /// <remarks>
+    /// <para>Controls how tightly the initial posterior is centered around the mean.
+    /// More negative values create a tighter initial posterior (lower variance).</para>
+    /// </remarks>
+    public double? InitialLogVariance { get; set; }
+
+    /// <summary>
+    /// Default KL divergence weight for variational methods (GAE, CausalVAE). Default: null (0.01).
+    /// </summary>
+    /// <remarks>
+    /// <para>Scales the KL divergence term in the ELBO loss. Higher values enforce stronger
+    /// regularization toward the prior but can hurt reconstruction quality.</para>
+    /// </remarks>
+    public double? DefaultKlWeight { get; set; }
+
+    /// <summary>
+    /// Maximum KL divergence weight after warm-up. Default: null (0.25).
+    /// </summary>
+    /// <remarks>
+    /// <para>When KL warm-up is enabled, the KL weight ramps linearly from <see cref="DefaultKlWeight"/>
+    /// to this value over the first 25% of training epochs to prevent posterior collapse.</para>
+    /// </remarks>
+    public double? MaxKlWeight { get; set; }
+
+    /// <summary>
+    /// Whether to use KL weight warm-up schedule. Default: null (true).
+    /// </summary>
+    /// <remarks>
+    /// <para>When true, the KL weight ramps linearly from <see cref="DefaultKlWeight"/> to
+    /// <see cref="MaxKlWeight"/> over the first 25% of epochs. When false, uses a fixed weight.</para>
+    /// </remarks>
+    public bool? UseKlWarmUp { get; set; }
 }

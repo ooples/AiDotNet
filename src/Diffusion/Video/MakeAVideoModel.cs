@@ -272,7 +272,7 @@ public class MakeAVideoModel<T> : VideoDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var unetCount = _videoUNet.GetParameters().Length;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != unetCount + vaeCount)
             throw new ArgumentException(
@@ -326,7 +326,6 @@ public class MakeAVideoModel<T> : VideoDiffusionModelBase<T>
         {
             Name = "Make-A-Video",
             Version = "1.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Make-A-Video text-to-video generation without paired text-video data by Meta",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

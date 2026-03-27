@@ -225,7 +225,6 @@ public class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
         {
             Name = _useNativeMode ? "RoomImpulseResponse-Native" : "RoomImpulseResponse-ONNX",
             Description = "Neural Room Impulse Response estimation for dereverberation (2023-2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumFrequencyBins,
             Complexity = _options.NumEncoderLayers
         };
         m.AdditionalInfo["RIRLength"] = _options.RIRLength.ToString();

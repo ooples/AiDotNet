@@ -1,5 +1,7 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -57,6 +59,11 @@ namespace AiDotNet.NeuralNetworks.Layers.SSM;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.StateSpaceModel)]
+[LayerCategory(LayerCategory.Attention)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerTask(LayerTask.AttentionComputation)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 2")]
 public class RebasedLayer<T> : LayerBase<T>
 {
     private readonly int _modelDimension;
@@ -151,12 +158,15 @@ public class RebasedLayer<T> : LayerBase<T>
         int sequenceLength,
         int modelDimension = 256,
         int numHeads = 8,
-        IActivationFunction<T>? activationFunction = null)
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             [sequenceLength, modelDimension],
             [sequenceLength, modelDimension],
             activationFunction ?? new IdentityActivation<T>())
     {
+        InitializationStrategy = initializationStrategy ?? InitializationStrategies<T>.Eager;
+
         if (sequenceLength <= 0)
             throw new ArgumentException($"Sequence length ({sequenceLength}) must be positive.", nameof(sequenceLength));
         if (modelDimension <= 0)
@@ -194,11 +204,7 @@ public class RebasedLayer<T> : LayerBase<T>
 
     private void InitializeTensor2D(Tensor<T> tensor)
     {
-        int fanIn = tensor.Shape[0];
-        int fanOut = tensor.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), scale);
+        InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
     }
 
     /// <summary>
@@ -234,7 +240,7 @@ public class RebasedLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int rank = input.Shape.Length;
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
@@ -307,7 +313,7 @@ public class RebasedLayer<T> : LayerBase<T>
         Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
         T epsilon = NumOps.FromDouble(1e-6);
 
         // Cache feature maps for backward pass
@@ -347,18 +353,26 @@ public class RebasedLayer<T> : LayerBase<T>
                     ApplySquaredReluFeatureMap(qHead, phiQ);
                     ApplySquaredReluFeatureMap(kHead, phiK);
 
-                    // Cache for backward pass
-                    T qNormSq = NumOps.Zero;
-                    T kNormSq = NumOps.Zero;
+                    // Cache for backward pass — store the PRE-normalization L2 norm
+                    // (needed for the normalization derivative: dphi/du = (I - phi*phi^T)/||u||)
+                    T qPreNormSq = NumOps.Zero;
+                    T kPreNormSq = NumOps.Zero;
                     for (int d = 0; d < _headDimension; d++)
                     {
                         phiQCache[new[] { bi, t, hi, d }] = phiQ[d];
                         phiKCache[new[] { bi, t, hi, d }] = phiK[d];
-                        qNormSq = NumOps.Add(qNormSq, NumOps.Multiply(phiQ[d], phiQ[d]));
-                        kNormSq = NumOps.Add(kNormSq, NumOps.Multiply(phiK[d], phiK[d]));
+                        // Recover pre-normalized u = phi * ||u||. Since phi = u/||u||,
+                        // we need ||u|| = sqrt(sum(ReLU(x)^4)). But phi is already normalized,
+                        // so sum(phi^2) = 1, useless. Instead, compute from the raw head vectors.
+                        T qRelu = NumOps.GreaterThan(qHead[d], NumOps.Zero) ? qHead[d] : NumOps.Zero;
+                        T kRelu = NumOps.GreaterThan(kHead[d], NumOps.Zero) ? kHead[d] : NumOps.Zero;
+                        T qSq = NumOps.Multiply(qRelu, qRelu); // ReLU(x)^2 = u_d
+                        T kSq = NumOps.Multiply(kRelu, kRelu);
+                        qPreNormSq = NumOps.Add(qPreNormSq, NumOps.Multiply(qSq, qSq)); // sum(u_d^2)
+                        kPreNormSq = NumOps.Add(kPreNormSq, NumOps.Multiply(kSq, kSq));
                     }
-                    phiQNormCache[new[] { bi, t, hi }] = NumOps.Sqrt(NumOps.Add(qNormSq, NumOps.FromDouble(1e-8)));
-                    phiKNormCache[new[] { bi, t, hi }] = NumOps.Sqrt(NumOps.Add(kNormSq, NumOps.FromDouble(1e-8)));
+                    phiQNormCache[new[] { bi, t, hi }] = NumOps.Sqrt(NumOps.Add(qPreNormSq, NumOps.FromDouble(1e-8)));
+                    phiKNormCache[new[] { bi, t, hi }] = NumOps.Sqrt(NumOps.Add(kPreNormSq, NumOps.FromDouble(1e-8)));
 
                     // Update state: S += phi(k) * v^T
                     for (int fi = 0; fi < _headDimension; fi++)
@@ -672,7 +686,7 @@ public class RebasedLayer<T> : LayerBase<T>
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
-        var ones = new Tensor<T>(x.Shape);
+        var ones = new Tensor<T>(x.Shape.ToArray());
         ones.Fill(NumOps.One);
         var oneMinusSig = Engine.TensorSubtract(ones, sig);
         var xTimesOneMinusSig = Engine.TensorMultiply(x, oneMinusSig);
@@ -726,6 +740,26 @@ public class RebasedLayer<T> : LayerBase<T>
         _outputGateWeights, _outputGateBias,
         _outputProjectionWeights, _outputProjectionBias
     ];
+
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
+        return Vector<T>.Concatenate(
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
+            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
+    }
+
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
+        _outputGateWeightsGradient = null; _outputGateBiasGradient = null; _outputProjectionWeightsGradient = null; _outputProjectionBiasGradient = null;
+    }
 
     /// <inheritdoc />
     public override void ResetState()

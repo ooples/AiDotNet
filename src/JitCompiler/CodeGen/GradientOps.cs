@@ -132,7 +132,7 @@ public static class GradientOps
     public static Tensor<T> GradSigmoid<T>(Tensor<T> gradOutput, Tensor<T> forwardOutput)
     {
         // grad_x = grad_y * y * (1 - y)
-        var ones = CreateOnes<T>(forwardOutput.Shape);
+        var ones = CreateOnes<T>(forwardOutput.Shape.ToArray());
         var oneMinusY = ones.Subtract(forwardOutput);
         var yTimesOneMinusY = Tensor<T>.ElementwiseMultiply(forwardOutput, oneMinusY);
         return Tensor<T>.ElementwiseMultiply(gradOutput, yTimesOneMinusY);
@@ -147,7 +147,7 @@ public static class GradientOps
     {
         // grad_x = grad_y * (1 - y^2)
         var ySquared = Tensor<T>.ElementwiseMultiply(forwardOutput, forwardOutput);
-        var ones = CreateOnes<T>(forwardOutput.Shape);
+        var ones = CreateOnes<T>(forwardOutput.Shape.ToArray());
         var oneMinusYSquared = ones.Subtract(ySquared);
         return Tensor<T>.ElementwiseMultiply(gradOutput, oneMinusYSquared);
     }
@@ -225,7 +225,7 @@ public static class GradientOps
             resultData[i] = numOps.Multiply(gradData[i], derivative);
         }
 
-        return new Tensor<T>(gradOutput.Shape, new Vector<T>(resultData));
+        return new Tensor<T>(gradOutput.Shape.ToArray(), new Vector<T>(resultData));
     }
 
     /// <summary>
@@ -252,7 +252,7 @@ public static class GradientOps
             resultData[i] = numOps.Multiply(gradData[i], derivative);
         }
 
-        return new Tensor<T>(gradOutput.Shape, new Vector<T>(resultData));
+        return new Tensor<T>(gradOutput.Shape.ToArray(), new Vector<T>(resultData));
     }
 
     /// <summary>
@@ -293,7 +293,7 @@ public static class GradientOps
             resultData[i] = numOps.Multiply(gradData[i], derivative);
         }
 
-        return new Tensor<T>(gradOutput.Shape, new Vector<T>(resultData));
+        return new Tensor<T>(gradOutput.Shape.ToArray(), new Vector<T>(resultData));
     }
 
     /// <summary>
@@ -312,7 +312,7 @@ public static class GradientOps
                 : numOps.Zero;
         }
 
-        return new Tensor<T>(input.Shape, new Vector<T>(resultData));
+        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(resultData));
     }
 
     /// <summary>
@@ -343,7 +343,7 @@ public static class GradientOps
         {
             data[i] = numOps.Negate(data[i]);
         }
-        return new Tensor<T>(input.Shape, new Vector<T>(data));
+        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(data));
     }
 
     /// <summary>
@@ -351,7 +351,7 @@ public static class GradientOps
     /// </summary>
     private static Tensor<T> DivideHelper<T>(Tensor<T> numerator, Tensor<T> denominator)
     {
-        if (!numerator.Shape.SequenceEqual(denominator.Shape))
+        if (!numerator.Shape.ToArray().SequenceEqual(denominator.Shape.ToArray()))
             throw new ArgumentException("Tensors must have the same shape for element-wise division");
 
         var numOps = MathHelper.GetNumericOperations<T>();
@@ -364,7 +364,7 @@ public static class GradientOps
             resultData[i] = numOps.Divide(numeratorData[i], denominatorData[i]);
         }
 
-        return new Tensor<T>(numerator.Shape, new Vector<T>(resultData));
+        return new Tensor<T>(numerator.Shape.ToArray(), new Vector<T>(resultData));
     }
 
     /// <summary>
@@ -376,7 +376,7 @@ public static class GradientOps
         var reduced = input.Sum(axes);
 
         // Now we need to restore the reduced dimensions with size 1
-        var newShape = new List<int>(input.Shape);
+        var newShape = new List<int>(input.Shape.ToArray());
         foreach (var axis in axes.OrderBy(a => a))
         {
             newShape[axis] = 1;
@@ -405,8 +405,8 @@ public static class GradientOps
             // Gradient for input: transposed convolution
             // savedTensor contains the filters [outChannels, inChannels, kH, kW]
             var filters = savedTensor;
-            var filterShape = filters.Shape;
-            var gradShape = gradOutput.Shape;
+            var filterShape = filters.Shape.ToArray();
+            var gradShape = gradOutput.Shape.ToArray();
 
             int batchSize = gradShape[0];
             int outChannels = filterShape[0];
@@ -474,8 +474,8 @@ public static class GradientOps
             // Gradient for filters: correlate input with grad_output
             // savedTensor contains the input [N, inChannels, H, W]
             var input = savedTensor;
-            var inputShape = input.Shape;
-            var gradShape = gradOutput.Shape;
+            var inputShape = input.Shape.ToArray();
+            var gradShape = gradOutput.Shape.ToArray();
 
             int batchSize = inputShape[0];
             int inChannels = inputShape[1];
@@ -572,7 +572,7 @@ public static class GradientOps
                 resultData[c] = sum;
             }
 
-            return new Tensor<T>(result.Shape, new Vector<T>(resultData));
+            return new Tensor<T>(result.Shape.ToArray(), new Vector<T>(resultData));
         }
     }
 
@@ -588,7 +588,7 @@ public static class GradientOps
     public static Tensor<T> GradMaxPool2D<T>(Tensor<T> gradOutput, Tensor<T> forwardInput, int[] poolSize, int[] stride)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = forwardInput.Shape;
+        var inputShape = forwardInput.Shape.ToArray();
         var result = new Tensor<T>(inputShape);
         var resultData = result.ToArray();
         var inputData = forwardInput.ToArray();
@@ -863,7 +863,7 @@ public static class GradientOps
             resultData[i] = numOps.Multiply(scaled, gradData[i]);
         }
 
-        return new Tensor<T>(forwardInput.Shape, new Vector<T>(resultData));
+        return new Tensor<T>(forwardInput.Shape.ToArray(), new Vector<T>(resultData));
     }
 
     /// <summary>
@@ -928,7 +928,7 @@ public static class GradientOps
 
         // Copy gradient values to correct positions
         var gradData = gradOutput.ToArray();
-        var gradShape = gradOutput.Shape;
+        var gradShape = gradOutput.Shape.ToArray();
 
         // Calculate strides for original shape
         var strides = new int[originalShape.Length];
@@ -952,7 +952,7 @@ public static class GradientOps
     public static Tensor<T> GradPad<T>(Tensor<T> gradOutput, int[] padding)
     {
         // Extract the center (unpadded) region
-        var shape = gradOutput.Shape;
+        var shape = gradOutput.Shape.ToArray();
         var startIndices = new int[shape.Length];
         var sizes = new int[shape.Length];
 
@@ -1004,7 +1004,7 @@ public static class GradientOps
             resultData[i] = numOps.Multiply(gradData[i], slope);
         }
 
-        return new Tensor<T>(forwardInput.Shape, new Vector<T>(resultData));
+        return new Tensor<T>(forwardInput.Shape.ToArray(), new Vector<T>(resultData));
     }
 
     /// <summary>
@@ -1051,7 +1051,7 @@ public static class GradientOps
             resultData[i] = numOps.Multiply(gradData[i], derivative);
         }
 
-        return new Tensor<T>(forwardInput.Shape, new Vector<T>(resultData));
+        return new Tensor<T>(forwardInput.Shape.ToArray(), new Vector<T>(resultData));
     }
 
     /// <summary>
@@ -1069,7 +1069,7 @@ public static class GradientOps
         }
 
         // Reshape to original shape if needed
-        if (!result.Shape.SequenceEqual(originalShape))
+        if (!result.Shape.ToArray().SequenceEqual(originalShape))
         {
             result = result.Reshape(originalShape);
         }
@@ -1096,7 +1096,7 @@ public static class GradientOps
             // This is the complex case requiring variance and mean
             var gradData = gradOutput.ToArray();
             var savedData = savedTensor.ToArray();
-            var shape = gradOutput.Shape;
+            var shape = gradOutput.Shape.ToArray();
 
             // Calculate the size of the normalized dimensions
             int normalizedSize = normalizedShape.Aggregate(1, (a, b) => a * b);
@@ -1215,7 +1215,7 @@ public static class GradientOps
 
         var gradData = gradOutput.ToArray();
         var indexData = indices.ToArray();
-        var gradShape = gradOutput.Shape;
+        var gradShape = gradOutput.Shape.ToArray();
 
         // Calculate strides for input shape
         var inputStrides = new int[inputShape.Length];
@@ -1276,7 +1276,7 @@ public static class GradientOps
     private static Tensor<T> SumOverNonNormalizedDims<T>(Tensor<T> input, int[] normalizedShape)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Shape;
+        var inputShape = input.Shape.ToArray();
         var inputData = input.ToArray();
 
         // Calculate how many leading dimensions to sum over
@@ -1319,7 +1319,7 @@ public static class GradientOps
     private static Tensor<T> SliceAlongAxis<T>(Tensor<T> input, int axis, int start, int size)
     {
         // Simplified slice implementation
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
         var newShape = shape.ToArray();
         newShape[axis] = size;
 
@@ -1351,7 +1351,7 @@ public static class GradientOps
         var resultData = new T[resultSize];
 
         // Simplified copy - actual implementation would need proper indexing
-        var inputShape = input.Shape;
+        var inputShape = input.Shape.ToArray();
         var strides = new int[inputShape.Length];
         strides[strides.Length - 1] = 1;
         for (int d = strides.Length - 2; d >= 0; d--)
@@ -1370,7 +1370,7 @@ public static class GradientOps
     /// </summary>
     private static Tensor<T> BroadcastTo<T>(Tensor<T> input, int[] targetShape)
     {
-        var inputShape = input.Shape;
+        var inputShape = input.Shape.ToArray();
 
         // If shapes match, return as-is
         if (inputShape.SequenceEqual(targetShape))
@@ -1400,7 +1400,7 @@ public static class GradientOps
             resultData[i] = numOps.Multiply(data[i], scalar);
         }
 
-        return new Tensor<T>(input.Shape, new Vector<T>(resultData));
+        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(resultData));
     }
 
     /// <summary>
@@ -1417,7 +1417,7 @@ public static class GradientOps
             resultData[i] = numOps.Divide(data[i], scalar);
         }
 
-        return new Tensor<T>(input.Shape, new Vector<T>(resultData));
+        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(resultData));
     }
 
     /// <summary>
@@ -1575,8 +1575,8 @@ public static class GradientOps
         {
             // Gradient for input: standard convolution
             var filters = savedTensor;
-            var filterShape = filters.Shape;
-            var gradShape = gradOutput.Shape;
+            var filterShape = filters.Shape.ToArray();
+            var gradShape = gradOutput.Shape.ToArray();
 
             int batchSize = gradShape[0];
             int outChannels = gradShape[1];
@@ -1643,8 +1643,8 @@ public static class GradientOps
         {
             // Gradient for filters
             var input = savedTensor;
-            var inputShape = input.Shape;
-            var gradShape = gradOutput.Shape;
+            var inputShape = input.Shape.ToArray();
+            var gradShape = gradOutput.Shape.ToArray();
 
             int batchSize = inputShape[0];
             int inChannels = inputShape[1];
@@ -1730,8 +1730,8 @@ public static class GradientOps
         {
             // Gradient for input
             var filters = savedTensor;
-            var filterShape = filters.Shape;
-            var gradShape = gradOutput.Shape;
+            var filterShape = filters.Shape.ToArray();
+            var gradShape = gradOutput.Shape.ToArray();
 
             int batchSize = gradShape[0];
             int channels = gradShape[1];
@@ -1792,8 +1792,8 @@ public static class GradientOps
         {
             // Gradient for filters
             var input = savedTensor;
-            var inputShape = input.Shape;
-            var gradShape = gradOutput.Shape;
+            var inputShape = input.Shape.ToArray();
+            var gradShape = gradOutput.Shape.ToArray();
 
             int batchSize = inputShape[0];
             int channels = inputShape[1];
@@ -1866,7 +1866,7 @@ public static class GradientOps
     public static Tensor<T> GradUpsample<T>(Tensor<T> gradOutput, int scale, string mode = "nearest")
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = gradOutput.Shape;
+        var shape = gradOutput.Shape.ToArray();
 
         // Assuming NCHW format
         int batchSize = shape[0];
@@ -1985,7 +1985,7 @@ public static class GradientOps
         }
 
         var gradData = gradOutput.ToArray();
-        var gradShape = gradOutput.Shape;
+        var gradShape = gradOutput.Shape.ToArray();
 
         // Calculate strides
         var origStrides = new int[originalShape.Length];
@@ -2054,13 +2054,13 @@ public static class GradientOps
             var gradData = gradHiddenOut.ToArray();
             var resultShape = inputIndex switch
             {
-                0 => savedTensors[0].Shape, // input
-                1 => savedTensors[1].Shape, // h_prev
-                2 => savedTensors[2].Shape, // c_prev
+                0 => savedTensors[0].Shape.ToArray(), // input
+                1 => savedTensors[1].Shape.ToArray(), // h_prev
+                2 => savedTensors[2].Shape.ToArray(), // c_prev
                 3 => new int[] { 4 * hiddenSize, savedTensors[0].Shape[^1] }, // W_ih
                 4 => new int[] { 4 * hiddenSize, hiddenSize }, // W_hh
                 5 => new int[] { 4 * hiddenSize }, // bias
-                _ => savedTensors[0].Shape
+                _ => savedTensors[0].Shape.ToArray()
             };
 
             var result = new T[resultShape.Aggregate(1, (a, b) => a * b)];
@@ -2137,14 +2137,14 @@ public static class GradientOps
                 {
                     result[i] = i < gradHData.Length ? gradHData[i] : numOps.Zero;
                 }
-                return new Tensor<T>(input.Shape, new Vector<T>(result));
+                return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(result));
             }
             case 1: // h_prev gradient
             {
                 // grad_h_prev = W_hh^T @ grad_gates
                 var result = new T[batchSize * hiddenSize];
                 Array.Copy(gradHData, result, Math.Min(gradHData.Length, result.Length));
-                return new Tensor<T>(hPrev.Shape, new Vector<T>(result));
+                return new Tensor<T>(hPrev.Shape.ToArray(), new Vector<T>(result));
             }
             case 2: // c_prev gradient
             {
@@ -2159,7 +2159,7 @@ public static class GradientOps
                         result[idx] = numOps.Multiply(gradC[idx], gatesData[fIdx]);
                     }
                 }
-                return new Tensor<T>(cPrev.Shape, new Vector<T>(result));
+                return new Tensor<T>(cPrev.Shape.ToArray(), new Vector<T>(result));
             }
             default: // Weight/bias gradients
             {
@@ -2201,8 +2201,8 @@ public static class GradientOps
             var gradData = gradHiddenOut.ToArray();
             var resultShape = inputIndex switch
             {
-                0 => savedTensors[0].Shape,
-                1 => savedTensors.Length > 1 ? savedTensors[1].Shape : new int[] { hiddenSize },
+                0 => savedTensors[0].Shape.ToArray(),
+                1 => savedTensors.Length > 1 ? savedTensors[1].Shape.ToArray() : new int[] { hiddenSize },
                 2 => new int[] { 3 * hiddenSize, savedTensors[0].Shape[^1] },
                 3 => new int[] { 3 * hiddenSize, hiddenSize },
                 _ => new int[] { 3 * hiddenSize }
@@ -2236,7 +2236,7 @@ public static class GradientOps
                 {
                     result[i] = i < gradHData.Length ? gradHData[i] : numOps.Zero;
                 }
-                return new Tensor<T>(input.Shape, new Vector<T>(result));
+                return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(result));
             }
             case 1: // h_prev gradient
             {
@@ -2253,7 +2253,7 @@ public static class GradientOps
                         result[idx] = numOps.Multiply(gradHData[idx], oneMinusZ);
                     }
                 }
-                return new Tensor<T>(hPrev.Shape, new Vector<T>(result));
+                return new Tensor<T>(hPrev.Shape.ToArray(), new Vector<T>(result));
             }
             default: // Weight/bias gradients
             {
@@ -2348,7 +2348,7 @@ public static class GradientOps
         var V = savedTensors[2];
         var attentionWeights = savedTensors[3];
 
-        var shape = Q.Shape;
+        var shape = Q.Shape.ToArray();
         int batchSize = shape[0];
         int seqLen = shape[1];
         int modelDim = numHeads * headDim;
@@ -2367,7 +2367,7 @@ public static class GradientOps
     private static Tensor<T> SumOverBatchAndSpatial<T>(Tensor<T> input)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = input.Shape;
+        var shape = input.Shape.ToArray();
 
         if (shape.Length == 1)
         {

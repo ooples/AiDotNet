@@ -32,6 +32,14 @@ namespace AiDotNet.NeuralNetworks;
 /// gradually improving its predictions through a process called training.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new NeuralNetworkOptions { InputSize = 10, HiddenLayers = new[] { 64, 32 }, OutputSize = 2 };
+/// var model = new NeuralNetwork&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 10 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
@@ -280,21 +288,13 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
         // Step 1: Forward pass with memory for backpropagation
         Vector<T> outputVector = ForwardWithMemory(input).ToVector();
 
-        // Step 2: Calculate loss/error (e.g., mean squared error)
+        // Step 2: Calculate loss
         Vector<T> expectedVector = expectedOutput.ToVector();
-        Vector<T> errorVector = new(expectedVector.Length);
-
-        for (int i = 0; i < expectedVector.Length; i++)
-        {
-            // Error = expected - actual
-            errorVector[i] = NumOps.Subtract(expectedVector[i], outputVector[i]);
-        }
-
-        // Calculate and store the loss value
         LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
 
-        // Step 3: Backpropagation to compute gradients
-        Backpropagate(Tensor<T>.FromVector(errorVector));
+        // Step 3: Backpropagation using proper loss gradient (not raw error)
+        Vector<T> lossGradient = LossFunction.CalculateDerivative(outputVector, expectedVector);
+        Backpropagate(Tensor<T>.FromVector(lossGradient));
 
         // Step 4: Update parameters using gradients and learning rate
         T learningRate = NumOps.FromDouble(0.01);
@@ -355,7 +355,6 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "InputSize", Architecture.InputSize },

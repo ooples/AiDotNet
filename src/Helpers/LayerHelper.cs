@@ -909,8 +909,12 @@ public static class LayerHelper<T>
         int hiddenSize = Math.Max(64, inputSize);
         int currentSize = inputSize;
 
+        // Use LeakyReLU instead of ReLU to prevent dead neuron problem in deep ResNets.
+        // ReLU kills gradient for negative values; with many layers, this causes all-zero gradients.
+        IActivationFunction<T> hiddenActivation = new LeakyReLUActivation<T>();
+
         // Initial projection layer
-        yield return new DenseLayer<T>(currentSize, hiddenSize, new ReLUActivation<T>() as IActivationFunction<T>);
+        yield return new DenseLayer<T>(currentSize, hiddenSize, hiddenActivation);
         currentSize = hiddenSize;
 
         // Residual blocks using Dense layers
@@ -918,11 +922,10 @@ public static class LayerHelper<T>
         {
             for (int j = 0; j < blockSize; j++)
             {
-                // Each "residual block" is a Dense layer with skip connection via ResidualLayer
                 yield return new ResidualLayer<T>(
                     inputShape: [currentSize],
-                    innerLayer: new DenseLayer<T>(currentSize, currentSize, new ReLUActivation<T>() as IActivationFunction<T>),
-                    activationFunction: new ReLUActivation<T>()
+                    innerLayer: new DenseLayer<T>(currentSize, currentSize, hiddenActivation),
+                    activationFunction: new LeakyReLUActivation<T>()
                 );
             }
 
@@ -930,13 +933,16 @@ public static class LayerHelper<T>
             if (i < blockCount - 1)
             {
                 int newSize = Math.Min(currentSize * 2, 512);
-                yield return new DenseLayer<T>(currentSize, newSize, new ReLUActivation<T>() as IActivationFunction<T>);
+                yield return new DenseLayer<T>(currentSize, newSize, hiddenActivation);
                 currentSize = newSize;
             }
         }
 
-        // Final output layer
-        yield return new DenseLayer<T>(currentSize, architecture.OutputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+        // Final output layer — use softmax for classification, identity for regression
+        IActivationFunction<T> finalActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
+            ? new SoftmaxActivation<T>()
+            : new IdentityActivation<T>();
+        yield return new DenseLayer<T>(currentSize, architecture.OutputSize, finalActivation);
     }
 
     /// <summary>
@@ -1336,27 +1342,26 @@ public static class LayerHelper<T>
         IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
         IActivationFunction<T> softmaxActivation = new SoftmaxActivation<T>();
 
-        // Initialize layers
+        // Initialize layers — RBMLayer applies sigmoid internally,
+        // no extra ActivationLayer needed (double sigmoid compresses output to [0.5, 0.73])
         for (int i = 0; i < layerSizes.Length - 1; i++)
         {
             int visibleUnits = layerSizes[i];
             int hiddenUnits = layerSizes[i + 1];
 
-            // Create and add RBM layer
             yield return new RBMLayer<T>(
                 visibleUnits: visibleUnits,
                 hiddenUnits: hiddenUnits,
                 scalarActivation: sigmoidActivation
             );
-
-            // Add activation layer for each RBM
-            yield return new ActivationLayer<T>([hiddenUnits], sigmoidActivation);
         }
 
-        // Add the final output layer
+        // Add the final output layer — use softmax for classification, identity for regression
         int outputSize = layerSizes[layerSizes.Length - 1];
-        yield return new DenseLayer<T>(outputSize, outputSize, softmaxActivation);
-        yield return new ActivationLayer<T>([outputSize], softmaxActivation);
+        IActivationFunction<T> finalActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
+            ? softmaxActivation
+            : new IdentityActivation<T>();
+        yield return new DenseLayer<T>(outputSize, outputSize, finalActivation);
     }
 
     /// <summary>
@@ -1466,8 +1471,8 @@ public static class LayerHelper<T>
         // Reservoir (recurrent connections, fixed random weights)
         yield return new ReservoirLayer<T>(reservoirSize, reservoirSize, spectralRadius: spectralRadius, connectionProbability: sparsity);
 
-        // Reservoir activation
-        yield return new ActivationLayer<T>([reservoirSize], new TanhActivation<T>() as IVectorActivationFunction<T>);
+        // ReservoirLayer already applies tanh internally per Jaeger (2001).
+        // No extra ActivationLayer needed — double tanh compresses output.
 
         // Output layer (Reservoir to output, trainable)
         yield return new DenseLayer<T>(reservoirSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
@@ -2537,14 +2542,12 @@ public static class LayerHelper<T>
         // Input layer
         yield return new InputLayer<T>(inputSize);
 
-        // First RNN Layer
+        // First RNN Layer (RecurrentLayer applies tanh internally — no extra ActivationLayer)
         yield return new RecurrentLayer<T>(
             inputSize: inputSize,
             hiddenSize: hiddenSize,
             activationFunction: new TanhActivation<T>()
         );
-
-        yield return new ActivationLayer<T>([hiddenSize], new TanhActivation<T>() as IActivationFunction<T>);
 
         // Additional RNN layers if needed
         for (int i = 1; i < recurrentLayerCount; i++)
@@ -2554,8 +2557,6 @@ public static class LayerHelper<T>
                 hiddenSize: hiddenSize,
                 activationFunction: new TanhActivation<T>()
             );
-
-            yield return new ActivationLayer<T>([hiddenSize], new TanhActivation<T>() as IActivationFunction<T>);
         }
 
         // Extract the last timestep from the sequence for classification tasks
@@ -2569,8 +2570,16 @@ public static class LayerHelper<T>
             activationFunction: null
         );
 
-        // Add the final Activation Layer (typically Softmax for classification tasks)
-        yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
+        // Task-appropriate final activation
+        if (architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
+        }
+        else if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SigmoidActivation<T>() as IActivationFunction<T>);
+        }
+        // Regression: no final activation (identity)
     }
 
     /// <summary>
@@ -2761,8 +2770,10 @@ public static class LayerHelper<T>
         // Input layer
         yield return new InputLayer<T>(inputSize);
 
-        // Controller (Feed-forward network)
-        yield return new DenseLayer<T>(inputSize, controllerSize, new TanhActivation<T>() as IActivationFunction<T>);
+        // Controller (Feed-forward network) — input is [features + memoryVectorSize]
+        // because ProcessController concatenates input with read results
+        int controllerInputSize = inputSize + memoryVectorSize;
+        yield return new DenseLayer<T>(controllerInputSize, controllerSize, new TanhActivation<T>() as IActivationFunction<T>);
 
         // Read heads - typically use content-based addressing with cosine similarity
         yield return new MemoryReadLayer<T>(controllerSize, memoryVectorSize, memoryVectorSize,
@@ -2984,7 +2995,7 @@ public static class LayerHelper<T>
     /// <param name="connectionProbability">The probability of connection between neurons in the reservoir. Default is 0.1 (10%).</param>
     /// <param name="spectralRadius">Controls the stability of the reservoir dynamics. Default is 0.9.</param>
     /// <param name="inputScaling">Scaling factor for input connections. Default is 1.0.</param>
-    /// <param name="leakingRate">Controls how quickly the reservoir responds to new inputs. Default is 1.0.</param>
+    /// <param name="leakingRate">Controls how quickly the reservoir responds to new inputs. Default is 0.3 per Jaeger &amp; Haas (2004).</param>
     /// <returns>A collection of layers configured for a Liquid State Machine.</returns>
     /// <remarks>
     /// <para>
@@ -3009,7 +3020,7 @@ public static class LayerHelper<T>
         double connectionProbability = 0.1,
         double spectralRadius = 0.9,
         double inputScaling = 1.0,
-        double leakingRate = 1.0)
+        double leakingRate = 0.3)
     {
         // Validate input
         if (architecture == null)
@@ -3086,8 +3097,6 @@ public static class LayerHelper<T>
             yield return new ActivationLayer<T>([outputSize], new IdentityActivation<T>() as IActivationFunction<T>);
         }
 
-        // Add the final Activation Layer (typically Softmax for classification tasks)
-        yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -3195,8 +3204,8 @@ public static class LayerHelper<T>
                 recurrentActivation: new SigmoidActivation<T>() as IActivationFunction<T>
             );
 
-            // Add Activation Layer after LSTM
-            yield return new ActivationLayer<T>([_layerHiddenSize], new TanhActivation<T>() as IActivationFunction<T>);
+            // LSTMLayer already applies tanh internally — no extra ActivationLayer
+            // (double tanh compresses output range, causing vanishing gradients)
 
             _currentInputSize = _layerHiddenSize;
         }

@@ -118,5 +118,26 @@ public enum ModelDomain
     /// Traditional machine learning models for general-purpose prediction tasks.
     /// Examples: classification, regression, clustering on structured/tabular data.
     /// </summary>
-    MachineLearning
+    MachineLearning,
+
+    /// <summary>Anomaly detection models.</summary>
+    AnomalyDetection,
+
+    /// <summary>Recommendation system models.</summary>
+    Recommendation,
+
+    /// <summary>Mathematical optimization models.</summary>
+    Optimization,
+
+    /// <summary>Alias for Vision.</summary>
+    ComputerVision = Vision,
+
+    /// <summary>Alias for Language.</summary>
+    NaturalLanguageProcessing = Language,
+
+    /// <summary>Alias for GraphAnalysis.</summary>
+    GraphAnalytics = GraphAnalysis,
+
+    /// <summary>Alias for Science.</summary>
+    Scientific = Science
 }

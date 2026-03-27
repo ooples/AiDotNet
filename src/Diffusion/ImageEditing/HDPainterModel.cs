@@ -41,6 +41,14 @@ namespace AiDotNet.Diffusion.ImageEditing;
 /// Reference: Manukyan et al., "HD-Painter: High-Resolution and Prompt-Faithful Text-Guided Image Inpainting with Diffusion Models", 2024
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 4, Height = 2048, Width = 2048, NumInferenceSteps = 30 };
+/// var model = new HDPainterModel&lt;float&gt;(options);
+/// var maskedInput = Tensor&lt;float&gt;.Random(new[] { 1, 9, 256, 256 });
+/// var inpainted = model.Predict(maskedInput);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Inpainting)]
@@ -134,7 +142,7 @@ public class HDPainterModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "HD-Painter", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "HD-Painter", Version = "1.0",
             Description = "High-resolution inpainting with Prompt-Aware Introverted Attention (PAIntA)",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

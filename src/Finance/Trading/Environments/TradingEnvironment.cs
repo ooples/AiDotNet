@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors;
@@ -26,6 +27,16 @@ namespace AiDotNet.Finance.Trading.Environments;
 /// rewards based on portfolio changes.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // TradingEnvironment is abstract; use StockTradingEnvironment or MarketMakingEnvironment
+/// // Example with StockTradingEnvironment for single-asset discrete trading:
+/// var marketData = new Tensor&lt;double&gt;(new[] { 1000, 1 });
+/// var env = new StockTradingEnvironment&lt;double&gt;(
+///     marketData, windowSize: 20, initialCapital: NumOps.FromDouble(10000.0),
+///     tradeSize: NumOps.FromDouble(1.0));
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.ReinforcementLearning)]
 [ModelCategory(ModelCategory.ReinforcementLearningAgent)]
@@ -35,6 +46,7 @@ namespace AiDotNet.Finance.Trading.Environments;
 public abstract class TradingEnvironment<T> : IEnvironment<T>
 {
     protected readonly INumericOperations<T> NumOps;
+    protected IEngine Engine => AiDotNetEngine.Current;
     protected readonly Tensor<T> MarketData;
     protected readonly int WindowSize;
     protected readonly int NumAssets;
@@ -309,10 +321,7 @@ public abstract class TradingEnvironment<T> : IEnvironment<T>
     protected void UpdatePortfolioValue(Vector<T> prices)
     {
         T value = _cash;
-        for (int asset = 0; asset < NumAssets; asset++)
-        {
-            value = NumOps.Add(value, NumOps.Multiply(_positions[asset], prices[asset]));
-        }
+        value = NumOps.Add(value, Engine.DotProduct(_positions, prices));
         _portfolioValue = value;
     }
 

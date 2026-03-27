@@ -286,7 +286,6 @@ public class VoiceCraft<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         {
             Name = _useNativeMode ? "VoiceCraft-Native" : "VoiceCraft-ONNX",
             Description = "VoiceCraft codec LM for speech editing and zero-shot TTS (Peng et al., 2024)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.HiddenDim,
             Complexity = _options.NumLayers
         };
         m.AdditionalInfo["CodebookSize"] = _options.CodebookSize.ToString();

@@ -334,6 +334,7 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         return maxIndex;
     }
 
+    [AiDotNet.Attributes.ModelMetadataExempt]
     private sealed class PreprocessingFullModel : IFullModel<T, TInput, TOutput>
     {
         private readonly IFullModel<T, TInput, TOutput> _inner;
@@ -352,6 +353,12 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
 
         /// <inheritdoc/>
         public int ParameterCount => _inner.ParameterCount;
+
+        /// <inheritdoc/>
+        public bool SupportsParameterInitialization => _inner.SupportsParameterInitialization;
+
+        /// <inheritdoc/>
+        public Vector<T> SanitizeParameters(Vector<T> parameters) => _inner.SanitizeParameters(parameters);
 
         /// <inheritdoc/>
         public bool SupportsJitCompilation => _inner.SupportsJitCompilation;

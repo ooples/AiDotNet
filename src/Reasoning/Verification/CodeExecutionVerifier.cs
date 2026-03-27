@@ -47,8 +47,8 @@ namespace AiDotNet.Reasoning.Verification;
 ///     testCases: new[] { "assert add(2, 3) == 5" },
 ///     language: "python"
 /// );
-/// Console.WriteLine($"Tests passed: {result.AllTestsPassed}");
-/// Console.WriteLine($"Success rate: {result.PassRate}");
+/// // Result is available in the returned value
+/// // Result is available in the returned value
 /// ```
 ///
 /// **Research:**

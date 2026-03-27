@@ -1,4 +1,5 @@
 using AiDotNet.Clustering.Interfaces;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Clustering.DistanceMetrics;
 
@@ -24,6 +25,11 @@ public abstract class DistanceMetricBase<T> : IDistanceMetric<T>
     protected readonly INumericOperations<T> NumOps;
 
     /// <summary>
+    /// Provides hardware-accelerated tensor/vector operations.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// Initializes a new instance of the distance metric base class.
     /// </summary>
     protected DistanceMetricBase()
@@ -36,6 +42,29 @@ public abstract class DistanceMetricBase<T> : IDistanceMetric<T>
 
     /// <inheritdoc />
     public abstract T Compute(Vector<T> a, Vector<T> b);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Default implementation uses Euclidean distance inline.
+    /// Override in subclasses for Manhattan, Cosine, etc.
+    /// </remarks>
+    public virtual T ComputeInline(T[] a, T[] b, int length)
+    {
+        if (length < 0 || length > a.Length || length > b.Length)
+            throw new ArgumentOutOfRangeException(nameof(length),
+                $"Length ({length}) must be non-negative and within bounds of both arrays (a={a.Length}, b={b.Length}).");
+
+        // Engine.Subtract + DotProduct — zero-overhead in 0.13.0
+        var aVec = new Vector<T>(length);
+        var bVec = new Vector<T>(length);
+        for (int i = 0; i < length; i++)
+        {
+            aVec[i] = a[i];
+            bVec[i] = b[i];
+        }
+        var diff = Engine.Subtract(aVec, bVec);
+        return NumOps.Sqrt(Engine.DotProduct(diff, diff));
+    }
 
     /// <inheritdoc />
     public virtual Vector<T> ComputeToAll(Vector<T> point, Matrix<T> data)

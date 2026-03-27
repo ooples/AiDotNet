@@ -209,7 +209,7 @@ public class BSRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "BS-RoFormer-Native" : "BS-RoFormer-ONNX", Description = "BS-RoFormer Band-Split Rotary Transformer (Lu et al., 2023)", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.NumFreqBins, Complexity = _options.NumTransformerLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "BS-RoFormer-Native" : "BS-RoFormer-ONNX", Description = "BS-RoFormer Band-Split Rotary Transformer (Lu et al., 2023)", FeatureCount = _options.NumFreqBins, Complexity = _options.NumTransformerLayers };
         m.AdditionalInfo["NumBands"] = _options.NumBands.ToString(); m.AdditionalInfo["NumStems"] = _options.NumStems.ToString();
         return m;
     }
@@ -253,7 +253,7 @@ public class BSRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         var sources = new Dictionary<string, Tensor<T>>();
         for (int si = 0; si < _options.NumStems && si < _options.Sources.Length; si++)
         {
-            var maskedMag = new Tensor<T>(magnitude.Shape);
+            var maskedMag = new Tensor<T>(magnitude.Shape.ToArray());
             for (int f = 0; f < nf; f++)
             {
                 for (int b = 0; b < numBins; b++)

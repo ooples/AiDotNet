@@ -604,7 +604,7 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape);
+        var normalized = new Tensor<T>(image.Shape.ToArray());
         double[] means = [0.485, 0.456, 0.406];
         double[] stds = [0.229, 0.224, 0.225];
 
@@ -642,7 +642,6 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
         return new ModelMetadata<T>
         {
             Name = "MATCHA",
-            ModelType = ModelType.NeuralNetwork,
             Description = "MATCHA for chart understanding with math reasoning (ACL 2023)",
             FeatureCount = _encoderDim,
             Complexity = _encoderLayers + _decoderLayers,

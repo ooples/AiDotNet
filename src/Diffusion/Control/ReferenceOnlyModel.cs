@@ -30,6 +30,23 @@ namespace AiDotNet.Diffusion.Control;
 /// preprocessing of the reference image is needed.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Reference-Only model for style transfer
+/// var options = new LatentDiffusionOptions&lt;float&gt;
+/// {
+///     LatentChannels = 4,
+///     Height = 512,
+///     Width = 512,
+///     NumInferenceSteps = 30
+/// };
+/// var model = new ReferenceOnlyModel&lt;float&gt;(options);
+///
+/// // Use a reference image to guide generation style
+/// var referenceImage = Tensor&lt;float&gt;.Random(new[] { 1, 4, 64, 64 });
+/// var styledOutput = model.Predict(referenceImage);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
@@ -136,7 +153,7 @@ public class ReferenceOnlyModel<T> : LatentDiffusionModelBase<T>
     {
         var metadata = new ModelMetadata<T>
         {
-            Name = "Reference-Only", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "Reference-Only", Version = "1.0",
             Description = "Reference-only control using self-attention feature injection from a reference image",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };

@@ -38,6 +38,17 @@ namespace AiDotNet.Classification.Ensemble;
 /// - When you need faster training
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Use AiModelBuilder facade for Extra Trees classification
+/// var builder = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new ExtraTreesClassifier&lt;double&gt;(
+///         new ExtraTreesClassifierOptions&lt;double&gt;()));
+///
+/// var result = builder.Build(features, labels);
+/// var prediction = result.Predict(newSample);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelCategory(ModelCategory.DecisionTree)]
@@ -80,7 +91,6 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
     /// <summary>
     /// Returns the model type identifier for this classifier.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.ExtraTreesClassifier;
 
     /// <summary>
     /// Trains the Extra Trees classifier on the provided data.

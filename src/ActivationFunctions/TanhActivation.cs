@@ -1,6 +1,10 @@
 
 
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.ActivationFunctions;
@@ -31,7 +35,13 @@ namespace AiDotNet.ActivationFunctions;
 /// the function's slope becomes very small, which can slow down learning in deep networks.
 /// </para>
 /// </remarks>
-public class TanhActivation<T> : ActivationFunctionBase<T>
+[ActivationCategory(ActivationCategory.General)]
+[ActivationCategory(ActivationCategory.Gate)]
+[ActivationTask(ActivationTask.HiddenLayer)]
+[ActivationTask(ActivationTask.RecurrentGating)]
+[ActivationTask(ActivationTask.GenerativeOutput)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = true, Cost = ComputeCost.Medium)]
+public class TanhActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>
 {
     /// <summary>
     /// Indicates that this activation function supports operations on individual scalar values.
@@ -59,6 +69,11 @@ public class TanhActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Activate(T input)
     {
+        // Clamp to avoid NaN from exp overflow in MathHelper.Tanh
+        // tanh(x) = 1.0 for x > ~19.1 and -1.0 for x < ~-19.1 (double precision)
+        double xd = Convert.ToDouble(input);
+        if (xd > 20.0) return NumOps.One;
+        if (xd < -20.0) return NumOps.Negate(NumOps.One);
         return MathHelper.Tanh(input);
     }
 
@@ -142,7 +157,7 @@ public class TanhActivation<T> : ActivationFunctionBase<T>
     {
         var tanh = Activate(input);
         var tanhSquared = Engine.TensorMultiply(tanh, tanh);
-        var one = Tensor<T>.CreateDefault(input.Shape, NumOps.One);
+        var one = Tensor<T>.CreateDefault(input.Shape.ToArray(), NumOps.One);
         return Engine.TensorSubtract(one, tanhSquared);
     }
 
@@ -242,4 +257,14 @@ public class TanhActivation<T> : ActivationFunctionBase<T>
     }
 
     #endregion
+
+    /// <summary>
+    /// Computes tanh derivative given the post-activation output: 1 - y².
+    /// </summary>
+    public Tensor<T> DerivativeFromOutput(Tensor<T> output)
+    {
+        var ones = new Tensor<T>(output.Shape.ToArray());
+        ones.Fill(NumOps.One);
+        return ones.Subtract(output.ElementwiseMultiply(output));
+    }
 }

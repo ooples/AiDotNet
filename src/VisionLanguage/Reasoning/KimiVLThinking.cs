@@ -17,10 +17,34 @@ namespace AiDotNet.VisionLanguage.Reasoning;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para>
+/// Kimi-VL-Thinking (Moonshot AI, 2025) extends Kimi-VL with long chain-of-thought reasoning
+/// capabilities trained through reinforcement learning alignment. It generates structured
+/// multi-step reasoning traces for complex visual problems, breaking down tasks into
+/// intermediate steps before producing final answers.
+/// </para>
 /// <para><b>References:</b>
 /// <list type="bullet"><item>Paper: "Kimi-VL Technical Report" (Moonshot AI, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> KimiVLThinking is a vision-language model. Default values follow the original paper settings.</para>
+/// <para><b>For Beginners:</b> Kimi-VL-Thinking is a vision-language model specialized in
+/// long chain-of-thought reasoning for complex visual tasks. Default values follow the
+/// original paper settings.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Kimi-VL-Thinking model for long chain-of-thought visual reasoning
+/// // with RL alignment for structured multi-step problem solving
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.TwoDimensional,
+///     taskType: NeuralNetworkTaskType.Classification,
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///
+/// // ONNX inference mode with pre-trained model
+/// var model = new KimiVLThinking&lt;double&gt;(architecture, "kimivlthinking.onnx");
+///
+/// // Training mode with native layers
+/// var trainModel = new KimiVLThinking&lt;double&gt;(architecture, new KimiVLThinkingOptions());
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Language)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -201,7 +225,7 @@ public class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Kimi-VL-Thinking-Native" : "Kimi-VL-Thinking-ONNX", Description = "Kimi-VL-Thinking: long chain-of-thought reasoning with RL alignment.", ModelType = ModelType.NeuralNetwork, FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
+        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Kimi-VL-Thinking-Native" : "Kimi-VL-Thinking-ONNX", Description = "Kimi-VL-Thinking: long chain-of-thought reasoning with RL alignment.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
         m.AdditionalInfo["Architecture"] = "Kimi-VL-Thinking";
         m.AdditionalInfo["ReasoningApproach"] = _options.ReasoningApproach;
         m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;

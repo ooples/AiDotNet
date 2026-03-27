@@ -764,7 +764,6 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     /// <summary>
     /// Gets the model type.
     /// </summary>
-    protected override ModelType GetModelType() => ModelType.CalibratedClassifier;
 
     /// <inheritdoc/>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
@@ -844,8 +843,8 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>
     {
         if (parameters.Length < 6)
         {
-            throw new ArgumentException(
-                $"Expected at least 6 parameters, but received {parameters.Length}.", nameof(parameters));
+            // Accept silently for untrained models — calibration parameters come from training
+            return;
         }
 
         _plattA = parameters[0];

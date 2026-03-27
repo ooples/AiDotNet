@@ -811,6 +811,7 @@ public class FederatedLearningDeepMathIntegrationTests
                 _parameters[i] = parameters[i];
         }
         public int ParameterCount => _parameters.Length;
+        public bool SupportsParameterInitialization => ParameterCount > 0;
         public IFullModel<double, double[], double[]> WithParameters(Vector<double> p)
         {
             var newParams = new double[p.Length];
@@ -850,6 +851,8 @@ public class FederatedLearningDeepMathIntegrationTests
 
         // ILossFunction default
         public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
+
+    public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
     }
 
     #endregion

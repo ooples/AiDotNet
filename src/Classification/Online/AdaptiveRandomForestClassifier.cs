@@ -48,6 +48,27 @@ namespace AiDotNet.Classification.Online;
 ///
 /// <para><b>Reference:</b> Gomes et al., "Adaptive Random Forests for Evolving Data Stream Classification" (2017)</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create adaptive random forest for streaming data with concept drift
+/// var options = new AdaptiveRandomForestOptions&lt;double&gt;();
+/// var classifier = new AdaptiveRandomForestClassifier&lt;double&gt;(options);
+///
+/// // Prepare initial training data
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1.0, 1.1,  1.2, 0.9,  0.8, 1.0,
+///     5.0, 5.1,  5.2, 4.9,  4.8, 5.0 });
+/// var labels = new Vector&lt;double&gt;(new double[] { 0, 0, 0, 1, 1, 1 });
+///
+/// // Train with per-tree drift detection for local adaptation
+/// classifier.Train(features, labels);
+///
+/// // Predict with weighted voting across adapted trees
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 1.1, 1.0 });
+/// var prediction = classifier.Predict(newSample);
+/// // Result is available in the returned value
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Ensemble)]
@@ -143,7 +164,6 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
     }
 
     /// <inheritdoc />
-    protected override ModelType GetModelType() => ModelType.AdaptiveRandomForestClassifier;
 
     /// <summary>
     /// Updates the model with a single training sample.
@@ -178,57 +198,67 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
                 throw new InvalidOperationException("Ensemble member is not properly initialized.");
             }
 
-            // Evaluate prequentially (predict BEFORE training to avoid bias)
-            var selectedFeaturesForPred = ExtractSelectedFeatures(features, member.SelectedFeatures);
-            var prediction = member.Tree.Predict(ConvertToMatrix(selectedFeaturesForPred));
-            bool isCorrect = NumOps.Compare(prediction[0], label) == 0;
-
-            // Update accuracy estimate with exponential decay
-            member.TotalCount++;
-            if (isCorrect) member.CorrectCount++;
-            member.AccuracyEstimate = (double)member.CorrectCount / member.TotalCount;
-
-            // Update drift detectors with error (1 = error, 0 = correct)
-            T error = isCorrect ? NumOps.Zero : NumOps.One;
-
-            bool warningTriggered = member.WarningDetector.AddObservation(error);
-            bool driftTriggered = member.DriftDetector.AddObservation(error);
-
-            // Handle warning state
-            if (member.WarningDetector.IsInWarning && !member.InWarning)
+            // Evaluate prequentially (predict BEFORE training to avoid bias).
+            // Skip if the tree hasn't been trained yet — can't evaluate a tree with no classes.
+            bool driftTriggered = false;
+            if (member.Tree.IsWarm)
             {
-                member.InWarning = true;
-                member.BackgroundTree = CreateTree();
-            }
-            else if (!member.WarningDetector.IsInWarning && member.InWarning && !driftTriggered)
-            {
-                // Warning cleared, discard background tree
-                member.InWarning = false;
-                member.BackgroundTree = null;
-            }
+                var selectedFeaturesForPred = ExtractSelectedFeatures(features, member.SelectedFeatures);
+                var prediction = member.Tree.Predict(ConvertToMatrix(selectedFeaturesForPred));
+                bool isCorrect = NumOps.Compare(prediction[0], label) == 0;
 
-            // Handle drift detection
-            if (driftTriggered)
-            {
-                if (member.BackgroundTree is not null)
+                // Update accuracy estimate with exponential moving average (alpha = 0.01)
+                // This decays old observations so recent performance dominates after drift
+                const double ewmaAlpha = 0.01;
+                member.TotalCount++;
+                if (isCorrect) member.CorrectCount++;
+                double observation = isCorrect ? 1.0 : 0.0;
+                member.AccuracyEstimate = member.TotalCount == 1
+                    ? observation
+                    : (1 - ewmaAlpha) * member.AccuracyEstimate + ewmaAlpha * observation;
+
+                // Update drift detectors with error (1 = error, 0 = correct)
+                T error = isCorrect ? NumOps.Zero : NumOps.One;
+
+                bool warningTriggered = member.WarningDetector.AddObservation(error);
+                driftTriggered = member.DriftDetector.AddObservation(error);
+
+                // Handle warning state
+                if (member.WarningDetector.IsInWarning && !member.InWarning)
                 {
-                    // Replace with background tree
-                    member.Tree = member.BackgroundTree;
+                    member.InWarning = true;
+                    member.BackgroundTree = CreateTree();
                 }
-                else
+                else if (!member.WarningDetector.IsInWarning && member.InWarning && !driftTriggered)
                 {
-                    // Create new tree
-                    member.Tree = CreateTree();
+                    // Warning cleared, discard background tree
+                    member.InWarning = false;
+                    member.BackgroundTree = null;
                 }
 
-                // Reset state
-                member.BackgroundTree = null;
-                member.InWarning = false;
-                member.DriftDetector.Reset();
-                member.WarningDetector.Reset();
-                member.CorrectCount = 0;
-                member.TotalCount = 0;
-                member.AccuracyEstimate = 1.0;
+                // Handle drift detection
+                if (driftTriggered)
+                {
+                    if (member.BackgroundTree is not null)
+                    {
+                        // Replace with background tree
+                        member.Tree = member.BackgroundTree;
+                    }
+                    else
+                    {
+                        // Create new tree
+                        member.Tree = CreateTree();
+                    }
+
+                    // Reset state
+                    member.BackgroundTree = null;
+                    member.InWarning = false;
+                    member.DriftDetector.Reset();
+                    member.WarningDetector.Reset();
+                    member.CorrectCount = 0;
+                    member.TotalCount = 0;
+                    member.AccuracyEstimate = 1.0;
+                }
             }
 
             // Poisson sampling for diversity (train AFTER evaluation)
@@ -267,6 +297,15 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         PartialFit(x, y);
+
+        // After batch training, force splits on all ensemble member trees.
+        // In streaming mode, trees split naturally as GracePeriod is reached.
+        // But in batch mode with fewer samples than GracePeriod, trees remain
+        // as single leaves predicting the majority class.
+        foreach (var member in _ensemble)
+        {
+            member.Tree?.ForceBatchSplits();
+        }
     }
 
     /// <inheritdoc />
@@ -310,6 +349,11 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
         {
             var memberFeatures = member.SelectedFeatures ?? throw new InvalidOperationException("SelectedFeatures has not been initialized.");
             var memberTree = member.Tree ?? throw new InvalidOperationException("Tree has not been initialized.");
+
+            // Skip cold trees (not yet trained) — they can't predict meaningfully
+            if (!memberTree.IsWarm)
+                continue;
+
             var selectedFeatures = ExtractSelectedFeatures(features, memberFeatures);
             var treePrediction = memberTree.Predict(ConvertToMatrix(selectedFeatures));
 

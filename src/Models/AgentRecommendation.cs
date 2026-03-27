@@ -31,7 +31,7 @@ namespace AiDotNet.Models;
 /// - The reasoning helps you learn about machine learning best practices
 ///
 /// For example, if you enabled ModelSelection and HyperparameterTuning, you might get:
-/// - SuggestedModelType: RandomForest
+/// - SuggestedModelType: typeof(RandomForest&lt;T&gt;)
 /// - ModelSelectionReasoning: "Random Forest is recommended because your dataset has 10,000 samples with
 ///   complex non-linear relationships. It will handle the outliers better than linear models and is less
 ///   likely to overfit than a deep neural network given your data size."
@@ -80,7 +80,7 @@ public class AgentRecommendation<T, TInput, TOutput>
     /// <summary>
     /// Gets or sets the AI agent's recommended model type for your problem.
     /// </summary>
-    /// <value>A ModelType enum value representing the recommended model, or null if model selection was not enabled.</value>
+    /// <value>A Type representing the recommended model class, or null if model selection was not enabled.</value>
     /// <remarks>
     /// <para>
     /// This property contains the specific model type that the AI agent recommends based on your data characteristics,
@@ -105,7 +105,7 @@ public class AgentRecommendation<T, TInput, TOutput>
     /// Always read the ModelSelectionReasoning property to understand why this model was chosen for your specific situation.
     /// </para>
     /// </remarks>
-    public ModelType? SuggestedModelType { get; set; }
+    public Type? SuggestedModelType { get; set; }
 
     /// <summary>
     /// Gets or sets the AI agent's detailed explanation for why it recommended the suggested model type.

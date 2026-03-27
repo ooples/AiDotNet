@@ -36,6 +36,14 @@ namespace AiDotNet.NeuralNetworks;
 /// - Finding novel solutions that a human designer might not think of
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var options = new NEATOptions { InputSize = 4, OutputSize = 2, PopulationSize = 150 };
+/// var model = new NEAT&lt;float&gt;(options);
+/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 4 });
+/// var output = model.Predict(input);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.General)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -43,7 +51,7 @@ namespace AiDotNet.NeuralNetworks;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ModelPaper("Evolving Neural Networks through Augmenting Topologies", "http://nn.cs.utexas.edu/downloads/papers/stanley.ec02.pdf", Year = 2002, Authors = "Kenneth O. Stanley, Risto Miikkulainen")]
+[ModelPaper("Evolving Neural Networks through Augmenting Topologies", "https://nn.cs.utexas.edu/downloads/papers/stanley.ec02.pdf", Year = 2002, Authors = "Kenneth O. Stanley, Risto Miikkulainen")]
 public class NEAT<T> : NeuralNetworkBase<T>
 {
     private readonly NEATOptions _options;
@@ -702,7 +710,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
             int featureSize = input.Shape[1];
 
             // Create output tensor with correct shape
-            var output = new Tensor<T>(new int[] { batchSize, Architecture.OutputSize });
+            var output = TensorAllocator.Rent<T>(new int[] { batchSize, Architecture.OutputSize });
 
             // Process each sample
             for (int b = 0; b < batchSize; b++)
@@ -736,7 +744,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
             var activations = ActivateGenome(bestGenome, inputVector);
 
             // Create output tensor
-            var output = new Tensor<T>(new int[] { Architecture.OutputSize });
+            var output = TensorAllocator.Rent<T>(new int[] { Architecture.OutputSize });
             for (int i = 0; i < Architecture.OutputSize; i++)
             {
                 output[i] = activations[Architecture.InputSize + i];
@@ -1182,7 +1190,6 @@ public class NEAT<T> : NeuralNetworkBase<T>
 
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NEAT,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "PopulationSize", _populationSize },

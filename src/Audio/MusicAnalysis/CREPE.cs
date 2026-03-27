@@ -30,7 +30,7 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 1024, outputSize: 360);
 /// var model = new CREPE&lt;float&gt;(arch, "crepe_full.onnx");
 /// var (hasPitch, pitch) = model.DetectPitch(audioFrame);
-/// Console.WriteLine($"Pitch: {pitch} Hz");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// </remarks>
@@ -290,7 +290,6 @@ public class CREPE<T> : AudioNeuralNetworkBase<T>, IPitchDetector<T>
         {
             Name = _useNativeMode ? "CREPE-Native" : "CREPE-ONNX",
             Description = $"CREPE {_options.Variant} pitch detection (Kim et al., 2018)",
-            ModelType = ModelType.NeuralNetwork, FeatureCount = _options.FrameSize,
             Complexity = 6
         };
         m.AdditionalInfo["Variant"] = _options.Variant;

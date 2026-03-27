@@ -187,7 +187,6 @@ public class VideoGigaGAN<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "VideoGigaGAN-Native" : "VideoGigaGAN-ONNX",
             Description = $"VideoGigaGAN {_options.Variant} large-scale GAN VSR (Xu et al., CVPR 2025)",
-            ModelType = ModelType.VideoSuperResolution,
             Complexity = _options.NumResBlocks
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();

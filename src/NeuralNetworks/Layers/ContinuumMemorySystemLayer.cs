@@ -1,4 +1,4 @@
-
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Optimizers;
@@ -14,6 +14,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// yt = MLP^(fk)(MLP^(fk-1)(...MLP^(f1)(xt)))
 /// </summary>
 /// <typeparam name="T">The numeric type</typeparam>
+[LayerCategory(LayerCategory.Memory)]
+[LayerTask(LayerTask.SequenceModeling)]
+[LayerProperty(IsTrainable = true, IsStateful = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "new[] { 4 }, 4, 2")]
 public class ContinuumMemorySystemLayer<T> : LayerBase<T>
 {
     private readonly DenseLayer<T>[] _mlpBlocks;
@@ -31,6 +34,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
     /// <summary>
     /// Indicates whether this layer supports training. CMS always supports training.
     /// </summary>
+    public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -165,7 +169,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        if (input.Shape == null || input.Shape.Length == 0)
+        if (input.Shape.ToArray() == null || input.Shape.Length == 0)
             throw new ArgumentException("Input tensor must have a valid shape", nameof(input));
 
         LastInput = input;

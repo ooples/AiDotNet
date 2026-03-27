@@ -1,5 +1,7 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -30,6 +32,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations (float or double).</typeparam>
+[LayerCategory(LayerCategory.Dense)]
+[LayerTask(LayerTask.Projection)]
+[LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 8", TestConstructorArgs = "8, 4")]
 public class HyperbolicLinearLayer<T> : LayerBase<T>
 {
     private readonly IHyperbolicManifoldEngine _engine;
@@ -198,7 +203,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
     /// <returns>Output tensor with shape [outputFeatures] or [batch, outputFeatures].</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape;
+        _originalInputShape = input.Shape.ToArray();
 
         int batchSize;
         int inputLen;
@@ -250,9 +255,11 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
                 inputVec[i] = inputTensor[b, i];
             }
 
-            // Project input to Poincare ball (ensure valid point)
-            var epsilon = _numOps.FromDouble(1e-5);
-            var projectedInput = _engine.PoincareProject(inputVec, _curvature, epsilon);
+            // Map Euclidean input to Poincaré ball via exponential map from origin.
+            // Per Nickel & Kiela (2017), this preserves magnitude differences unlike
+            // PoincareProject which clips to the boundary (losing scale information).
+            var origin = CreateOriginVector(InputFeatures);
+            var projectedInput = _engine.PoincareExpMap(origin, inputVec, _curvature);
 
             // For each output feature
             for (int o = 0; o < OutputFeatures; o++)
@@ -273,14 +280,15 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
 
                 // Compute hyperbolic linear transformation:
                 // 1. Apply exponential map from origin with weight as tangent vector
-                var origin = CreateOriginVector(InputFeatures);
-                var weightPoint = _engine.PoincareExpMap(origin, weightVec, _curvature);
+                var originForWeight = CreateOriginVector(InputFeatures);
+                var weightPoint = _engine.PoincareExpMap(originForWeight, weightVec, _curvature);
 
                 // 2. Mobius addition of input with weight point
                 var transformed = _engine.MobiusAdd(projectedInput, weightPoint, _curvature);
 
-                // 3. Mobius addition with bias
-                var biasProjected = _engine.PoincareProject(biasVec, _curvature, epsilon);
+                // 3. Mobius addition with bias (map bias to ball via exp map)
+                var originForBias = CreateOriginVector(InputFeatures);
+                var biasProjected = _engine.PoincareExpMap(originForBias, biasVec, _curvature);
                 var withBias = _engine.MobiusAdd(transformed, biasProjected, _curvature);
 
                 // 4. Compute output as distance from origin (scalar output)
@@ -370,7 +378,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         if (IsTrainingMode)
         {
             _gpuInput = input;
-            _gpuInputShape = input.Shape.ToArray();
+            _gpuInputShape = input.Shape.ToArray().ToArray();
         }
 
         // Cache weights to GPU: flatten [OutputFeatures, InputFeatures] for the kernel
@@ -429,7 +437,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
             else
             {
                 var newShape = new int[input.Shape.Length];
-                Array.Copy(input.Shape, newShape, input.Shape.Length - 1);
+                Array.Copy(input.Shape.ToArray(), newShape, input.Shape.Length - 1);
                 newShape[^1] = OutputFeatures;
                 outputShape = newShape;
             }
@@ -643,66 +651,76 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         // Initialize gradients
         _weightsGradient = new Matrix<T>(OutputFeatures, InputFeatures);
         _biasesGradient = new Matrix<T>(OutputFeatures, InputFeatures);
-        var inputGradient = new Tensor<T>(_lastInput.Shape);
+        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
-        // Compute gradients using proper Riemannian gradient descent for Poincaré ball geometry.
-        // For the Poincaré ball with curvature c, the conformal factor is:
-        //   λ(x) = 2 / (1 - c||x||²)  where c = |curvature|
-        // The Riemannian gradient is related to the Euclidean gradient by:
-        //   grad_R = (1/λ(x)²) * grad_E = ((1 - c||x||²)² / 4) * grad_E
-        var epsilon = _numOps.FromDouble(1e-5);
-        var absCurvature = _numOps.Abs(_curvature);
+        // Compute gradients via finite differences through the complex Poincaré ball
+        // operations (ExpMap, MobiusAdd, PoincareDistance). Analytical gradients through
+        // these hyperbolic ops require Jacobians of each composition which are error-prone.
+        // Finite differences give correct Euclidean gradients for weight updates.
+        double eps = 1e-5;
 
         for (int b = 0; b < batchSize; b++)
         {
-            // Extract input vector
-            var inputVec = new Vector<T>(InputFeatures);
-            for (int i = 0; i < InputFeatures; i++)
-            {
-                inputVec[i] = _lastInput[b, i];
-            }
-            var projectedInput = _engine.PoincareProject(inputVec, _curvature, epsilon);
-
-            // Compute squared norm of projected input: ||x||²
-            T squaredNorm = _numOps.Zero;
-            for (int i = 0; i < InputFeatures; i++)
-            {
-                squaredNorm = _numOps.Add(squaredNorm, _numOps.Multiply(projectedInput[i], projectedInput[i]));
-            }
-
-            // Compute conformal factor for Riemannian gradient:
-            // conformalFactor = (1 - c||x||²)² / 4 = 1/λ(x)²
-            // This converts Euclidean gradients to Riemannian gradients on the Poincaré ball
-            var cNormSquared = _numOps.Multiply(absCurvature, squaredNorm);
-            var oneMinusCNorm = _numOps.Subtract(_numOps.One, cNormSquared);
-            var conformalFactor = _numOps.Divide(
-                _numOps.Multiply(oneMinusCNorm, oneMinusCNorm),
-                _numOps.FromDouble(4.0));
-
+            // Weight gradients: perturb each weight and measure output change
             for (int o = 0; o < OutputFeatures; o++)
             {
-                T gradOutput = gradTensor[b, o];
-
-                // Scale the output gradient by the conformal factor for Riemannian geometry
-                var riemannianGrad = _numOps.Multiply(gradOutput, conformalFactor);
+                T gradOut = gradTensor[b, o];
 
                 for (int i = 0; i < InputFeatures; i++)
                 {
-                    // Weight gradient: Riemannian gradient scaled by input direction
-                    var existingWGrad = _weightsGradient[o, i];
-                    var inputContrib = _numOps.Multiply(riemannianGrad, projectedInput[i]);
-                    _weightsGradient[o, i] = _numOps.Add(existingWGrad, inputContrib);
+                    // dL/dW[o,i] via finite diff
+                    T origW = _weights[o, i];
 
-                    // Bias gradient: Riemannian gradient (conformal factor already applied)
-                    // Distributed across input features for the bias point
-                    var existingBGrad = _biasesGradient[o, i];
-                    var biasContrib = _numOps.Divide(riemannianGrad, _numOps.FromDouble(InputFeatures));
-                    _biasesGradient[o, i] = _numOps.Add(existingBGrad, biasContrib);
+                    _weights[o, i] = _numOps.Add(origW, _numOps.FromDouble(eps));
+                    T outPlus = ComputeSingleOutput(b, o);
 
-                    // Input gradient: Riemannian gradient scaled by weight direction
-                    var existingIGrad = inputGradient[b, i];
-                    var weightContrib = _numOps.Multiply(riemannianGrad, _weights[o, i]);
-                    inputGradient[b, i] = _numOps.Add(existingIGrad, weightContrib);
+                    _weights[o, i] = _numOps.Subtract(origW, _numOps.FromDouble(eps));
+                    T outMinus = ComputeSingleOutput(b, o);
+
+                    _weights[o, i] = origW;
+
+                    T dOutdW = _numOps.Divide(
+                        _numOps.Subtract(outPlus, outMinus),
+                        _numOps.FromDouble(2.0 * eps));
+                    _weightsGradient[o, i] = _numOps.Add(_weightsGradient[o, i],
+                        _numOps.Multiply(gradOut, dOutdW));
+
+                    // dL/dB[o,i] via finite diff
+                    T origB = _biases[o, i];
+
+                    _biases[o, i] = _numOps.Add(origB, _numOps.FromDouble(eps));
+                    outPlus = ComputeSingleOutput(b, o);
+
+                    _biases[o, i] = _numOps.Subtract(origB, _numOps.FromDouble(eps));
+                    outMinus = ComputeSingleOutput(b, o);
+
+                    _biases[o, i] = origB;
+
+                    T dOutdB = _numOps.Divide(
+                        _numOps.Subtract(outPlus, outMinus),
+                        _numOps.FromDouble(2.0 * eps));
+                    _biasesGradient[o, i] = _numOps.Add(_biasesGradient[o, i],
+                        _numOps.Multiply(gradOut, dOutdB));
+                }
+
+                // Input gradients
+                for (int i = 0; i < InputFeatures; i++)
+                {
+                    T origIn = _lastInput[b, i];
+
+                    _lastInput[b, i] = _numOps.Add(origIn, _numOps.FromDouble(eps));
+                    T outPlus = ComputeSingleOutput(b, o);
+
+                    _lastInput[b, i] = _numOps.Subtract(origIn, _numOps.FromDouble(eps));
+                    T outMinus = ComputeSingleOutput(b, o);
+
+                    _lastInput[b, i] = origIn;
+
+                    T dOutdIn = _numOps.Divide(
+                        _numOps.Subtract(outPlus, outMinus),
+                        _numOps.FromDouble(2.0 * eps));
+                    inputGradient[b, i] = _numOps.Add(inputGradient[b, i],
+                        _numOps.Multiply(gradOut, dOutdIn));
                 }
             }
         }
@@ -722,6 +740,38 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
     /// Uses Riemannian gradient descent (exponential map of negative gradient).
     /// </remarks>
     /// <param name="learningRate">The learning rate to use for the update.</param>
+    /// <summary>
+    /// Recomputes a single output value for the given batch and output feature index.
+    /// Used by finite-difference backward for correct gradients through Poincaré ball operations.
+    /// </summary>
+    private T ComputeSingleOutput(int b, int o)
+    {
+        if (_lastInput is null)
+            throw new InvalidOperationException("Forward must be called before ComputeSingleOutput.");
+
+        var inputVec = new Vector<T>(InputFeatures);
+        for (int i = 0; i < InputFeatures; i++)
+            inputVec[i] = _lastInput[b, i];
+
+        var origin = CreateOriginVector(InputFeatures);
+        var projectedInput = _engine.PoincareExpMap(origin, inputVec, _curvature);
+
+        var weightVec = new Vector<T>(InputFeatures);
+        for (int i = 0; i < InputFeatures; i++)
+            weightVec[i] = _weights[o, i];
+        var weightPoint = _engine.PoincareExpMap(CreateOriginVector(InputFeatures), weightVec, _curvature);
+
+        var transformed = _engine.MobiusAdd(projectedInput, weightPoint, _curvature);
+
+        var biasVec = new Vector<T>(InputFeatures);
+        for (int i = 0; i < InputFeatures; i++)
+            biasVec[i] = _biases[o, i];
+        var biasProjected = _engine.PoincareExpMap(CreateOriginVector(InputFeatures), biasVec, _curvature);
+        var withBias = _engine.MobiusAdd(transformed, biasProjected, _curvature);
+
+        return _engine.PoincareDistance(origin, withBias, _curvature);
+    }
+
     public override void UpdateParameters(T learningRate)
     {
         if (_weightsGradient == null || _biasesGradient == null)
@@ -825,9 +875,53 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         }
     }
 
+    /// <inheritdoc/>
+    public override Vector<T> GetParameterGradients()
+    {
+        var gradients = new Vector<T>(ParameterCount);
+        int idx = 0;
+
+        // Weights gradients: [OutputFeatures, InputFeatures]
+        if (_weightsGradient != null)
+        {
+            for (int o = 0; o < OutputFeatures; o++)
+                for (int i = 0; i < InputFeatures; i++)
+                    gradients[idx++] = _weightsGradient[o, i];
+        }
+        else
+        {
+            idx += OutputFeatures * InputFeatures;
+        }
+
+        // Biases gradients: also [OutputFeatures, InputFeatures] in hyperbolic space
+        if (_biasesGradient != null)
+        {
+            for (int o = 0; o < OutputFeatures; o++)
+                for (int i = 0; i < InputFeatures; i++)
+                    gradients[idx++] = _biasesGradient[o, i];
+        }
+
+        return gradients;
+    }
+
+    /// <inheritdoc/>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["Curvature"] = Convert.ToDouble(_curvature).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
+
     /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
+    public override void ClearGradients()
+    {
+        base.ClearGradients();
+        _weightsGradient = null;
+        _biasesGradient = null;
+    }
+
     public override void ResetState()
     {
         _lastInput = null;

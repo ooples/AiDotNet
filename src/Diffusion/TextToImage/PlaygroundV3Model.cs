@@ -282,7 +282,7 @@ public class PlaygroundV3Model<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var predictorCount = _predictor.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != predictorCount + vaeCount)
         {
@@ -342,7 +342,6 @@ public class PlaygroundV3Model<T> : LatentDiffusionModelBase<T>
         {
             Name = "Playground v3",
             Version = "3.0",
-            ModelType = ModelType.NeuralNetwork,
             Description = "Aesthetically optimized MMDiT-X with DPO human preference alignment",
             FeatureCount = ParameterCount,
             Complexity = ParameterCount

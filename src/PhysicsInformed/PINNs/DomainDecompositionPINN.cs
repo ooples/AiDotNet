@@ -61,6 +61,18 @@ namespace AiDotNet.PhysicsInformed.PINNs;
 ///   (XPINNs): A Generalized Space-Time Domain Decomposition Based Deep Learning Framework"
 ///   Communications in Computational Physics, 2020.
 /// </remarks>
+/// <example>
+/// <code>
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputSize: 2, outputSize: 1);
+/// var pde = new HeatEquation&lt;float&gt;();
+/// var bc = new IBoundaryCondition&lt;float&gt;[] { dirichletBC };
+/// var subdomains = new List&lt;SubdomainDefinition&lt;float&gt;&gt; { left, right };
+/// var ddPinn = new DomainDecompositionPINN&lt;float&gt;(architecture, pde, bc, subdomains);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Science)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -432,7 +444,7 @@ public class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T>
         loss = NumOps.Divide(loss, NumOps.FromDouble(batchSize));
 
         // Backpropagate
-        var gradient = new Tensor<T>(output.Shape);
+        var gradient = new Tensor<T>(output.Shape.ToArray());
         T scale = NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(batchSize));
         for (int i = 0; i < batchSize; i++)
         {
@@ -493,8 +505,8 @@ public class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T>
                 NumOps.Multiply(NumOps.FromDouble(_interfaceWeight), continuityLoss));
 
             // Backpropagate interface loss to both networks
-            var gradient1 = new Tensor<T>(output1.Shape);
-            var gradient2 = new Tensor<T>(output2.Shape);
+            var gradient1 = new Tensor<T>(output1.Shape.ToArray());
+            var gradient2 = new Tensor<T>(output2.Shape.ToArray());
             T gradScale = NumOps.Multiply(
                 NumOps.FromDouble(2.0 * _interfaceWeight),
                 NumOps.Divide(NumOps.One, NumOps.FromDouble(numPoints)));

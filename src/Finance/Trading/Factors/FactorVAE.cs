@@ -39,6 +39,21 @@ namespace AiDotNet.Finance.Trading.Factors;
 /// Reference: Kim &amp; Mnih (2019). "Disentangling by Factorising"
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Define architecture for disentangled factor learning via VAE (50 assets, 10 features, 5 latent factors)
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 60, inputWidth: 10, inputDepth: 1, outputSize: 5);
+///
+/// // Training mode: VAE learns independent latent factors with disentanglement penalty
+/// var model = new FactorVAE&lt;double&gt;(architecture);
+///
+/// // ONNX inference mode: load pre-trained FactorVAE model
+/// var onnxModel = new FactorVAE&lt;double&gt;(architecture, "factor_vae.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -347,7 +362,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         SetTrainingMode(true);
         var output = PredictNative(input);
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        var gradTensor = Tensor<T>.FromVector(gradient, output.Shape);
+        var gradTensor = Tensor<T>.FromVector(gradient, output.Shape.ToArray());
 
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
@@ -394,7 +409,6 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.NeuralNetwork,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["NumFactors"] = _numFactors,
@@ -664,7 +678,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
         for (int i = 0; i < input.Length; i++)
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
         string inputName = OnnxSession.InputMetadata.Keys.First();
 
         using var results = OnnxSession.Run(new[]

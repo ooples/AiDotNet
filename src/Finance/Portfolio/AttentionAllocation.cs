@@ -23,6 +23,19 @@ namespace AiDotNet.Finance.Portfolio;
 /// dynamically based on market context, rather than relying on static historical correlations.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create an Attention Allocation model for portfolio optimization
+/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+///     inputType: InputType.OneDimensional,
+///     taskType: NeuralNetworkTaskType.Regression,
+///     inputHeight: 60, inputWidth: 10, inputDepth: 1, outputSize: 10);
+/// var model = new AttentionAllocation&lt;double&gt;(architecture);
+///
+/// // Or load a pre-trained ONNX model for attention-based allocation
+/// var onnxModel = new AttentionAllocation&lt;double&gt;(architecture, "attentionalloc.onnx");
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Finance)]
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

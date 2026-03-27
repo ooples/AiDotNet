@@ -1,4 +1,6 @@
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -33,6 +35,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+[LayerCategory(LayerCategory.Positional)]
+[LayerTask(LayerTask.PositionalEncoding)]
+[LayerProperty(IsTrainable = false, TestInputShape = "2, 4, 4", TestConstructorArgs = "2, 4")]
 internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
 {
     private readonly int _numHeads;
@@ -208,7 +213,7 @@ internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
         var bias = ComputeBias(queryLen, keyLen);
 
         // Add bias to scores
-        var output = new Tensor<T>(input.Shape);
+        var output = new Tensor<T>(input.Shape.ToArray());
 
         if (rank == 4)
         {

@@ -39,7 +39,7 @@ namespace AiDotNet.Document.OCR.TextRecognition;
 /// <code>
 /// var model = new CRNN&lt;float&gt;(architecture);
 /// var result = model.RecognizeText(croppedTextImage);
-/// Console.WriteLine($"Recognized: {result.Text}");
+/// // Result is available in the returned value
 /// </code>
 /// </para>
 /// <para>
@@ -340,7 +340,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int height = processed.Shape[2];
         int width = processed.Shape[3];
 
-        var normalized = new Tensor<T>(processed.Shape);
+        var normalized = new Tensor<T>(processed.Shape.ToArray());
         for (int i = 0; i < processed.Data.Length; i++)
         {
             double val = NumOps.ToDouble(processed.Data.Span[i]);
@@ -418,7 +418,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
         if (output.Rank == 3)
         {
-            int classDim = Array.IndexOf(output.Shape, expectedClasses);
+            int classDim = Array.IndexOf(output.Shape.ToArray(), expectedClasses);
             if (classDim < 0)
             {
                 classDim = 2;
@@ -512,7 +512,6 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         return new ModelMetadata<T>
         {
             Name = "CRNN",
-            ModelType = ModelType.NeuralNetwork,
             Description = "CRNN for sequence text recognition (TPAMI 2017)",
             FeatureCount = _cnnChannels,
             Complexity = _rnnLayers,

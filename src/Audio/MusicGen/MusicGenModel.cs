@@ -691,7 +691,7 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
     private Tensor<T> ApplyGuidance(Tensor<T> condLogits, Tensor<T> uncondLogits, double scale)
     {
-        var guided = new Tensor<T>(condLogits.Shape);
+        var guided = new Tensor<T>(condLogits.Shape.ToArray());
 
         for (int i = 0; i < condLogits.Length; i++)
         {
@@ -1034,7 +1034,6 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         {
             Name = $"MusicGen-{_options.ModelSize}",
             Description = $"Meta MusicGen text-to-music model ({_options.ModelSize})",
-            ModelType = ModelType.NeuralNetwork,
             FeatureCount = _options.MaxTextLength,
             Complexity = (int)_options.ModelSize,
             AdditionalInfo = new Dictionary<string, object>

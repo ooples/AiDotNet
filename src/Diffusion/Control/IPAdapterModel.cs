@@ -520,7 +520,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var unetCount = _baseUNet.ParameterCount;
-        var vaeCount = _vae.ParameterCount;
+        var vaeCount = _vae.GetParameters().Length;
         var encoderCount = _imageEncoder.ParameterCount;
         var projectorCount = _imageProjector.ParameterCount;
 
@@ -578,7 +578,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T>
         {
-            Name = "IP-Adapter", Version = "1.0", ModelType = ModelType.NeuralNetwork,
+            Name = "IP-Adapter", Version = "1.0",
             Description = "Image prompt adapter for reference image-guided diffusion generation",
             FeatureCount = ParameterCount, Complexity = ParameterCount
         };
@@ -672,7 +672,7 @@ public class ImageEncoder<T>
     private Tensor<T> FlattenPatches(Tensor<T> image)
     {
         // Simplified: just flatten the image
-        var flatData = new T[image.Shape.Aggregate((a, b) => a * b)];
+        var flatData = new T[image.Length];
         var span = image.AsSpan();
         for (int i = 0; i < span.Length && i < flatData.Length; i++)
         {
@@ -683,7 +683,7 @@ public class ImageEncoder<T>
 
     private Tensor<T> ApplyGelu(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape);
+        var result = new Tensor<T>(x.Shape.ToArray());
         var span = x.AsSpan();
         var resultSpan = result.AsWritableSpan();
 

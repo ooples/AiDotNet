@@ -38,6 +38,11 @@ namespace AiDotNet.ProgramSynthesis.Engines;
 /// This deeper understanding helps with tasks like bug detection and code optimization.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var graphCodeBert = new GraphCodeBERT&lt;float&gt;();
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Language)]
 [ModelDomain(ModelDomain.GraphAnalysis)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

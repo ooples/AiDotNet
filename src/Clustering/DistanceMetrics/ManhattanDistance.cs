@@ -43,4 +43,13 @@ public class ManhattanDistance<T> : DistanceMetricBase<T>
 
         return VectorHelper.ManhattanDistance(a, b);
     }
+
+    /// <inheritdoc />
+    public override T ComputeInline(T[] a, T[] b, int length)
+    {
+        T sum = NumOps.Zero;
+        for (int i = 0; i < length; i++)
+            sum = NumOps.Add(sum, NumOps.Abs(NumOps.Subtract(a[i], b[i])));
+        return sum;
+    }
 }

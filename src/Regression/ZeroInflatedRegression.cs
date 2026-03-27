@@ -38,6 +38,25 @@ namespace AiDotNet.Regression;
 /// to Defects in Manufacturing". Technometrics, 34(1), 1-14.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // Create a Zero-Inflated regression for count data with excess zeros
+/// var options = new ZeroInflatedRegressionOptions&lt;double&gt;();
+/// var model = new ZeroInflatedRegression&lt;double&gt;(options);
+///
+/// // Prepare training data: 6 samples with 2 features, count targets with excess zeros
+/// var features = Matrix&lt;double&gt;.Build.Dense(6, 2, new double[] {
+///     1, 2,  3, 4,  5, 6,  7, 8,  9, 10,  11, 12 });
+/// var targets = new Vector&lt;double&gt;(new double[] { 0, 0, 3, 0, 7, 12 });
+///
+/// // Train with mixture model (zero process + count process)
+/// model.Train(features, targets);
+///
+/// // Predict count for a new sample
+/// var newSample = Matrix&lt;double&gt;.Build.Dense(1, 2, new double[] { 13, 14 });
+/// var prediction = model.Predict(newSample);
+/// </code>
+/// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.Statistical)]
@@ -117,14 +136,16 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _numFeatures = x.Columns;
         int n = x.Rows;
 
-        // Validate response values are non-negative integers
+        // Coerce response values to non-negative integers (count data)
+        // Continuous values are rounded; negatives are clamped to zero
         T zero = NumOps.Zero;
         for (int i = 0; i < n; i++)
         {
             double yi = NumOps.ToDouble(y[i]);
-            if (NumOps.LessThan(y[i], zero) || yi != Math.Floor(yi))
+            double rounded = Math.Max(0.0, Math.Round(yi));
+            if (yi != rounded)
             {
-                throw new ArgumentException($"Response must be non-negative integers. Found: {yi} at index {i}");
+                y[i] = NumOps.FromDouble(rounded);
             }
         }
 
@@ -311,14 +332,13 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            // Count model linear predictor
+            // Count model linear predictor using Engine.DotProduct
             T etaCount = _countIntercept;
             if (_countCoefficients != null)
             {
-                for (int j = 0; j < _numFeatures; j++)
-                {
-                    etaCount = NumOps.Add(etaCount, NumOps.Multiply(_countCoefficients[j], x[i, j]));
-                }
+                var xRow = new Vector<T>(_numFeatures);
+                for (int j = 0; j < _numFeatures; j++) xRow[j] = x[i, j];
+                etaCount = NumOps.Add(etaCount, Engine.DotProduct(_countCoefficients, xRow));
             }
 
             // Apply count link inverse (boundary: special math functions)
@@ -341,14 +361,13 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
             }
             lambdas[i] = lambda;
 
-            // Zero-inflation model linear predictor
+            // Zero-inflation model linear predictor using Engine.DotProduct
             T etaZero = _zeroIntercept;
             if (_options.ModelZeroInflation && _zeroCoefficients != null)
             {
-                for (int j = 0; j < _numFeatures; j++)
-                {
-                    etaZero = NumOps.Add(etaZero, NumOps.Multiply(_zeroCoefficients[j], x[i, j]));
-                }
+                var xRow2 = new Vector<T>(_numFeatures);
+                for (int j = 0; j < _numFeatures; j++) xRow2[j] = x[i, j];
+                etaZero = NumOps.Add(etaZero, Engine.DotProduct(_zeroCoefficients, xRow2));
             }
 
             // Apply zero link inverse (boundary: special math functions for Probit/CLogLog)
@@ -746,7 +765,6 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         return new ModelMetadata<T>
         {
-            ModelType = ModelType.ZeroInflatedRegression,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "DistributionFamily", _options.DistributionFamily.ToString() },
@@ -822,5 +840,12 @@ public class ZeroInflatedRegression<T> : AsyncDecisionTreeRegressionBase<T>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateNewInstance()
     {
         return new ZeroInflatedRegression<T>(_options, Regularization);
+    }
+
+    public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
+    {
+        var clone = new ZeroInflatedRegression<T>(_options, Regularization);
+        clone.Deserialize(Serialize());
+        return clone;
     }
 }
