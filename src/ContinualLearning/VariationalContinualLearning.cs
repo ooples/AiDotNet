@@ -155,6 +155,16 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
             }
         }
 
+        // Tighten the posterior variance after each task.
+        // Per Nguyen et al. (2018), "Variational Continual Learning":
+        // the posterior variance should decrease with more tasks, making the
+        // KL regularization stronger (more tasks to protect = tighter constraint).
+        T varianceShrink = _numOps.FromDouble(Math.Log(0.5)); // halve variance each task
+        for (int i = 0; i < _posteriorLogVar.Length; i++)
+        {
+            _posteriorLogVar[i] = _numOps.Add(_posteriorLogVar[i], varianceShrink);
+        }
+
         _taskCount++;
     }
 
