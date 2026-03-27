@@ -127,6 +127,16 @@ public interface IContinualLearningStrategy<T>
     double Lambda { get; set; }
 
     /// <summary>
+    /// Whether this strategy accumulates regularization strength across tasks.
+    /// </summary>
+    /// <remarks>
+    /// <para>True for EWC, MAS, Online EWC (accumulate Fisher/importance weights).
+    /// False for VCL (prior shifts to last posterior without precision accumulation,
+    /// per Nguyen et al. ICLR 2018 reference implementation).</para>
+    /// </remarks>
+    bool AccumulatesAcrossTasks { get; }
+
+    /// <summary>
     /// Resets the strategy, clearing all stored task information.
     /// </summary>
     /// <remarks>

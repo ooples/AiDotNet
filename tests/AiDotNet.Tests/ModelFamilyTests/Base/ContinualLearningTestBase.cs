@@ -21,6 +21,8 @@ public abstract class ContinualLearningTestBase
     /// <summary>Number of model parameters for test data generation.</summary>
     protected virtual int NumParameters => 10;
 
+    // AccumulatesAcrossTasks is checked via the IContinualLearningStrategy<T> interface property.
+
     // =========================================================================
     // INVARIANT 1: Regularization loss is non-negative
     // EWC: L = λ/2 * Σ F_i (θ_i - θ*_i)² >= 0 since F_i >= 0 and squared terms >= 0
@@ -236,13 +238,19 @@ public abstract class ContinualLearningTestBase
 
     // =========================================================================
     // INVARIANT 8: Multi-task accumulation — loss after 2 tasks ≥ loss after 1 task
-    // With more tasks to remember, regularization should be at least as strong.
+    // Applies to strategies that accumulate regularization (EWC, MAS).
+    // VCL just shifts the prior to the last posterior — loss may decrease.
     // =========================================================================
 
     [Fact]
     public void ComputeLoss_IncreasesWithMoreTasks()
     {
         var strategy = CreateStrategy();
+
+        // Only applies to strategies that accumulate regularization (EWC, MAS).
+        // VCL shifts prior to last posterior — per Nguyen et al. ICLR 2018 reference
+        // implementation, there's no precision accumulation so loss may decrease.
+        if (!strategy.AccumulatesAcrossTasks) return;
         var network = CreateMockNetwork();
         var taskData = CreateTestTaskData();
 

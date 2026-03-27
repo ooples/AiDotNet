@@ -68,6 +68,8 @@ public class LearningWithoutForgetting<T> : IContinualLearningStrategy<T>
     }
 
     /// <inheritdoc />
+    public bool AccumulatesAcrossTasks => true;
+
     public double Lambda
     {
         get => _lambda;
