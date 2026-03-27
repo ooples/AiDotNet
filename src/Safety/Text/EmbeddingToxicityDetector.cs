@@ -42,7 +42,6 @@ namespace AiDotNet.Safety.Text;
     Authors = "Yifan Li, Zhengnan Hou, et al.")]
 public class EmbeddingToxicityDetector<T> : TextSafetyModuleBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly T _threshold;
     private readonly int _embeddingDim;

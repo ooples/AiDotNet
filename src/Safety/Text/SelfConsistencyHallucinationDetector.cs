@@ -50,7 +50,6 @@ namespace AiDotNet.Safety.Text;
     Authors = "Potsawee Manakul, Adian Liusie, Mark J. F. Gales")]
 public class SelfConsistencyHallucinationDetector<T> : TextSafetyModuleBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly double _contradictionThreshold;
     private readonly int _embeddingDim;

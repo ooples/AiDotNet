@@ -605,9 +605,7 @@ public sealed class MultiFidelityAutoML<T, TInput, TOutput> : BuiltInSupervisedA
                 return true;
         }
 
-        // Fallback for unannotated models
-        var typeName = checkType.Name;
-        return typeName.StartsWith("TimeSeriesRegression", StringComparison.Ordinal)
-            || typeName.StartsWith("BayesianStructuralTimeSeriesModel", StringComparison.Ordinal);
+        // No ModelCategory attribute found — not a time series model
+        return false;
     }
 }

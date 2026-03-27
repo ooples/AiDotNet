@@ -239,7 +239,7 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIn
             for (int i = 0; i < n; i++)
             {
                 var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature));
+                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature));
             }
 
             // Add hard gradient if labels provided

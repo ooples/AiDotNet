@@ -198,7 +198,19 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                     P[i, j] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
                 }
 
-            // Compute gradients (simplified: data fit + acyclicity on P)
+            // Compute NOTEARS acyclicity constraint and gradient: h(P) = tr(exp(P∘P)) - d
+            var PSq = new Matrix<T>(d, d);
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                    PSq[i, j] = NumOps.Multiply(P[i, j], P[i, j]);
+            var expPSq = MatrixExponentialTaylor(PSq, d);
+            T hCurrent = NumOps.Zero;
+            for (int i = 0; i < d; i++)
+                hCurrent = NumOps.Add(hCurrent, expPSq[i, i]);
+            hCurrent = NumOps.Subtract(hCurrent, NumOps.FromDouble(d));
+            T augCoeff = NumOps.Add(alpha, NumOps.Multiply(rho, hCurrent));
+
+            // Compute gradients: data fit + NOTEARS acyclicity
             var gWo = new Matrix<T>(headDim, 1);
             var gWq = new Matrix<T>(featDim, headDim);
             var gWk = new Matrix<T>(featDim, headDim);
@@ -212,8 +224,9 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                     T pij = P[i, j];
                     T absCorr = NumOps.Abs(corr[i, j]);
                     T dataGrad = NumOps.Subtract(pij, absCorr);
-                    T acycGrad = NumOps.Multiply(NumOps.Add(alpha, NumOps.Multiply(rho, pij)),
-                        NumOps.FromDouble(2));
+                    // NOTEARS gradient: (alpha + rho*h) * exp(P²)^T[j,i] * 2 * P[i,j]
+                    T acycGrad = NumOps.Multiply(augCoeff,
+                        NumOps.Multiply(expPSq[j, i], NumOps.Multiply(NumOps.FromDouble(2), pij)));
                     T totalGrad = NumOps.Add(dataGrad, acycGrad);
                     T sigDeriv = NumOps.Multiply(pij, NumOps.Subtract(NumOps.One, pij));
                     T dLogit = NumOps.Multiply(totalGrad, sigDeriv);
@@ -305,24 +318,17 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
                     Wk[f, k] = NumOps.Subtract(Wk[f, k], NumOps.Multiply(lr, gWk[f, k]));
                 }
 
-            // NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
-            var PSq = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    PSq[i, j] = NumOps.Multiply(P[i, j], P[i, j]);
-            var expPSq = MatrixExponentialTaylor(PSq, d);
-            T hVal = NumOps.Zero;
-            for (int i = 0; i < d; i++)
-                hVal = NumOps.Add(hVal, expPSq[i, i]);
-            hVal = NumOps.Subtract(hVal, NumOps.FromDouble(d));
-            prevHW = NumOps.ToDouble(hVal);
-            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
-            if (NumOps.GreaterThan(hVal, NumOps.FromDouble(0.25)))
+            // Reuse hCurrent computed during gradient calculation above
+            double hDouble = NumOps.ToDouble(hCurrent);
+            alpha = NumOps.Add(alpha, NumOps.Multiply(rho, hCurrent));
+            // Increase rho only when h is not decreasing fast enough (per NOTEARS augmented Lagrangian)
+            if (hDouble > 0.25 * Math.Max(prevHW, 1.0))
             {
                 T newRho = NumOps.Multiply(rho, NumOps.FromDouble(10));
                 T rhoMax = NumOps.FromDouble(MaxPenaltyValue);
                 rho = NumOps.GreaterThan(newRho, rhoMax) ? rhoMax : newRho;
             }
+            prevHW = hDouble;
         }
 
         // Final inference using trained parameters

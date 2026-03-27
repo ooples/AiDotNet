@@ -30,6 +30,11 @@ public abstract class AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, Vector<T>
 {
 
     /// <summary>
+    /// Provides hardware-accelerated tensor/vector operations (SIMD, GPU when available).
+    /// </summary>
+    protected new IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
     /// The contamination parameter representing the expected proportion of anomalies in the data.
     /// Industry standard default is 0.1 (10%).
     /// </summary>
@@ -213,11 +218,6 @@ public abstract class AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, Vector<T>
     public override void SetParameters(Vector<T> parameters) { }
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// Default implementation creates a shallow copy via MemberwiseClone.
-    /// Concrete detectors with deep mutable state should override this
-    /// to properly clone their algorithm-specific internal state.
-    /// </remarks>
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
         return (AnomalyDetectorBase<T>)MemberwiseClone();

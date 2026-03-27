@@ -371,10 +371,6 @@ public class Mamba2Block<T> : LayerBase<T>
         var zBranch = SliceTensor(projected3D, 2, _innerDimension, _innerDimension);
         _lastXBranch = xBranch;
         _lastZBranch = zBranch;
-        // Debug: verify xBranch values
-        var _dbgFwd = Path.Combine(Path.GetTempPath(), "mamba2_debug.log");
-        File.AppendAllText(_dbgFwd, $"FWD: xBranch[0,0,0..2]=[{Convert.ToDouble(xBranch[new[]{0,0,0}]):G6},{Convert.ToDouble(xBranch[new[]{0,0,1}]):G6},{Convert.ToDouble(xBranch[new[]{0,0,2}]):G6}] projected3D[0,0,0..2]=[{Convert.ToDouble(projected3D[new[]{0,0,0}]):G6},{Convert.ToDouble(projected3D[new[]{0,0,1}]):G6},{Convert.ToDouble(projected3D[new[]{0,0,2}]):G6}]{Environment.NewLine}");
-
         // Step 2: Conv1D on x branch
         var convOutput = DepthwiseConv1DForward(xBranch, batchSize, seqLen);
         _lastConvOutput = convOutput;
@@ -974,6 +970,8 @@ public class Mamba2Block<T> : LayerBase<T>
         Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
         var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
+        // Zero-initialize rented buffer — it may contain stale data from previous use
+        for (int i = 0; i < dInput.Length; i++) dInput[i] = NumOps.Zero;
         _convBiasGradient = new Tensor<T>(new[] { _innerDimension });
         _convWeightsGradient = new Tensor<T>(new[] { _innerDimension, _convKernelSize });
 

@@ -19,12 +19,9 @@ namespace AiDotNet.Safety.Audio;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class VoiceProtectorBase<T> : IVoiceProtector<T>
+public abstract class VoiceProtectorBase<T> : SafetyModuleBase<T>, IVoiceProtector<T>
 {
-    /// <summary>
-    /// Numeric operations for type T.
-    /// </summary>
-    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    // NumOps, Engine, ModuleName, IsReady inherited from SafetyModuleBase
 
     /// <summary>
     /// The default sample rate for audio processing.
@@ -43,16 +40,10 @@ public abstract class VoiceProtectorBase<T> : IVoiceProtector<T>
     }
 
     /// <inheritdoc />
-    public abstract string ModuleName { get; }
-
-    /// <inheritdoc />
-    public virtual bool IsReady => true;
-
-    /// <inheritdoc />
     public abstract Vector<T> ProtectVoice(Vector<T> audioSamples, int sampleRate);
 
     /// <inheritdoc />
-    public virtual IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
+    public override IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
         if (content is null) throw new ArgumentNullException(nameof(content));
 

@@ -251,8 +251,8 @@ public class RFCIAlgorithm<T> : ConstraintBasedBase<T>
             }
         }
 
-        // Phase 4: Apply Meek-like orientation rules
-        ApplyMeekRules(adj, oriented, d);
+        // Phase 4: Apply Meek-like orientation rules (skip bidirected edges)
+        ApplyMeekRules(adj, oriented, bidirected, d);
 
         // Build weighted adjacency matrix
         var W = new Matrix<T>(d, d);
@@ -296,7 +296,7 @@ public class RFCIAlgorithm<T> : ConstraintBasedBase<T>
         return result;
     }
 
-    private static void ApplyMeekRules(bool[,] adj, bool[,] oriented, int d)
+    private static void ApplyMeekRules(bool[,] adj, bool[,] oriented, bool[,] bidirected, int d)
     {
         bool changed = true;
         while (changed)
@@ -306,7 +306,8 @@ public class RFCIAlgorithm<T> : ConstraintBasedBase<T>
             {
                 for (int j = 0; j < d; j++)
                 {
-                    if (!adj[i, j] || oriented[i, j] || oriented[j, i]) continue;
+                    // Skip edges that are already oriented, or bidirected (latent confounder)
+                    if (!adj[i, j] || oriented[i, j] || oriented[j, i] || bidirected[i, j]) continue;
 
                     for (int k = 0; k < d; k++)
                     {

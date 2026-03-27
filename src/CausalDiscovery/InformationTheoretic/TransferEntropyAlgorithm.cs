@@ -147,13 +147,15 @@ public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
             return 0;
         }
 
-        if (rssUnrestricted < 1e-15)
+        // Use a relative cutoff based on restricted RSS to handle different data scales
+        double minRss = rssRestricted * 1e-12;
+        if (minRss < double.Epsilon) minRss = double.Epsilon;
+
+        if (rssUnrestricted < minRss)
         {
-            // Unrestricted model fits perfectly but restricted does not.
-            // This is the strongest possible TE signal: source perfectly predicts target
-            // beyond what target's own history can explain. Cap at a large finite value
-            // (log ratio is +infinity when denominator → 0).
-            return 0.5 * Math.Log(rssRestricted / 1e-15);
+            // Unrestricted model fits nearly perfectly compared to restricted.
+            // Cap at a large finite value (log ratio is +infinity when denominator → 0).
+            return 0.5 * Math.Log(rssRestricted / minRss);
         }
 
         double te = 0.5 * Math.Log(rssRestricted / rssUnrestricted);

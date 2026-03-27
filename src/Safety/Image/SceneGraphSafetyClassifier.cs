@@ -44,7 +44,6 @@ namespace AiDotNet.Safety.Image;
     Authors = "Various")]
 public class SceneGraphSafetyClassifier<T> : ImageSafetyModuleBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly double _threshold;
     private readonly int _gridSize;

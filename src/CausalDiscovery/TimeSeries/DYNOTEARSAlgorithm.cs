@@ -235,19 +235,19 @@ public class DYNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
                 }
             }
 
-            // Gradient of loss w.r.t. W: -1/n * Xt' * R
-            T nT = NumOps.FromDouble(n);
             // Gradient of loss w.r.t. W: -1/n * Xt' * R using Engine.DotProduct
+            T nT = NumOps.FromDouble(n);
             var gradW = new Matrix<T>(d, d);
+            // Pre-allocate reusable column vectors
+            var colVec = new Vector<T>(n);
+            var rColVec = new Vector<T>(n);
             for (int i = 0; i < d; i++)
             {
-                var xtCol = new Vector<T>(n);
-                for (int t = 0; t < n; t++) xtCol[t] = Xt[t, i];
+                for (int t = 0; t < n; t++) colVec[t] = Xt[t, i];
                 for (int j = 0; j < d; j++)
                 {
-                    var rCol = new Vector<T>(n);
-                    for (int t = 0; t < n; t++) rCol[t] = R[t, j];
-                    gradW[i, j] = NumOps.Negate(NumOps.Divide(Engine.DotProduct(xtCol, rCol), nT));
+                    for (int t = 0; t < n; t++) rColVec[t] = R[t, j];
+                    gradW[i, j] = NumOps.Negate(NumOps.Divide(Engine.DotProduct(colVec, rColVec), nT));
                 }
             }
 
@@ -255,13 +255,11 @@ public class DYNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
             var gradA = new Matrix<T>(lagDim, d);
             for (int i = 0; i < lagDim; i++)
             {
-                var zCol = new Vector<T>(n);
-                for (int t = 0; t < n; t++) zCol[t] = Z[t, i];
+                for (int t = 0; t < n; t++) colVec[t] = Z[t, i];
                 for (int j = 0; j < d; j++)
                 {
-                    var rCol2 = new Vector<T>(n);
-                    for (int t = 0; t < n; t++) rCol2[t] = R[t, j];
-                    gradA[i, j] = NumOps.Negate(NumOps.Divide(Engine.DotProduct(zCol, rCol2), nT));
+                    for (int t = 0; t < n; t++) rColVec[t] = R[t, j];
+                    gradA[i, j] = NumOps.Negate(NumOps.Divide(Engine.DotProduct(colVec, rColVec), nT));
                 }
             }
 

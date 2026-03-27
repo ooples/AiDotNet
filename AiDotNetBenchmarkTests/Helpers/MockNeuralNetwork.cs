@@ -37,6 +37,10 @@ public class MockNeuralNetwork<T, TInput, TOutput> : IFullModel<T, TInput, TOutp
     {
         if (parameters == null)
             throw new ArgumentNullException(nameof(parameters));
+        if (parameters.Length != _parameters.Length)
+            throw new ArgumentException(
+                $"Parameter count mismatch: expected {_parameters.Length}, got {parameters.Length}.",
+                nameof(parameters));
         _parameters = parameters.Clone();
     }
 

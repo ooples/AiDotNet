@@ -203,20 +203,22 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
             var (loss, lossGrad) = ComputeL2Loss(X, currentW);
             var (h, hGrad) = ComputeLogDetConstraint(currentW, s, d);
 
-            double obj = loss + Lambda1 * ComputeL1Norm(currentW) + mu * h;
+            // Per DAGMA reference: obj = mu*score + h (score weighted by mu, NOT h)
+            double obj = mu * (loss + Lambda1 * ComputeL1Norm(currentW)) + h;
 
-            // Full gradient = loss_grad + mu * h_grad + L1 subgradient
+            // Per reference: grad = mu*G_score + mu*lambda1*sign(W) + G_h
             double[] grad = new double[vecLen];
             for (int i = 0; i < d; i++)
             {
                 for (int j = 0; j < d; j++)
                 {
                     int idx = i * d + j;
-                    grad[idx] = NumOps.ToDouble(lossGrad[i, j]) + mu * NumOps.ToDouble(hGrad[i, j]);
+                    // mu weights the score gradient, h gradient is unweighted
+                    grad[idx] = mu * NumOps.ToDouble(lossGrad[i, j]) + NumOps.ToDouble(hGrad[i, j]);
 
                     if (i != j)
                     {
-                        grad[idx] += Lambda1 * Math.Sign(w[idx]);
+                        grad[idx] += mu * Lambda1 * Math.Sign(w[idx]);
                     }
                 }
             }
@@ -237,6 +239,44 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
             for (int i = 0; i < d; i++)
             {
                 w[i * d + i] = 0;
+            }
+
+            // M-matrix domain check (per DAGMA reference implementation):
+            // Verify sI - W⊙W is still an M-matrix (inverse has no negative entries).
+            // If violated, halve the learning rate and retry the step.
+            var checkW = UnflattenMatrix(w, d);
+            var checkM = new Matrix<T>(d, d);
+            T sCheck = NumOps.FromDouble(s);
+            for (int ci = 0; ci < d; ci++)
+            {
+                checkM[ci, ci] = sCheck;
+                for (int cj = 0; cj < d; cj++)
+                    checkM[ci, cj] = NumOps.Subtract(checkM[ci, cj],
+                        NumOps.Multiply(checkW[ci, cj], checkW[ci, cj]));
+            }
+
+            var invCheck = InvertMatrix(checkM, d);
+            if (invCheck is null || HasNegativeEntry(invCheck, d))
+            {
+                // Stepped outside M-matrix domain — halve learning rate and retry
+                double tempLr = _learningRate;
+                // Undo step
+                for (int i = 0; i < vecLen; i++)
+                {
+                    double mHat2 = m[i] / (1 - Math.Pow(ADAM_BETA1, iter));
+                    double vHat2 = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
+                    w[i] += tempLr * mHat2 / (Math.Sqrt(vHat2) + 1e-8);
+                }
+                _learningRate *= 0.5;
+                if (_learningRate < 1e-16) break;
+                // Redo with smaller step
+                for (int i = 0; i < vecLen; i++)
+                {
+                    double mHat2 = m[i] / (1 - Math.Pow(ADAM_BETA1, iter));
+                    double vHat2 = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
+                    w[i] -= _learningRate * mHat2 / (Math.Sqrt(vHat2) + 1e-8);
+                }
+                for (int ci = 0; ci < d; ci++) w[ci * d + ci] = 0;
             }
 
             // Convergence check at checkpoint intervals
@@ -426,6 +466,18 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
             for (int j = 0; j < d; j++)
                 result[i, j] = NumOps.FromDouble(vector[i * d + j]);
         return result;
+    }
+
+    /// <summary>
+    /// Checks if any entry of the matrix is negative (M-matrix violation).
+    /// </summary>
+    private bool HasNegativeEntry(Matrix<T> matrix, int d)
+    {
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                if (NumOps.ToDouble(matrix[i, j]) < -1e-10)
+                    return true;
+        return false;
     }
 
     #endregion

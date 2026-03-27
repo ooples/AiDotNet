@@ -35,7 +35,6 @@ namespace AiDotNet.Safety.Watermarking;
     Authors = "Google DeepMind")]
 public class NeuralImageWatermarker<T> : ImageWatermarkerBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <inheritdoc />
     public override string ModuleName => "NeuralImageWatermarker";

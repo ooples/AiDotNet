@@ -2,6 +2,8 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Validation;
 
@@ -40,10 +42,9 @@ namespace AiDotNet.SelfSupervisedLearning.Evaluation;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("A Simple Framework for Contrastive Learning of Visual Representations", "https://arxiv.org/abs/2002.05709", Year = 2020, Authors = "Ting Chen, Simon Kornblith, Mohammad Norouzi, Geoffrey Hinton")]
-public class KNNEvaluator<T>
+public class KNNEvaluator<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private static IEngine Engine => AiDotNetEngine.Current;
+    // NumOps and Engine inherited from ModelBase
 
     private readonly INeuralNetwork<T> _encoder;
     private readonly int _k;
@@ -205,7 +206,7 @@ public class KNNEvaluator<T>
     /// </summary>
     /// <param name="testData">Test data.</param>
     /// <returns>Predicted class labels.</returns>
-    public int[] Predict(Tensor<T> testData)
+    public int[] PredictClasses(Tensor<T> testData)
     {
         if (_trainFeatures is null || _trainLabels is null)
             throw new InvalidOperationException("Must call Fit() before Predict()");
@@ -361,4 +362,35 @@ public class KNNEvaluator<T>
 
         return new Tensor<T>(result, [batchSize, dim]);
     }
+
+    #region ModelBase Overrides
+
+    /// <inheritdoc />
+    public override Tensor<T> Predict(Tensor<T> input) => _encoder.Predict(input);
+
+    /// <inheritdoc />
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+
+    /// <inheritdoc />
+    public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters() => _encoder.GetParameters();
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters) => _encoder.SetParameters(parameters);
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+    {
+        var copy = DeepCopy();
+        copy.SetParameters(parameters);
+        return copy;
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+        => (KNNEvaluator<T>)MemberwiseClone();
+
+    #endregion
 }

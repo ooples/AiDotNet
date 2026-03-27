@@ -50,7 +50,6 @@ namespace AiDotNet.Safety.Audio;
     Authors = "Various")]
 internal class SpectralDeepfakeDetector<T> : AudioSafetyModuleBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly T _threshold;
     private readonly FastFourierTransform<T> _fft;

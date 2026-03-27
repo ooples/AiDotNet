@@ -4,6 +4,8 @@ using AiDotNet.ContinualLearning.Interfaces;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ContinualLearning.Memory;
@@ -78,7 +80,7 @@ public enum ReplaySamplingStrategy
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Experience Replay for Continual Learning", "https://arxiv.org/abs/1811.11682", Year = 2019, Authors = "David Rolnick, Arun Ahuja, Jonathan Schwarz, Timothy Lillicrap, Gregory Wayne")]
-public class ExperienceReplayBuffer<T, TInput, TOutput>
+public class ExperienceReplayBuffer<T, TInput, TOutput> : ModelBase<T, TInput, TOutput>
 {
     private readonly int _maxSize;
     private readonly List<DataPoint<T, TInput, TOutput>> _buffer;
@@ -894,6 +896,38 @@ public class ExperienceReplayBuffer<T, TInput, TOutput>
         }
         return sum;
     }
+
+    #endregion
+
+    #region ModelBase Overrides
+
+    /// <inheritdoc />
+    public override TOutput Predict(TInput input) =>
+        throw new NotSupportedException("ExperienceReplayBuffer is a memory buffer, not a predictor.");
+
+    /// <inheritdoc />
+    public override void Train(TInput input, TOutput expectedOutput) { }
+
+    /// <inheritdoc />
+    public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters() => new Vector<T>(0);
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters) { }
+
+    /// <inheritdoc />
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        var copy = DeepCopy();
+        copy.SetParameters(parameters);
+        return copy;
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
+        => (ExperienceReplayBuffer<T, TInput, TOutput>)MemberwiseClone();
 
     #endregion
 }

@@ -107,6 +107,10 @@ public class PCNOTEARSAlgorithm<T> : HybridBase<T>
 
         for (int condSize = 0; condSize <= _maxConditioningSetSize; condSize++)
         {
+            // Early termination: degrees of freedom = n - condSize - 3.
+            // If dof <= 0, no CI test at this or larger conditioning set sizes can be valid.
+            if (n - condSize - 3 <= 0) break;
+
             for (int i = 0; i < d; i++)
             {
                 for (int j = i + 1; j < d; j++)

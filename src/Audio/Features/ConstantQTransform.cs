@@ -2,6 +2,8 @@ using System;
 using System.Numerics;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -46,9 +48,9 @@ namespace AiDotNet.Audio.Features;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("An Efficient Algorithm for the Calculation of a Constant Q Transform", "https://doi.org/10.1121/1.404385", Year = 1992, Authors = "Judith C. Brown, Miller S. Puckette")]
-public class ConstantQTransform<T>
+public class ConstantQTransform<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
-    private readonly INumericOperations<T> _numOps;
+    // NumOps inherited from ModelBase
     private readonly int _sampleRate;
     private readonly double _fMin;
     private readonly int _binsPerOctave;
@@ -97,7 +99,7 @@ public class ConstantQTransform<T>
         int hopLength = 512,
         WindowType windowType = WindowType.Hann)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
+        // NumOps already initialized via ModelBase static field
         _sampleRate = sampleRate;
         _fMin = fMin;
         _binsPerOctave = binsPerOctave;
@@ -199,7 +201,7 @@ public class ConstantQTransform<T>
         var audioDouble = new double[numSamples];
         for (int i = 0; i < numSamples; i++)
         {
-            audioDouble[i] = _numOps.ToDouble(audio[i]);
+            audioDouble[i] = NumOps.ToDouble(audio[i]);
         }
 
         // For each time frame
@@ -221,7 +223,7 @@ public class ConstantQTransform<T>
                 }
 
                 // Store magnitude
-                result[frame, k] = _numOps.FromDouble(sum.Magnitude);
+                result[frame, k] = NumOps.FromDouble(sum.Magnitude);
             }
         }
 
@@ -244,7 +246,7 @@ public class ConstantQTransform<T>
         var audioDouble = new double[numSamples];
         for (int i = 0; i < numSamples; i++)
         {
-            audioDouble[i] = _numOps.ToDouble(audio[i]);
+            audioDouble[i] = NumOps.ToDouble(audio[i]);
         }
 
         for (int frame = 0; frame < numFrames; frame++)
@@ -262,8 +264,8 @@ public class ConstantQTransform<T>
                     sum += audioDouble[sampleIdx] * _kernelBank[k, n];
                 }
 
-                result[frame, k, 0] = _numOps.FromDouble(sum.Real);
-                result[frame, k, 1] = _numOps.FromDouble(sum.Imaginary);
+                result[frame, k, 0] = NumOps.FromDouble(sum.Real);
+                result[frame, k, 1] = NumOps.FromDouble(sum.Imaginary);
             }
         }
 
@@ -284,8 +286,8 @@ public class ConstantQTransform<T>
         {
             for (int j = 0; j < cqt.Shape[1]; j++)
             {
-                double mag = _numOps.ToDouble(cqt[i, j]);
-                cqt[i, j] = _numOps.FromDouble(Math.Pow(mag, power));
+                double mag = NumOps.ToDouble(cqt[i, j]);
+                cqt[i, j] = NumOps.FromDouble(Math.Pow(mag, power));
             }
         }
 
@@ -307,10 +309,10 @@ public class ConstantQTransform<T>
         {
             for (int j = 0; j < cqt.Shape[1]; j++)
             {
-                double power = _numOps.ToDouble(cqt[i, j]);
+                double power = NumOps.ToDouble(cqt[i, j]);
                 double db = 10.0 * Math.Log10(Math.Max(power, 1e-10) / (refValue * refValue));
                 db = Math.Max(db, minDb);
-                cqt[i, j] = _numOps.FromDouble(db);
+                cqt[i, j] = NumOps.FromDouble(db);
             }
         }
 
@@ -341,4 +343,35 @@ public class ConstantQTransform<T>
         int octave = (midiNote / 12) - 1;
         return $"{noteNames[noteIndex]}{octave}";
     }
+
+    #region ModelBase Overrides
+
+    /// <inheritdoc />
+    public override Tensor<T> Predict(Tensor<T> input) => Transform(input);
+
+    /// <inheritdoc />
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+
+    /// <inheritdoc />
+    public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+
+    /// <inheritdoc />
+    public override Tensors.LinearAlgebra.Vector<T> GetParameters() => new Tensors.LinearAlgebra.Vector<T>(0);
+
+    /// <inheritdoc />
+    public override void SetParameters(Tensors.LinearAlgebra.Vector<T> parameters) { }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Tensors.LinearAlgebra.Vector<T> parameters)
+    {
+        var copy = DeepCopy();
+        copy.SetParameters(parameters);
+        return copy;
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+        => (ConstantQTransform<T>)MemberwiseClone();
+
+    #endregion
 }

@@ -45,7 +45,6 @@ namespace AiDotNet.Safety.Image;
     Authors = "Yinglong Nie, et al.")]
 public class ConsistencyDeepfakeDetector<T> : ImageSafetyModuleBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly double _threshold;
     private readonly int _gridSize;

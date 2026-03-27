@@ -52,7 +52,6 @@ namespace AiDotNet.Safety.Text;
     Authors = "Jingyang Zhang, Jingwei Sun, Eric Yeats, et al.")]
 public class PerplexityMemorizationDetector<T> : TextSafetyModuleBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly double _lowPerplexityThreshold;
     private readonly double _highRepetitionThreshold;

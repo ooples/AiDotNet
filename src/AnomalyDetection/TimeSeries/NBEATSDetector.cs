@@ -858,10 +858,10 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
     {
         int outputSize = W.Columns;
         var output = new Vector<T>(outputSize);
+        var wCol = new Vector<T>(input.Length);
 
         for (int j = 0; j < outputSize; j++)
         {
-            var wCol = new Vector<T>(input.Length);
             for (int i = 0; i < input.Length; i++) wCol[i] = W[i, j];
             output[j] = NumOps.Add(b[j], Engine.DotProduct(input, wCol));
         }

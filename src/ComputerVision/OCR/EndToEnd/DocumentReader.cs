@@ -3,6 +3,8 @@ using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.TextDetection;
 using AiDotNet.ComputerVision.OCR.Recognition;
 using AiDotNet.Enums;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 
@@ -33,9 +35,8 @@ namespace AiDotNet.ComputerVision.OCR.EndToEnd;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class DocumentReader<T>
+public class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
-    private readonly INumericOperations<T> _numOps;
     private readonly TextDetectorBase<T> _detector;
     private readonly OCRBase<T> _recognizer;
     private readonly OCROptions<T> _options;
@@ -50,14 +51,13 @@ public class DocumentReader<T>
     /// </summary>
     public DocumentReader(OCROptions<T> options)
     {
-        _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         _options = options;
 
         // Use DBNet for document text detection (works well with clean documents)
         var detectionOptions = new TextDetectionOptions<T>
         {
             Architecture = TextDetectionArchitecture.DBNet,
-            ConfidenceThreshold = _numOps.FromDouble(0.3) // Lower threshold for documents
+            ConfidenceThreshold = NumOps.FromDouble(0.3) // Lower threshold for documents
         };
 
         _detector = new DBNet<T>(detectionOptions);
@@ -164,7 +164,7 @@ public class DocumentReader<T>
         double maxVal = 0;
         for (int i = 0; i < Math.Min(100, image.Length); i++)
         {
-            maxVal = Math.Max(maxVal, Math.Abs(_numOps.ToDouble(image[i])));
+            maxVal = Math.Max(maxVal, Math.Abs(NumOps.ToDouble(image[i])));
         }
         bool isNormalized = maxVal <= 1.0;
         double midpoint = isNormalized ? 0.5 : 128.0;
@@ -179,13 +179,13 @@ public class DocumentReader<T>
                 {
                     for (int c = 0; c < channels; c++)
                     {
-                        double val = _numOps.ToDouble(image[b, c, h, w]);
+                        double val = NumOps.ToDouble(image[b, c, h, w]);
 
                         // Simple contrast enhancement (works with both [0,1] and [0,255] ranges)
                         val = (val - midpoint) * 1.2 + midpoint;
                         val = MathHelper.Clamp(val, 0, rangeMax);
 
-                        result[b, c, h, w] = _numOps.FromDouble(val);
+                        result[b, c, h, w] = NumOps.FromDouble(val);
                     }
                 }
             }
@@ -206,7 +206,7 @@ public class DocumentReader<T>
 
         // Sort regions by vertical position
         var sortedRegions = regions
-            .OrderBy(r => _numOps.ToDouble(r.Box.Y1))
+            .OrderBy(r => NumOps.ToDouble(r.Box.Y1))
             .ToList();
 
         // Group into lines based on Y-overlap
@@ -237,8 +237,8 @@ public class DocumentReader<T>
         foreach (var region in regions)
         {
             bool addedToLine = false;
-            double regionTop = _numOps.ToDouble(region.Box.Y1);
-            double regionBottom = _numOps.ToDouble(region.Box.Y2);
+            double regionTop = NumOps.ToDouble(region.Box.Y1);
+            double regionBottom = NumOps.ToDouble(region.Box.Y2);
             double regionHeight = regionBottom - regionTop;
 
             // Skip degenerate regions with zero height
@@ -249,8 +249,8 @@ public class DocumentReader<T>
 
             foreach (var line in lines)
             {
-                double lineTop = line.Min(r => _numOps.ToDouble(r.Box.Y1));
-                double lineBottom = line.Max(r => _numOps.ToDouble(r.Box.Y2));
+                double lineTop = line.Min(r => NumOps.ToDouble(r.Box.Y1));
+                double lineBottom = line.Max(r => NumOps.ToDouble(r.Box.Y2));
 
                 // Check vertical overlap
                 double overlap = Math.Min(regionBottom, lineBottom) - Math.Max(regionTop, lineTop);
@@ -274,7 +274,7 @@ public class DocumentReader<T>
         foreach (var line in lines)
         {
             line.Sort((a, b) =>
-                _numOps.ToDouble(a.Box.X1).CompareTo(_numOps.ToDouble(b.Box.X1)));
+                NumOps.ToDouble(a.Box.X1).CompareTo(NumOps.ToDouble(b.Box.X1)));
         }
 
         return lines;
@@ -295,8 +295,8 @@ public class DocumentReader<T>
         {
             foreach (var region in line)
             {
-                double x1 = _numOps.ToDouble(region.Box.X1);
-                double x2 = _numOps.ToDouble(region.Box.X2);
+                double x1 = NumOps.ToDouble(region.Box.X1);
+                double x2 = NumOps.ToDouble(region.Box.X2);
 
                 if (x2 < midPoint - imageWidth * 0.1)
                     hasLeftColumn = true;
@@ -316,13 +316,13 @@ public class DocumentReader<T>
                 // Use region center to determine column assignment (prevents duplicates)
                 var leftRegions = line.Where(r =>
                 {
-                    double centerX = (_numOps.ToDouble(r.Box.X1) + _numOps.ToDouble(r.Box.X2)) / 2;
+                    double centerX = (NumOps.ToDouble(r.Box.X1) + NumOps.ToDouble(r.Box.X2)) / 2;
                     return centerX < midPoint;
                 }).ToList();
 
                 var rightRegions = line.Where(r =>
                 {
-                    double centerX = (_numOps.ToDouble(r.Box.X1) + _numOps.ToDouble(r.Box.X2)) / 2;
+                    double centerX = (NumOps.ToDouble(r.Box.X1) + NumOps.ToDouble(r.Box.X2)) / 2;
                     return centerX >= midPoint;
                 }).ToList();
 
@@ -353,10 +353,10 @@ public class DocumentReader<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        int x1 = Math.Max(0, (int)_numOps.ToDouble(region.Box.X1));
-        int y1 = Math.Max(0, (int)_numOps.ToDouble(region.Box.Y1));
-        int x2 = Math.Min(width, (int)_numOps.ToDouble(region.Box.X2));
-        int y2 = Math.Min(height, (int)_numOps.ToDouble(region.Box.Y2));
+        int x1 = Math.Max(0, (int)NumOps.ToDouble(region.Box.X1));
+        int y1 = Math.Max(0, (int)NumOps.ToDouble(region.Box.Y1));
+        int x2 = Math.Min(width, (int)NumOps.ToDouble(region.Box.X2));
+        int y2 = Math.Min(height, (int)NumOps.ToDouble(region.Box.Y2));
 
         int cropW = Math.Max(1, x2 - x1);
         int cropH = Math.Max(1, y2 - y1);
@@ -387,6 +387,37 @@ public class DocumentReader<T>
     {
         return _detector.GetParameterCount() + _recognizer.GetParameterCount();
     }
+
+    #region ModelBase Overrides
+
+    /// <inheritdoc />
+    public override Tensor<T> Predict(Tensor<T> input) => PreprocessDocument(input);
+
+    /// <inheritdoc />
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+
+    /// <inheritdoc />
+    public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters() => new Vector<T>(0);
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters) { }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+    {
+        var copy = DeepCopy();
+        copy.SetParameters(parameters);
+        return copy;
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+        => (DocumentReader<T>)MemberwiseClone();
+
+    #endregion
 }
 
 /// <summary>

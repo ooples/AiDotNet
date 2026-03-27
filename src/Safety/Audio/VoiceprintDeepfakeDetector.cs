@@ -43,7 +43,6 @@ namespace AiDotNet.Safety.Audio;
     Authors = "Various")]
 public class VoiceprintDeepfakeDetector<T> : AudioSafetyModuleBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly T _threshold;
     private readonly int _frameSize;

@@ -38,7 +38,6 @@ namespace AiDotNet.Safety.Watermarking;
     Authors = "Robin San Roman, Pierre Fernandez, et al.")]
 public class AudioSealWatermarker<T> : AudioWatermarkerBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly int _segmentSize;
 
     /// <inheritdoc />

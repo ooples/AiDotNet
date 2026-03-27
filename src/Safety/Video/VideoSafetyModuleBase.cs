@@ -20,15 +20,11 @@ namespace AiDotNet.Safety.Video;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class VideoSafetyModuleBase<T> : IVideoSafetyModule<T>
+public abstract class VideoSafetyModuleBase<T> : SafetyModuleBase<T>, IVideoSafetyModule<T>
 {
+    // ModuleName, IsReady, Engine, NumOps inherited from SafetyModuleBase
+
     private readonly double _defaultFrameRate;
-
-    /// <inheritdoc />
-    public abstract string ModuleName { get; }
-
-    /// <inheritdoc />
-    public virtual bool IsReady => true;
 
     /// <summary>
     /// Initializes a new video safety module base with the specified default frame rate.
@@ -47,7 +43,7 @@ public abstract class VideoSafetyModuleBase<T> : IVideoSafetyModule<T>
     /// The base implementation wraps the vector in a single 1D tensor frame and delegates to
     /// <see cref="EvaluateVideo(IReadOnlyList{Tensor{T}}, double)"/> using the default frame rate.
     /// </remarks>
-    public virtual IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
+    public override IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
         if (content is null)
         {

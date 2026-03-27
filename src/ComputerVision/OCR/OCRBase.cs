@@ -1,4 +1,6 @@
 using AiDotNet.Augmentation.Image;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.OCR;
@@ -197,14 +199,9 @@ public enum TextRecognitionModel
 /// Base class for OCR models.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class OCRBase<T>
+public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
-    /// <summary>
-    /// Provides access to the hardware-accelerated tensor engine.
-    /// </summary>
-    protected IEngine Engine => AiDotNetEngine.Current;
-
-    protected readonly INumericOperations<T> NumOps;
+    // Engine and NumOps inherited from ModelBase
     protected readonly OCROptions<T> Options;
 
     /// <summary>
@@ -233,7 +230,6 @@ public abstract class OCRBase<T>
     /// </summary>
     protected OCRBase(OCROptions<T> options)
     {
-        NumOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         Options = options;
 
         string charset = options.CharacterSet ?? DefaultCharacterSet;
@@ -490,4 +486,60 @@ public abstract class OCRBase<T>
     /// Saves model weights.
     /// </summary>
     public abstract void SaveWeights(string path);
+
+    #region ModelBase Overrides
+
+    /// <summary>
+    /// Runs OCR and returns region info as a tensor [numRegions, 6].
+    /// Columns: confidence, textLength, x1, y1, x2, y2.
+    /// </summary>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        var result = Recognize(input);
+        int regions = result.TextRegions.Count;
+        if (regions == 0)
+            return new Tensor<T>([0, 6]);
+
+        var output = new Tensor<T>([regions, 6]);
+        for (int i = 0; i < regions; i++)
+        {
+            var region = result.TextRegions[i];
+            output[i, 0] = region.Confidence;
+            output[i, 1] = NumOps.FromDouble(region.Text.Length);
+            if (region.Box is not null)
+            {
+                output[i, 2] = region.Box.X1;
+                output[i, 3] = region.Box.Y1;
+                output[i, 4] = region.Box.X2;
+                output[i, 5] = region.Box.Y2;
+            }
+        }
+        return output;
+    }
+
+    /// <inheritdoc />
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+
+    /// <inheritdoc />
+    public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters() => new Vector<T>(0);
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters) { }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+    {
+        var copy = DeepCopy();
+        copy.SetParameters(parameters);
+        return copy;
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+        => (OCRBase<T>)MemberwiseClone();
+
+    #endregion
 }
