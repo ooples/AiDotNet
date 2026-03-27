@@ -176,30 +176,36 @@ public abstract class RegressionModelTestBase
     [Fact]
     public void IrrelevantFeature_ShouldNotImprove_Predictions()
     {
+        if (Features < 2)
+        {
+            // Univariate models (e.g., SimpleRegression) can't compare N vs N+1 features
+            // since they only accept exactly 1 feature. Skip this test.
+            return;
+        }
+
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
         var model1 = CreateModel();
         var model2 = CreateModel();
 
-        // Generate data with 2 real features: y = 2*x1 + 4*x2 + 1
-        var (trainX_real, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, 2, rng1, noise: 0.1);
-        var (testX_real, testY) = ModelTestHelpers.GenerateLinearData(TestSamples, 2, rng2, noise: 0.1);
+        var (trainX_real, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng1, noise: 0.1);
+        var (testX_real, testY) = ModelTestHelpers.GenerateLinearData(TestSamples, Features, rng2, noise: 0.1);
 
         // Create version with 1 added noise feature
         var rngNoise = ModelTestHelpers.CreateSeededRandom(77);
-        var trainX_noisy = new Matrix<double>(TrainSamples, 3);
-        var testX_noisy = new Matrix<double>(TestSamples, 3);
+        var trainX_noisy = new Matrix<double>(TrainSamples, Features + 1);
+        var testX_noisy = new Matrix<double>(TestSamples, Features + 1);
         for (int i = 0; i < TrainSamples; i++)
         {
-            trainX_noisy[i, 0] = trainX_real[i, 0];
-            trainX_noisy[i, 1] = trainX_real[i, 1];
-            trainX_noisy[i, 2] = rngNoise.NextDouble() * 100.0; // pure noise
+            for (int j = 0; j < Features; j++)
+                trainX_noisy[i, j] = trainX_real[i, j];
+            trainX_noisy[i, Features] = rngNoise.NextDouble() * 100.0; // pure noise
         }
         for (int i = 0; i < TestSamples; i++)
         {
-            testX_noisy[i, 0] = testX_real[i, 0];
-            testX_noisy[i, 1] = testX_real[i, 1];
-            testX_noisy[i, 2] = rngNoise.NextDouble() * 100.0;
+            for (int j = 0; j < Features; j++)
+                testX_noisy[i, j] = testX_real[i, j];
+            testX_noisy[i, Features] = rngNoise.NextDouble() * 100.0;
         }
 
         model1.Train(trainX_real, trainY);
@@ -231,16 +237,18 @@ public abstract class RegressionModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(200, 2, rng, noise: 0.01);
+        int nFeatures = Math.Max(Features, 1);
+        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(200, nFeatures, rng, noise: 0.01);
 
         model.Train(trainX, trainY);
 
-        // Create probe with x1 varying from -5 to 15, x2 fixed at 5
-        var probe = new Matrix<double>(5, 2);
+        // Create probe with x0 varying from -5 to 15, other features fixed at 5
+        var probe = new Matrix<double>(5, nFeatures);
         for (int i = 0; i < 5; i++)
         {
             probe[i, 0] = i * 5.0 - 5.0; // -5, 0, 5, 10, 15
-            probe[i, 1] = 5.0;
+            for (int j = 1; j < nFeatures; j++)
+                probe[i, j] = 5.0;
         }
 
         var predictions = model.Predict(probe);
@@ -307,31 +315,41 @@ public abstract class RegressionModelTestBase
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateModel();
-        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(200, 2, rng, noise: 0.01);
+        int nFeatures = Math.Max(Features, 1);
+        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(200, nFeatures, rng, noise: 0.01);
 
         model.Train(trainX, trainY);
 
         // Probe: baseline at origin, then increase each feature independently
-        var probe = new Matrix<double>(3, 2);
-        probe[0, 0] = 0; probe[0, 1] = 0;   // baseline
-        probe[1, 0] = 10; probe[1, 1] = 0;   // x1 effect
-        probe[2, 0] = 0; probe[2, 1] = 10;   // x2 effect
+        int probeRows = 1 + nFeatures; // baseline + one per feature
+        var probe = new Matrix<double>(probeRows, nFeatures);
+        // Row 0 = baseline (all zeros)
+        for (int f = 0; f < nFeatures; f++)
+        {
+            probe[1 + f, f] = 10.0; // increase feature f by 10
+        }
 
         var predictions = model.Predict(probe);
         if (ModelTestHelpers.AllFinite(predictions))
         {
-            double effectX1 = predictions[1] - predictions[0];
-            double effectX2 = predictions[2] - predictions[0];
+            // Each feature should have positive effect (GenerateLinearData uses positive coefficients)
+            for (int f = 0; f < nFeatures; f++)
+            {
+                double effect = predictions[1 + f] - predictions[0];
+                Assert.True(effect > 0,
+                    $"Feature x{f} effect = {effect:F4}, expected positive. " +
+                    "Model learned wrong sign.");
+            }
 
-            Assert.True(effectX1 > 0,
-                $"Feature x1 effect = {effectX1:F4}, expected positive (true coeff = 2.0). " +
-                "Model learned wrong sign for x1.");
-            Assert.True(effectX2 > 0,
-                $"Feature x2 effect = {effectX2:F4}, expected positive (true coeff = 4.0). " +
-                "Model learned wrong sign for x2.");
-            Assert.True(effectX2 > effectX1,
-                $"Feature x2 effect ({effectX2:F4}) should be larger than x1 effect ({effectX1:F4}) " +
-                "since true coefficients are 4.0 vs 2.0.");
+            // If multiple features, x1 should have larger effect than x0
+            // (GenerateLinearData uses increasing coefficients)
+            if (nFeatures >= 2)
+            {
+                double effectX0 = predictions[1] - predictions[0];
+                double effectX1 = predictions[2] - predictions[0];
+                Assert.True(effectX1 > effectX0,
+                    $"Feature x1 effect ({effectX1:F4}) should be larger than x0 ({effectX0:F4}).");
+            }
         }
     }
 
@@ -344,29 +362,43 @@ public abstract class RegressionModelTestBase
     [Fact]
     public void FeaturePermutation_ShouldGiveConsistentPredictions()
     {
+        if (Features < 2)
+        {
+            // Feature permutation requires at least 2 features to swap.
+            // Univariate models pass trivially (no permutation possible).
+            return;
+        }
+
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
         var model1 = CreateModel();
         var model2 = CreateModel();
 
-        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, 2, rng1, noise: 0.01);
+        var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng1, noise: 0.01);
 
         // Create permuted version: swap columns 0 and 1
-        var permutedX = new Matrix<double>(TrainSamples, 2);
+        var permutedX = new Matrix<double>(TrainSamples, Features);
         for (int i = 0; i < TrainSamples; i++)
         {
-            permutedX[i, 0] = trainX[i, 1]; // swap
+            permutedX[i, 0] = trainX[i, 1]; // swap first two
             permutedX[i, 1] = trainX[i, 0];
+            for (int j = 2; j < Features; j++)
+                permutedX[i, j] = trainX[i, j]; // keep rest
         }
 
         model1.Train(trainX, trainY);
         model2.Train(permutedX, trainY);
 
         // Test with a specific point
-        var testOrig = new Matrix<double>(1, 2);
-        var testPerm = new Matrix<double>(1, 2);
+        var testOrig = new Matrix<double>(1, Features);
+        var testPerm = new Matrix<double>(1, Features);
         testOrig[0, 0] = 3.0; testOrig[0, 1] = 7.0;
         testPerm[0, 0] = 7.0; testPerm[0, 1] = 3.0; // swapped
+        for (int j = 2; j < Features; j++)
+        {
+            testOrig[0, j] = 5.0;
+            testPerm[0, j] = 5.0;
+        }
 
         var pred1 = model1.Predict(testOrig);
         var pred2 = model2.Predict(testPerm);
