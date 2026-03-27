@@ -118,19 +118,23 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
             for (int j = 0; j < d; j++)
             {
                 if (i == j) continue;
+
+                // Only add edge if learned probability exceeds threshold
+                if (learnedP[i, j] < 0.3) continue;
+
+                // Direction: edge i→j only if P[i,j] > P[j,i]
+                // For ties, only process the (i,j) pair where i < j to avoid 2-cycles.
+                if (learnedP[i, j] < learnedP[j, i]) continue;
+                if (Math.Abs(learnedP[i, j] - learnedP[j, i]) < 1e-10 && i > j) continue;
+
+                // Use covariance for edge weight
                 double varI = NumOps.ToDouble(cov[i, i]);
                 if (varI < 1e-10) continue;
                 double covIJ = NumOps.ToDouble(cov[i, j]);
                 double weight = covIJ / varI;
                 if (Math.Abs(weight) < EdgeThreshold) continue;
 
-                double varJ = NumOps.ToDouble(cov[j, j]);
-                double reverseWeight = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
-                bool learnedDirection = learnedP[i, j] >= learnedP[j, i];
-                bool statisticalDirection = Math.Abs(weight) >= reverseWeight;
-
-                if (learnedDirection || statisticalDirection)
-                    result[i, j] = NumOps.FromDouble(weight);
+                result[i, j] = NumOps.FromDouble(weight);
             }
         return result;
     }

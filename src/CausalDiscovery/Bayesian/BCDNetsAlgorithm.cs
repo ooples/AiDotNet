@@ -82,14 +82,20 @@ public class BCDNetsAlgorithm<T> : BayesianCausalBase<T>
         var mu = new Matrix<T>(d, d);      // weight means
         var logvar = new Matrix<T>(d, d);  // log-variance of weights
 
-        // Initialize mu from OLS
+        // Initialize mu from OLS and Z from absolute OLS weight magnitude
+        // This biases the search toward edges with strong statistical signal
         T eps = NumOps.FromDouble(1e-10);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
             {
                 if (i == j) continue;
                 if (NumOps.GreaterThan(cov[i, i], eps))
+                {
                     mu[i, j] = NumOps.Divide(cov[i, j], cov[i, i]);
+                    // Initialize edge logit from OLS strength: strong regression → positive logit
+                    double olsWeight = Math.Abs(NumOps.ToDouble(mu[i, j]));
+                    Z[i, j] = NumOps.FromDouble(olsWeight > 0.2 ? 1.0 : -1.0);
+                }
                 logvar[i, j] = NumOps.FromDouble(-4); // small initial variance
             }
 

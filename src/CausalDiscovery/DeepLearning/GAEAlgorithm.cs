@@ -261,7 +261,8 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
         }
 
         // Final output: use trained P matrix for structure, covariance for weights.
-        // Two-stage approach: (1) P determines direction, (2) covariance provides weight.
+        // The learned P matrix is the PRIMARY signal — only add edges where
+        // P[i,j] exceeds a threshold. Covariance provides the edge weight.
         var result = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
@@ -269,24 +270,23 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                 if (i == j) continue;
                 double pij = NumOps.ToDouble(lastP[i, j]);
                 double pji = NumOps.ToDouble(lastP[j, i]);
-                double varI = NumOps.ToDouble(cov[i, i]);
-                double covIJ = NumOps.ToDouble(cov[i, j]);
 
+                // Only add edge if learned probability exceeds threshold
+                if (pij < 0.3) continue;
+
+                // Direction: edge i→j only if P[i,j] > P[j,i]
+                // For ties, only process the (i,j) pair where i < j to avoid 2-cycles.
+                if (pij < pji) continue;
+                if (Math.Abs(pij - pji) < 1e-10 && i > j) continue;
+
+                // Use covariance for edge weight
+                double varI = NumOps.ToDouble(cov[i, i]);
                 if (varI < 1e-10) continue;
+                double covIJ = NumOps.ToDouble(cov[i, j]);
                 double weight = covIJ / varI;
                 if (Math.Abs(weight) < EdgeThreshold) continue;
 
-                // Edge i→j if: learned probability P[i,j] >= P[j,i] (asymmetric direction)
-                // OR if covariance ratio |cov/var_i| > |cov/var_j| (statistical direction)
-                double varJ = NumOps.ToDouble(cov[j, j]);
-                double reverseWeight = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
-                // Use strict inequality to avoid creating both i→j and j→i (2-cycle).
-                // For ties, only process the (i,j) pair where i < j.
-                bool learnedDirection = pij > pji || (pij == pji && i < j);
-                bool statisticalDirection = Math.Abs(weight) > reverseWeight;
-
-                if (learnedDirection || statisticalDirection)
-                    result[i, j] = NumOps.FromDouble(weight);
+                result[i, j] = NumOps.FromDouble(weight);
             }
 
         return result;

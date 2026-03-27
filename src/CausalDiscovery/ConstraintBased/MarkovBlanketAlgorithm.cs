@@ -36,7 +36,10 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 public class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
 {
     private const int DefaultDiscretizationBins = 10;
-    private const double DefaultMIThreshold = 0.01;
+    // MI threshold must account for finite-sample bias. For independent variables with k bins
+    // and n samples, expected spurious MI ≈ (k-1)²/(2n). With k=10, n=200 → 0.2.
+    // A safe threshold is ~3x the expected bias.
+    private const double DefaultMIThreshold = 0.05;
     private const double MinDiscretizationRange = 1e-10;
     private const int MinGroupSizeForMI = 5;
 
