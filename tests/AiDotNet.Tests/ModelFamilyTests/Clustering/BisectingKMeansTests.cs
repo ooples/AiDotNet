@@ -9,4 +9,7 @@ public class BisectingKMeansTests : ClusteringModelTestBase
 {
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
         => new BisectingKMeans<double>(new AiDotNet.Clustering.Options.BisectingKMeansOptions<double> { NumClusters = NumClusters });
+
+    protected override IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
+        => new BisectingKMeans<double>(new AiDotNet.Clustering.Options.BisectingKMeansOptions<double> { NumClusters = 1 });
 }

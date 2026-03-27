@@ -16,4 +16,7 @@ public class AgglomerativeClusteringTests : ClusteringModelTestBase
 
     // Hierarchical clustering doesn't have flat centroid parameters
     protected override bool HasFlatParameters => false;
+
+    protected override IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
+        => new AgglomerativeClustering<double>(new HierarchicalOptions<double> { NumClusters = 1 });
 }

@@ -16,4 +16,7 @@ public class OnlineKMeansTests : ClusteringModelTestBase
             MaxIterations = 10, // Multiple passes for convergence
             Seed = 42
         });
+
+    protected override IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
+        => new OnlineKMeans<double>(new AiDotNet.Clustering.Options.OnlineKMeansOptions<double> { NumClusters = 1 });
 }

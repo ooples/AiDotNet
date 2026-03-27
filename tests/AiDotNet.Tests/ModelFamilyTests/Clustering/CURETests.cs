@@ -9,4 +9,7 @@ public class CURETests : ClusteringModelTestBase
 {
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
         => new CURE<double>(new AiDotNet.Clustering.Options.CUREOptions<double> { NumClusters = NumClusters });
+
+    protected override IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
+        => new CURE<double>(new AiDotNet.Clustering.Options.CUREOptions<double> { NumClusters = 1 });
 }

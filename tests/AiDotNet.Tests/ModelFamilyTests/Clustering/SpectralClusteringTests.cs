@@ -13,4 +13,7 @@ public class SpectralClusteringTests : ClusteringModelTestBase
             NumClusters = NumClusters,
             Seed = 42 // Deterministic KMeans in eigenvector space
         });
+
+    protected override IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
+        => new SpectralClustering<double>(new AiDotNet.Clustering.Options.SpectralOptions<double> { NumClusters = 1 });
 }

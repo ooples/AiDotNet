@@ -14,4 +14,7 @@ public class StreamingMiniBatchKMeansTests : ClusteringModelTestBase
             BatchSize = 30, // Appropriate for 90 training samples
             Seed = 42
         });
+
+    protected override IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
+        => new MiniBatchKMeans<double>(new AiDotNet.Clustering.Options.MiniBatchKMeansOptions<double> { NumClusters = 1 });
 }
