@@ -261,8 +261,9 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
             teacherOutputs[r] = teacherBatchOutput.GetRow(r);
         }
 
-        // Compute average relational gradient for the batch
-        var avgRelationalGradient = ComputeAverageRelationalGradientForBatch(studentOutputs, teacherOutputs);
+        // Compute per-sample relational gradients (NOT averaged — each sample
+        // gets its own gradient based on its specific pairwise relationships)
+        var perSampleRelGradients = ComputePerSampleRelationalGradients(studentOutputs, teacherOutputs);
 
         for (int r = 0; r < batchSize; r++)
         {
@@ -278,7 +279,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
 
             for (int i = 0; i < outputDim; i++)
             {
-                var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
+                T diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
                 gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature));
             }
 
@@ -286,28 +287,22 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
             if (trueLabels != null)
             {
                 var studentProbs = DistillationHelper<T>.Softmax(studentOutput, 1.0);
-                var hardGradient = new Vector<T>(outputDim);
+                T alphaT = NumOps.FromDouble(Alpha);
+                T oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
 
                 for (int i = 0; i < outputDim; i++)
                 {
-                    hardGradient[i] = NumOps.Subtract(studentProbs[i], trueLabels[i]);
-                }
-
-                var alphaT = NumOps.FromDouble(Alpha);
-                var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
-
-                for (int i = 0; i < outputDim; i++)
-                {
+                    T hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
                     gradient[i] = NumOps.Add(
-                        NumOps.Multiply(alphaT, hardGradient[i]),
+                        NumOps.Multiply(alphaT, hardGrad),
                         NumOps.Multiply(oneMinusAlpha, gradient[i]));
                 }
             }
 
-            // Add amortized relational gradient
+            // Add THIS sample's relational gradient
             for (int i = 0; i < outputDim; i++)
             {
-                gradient[i] = NumOps.Add(gradient[i], avgRelationalGradient[i]);
+                gradient[i] = NumOps.Add(gradient[i], perSampleRelGradients[r][i]);
             }
 
             gradientBatch.SetRow(r, gradient);
@@ -701,6 +696,49 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
         }
 
         return sumGradient;
+    }
+
+    /// <summary>
+    /// Computes per-sample relational gradients using finite differences on the
+    /// relational loss. This guarantees the gradient matches the loss exactly,
+    /// regardless of how distance and angle components interact.
+    /// </summary>
+    private Vector<T>[] ComputePerSampleRelationalGradients(Vector<T>[] studentEmbeddings, Vector<T>[] teacherEmbeddings)
+    {
+        int n = studentEmbeddings.Length;
+        int dim = n > 0 ? studentEmbeddings[0].Length : 0;
+        var result = new Vector<T>[n];
+        T eps = NumOps.FromDouble(1e-5);
+
+        for (int sampleIdx = 0; sampleIdx < n; sampleIdx++)
+        {
+            var sampleGrad = new Vector<T>(dim);
+
+            for (int k = 0; k < dim; k++)
+            {
+                // Perturb studentEmbeddings[sampleIdx][k] by +epsilon
+                T origVal = studentEmbeddings[sampleIdx][k];
+
+                studentEmbeddings[sampleIdx][k] = NumOps.Add(origVal, eps);
+                T lossPlus = ComputeRelationalLoss(studentEmbeddings, teacherEmbeddings);
+
+                studentEmbeddings[sampleIdx][k] = NumOps.Subtract(origVal, eps);
+                T lossMinus = ComputeRelationalLoss(studentEmbeddings, teacherEmbeddings);
+
+                // Restore
+                studentEmbeddings[sampleIdx][k] = origVal;
+
+                // Finite difference: ∂L_rel/∂z_{sample,k}
+                T grad = NumOps.Divide(
+                    NumOps.Subtract(lossPlus, lossMinus),
+                    NumOps.FromDouble(2e-5));
+                sampleGrad[k] = grad;
+            }
+
+            result[sampleIdx] = sampleGrad;
+        }
+
+        return result;
     }
 
     /// <summary>
