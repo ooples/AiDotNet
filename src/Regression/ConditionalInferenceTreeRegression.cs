@@ -224,16 +224,11 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
             IsLeaf = false // Mark as internal node
         };
 
-        var buildTasks = new[]
-        {
-            new Func<Task<ConditionalInferenceTreeNode<T>?>>(() => BuildTreeAsync(leftX, leftY, depth + 1)),
-            new Func<Task<ConditionalInferenceTreeNode<T>?>>(() => BuildTreeAsync(rightX, rightY, depth + 1))
-        };
-
-        var results = await ParallelProcessingHelper.ProcessTasksInParallel(buildTasks, _options.MaxDegreeOfParallelism);
-
-        node.Left = await results[0];
-        node.Right = await results[1];
+        // Build children sequentially to avoid thread pool exhaustion from recursive parallelism.
+        // Per Hothorn et al. 2006, parallelism is best applied at the feature-evaluation level
+        // (FindBestSplitAsync), not the tree-level recursion.
+        node.Left = await BuildTreeAsync(leftX, leftY, depth + 1);
+        node.Right = await BuildTreeAsync(rightX, rightY, depth + 1);
 
         return node;
     }
