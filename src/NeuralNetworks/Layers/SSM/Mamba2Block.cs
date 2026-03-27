@@ -453,7 +453,7 @@ public class Mamba2Block<T> : LayerBase<T>
         Tensor<T> x, Tensor<T> delta, Tensor<T> b, Tensor<T> c,
         int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
+        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
 
         // Pre-compute A = -exp(A_log) per head: [numHeads]
         var negAPerHead = new T[_numHeads];
@@ -973,7 +973,7 @@ public class Mamba2Block<T> : LayerBase<T>
     private Tensor<T> DepthwiseConv1DBackward(
         Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
-        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
+        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
         _convBiasGradient = new Tensor<T>(new[] { _innerDimension });
         _convWeightsGradient = new Tensor<T>(new[] { _innerDimension, _convKernelSize });
 
