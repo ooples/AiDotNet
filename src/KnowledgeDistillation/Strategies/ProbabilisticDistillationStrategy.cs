@@ -151,7 +151,7 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
                 {
                     // Soft gradient (temperature-scaled)
                     var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                    softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature * Temperature));
+                    softGrad = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature));
 
                     // Hard gradient
                     var hardGrad = NumOps.Subtract(studentProbs[i], trueLabels[i]);
@@ -168,7 +168,7 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
                 {
                     // Soft gradient (temperature-scaled)
                     var softGrad = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                    gradient[i] = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature * Temperature));
+                    gradient[i] = NumOps.Multiply(softGrad, NumOps.FromDouble(Temperature));
                 }
             }
 
@@ -189,6 +189,12 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
                 }
             }
         }
+
+        // Average gradients over the batch
+        T oneOverBatch = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
+        for (int r2 = 0; r2 < batchSize; r2++)
+            for (int c = 0; c < outputDim; c++)
+                gradientBatch[r2, c] = NumOps.Multiply(gradientBatch[r2, c], oneOverBatch);
 
         return gradientBatch;
     }

@@ -113,7 +113,7 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
             for (int i = 0; i < outputDim; i++)
             {
                 var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature));
+                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature));
             }
 
             if (trueLabels != null)
@@ -146,6 +146,12 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
                 }
             }
         }
+
+        // Average gradients over the batch
+        T oneOverBatch = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
+        for (int r2 = 0; r2 < batchSize; r2++)
+            for (int c = 0; c < outputDim; c++)
+                gradientBatch[r2, c] = NumOps.Multiply(gradientBatch[r2, c], oneOverBatch);
 
         return gradientBatch;
     }
