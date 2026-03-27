@@ -99,11 +99,13 @@ public abstract class CausalDiscoveryTestBase
     [Fact]
     public void DiscoverStructure_DiagonalIsZero()
     {
-        if (!GuaranteesNoSelfEdges) return;
-
         var algo = CreateAlgorithm();
         var graph = algo.DiscoverStructure(CreateKnownStructureData());
         var adj = graph.AdjacencyMatrix;
+
+        // Even if the algorithm doesn't guarantee no self-edges, verify shape is correct
+        Assert.Equal(NumVariables, adj.Rows);
+        if (!GuaranteesNoSelfEdges) return;
 
         for (int i = 0; i < NumVariables; i++)
         {
@@ -202,11 +204,13 @@ public abstract class CausalDiscoveryTestBase
     [Fact]
     public void DiscoverStructure_RootNodeHasNoFalseAdjacencies()
     {
-        if (!CanRecoverLinearStructure || NumVariables < 4) return;
-
         var algo = CreateAlgorithm();
         var graph = algo.DiscoverStructure(CreateKnownStructureData());
         var adj = graph.AdjacencyMatrix;
+
+        // Always verify output is valid even when skipping the adjacency check
+        Assert.Equal(NumVariables, adj.Rows);
+        if (!CanRecoverLinearStructure || NumVariables < 4) return;
 
         // X0 is truly adjacent to X1 (edge 0-1) and X3 (edge 0-3)
         // X0 should NOT be adjacent to X2 (connected only via X1 chain)
