@@ -110,6 +110,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
     private T _lastGraphSmoothnessLoss;
     private Tensor<T>? _lastNodeRepresentations = null;
     private Tensor<T>? _lastAdjacencyMatrix = null;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
     /// <summary>
     /// Gets or sets the vector activation function used in graph convolutional layers.
     /// </summary>
@@ -853,14 +854,14 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         // Clip gradients to prevent exploding gradients
         parameterGradients = ClipGradient(parameterGradients);
 
-        // Create optimizer
-        var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Reuse optimizer across Train calls to preserve Adam momentum state
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
 
         // Update parameters using the optimizer
-        Vector<T> updatedParameters = optimizer.UpdateParameters(currentParameters, parameterGradients);
+        Vector<T> updatedParameters = _trainOptimizer.UpdateParameters(currentParameters, parameterGradients);
 
         // Apply updated parameters
         UpdateParameters(updatedParameters);
@@ -925,14 +926,14 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         // Apply gradient clipping
         parameterGradients = ClipGradient(parameterGradients);
 
-        // Use adaptive optimizer (Adam)
-        var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Reuse optimizer across calls to preserve Adam momentum state
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Get current parameters
         Vector<T> currentParameters = GetParameters();
 
         // Update parameters
-        Vector<T> updatedParameters = optimizer.UpdateParameters(currentParameters, parameterGradients);
+        Vector<T> updatedParameters = _trainOptimizer.UpdateParameters(currentParameters, parameterGradients);
 
         // Apply updated parameters
         UpdateParameters(updatedParameters);
