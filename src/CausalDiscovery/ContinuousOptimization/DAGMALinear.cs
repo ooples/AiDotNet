@@ -239,6 +239,44 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
                 w[i * d + i] = 0;
             }
 
+            // M-matrix domain check (per DAGMA reference implementation):
+            // Verify sI - W⊙W is still an M-matrix (inverse has no negative entries).
+            // If violated, halve the learning rate and retry the step.
+            var checkW = UnflattenMatrix(w, d);
+            var checkM = new Matrix<T>(d, d);
+            T sCheck = NumOps.FromDouble(s);
+            for (int ci = 0; ci < d; ci++)
+            {
+                checkM[ci, ci] = sCheck;
+                for (int cj = 0; cj < d; cj++)
+                    checkM[ci, cj] = NumOps.Subtract(checkM[ci, cj],
+                        NumOps.Multiply(checkW[ci, cj], checkW[ci, cj]));
+            }
+
+            var invCheck = InvertMatrix(checkM, d);
+            if (invCheck is null || HasNegativeEntry(invCheck, d))
+            {
+                // Stepped outside M-matrix domain — halve learning rate and retry
+                double tempLr = _learningRate;
+                // Undo step
+                for (int i = 0; i < vecLen; i++)
+                {
+                    double mHat2 = m[i] / (1 - Math.Pow(ADAM_BETA1, iter));
+                    double vHat2 = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
+                    w[i] += tempLr * mHat2 / (Math.Sqrt(vHat2) + 1e-8);
+                }
+                _learningRate *= 0.5;
+                if (_learningRate < 1e-16) break;
+                // Redo with smaller step
+                for (int i = 0; i < vecLen; i++)
+                {
+                    double mHat2 = m[i] / (1 - Math.Pow(ADAM_BETA1, iter));
+                    double vHat2 = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
+                    w[i] -= _learningRate * mHat2 / (Math.Sqrt(vHat2) + 1e-8);
+                }
+                for (int ci = 0; ci < d; ci++) w[ci * d + ci] = 0;
+            }
+
             // Convergence check at checkpoint intervals
             actualIter = iter;
 
@@ -426,6 +464,18 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
             for (int j = 0; j < d; j++)
                 result[i, j] = NumOps.FromDouble(vector[i * d + j]);
         return result;
+    }
+
+    /// <summary>
+    /// Checks if any entry of the matrix is negative (M-matrix violation).
+    /// </summary>
+    private bool HasNegativeEntry(Matrix<T> matrix, int d)
+    {
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                if (NumOps.ToDouble(matrix[i, j]) < -1e-10)
+                    return true;
+        return false;
     }
 
     #endregion
