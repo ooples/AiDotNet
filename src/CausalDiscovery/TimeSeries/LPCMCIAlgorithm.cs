@@ -66,12 +66,12 @@ public class LPCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         _alpha = options?.SignificanceLevel ?? 0.05;
         _maxCondSetSize = options?.MaxConditioningSetSize ?? 3;
         _correlationThreshold = options?.CorrelationThreshold ?? 0.1;
-        if (_alpha <= 0 || _alpha >= 1)
-            throw new ArgumentException("SignificanceLevel must be between 0 and 1 (exclusive).");
+        if (double.IsNaN(_alpha) || double.IsInfinity(_alpha) || _alpha <= 0 || _alpha >= 1)
+            throw new ArgumentException("SignificanceLevel must be a finite value between 0 and 1 (exclusive).");
         if (_maxCondSetSize < 0)
             throw new ArgumentException("MaxConditioningSetSize must be non-negative.");
-        if (_correlationThreshold < 0 || _correlationThreshold > 1)
-            throw new ArgumentException("CorrelationThreshold must be between 0 and 1.");
+        if (double.IsNaN(_correlationThreshold) || double.IsInfinity(_correlationThreshold) || _correlationThreshold < 0 || _correlationThreshold > 1)
+            throw new ArgumentException("CorrelationThreshold must be a finite value between 0 and 1.");
     }
 
     /// <inheritdoc/>

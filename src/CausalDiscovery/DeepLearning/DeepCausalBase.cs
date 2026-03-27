@@ -85,21 +85,41 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
         }
         if (options.EdgeThreshold.HasValue)
         {
-            if (double.IsNaN(options.EdgeThreshold.Value) || options.EdgeThreshold.Value < 0 || options.EdgeThreshold.Value > 1)
-                throw new ArgumentException("EdgeThreshold must be a finite value between 0 and 1.");
+            if (double.IsNaN(options.EdgeThreshold.Value) || double.IsInfinity(options.EdgeThreshold.Value) || options.EdgeThreshold.Value < 0)
+                throw new ArgumentException("EdgeThreshold must be a non-negative finite value.");
             EdgeThreshold = options.EdgeThreshold.Value;
         }
         if (options.LearningRate.HasValue)
         {
-            if (double.IsNaN(options.LearningRate.Value) || options.LearningRate.Value <= 0)
+            if (double.IsNaN(options.LearningRate.Value) || double.IsInfinity(options.LearningRate.Value) || options.LearningRate.Value <= 0)
                 throw new ArgumentException("LearningRate must be a positive finite value.");
             LearningRate = options.LearningRate.Value;
         }
-        if (options.InitialLogVariance.HasValue) InitialLogVariance = options.InitialLogVariance.Value;
-        if (options.DefaultKlWeight.HasValue) DefaultKlWeight = options.DefaultKlWeight.Value;
-        if (options.MaxKlWeight.HasValue) MaxKlWeight = options.MaxKlWeight.Value;
+        if (options.InitialLogVariance.HasValue)
+        {
+            if (double.IsNaN(options.InitialLogVariance.Value) || double.IsInfinity(options.InitialLogVariance.Value))
+                throw new ArgumentException("InitialLogVariance must be a finite value.");
+            InitialLogVariance = options.InitialLogVariance.Value;
+        }
+        if (options.DefaultKlWeight.HasValue)
+        {
+            if (double.IsNaN(options.DefaultKlWeight.Value) || double.IsInfinity(options.DefaultKlWeight.Value) || options.DefaultKlWeight.Value < 0)
+                throw new ArgumentException("DefaultKlWeight must be a non-negative finite value.");
+            DefaultKlWeight = options.DefaultKlWeight.Value;
+        }
+        if (options.MaxKlWeight.HasValue)
+        {
+            if (double.IsNaN(options.MaxKlWeight.Value) || double.IsInfinity(options.MaxKlWeight.Value) || options.MaxKlWeight.Value < 0)
+                throw new ArgumentException("MaxKlWeight must be a non-negative finite value.");
+            MaxKlWeight = options.MaxKlWeight.Value;
+        }
         if (options.UseKlWarmUp.HasValue) UseKlWarmUp = options.UseKlWarmUp.Value;
-        if (options.MaxPenalty.HasValue) MaxPenaltyValue = options.MaxPenalty.Value;
+        if (options.MaxPenalty.HasValue)
+        {
+            if (double.IsNaN(options.MaxPenalty.Value) || double.IsInfinity(options.MaxPenalty.Value) || options.MaxPenalty.Value <= 0)
+                throw new ArgumentException("MaxPenalty must be a positive finite value.");
+            MaxPenaltyValue = options.MaxPenalty.Value;
+        }
     }
 
     /// <summary>

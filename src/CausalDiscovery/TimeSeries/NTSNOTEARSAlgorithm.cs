@@ -72,10 +72,10 @@ public class NTSNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
         _maxSegments = Math.Max(MinSegments, Math.Min(options?.MaxSegments ?? DefaultMaxSegments, MaxSegmentsCap));
         _maxOuterIterations = Math.Max(1, options?.MaxIterations ?? 20);
         _maxInnerSteps = options?.InnerIterations ?? DefaultInnerSteps;
-        if (_lambda1 < 0)
-            throw new ArgumentException("SparsityPenalty must be non-negative.");
-        if (_wThreshold < 0)
-            throw new ArgumentException("EdgeThreshold must be non-negative.");
+        if (double.IsNaN(_lambda1) || double.IsInfinity(_lambda1) || _lambda1 < 0)
+            throw new ArgumentException("SparsityPenalty must be a non-negative finite value.");
+        if (double.IsNaN(_wThreshold) || double.IsInfinity(_wThreshold) || _wThreshold < 0)
+            throw new ArgumentException("EdgeThreshold must be a non-negative finite value.");
         if (_maxInnerSteps < 1)
             throw new ArgumentException("InnerIterations must be at least 1.");
     }
