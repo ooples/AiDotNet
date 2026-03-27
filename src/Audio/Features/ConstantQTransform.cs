@@ -51,7 +51,6 @@ namespace AiDotNet.Audio.Features;
 public class ConstantQTransform<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
     // NumOps inherited from ModelBase
-    private readonly INumericOperations<T> _numOps;
     private readonly int _sampleRate;
     private readonly double _fMin;
     private readonly int _binsPerOctave;
@@ -100,7 +99,7 @@ public class ConstantQTransform<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         int hopLength = 512,
         WindowType windowType = WindowType.Hann)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
+        // NumOps already initialized via ModelBase static field
         _sampleRate = sampleRate;
         _fMin = fMin;
         _binsPerOctave = binsPerOctave;
@@ -202,7 +201,7 @@ public class ConstantQTransform<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         var audioDouble = new double[numSamples];
         for (int i = 0; i < numSamples; i++)
         {
-            audioDouble[i] = _numOps.ToDouble(audio[i]);
+            audioDouble[i] = NumOps.ToDouble(audio[i]);
         }
 
         // For each time frame
@@ -224,7 +223,7 @@ public class ConstantQTransform<T> : ModelBase<T, Tensor<T>, Tensor<T>>
                 }
 
                 // Store magnitude
-                result[frame, k] = _numOps.FromDouble(sum.Magnitude);
+                result[frame, k] = NumOps.FromDouble(sum.Magnitude);
             }
         }
 
@@ -247,7 +246,7 @@ public class ConstantQTransform<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         var audioDouble = new double[numSamples];
         for (int i = 0; i < numSamples; i++)
         {
-            audioDouble[i] = _numOps.ToDouble(audio[i]);
+            audioDouble[i] = NumOps.ToDouble(audio[i]);
         }
 
         for (int frame = 0; frame < numFrames; frame++)
@@ -265,8 +264,8 @@ public class ConstantQTransform<T> : ModelBase<T, Tensor<T>, Tensor<T>>
                     sum += audioDouble[sampleIdx] * _kernelBank[k, n];
                 }
 
-                result[frame, k, 0] = _numOps.FromDouble(sum.Real);
-                result[frame, k, 1] = _numOps.FromDouble(sum.Imaginary);
+                result[frame, k, 0] = NumOps.FromDouble(sum.Real);
+                result[frame, k, 1] = NumOps.FromDouble(sum.Imaginary);
             }
         }
 
@@ -287,8 +286,8 @@ public class ConstantQTransform<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         {
             for (int j = 0; j < cqt.Shape[1]; j++)
             {
-                double mag = _numOps.ToDouble(cqt[i, j]);
-                cqt[i, j] = _numOps.FromDouble(Math.Pow(mag, power));
+                double mag = NumOps.ToDouble(cqt[i, j]);
+                cqt[i, j] = NumOps.FromDouble(Math.Pow(mag, power));
             }
         }
 
@@ -310,10 +309,10 @@ public class ConstantQTransform<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         {
             for (int j = 0; j < cqt.Shape[1]; j++)
             {
-                double power = _numOps.ToDouble(cqt[i, j]);
+                double power = NumOps.ToDouble(cqt[i, j]);
                 double db = 10.0 * Math.Log10(Math.Max(power, 1e-10) / (refValue * refValue));
                 db = Math.Max(db, minDb);
-                cqt[i, j] = _numOps.FromDouble(db);
+                cqt[i, j] = NumOps.FromDouble(db);
             }
         }
 
