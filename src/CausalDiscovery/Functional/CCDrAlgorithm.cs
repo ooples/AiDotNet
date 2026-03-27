@@ -64,7 +64,10 @@ public class CCDrAlgorithm<T> : FunctionalBase<T>
     /// </summary>
     public CCDrAlgorithm(CausalDiscoveryOptions? options = null)
     {
-        _lambda = options?.SparsityPenalty ?? 0.1;
+        // Default lambda: use a conservative value that works for small datasets.
+        // Theory suggests sqrt(log(d)/n), but in practice a smaller value is needed
+        // to avoid over-penalizing true edges with moderate sample sizes.
+        _lambda = options?.SparsityPenalty ?? 0.01;
         _gamma = options?.ConcavityParameter ?? 2.0;
         _threshold = options?.EdgeThreshold ?? 0.1;
         _maxIterations = options?.MaxIterations ?? 100;

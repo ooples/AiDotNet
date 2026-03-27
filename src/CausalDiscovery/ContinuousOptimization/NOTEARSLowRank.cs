@@ -64,7 +64,7 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
     public NOTEARSLowRank(CausalDiscoveryOptions? options = null)
     {
         ApplyOptions(options);
-        _learningRateValue = options?.LearningRate ?? 0.001;
+        _learningRateValue = options?.LearningRate ?? 0.01;
         _maxRank = options?.MaxRank ?? 10;
         _innerIterations = options?.InnerIterations ?? 20;
         _seed = options?.Seed;
