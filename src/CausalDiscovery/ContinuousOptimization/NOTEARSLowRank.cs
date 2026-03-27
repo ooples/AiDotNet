@@ -114,162 +114,86 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
             }
 
         // Augmented Lagrangian with L-BFGS inner solver (per NOTEARS reference)
-        double rho = 1.0;
-        double alphaLag = 0.0;
-        double prevH = double.MaxValue;
-        const int lbfgsMemory = 10;
-        const double innerTol = 1e-5;
+        T rhoT = NumOps.One;
+        T alphaLag = NumOps.Zero;
+        T prevH = NumOps.FromDouble(double.MaxValue);
+        var optimizer = new Optimizers.LBFGSFunctionOptimizer<T>();
+        int paramLen = 2 * d * rank;
 
         for (int outerIter = 0; outerIter < MaxIterations; outerIter++)
         {
-            // L-BFGS inner optimization over flattened [A; B] parameters
-            int paramLen = 2 * d * rank;
-            var param = new double[paramLen];
-            FlattenAB(A, B, param, d, rank);
+            // Flatten [A; B] into a single parameter vector
+            var initialParams = FlattenABToVector(A, B, d, rank);
 
-            var sVectors = new List<double[]>();
-            var yVectors = new List<double[]>();
-            double[]? prevGrad = null;
-            var prevParam = (double[])param.Clone();
+            // Capture current Lagrangian coefficients for the closure
+            T currentAlpha = alphaLag;
+            T currentRho = rhoT;
 
-            for (int innerIter = 0; innerIter < _innerIterations; innerIter++)
-            {
-                UnflattenAB(param, A, B, d, rank);
-                var W = ReconstructW(A, B, d, rank);
-
-                // Compute objective and gradient w.r.t. W
-                var (loss, lossGrad) = ComputeL2Loss(X, W);
-                var (h, hGrad) = ComputeNOTEARSConstraint(W);
-                double objective = loss + alphaLag * h + 0.5 * rho * h * h;
-                double augCoeff = alphaLag + rho * h;
-
-                // Chain rule: ∂L/∂A[i,r] = Σ_j (∂L/∂W[i,j] + augCoeff*∂h/∂W[i,j]) * B[j,r]
-                var g = new double[paramLen];
-                for (int i = 0; i < d; i++)
-                    for (int r = 0; r < rank; r++)
-                    {
-                        double gA = 0, gB = 0;
-                        for (int j = 0; j < d; j++)
-                        {
-                            double totalGradIJ = NumOps.ToDouble(lossGrad[i, j])
-                                + augCoeff * NumOps.ToDouble(hGrad[i, j])
-                                + Lambda1 * Math.Sign(NumOps.ToDouble(W[i, j]));
-                            gA += totalGradIJ * NumOps.ToDouble(B[j, r]);
-
-                            double totalGradJI = NumOps.ToDouble(lossGrad[j, i])
-                                + augCoeff * NumOps.ToDouble(hGrad[j, i])
-                                + Lambda1 * Math.Sign(NumOps.ToDouble(W[j, i]));
-                            gB += totalGradJI * NumOps.ToDouble(A[j, r]);
-                        }
-                        g[i * rank + r] = gA;
-                        g[d * rank + i * rank + r] = gB;
-                    }
-
-                // Check convergence
-                double maxGrad = 0;
-                for (int i = 0; i < paramLen; i++)
-                    maxGrad = Math.Max(maxGrad, Math.Abs(g[i]));
-                if (maxGrad < innerTol) break;
-
-                // L-BFGS two-loop recursion for search direction
-                var direction = ComputeLBFGSDirection(g, sVectors, yVectors);
-
-                // Backtracking line search with Armijo condition
-                double step = 1.0;
-                for (int ls = 0; ls < 20; ls++)
+            // Define the objective + gradient function for L-BFGS
+            var optimized = optimizer.Minimize(
+                initialParams,
+                (Vector<T> p) =>
                 {
-                    var trial = new double[paramLen];
-                    for (int i = 0; i < paramLen; i++)
-                        trial[i] = param[i] + step * direction[i];
+                    // Unflatten parameters
+                    var localA = new Matrix<T>(d, rank);
+                    var localB = new Matrix<T>(d, rank);
+                    UnflattenVectorToAB(p, localA, localB, d, rank);
+                    var W = ReconstructW(localA, localB, d, rank);
 
-                    UnflattenAB(trial, A, B, d, rank);
-                    var trialW = ReconstructW(A, B, d, rank);
-                    var (trialLoss, _) = ComputeL2Loss(X, trialW);
-                    var (trialH, _) = ComputeNOTEARSConstraint(trialW);
-                    double trialObj = trialLoss + alphaLag * trialH + 0.5 * rho * trialH * trialH;
+                    // Compute augmented Lagrangian objective
+                    var (loss, lossGrad) = ComputeL2Loss(X, W);
+                    var (h, hGrad) = ComputeNOTEARSConstraint(W);
+                    T augCoeff = NumOps.Add(currentAlpha, NumOps.Multiply(currentRho, NumOps.FromDouble(h)));
+                    T obj = NumOps.FromDouble(loss + NumOps.ToDouble(currentAlpha) * h
+                        + 0.5 * NumOps.ToDouble(currentRho) * h * h);
 
-                    double dirDeriv = 0;
-                    for (int i = 0; i < paramLen; i++)
-                        dirDeriv += g[i] * direction[i];
-
-                    if (trialObj <= objective + 1e-4 * step * dirDeriv)
-                    {
-                        param = trial;
-                        break;
-                    }
-                    step *= 0.5;
-                    if (ls == 19) // Fallback: tiny step
-                    {
-                        for (int i = 0; i < paramLen; i++)
-                            param[i] = prevParam[i] + 1e-4 * direction[i];
-                    }
-                }
-
-                // Update L-BFGS memory
-                UnflattenAB(param, A, B, d, rank);
-                var newW = ReconstructW(A, B, d, rank);
-                var (newLoss2, newLossGrad2) = ComputeL2Loss(X, newW);
-                var (newH2, newHGrad2) = ComputeNOTEARSConstraint(newW);
-                double newAugCoeff = alphaLag + rho * newH2;
-
-                var newG = new double[paramLen];
-                for (int i = 0; i < d; i++)
-                    for (int r = 0; r < rank; r++)
-                    {
-                        double ngA = 0, ngB = 0;
-                        for (int j = 0; j < d; j++)
+                    // Chain rule to parameter space: ∂L/∂A, ∂L/∂B
+                    var grad = new Vector<T>(paramLen);
+                    for (int i = 0; i < d; i++)
+                        for (int r = 0; r < rank; r++)
                         {
-                            double tg = NumOps.ToDouble(newLossGrad2[i, j])
-                                + newAugCoeff * NumOps.ToDouble(newHGrad2[i, j]);
-                            ngA += tg * NumOps.ToDouble(B[j, r]);
-                            double tgT = NumOps.ToDouble(newLossGrad2[j, i])
-                                + newAugCoeff * NumOps.ToDouble(newHGrad2[j, i]);
-                            ngB += tgT * NumOps.ToDouble(A[j, r]);
+                            T gA = NumOps.Zero;
+                            T gB = NumOps.Zero;
+                            for (int j = 0; j < d; j++)
+                            {
+                                T totalGW = NumOps.Add(
+                                    NumOps.Add(lossGrad[i, j], NumOps.Multiply(augCoeff, hGrad[i, j])),
+                                    NumOps.FromDouble(Lambda1 * Math.Sign(NumOps.ToDouble(W[i, j]))));
+                                gA = NumOps.Add(gA, NumOps.Multiply(totalGW, localB[j, r]));
+
+                                T totalGWT = NumOps.Add(
+                                    NumOps.Add(lossGrad[j, i], NumOps.Multiply(augCoeff, hGrad[j, i])),
+                                    NumOps.FromDouble(Lambda1 * Math.Sign(NumOps.ToDouble(W[j, i]))));
+                                gB = NumOps.Add(gB, NumOps.Multiply(totalGWT, localA[j, r]));
+                            }
+                            grad[i * rank + r] = gA;
+                            grad[d * rank + i * rank + r] = gB;
                         }
-                        newG[i * rank + r] = ngA;
-                        newG[d * rank + i * rank + r] = ngB;
-                    }
 
-                if (prevGrad is not null)
-                {
-                    var s = new double[paramLen];
-                    var y = new double[paramLen];
-                    double sy = 0;
-                    for (int i = 0; i < paramLen; i++)
-                    {
-                        s[i] = param[i] - prevParam[i];
-                        y[i] = newG[i] - prevGrad[i];
-                        sy += s[i] * y[i];
-                    }
-                    if (sy > 1e-10)
-                    {
-                        sVectors.Add(s);
-                        yVectors.Add(y);
-                        if (sVectors.Count > lbfgsMemory)
-                        {
-                            sVectors.RemoveAt(0);
-                            yVectors.RemoveAt(0);
-                        }
-                    }
-                }
+                    return (obj, grad);
+                },
+                _innerIterations,
+                NumOps.FromDouble(1e-5));
 
-                prevParam = (double[])param.Clone();
-                prevGrad = newG;
-            }
+            // Unflatten optimized parameters back to A, B
+            UnflattenVectorToAB(optimized, A, B, d, rank);
 
-            UnflattenAB(param, A, B, d, rank);
-
-            // Outer: evaluate and update Lagrangian
+            // Outer: evaluate and update augmented Lagrangian
             var outerW = ReconstructW(A, B, d, rank);
             var (hVal, _) = ComputeNOTEARSConstraint(outerW);
+            T hValT = NumOps.FromDouble(hVal);
 
-            alphaLag += rho * hVal;
-            if (hVal > 0.25 * prevH)
-                rho = Math.Min(rho * 10, _rhoMax);
-            prevH = hVal;
+            alphaLag = NumOps.Add(alphaLag, NumOps.Multiply(rhoT, hValT));
+            if (NumOps.GreaterThan(hValT, NumOps.Multiply(NumOps.FromDouble(0.25), prevH)))
+            {
+                T newRho = NumOps.Multiply(rhoT, NumOps.FromDouble(10));
+                T rhoMaxT = NumOps.FromDouble(_rhoMax);
+                rhoT = NumOps.GreaterThan(newRho, rhoMaxT) ? rhoMaxT : newRho;
+            }
+            prevH = hValT;
 
             if (hVal < HTolerance) break;
-            if (rho >= _rhoMax) break;
+            if (NumOps.ToDouble(rhoT) >= _rhoMax) break;
         }
 
         // Final reconstruction and thresholding (with covariance fallback)
@@ -277,87 +201,33 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
         return ThresholdWithFallback(result, WThreshold, data);
     }
 
-    private static void FlattenAB(Matrix<T> A, Matrix<T> B, double[] param, int d, int rank)
+    /// <summary>
+    /// Flattens low-rank factors [A; B] into a single Vector for the optimizer.
+    /// </summary>
+    private static Vector<T> FlattenABToVector(Matrix<T> A, Matrix<T> B, int d, int rank)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
+        var vec = new Vector<T>(2 * d * rank);
         for (int i = 0; i < d; i++)
             for (int r = 0; r < rank; r++)
             {
-                param[i * rank + r] = numOps.ToDouble(A[i, r]);
-                param[d * rank + i * rank + r] = numOps.ToDouble(B[i, r]);
+                vec[i * rank + r] = A[i, r];
+                vec[d * rank + i * rank + r] = B[i, r];
             }
-    }
-
-    private static void UnflattenAB(double[] param, Matrix<T> A, Matrix<T> B, int d, int rank)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < d; i++)
-            for (int r = 0; r < rank; r++)
-            {
-                A[i, r] = numOps.FromDouble(param[i * rank + r]);
-                B[i, r] = numOps.FromDouble(param[d * rank + i * rank + r]);
-            }
+        return vec;
     }
 
     /// <summary>
-    /// L-BFGS two-loop recursion to compute search direction.
-    /// Per Nocedal and Wright, "Numerical Optimization" Algorithm 7.4.
+    /// Unflattens a parameter Vector back into A, B matrices.
     /// </summary>
-    private static double[] ComputeLBFGSDirection(double[] gradient, List<double[]> sVectors, List<double[]> yVectors)
+    private static void UnflattenVectorToAB(Vector<T> vec, Matrix<T> A, Matrix<T> B, int d, int rank)
     {
-        int n = gradient.Length;
-        int m = sVectors.Count;
-
-        var q = (double[])gradient.Clone();
-
-        if (m == 0)
-        {
-            // Steepest descent (negated)
-            for (int i = 0; i < n; i++) q[i] = -q[i];
-            return q;
-        }
-
-        var alphas = new double[m];
-        var rhos = new double[m];
-
-        for (int i = 0; i < m; i++)
-        {
-            double dot = 0;
-            for (int j = 0; j < n; j++) dot += sVectors[i][j] * yVectors[i][j];
-            rhos[i] = dot > 1e-10 ? 1.0 / dot : 0;
-        }
-
-        // Backward pass
-        for (int i = m - 1; i >= 0; i--)
-        {
-            double dot = 0;
-            for (int j = 0; j < n; j++) dot += sVectors[i][j] * q[j];
-            alphas[i] = rhos[i] * dot;
-            for (int j = 0; j < n; j++) q[j] -= alphas[i] * yVectors[i][j];
-        }
-
-        // Initial Hessian approximation: H0 = (s^T y) / (y^T y) * I
-        double sTy = 0, yTy = 0;
-        for (int j = 0; j < n; j++)
-        {
-            sTy += sVectors[m - 1][j] * yVectors[m - 1][j];
-            yTy += yVectors[m - 1][j] * yVectors[m - 1][j];
-        }
-        double gamma = yTy > 1e-10 ? sTy / yTy : 1.0;
-        for (int j = 0; j < n; j++) q[j] *= gamma;
-
-        // Forward pass
-        for (int i = 0; i < m; i++)
-        {
-            double dot = 0;
-            for (int j = 0; j < n; j++) dot += yVectors[i][j] * q[j];
-            double beta = rhos[i] * dot;
-            for (int j = 0; j < n; j++) q[j] += (alphas[i] - beta) * sVectors[i][j];
-        }
-
-        // Negate for descent direction
-        for (int i = 0; i < n; i++) q[i] = -q[i];
-        return q;
+        for (int i = 0; i < d; i++)
+            for (int r = 0; r < rank; r++)
+            {
+                A[i, r] = vec[i * rank + r];
+                B[i, r] = vec[d * rank + i * rank + r];
+            }
     }
 
     /// <summary>
