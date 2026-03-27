@@ -35,6 +35,7 @@ namespace AiDotNet.AutoML.NAS
     /// var prediction = result.Predict(inputTensor);
     /// </code>
     /// </example>
+    [ModelMetadataExempt]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Optimization)]

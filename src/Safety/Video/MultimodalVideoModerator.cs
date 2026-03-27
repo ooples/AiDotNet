@@ -46,7 +46,6 @@ namespace AiDotNet.Safety.Video;
     Authors = "Various")]
 public class MultimodalVideoModerator<T> : VideoSafetyModuleBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly CLIPImageSafetyClassifier<T> _imageClassifier;
     private readonly double _samplingRate;

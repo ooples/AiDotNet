@@ -37,7 +37,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Gaussian Process Regression with Student-t Likelihood", "https://doi.org/10.5555/2986459.2986589", Year = 2011, Authors = "Jarno Vanhatalo, Pasi Jylänki, Aki Vehtari")]
-public class StudentTGaussianProcess<T> : IGaussianProcess<T>
+public class StudentTGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// Operations for performing numeric calculations with type T.
@@ -258,7 +258,7 @@ public class StudentTGaussianProcess<T> : IGaussianProcess<T>
     /// so they have less influence on the predictions.
     /// </para>
     /// </remarks>
-    public void Fit(Matrix<T> X, Vector<T> y)
+    public override void Fit(Matrix<T> X, Vector<T> y)
     {
         if (X is null) throw new ArgumentNullException(nameof(X));
         if (y is null) throw new ArgumentNullException(nameof(y));
@@ -540,7 +540,7 @@ public class StudentTGaussianProcess<T> : IGaussianProcess<T>
     /// The prediction is robust to outliers in the training data.
     /// </para>
     /// </remarks>
-    public (T mean, T variance) Predict(Vector<T> x)
+    public override (T mean, T variance) Predict(Vector<T> x)
     {
         // Convert single point to matrix
         var XNew = new Matrix<T>(1, x.Length);
@@ -563,7 +563,7 @@ public class StudentTGaussianProcess<T> : IGaussianProcess<T>
     /// You'll need to retrain after updating the kernel.
     /// </para>
     /// </remarks>
-    public void UpdateKernel(IKernelFunction<T> kernel)
+    public override void UpdateKernel(IKernelFunction<T> kernel)
     {
         if (kernel is null) throw new ArgumentNullException(nameof(kernel));
         // Note: Since _kernel is readonly, we throw to indicate the model needs recreation

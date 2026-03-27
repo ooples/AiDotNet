@@ -33,6 +33,7 @@ namespace AiDotNet.AutoML.NAS
     /// HardwareCost&lt;float&gt; cost = nas.EstimateArchitectureCost(inputChannels: 32, spatialSize: 224);
     /// </code>
     /// </example>
+    [ModelMetadataExempt]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Optimization)]

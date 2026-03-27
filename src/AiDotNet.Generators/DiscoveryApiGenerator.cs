@@ -557,7 +557,11 @@ public class DiscoveryApiGenerator : IIncrementalGenerator
                 continue;
 
             sb.Append($"        dict[ModelComplexity.{enumName}] = new Type[] {{ ");
-            var typesList = kvp.Value.OrderBy(e => e.ClassName).ToList();
+            var typesList = kvp.Value
+                .GroupBy(e => e.FullyQualifiedName)
+                .Select(g => g.First())
+                .OrderBy(e => e.ClassName)
+                .ToList();
             for (int i = 0; i < typesList.Count; i++)
             {
                 if (i > 0) sb.Append(", ");

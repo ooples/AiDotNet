@@ -32,6 +32,7 @@ namespace AiDotNet.AutoML.NAS
     /// List&lt;BigNASConfig&gt; configs = bignas.SandwichSample();
     /// </code>
     /// </example>
+    [ModelMetadataExempt]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Optimization)]

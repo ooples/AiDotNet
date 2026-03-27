@@ -47,7 +47,7 @@ namespace AiDotNet.Reasoning.DomainSpecific;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(string), typeof(string))]
 [ModelPaper("Chain-of-Thought Prompting Elicits Reasoning in Large Language Models", "https://doi.org/10.48550/arXiv.2201.11903", Year = 2022, Authors = "Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Brian Ichter, Fei Xia, Ed Chi, Quoc Le, Denny Zhou")]
-public class MathematicalReasoner<T>
+public class MathematicalReasoner<T> : IDomainReasoner<T>
 {
     private readonly IChatModel<T> _chatModel;
     private readonly ChainOfThoughtStrategy<T> _cotStrategy;
@@ -299,4 +299,6 @@ public class MathematicalReasoner<T>
 
         return match.Success ? match.Value : null;
     }
+    Task<ReasoningResult<T>> IDomainReasoner<T>.SolveAsync(string problem, CancellationToken cancellationToken)
+        => SolveAsync(problem, cancellationToken: cancellationToken);
 }

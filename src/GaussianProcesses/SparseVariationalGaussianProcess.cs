@@ -45,7 +45,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Scalable Variational Gaussian Process Classification", "https://doi.org/10.48550/arXiv.1411.2005", Year = 2015, Authors = "James Hensman, Alexander G. de G. Matthews, Zoubin Ghahramani")]
-public class SparseVariationalGaussianProcess<T> : IGaussianProcess<T>
+public class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// The kernel function that determines similarity between data points.
@@ -265,7 +265,7 @@ public class SparseVariationalGaussianProcess<T> : IGaussianProcess<T>
     /// After training, the model can make predictions with uncertainty estimates.
     /// </para>
     /// </remarks>
-    public void Fit(Matrix<T> X, Vector<T> y)
+    public override void Fit(Matrix<T> X, Vector<T> y)
     {
         _X = X;
         _y = y;
@@ -612,7 +612,7 @@ public class SparseVariationalGaussianProcess<T> : IGaussianProcess<T>
     }
 
     /// <inheritdoc/>
-    public (T mean, T variance) Predict(Vector<T> x)
+    public override (T mean, T variance) Predict(Vector<T> x)
     {
         if (_inducingPoints.IsEmpty || _variationalMean.IsEmpty)
         {
@@ -659,7 +659,7 @@ public class SparseVariationalGaussianProcess<T> : IGaussianProcess<T>
     }
 
     /// <inheritdoc/>
-    public void UpdateKernel(IKernelFunction<T> kernel)
+    public override void UpdateKernel(IKernelFunction<T> kernel)
     {
         _kernel = kernel;
         if (!_X.IsEmpty && !_y.IsEmpty)

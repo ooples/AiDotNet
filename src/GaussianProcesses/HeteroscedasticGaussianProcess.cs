@@ -42,7 +42,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Most Likely Heteroscedastic Gaussian Process Regression", "https://doi.org/10.1145/1273496.1273546", Year = 2007, Authors = "Kristian Kersting, Christian Plagemann, Patrick Pfaff, Wolfram Burgard")]
-public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
+public class HeteroscedasticGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// Operations for performing numeric calculations with type T.
@@ -225,7 +225,7 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
     /// This continues until convergence or max iterations reached.
     /// </para>
     /// </remarks>
-    public void Fit(Matrix<T> X, Vector<T> y)
+    public override void Fit(Matrix<T> X, Vector<T> y)
     {
         if (X is null) throw new ArgumentNullException(nameof(X));
         if (y is null) throw new ArgumentNullException(nameof(y));
@@ -575,7 +575,7 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
     /// Total uncertainty = predictive variance + noise variance
     /// </para>
     /// </remarks>
-    public (Vector<T> Mean, Vector<T> PredictiveVariance, Vector<T> NoiseVariance) Predict(Matrix<T> XNew)
+    public (Vector<T> Mean, Vector<T> PredictiveVariance, Vector<T> NoiseVariance) PredictWithUncertainty(Matrix<T> XNew)
     {
         if (!_isTrained)
             throw new InvalidOperationException("Model must be trained before prediction.");
@@ -669,7 +669,7 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
     /// is the total uncertainty (predictive + noise variance).
     /// </para>
     /// </remarks>
-    public (T mean, T variance) Predict(Vector<T> x)
+    public override (T mean, T variance) Predict(Vector<T> x)
     {
         // Convert single point to matrix
         var XNew = new Matrix<T>(1, x.Length);
@@ -678,7 +678,7 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
             XNew[0, j] = x[j];
         }
 
-        var (means, predVars, _) = Predict(XNew);
+        var (means, predVars, _) = PredictWithUncertainty(XNew);
         // Return PREDICTIVE (epistemic) variance only, not total variance.
         // The IGaussianProcess interface variance represents model uncertainty about the
         // function value, not observation noise. Epistemic variance should be low near
@@ -697,7 +697,7 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
     /// You'll need to retrain after updating the kernel.
     /// </para>
     /// </remarks>
-    public void UpdateKernel(IKernelFunction<T> kernel)
+    public override void UpdateKernel(IKernelFunction<T> kernel)
     {
         if (kernel is null) throw new ArgumentNullException(nameof(kernel));
         // Note: Since _meanKernel is readonly, we throw to indicate the model needs recreation
@@ -719,7 +719,7 @@ public class HeteroscedasticGaussianProcess<T> : IGaussianProcess<T>
     /// </remarks>
     public Vector<T> GetTotalUncertainty(Matrix<T> XNew)
     {
-        var (_, predVar, noiseVar) = Predict(XNew);
+        var (_, predVar, noiseVar) = PredictWithUncertainty(XNew);
 
         var total = new Vector<T>(predVar.Length);
         for (int i = 0; i < predVar.Length; i++)

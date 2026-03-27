@@ -685,39 +685,45 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         // Squash activation produces a Jacobian [totalCapsules, capsuleDim, capsuleDim],
         // not a scalar derivative. Apply via matrix-vector multiply per capsule.
         int totalCapsules = batchSize * outputHeight * outputWidth * _capsuleChannels;
-        var flatPreact = new Tensor<T>([totalCapsules, _capsuleDimension]);
-        // Reconstruct pre-activation from Forward (pre-squash output)
-        // Since we don't cache pre-activation, recompute from _lastOutput by inverting squash
-        // Simpler: compute derivative from pre-activation input to squash
         var flatGrad = outputGradient.Reshape([totalCapsules, _capsuleDimension]);
 
-        // Get the Jacobian of squash at the PRE-activation point (not post-activation)
+        // Get the derivative/Jacobian at the PRE-activation point (not post-activation).
+        // Vector activations (Squash) return a Jacobian [N, D, D].
+        // Scalar activations return element-wise derivatives [N, D].
         var preSquash = _lastPreSquash ?? _lastOutput.Reshape([totalCapsules, _capsuleDimension]);
-        var jacobians = ScalarActivation is not null ? ScalarActivation.Derivative(preSquash) : preSquash;
-        var activationGradientFlat = new Tensor<T>([totalCapsules, _capsuleDimension]);
+        Tensor<T> activationGradientFlat;
 
-        if (jacobians.Shape.Length == 3 && jacobians.Shape[1] == _capsuleDimension && jacobians.Shape[2] == _capsuleDimension)
+        if (VectorActivation is not null)
         {
-            // Jacobian case: Jacobian @ gradient per capsule via BatchMatMul
-            // jacobians: [totalCapsules, D, D], flatGrad: [totalCapsules, D] → [totalCapsules, D, 1]
-            var gradCol = flatGrad.Reshape([totalCapsules, _capsuleDimension, 1]);
-            var resultCol = Engine.BatchMatMul(jacobians, gradCol); // [totalCapsules, D, 1]
-            activationGradientFlat = resultCol.Reshape([totalCapsules, _capsuleDimension]);
+            // Vector activation (e.g., Squash): returns Jacobian [totalCapsules, D, D]
+            var jacobians = VectorActivation.Derivative(preSquash);
+            if (jacobians.Shape.Length == 3 && jacobians.Shape[1] == _capsuleDimension && jacobians.Shape[2] == _capsuleDimension)
+            {
+                // Jacobian @ gradient per capsule via BatchMatMul
+                var gradCol = flatGrad.Reshape([totalCapsules, _capsuleDimension, 1]);
+                var resultCol = Engine.BatchMatMul(jacobians, gradCol); // [totalCapsules, D, 1]
+                activationGradientFlat = resultCol.Reshape([totalCapsules, _capsuleDimension]);
+            }
+            else
+            {
+                // Fallback: element-wise if Derivative didn't return a Jacobian
+                activationGradientFlat = Engine.TensorMultiply(jacobians, flatGrad);
+            }
+        }
+        else if (ScalarActivation is not null)
+        {
+            // Scalar activation: element-wise derivatives [totalCapsules, D]
+            var derivatives = ScalarActivation.Derivative(preSquash);
+            activationGradientFlat = Engine.TensorMultiply(derivatives, flatGrad);
         }
         else
         {
-            // Scalar derivative case: element-wise multiply
-            activationGradientFlat = Engine.TensorMultiply(jacobians, flatGrad);
+            // Identity activation: gradient passes through unchanged
+            activationGradientFlat = flatGrad;
         }
 
         var activationGradient = activationGradientFlat
             .Reshape([batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
-
-        try {
-            var dbg = $"flatGrad[0..3]=[{NumOps.ToDouble(flatGrad[0,0]):E3},{NumOps.ToDouble(flatGrad[0,1]):E3},{NumOps.ToDouble(flatGrad[0,2]):E3},{NumOps.ToDouble(flatGrad[0,3]):E3}]\n" +
-                      $"actGrad[0..3]=[{NumOps.ToDouble(activationGradientFlat[0,0]):E3},{NumOps.ToDouble(activationGradientFlat[0,1]):E3},{NumOps.ToDouble(activationGradientFlat[0,2]):E3},{NumOps.ToDouble(activationGradientFlat[0,3]):E3}]\n" +
-                      $"preSquash[0..3]=[{NumOps.ToDouble(preSquash[0,0]):E3},{NumOps.ToDouble(preSquash[0,1]):E3},{NumOps.ToDouble(preSquash[0,2]):E3},{NumOps.ToDouble(preSquash[0,3]):E3}]\n";
-        } catch { }
 
         int outputChannels = _capsuleChannels * _capsuleDimension;
 

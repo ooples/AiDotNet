@@ -29,7 +29,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
 [ModelPaper("Multi-task Gaussian Process Prediction", "https://doi.org/10.5555/2981562.2981672", Year = 2008, Authors = "Edwin V. Bonilla, Kian Ming A. Chai, Christopher K. I. Williams")]
-public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
+public class MultiOutputGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// The kernel function that determines how points in the input space relate to each other.
@@ -114,7 +114,7 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
     /// Use the FitMultiOutput method instead when you have multiple output values to predict.
     /// </para>
     /// </remarks>
-    public void Fit(Matrix<T> X, Vector<T> y)
+    public override void Fit(Matrix<T> X, Vector<T> y)
     {
         throw new InvalidOperationException("Use FitMultiOutput method for multi-output GP");
     }
@@ -183,7 +183,7 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
     /// Use the PredictMultiOutput method instead when you want to predict multiple output values.
     /// </para>
     /// </remarks>
-    public (T mean, T variance) Predict(Vector<T> x)
+    public override (T mean, T variance) Predict(Vector<T> x)
     {
         throw new InvalidOperationException("Use PredictMultiOutput method for multi-output GP");
     }
@@ -257,7 +257,7 @@ public class MultiOutputGaussianProcess<T> : IGaussianProcess<T>
     /// retrain the model with the new kernel using that same data.
     /// </para>
     /// </remarks>
-    public void UpdateKernel(IKernelFunction<T> kernel)
+    public override void UpdateKernel(IKernelFunction<T> kernel)
     {
         _kernel = kernel;
         if (!_X.IsEmpty && !_Y.IsEmpty)

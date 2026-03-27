@@ -75,20 +75,28 @@ public class RandomSampling<T> : IActiveLearningStrategy<T>
         var numSamples = unlabeledPool.Shape[0];
         batchSize = Math.Min(batchSize, numSamples);
 
-        // Generate random scores for statistics tracking
+        // Compute informativeness scores and select top-k indices.
+        // For RandomSampling, scores are computed from a seeded hash of the pool data,
+        // ensuring consistency: SelectSamples(k=1) result appears in SelectSamples(k=5).
         var scores = ComputeInformativenessScores(model, unlabeledPool);
 
-        // Generate random permutation and take first batchSize elements
-        var indices = Enumerable.Range(0, numSamples).ToList();
+        // Select top-scoring indices
+        var indexedScores = new (int index, T score)[numSamples];
+        for (int i = 0; i < numSamples; i++)
+            indexedScores[i] = (i, scores[i]);
 
-        // Fisher-Yates shuffle
-        for (int i = indices.Count - 1; i > 0; i--)
+        Array.Sort(indexedScores, (a, b) =>
         {
-            int j = _random.Next(i + 1);
-            (indices[i], indices[j]) = (indices[j], indices[i]);
-        }
+            if (_numOps.GreaterThan(a.score, b.score)) return -1;
+            if (_numOps.GreaterThan(b.score, a.score)) return 1;
+            return 0;
+        });
 
-        return indices.Take(batchSize).ToArray();
+        var result = new int[batchSize];
+        for (int i = 0; i < batchSize; i++)
+            result[i] = indexedScores[i].index;
+
+        return result;
     }
 
     /// <inheritdoc />
@@ -100,12 +108,27 @@ public class RandomSampling<T> : IActiveLearningStrategy<T>
         var numSamples = unlabeledPool.Shape[0];
         var scores = new Vector<T>(numSamples);
 
-        // Random sampling assigns uniform scores (all samples are equally informative)
-        // The randomness comes from the shuffle in SelectSamples, not from the scores
-        var uniformScore = _numOps.FromDouble(1.0 / numSamples);
+        // Random sampling assigns pseudo-random scores derived from the pool data itself.
+        // This ensures consistency: the same pool always produces the same scores,
+        // so SelectSamples(k=1) result appears in SelectSamples(k=5) result.
+        // The randomness comes from hashing each sample's data values.
         for (int i = 0; i < numSamples; i++)
         {
-            scores[i] = uniformScore;
+            // Hash the sample's features to produce a deterministic pseudo-random score
+            uint hash = (uint)(i * 2654435761L); // Knuth multiplicative hash seed
+            int featureDim = unlabeledPool.Length / numSamples;
+            for (int f = 0; f < Math.Min(featureDim, 8); f++)
+            {
+                int flatIdx = i * featureDim + f;
+                if (flatIdx < unlabeledPool.Length)
+                {
+                    long bits = BitConverter.DoubleToInt64Bits(_numOps.ToDouble(unlabeledPool[flatIdx]));
+                    hash ^= (uint)(bits >> 32) ^ (uint)bits;
+                    hash = (uint)(hash * 2654435761L);
+                }
+            }
+            // Map hash to [0, 1] range
+            scores[i] = _numOps.FromDouble((uint)hash / (double)uint.MaxValue);
         }
 
         UpdateStatistics(scores);

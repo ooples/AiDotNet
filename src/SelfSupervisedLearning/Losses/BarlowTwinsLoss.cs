@@ -1,3 +1,4 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -37,7 +38,7 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Barlow Twins: Self-Supervised Learning via Redundancy Reduction", "https://arxiv.org/abs/2103.03230", Year = 2021, Authors = "Jure Zbontar, Li Jing, Ishan Misra, Yann LeCun, Stéphane Deny")]
-public class BarlowTwinsLoss<T>
+public class BarlowTwinsLoss<T> : IContrastiveLoss<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static IEngine Engine => AiDotNetEngine.Current;

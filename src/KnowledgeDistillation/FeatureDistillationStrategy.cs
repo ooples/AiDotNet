@@ -1,8 +1,9 @@
-
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
@@ -53,8 +54,9 @@ namespace AiDotNet.KnowledgeDistillation;
     "https://arxiv.org/abs/1412.6550",
     Year = 2015,
     Authors = "Adriana Romero, Nicolas Ballas, Samira Ebrahimi Kahou, et al.")]
-public class FeatureDistillationStrategy<T>
+public class FeatureDistillationStrategy<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
+    // NumOps inherited from ModelBase
     private readonly INumericOperations<T> _numOps;
     private readonly string[] _layerPairs;
     private readonly double _featureWeight;
@@ -249,4 +251,35 @@ public class FeatureDistillationStrategy<T>
 
         return gradient;
     }
+
+    #region ModelBase Overrides
+
+    /// <inheritdoc />
+    public override Tensor<T> Predict(Tensor<T> input) => input;
+
+    /// <inheritdoc />
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
+
+    /// <inheritdoc />
+    public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters() => new Vector<T>(0);
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters) { }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+    {
+        var copy = DeepCopy();
+        copy.SetParameters(parameters);
+        return copy;
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+        => (FeatureDistillationStrategy<T>)MemberwiseClone();
+
+    #endregion
 }

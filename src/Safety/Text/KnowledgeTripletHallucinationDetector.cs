@@ -44,7 +44,6 @@ namespace AiDotNet.Safety.Text;
     Authors = "Xiangkun Hu, Dongyu Ru, Shicheng Tan, Tong Yu, et al.")]
 public class KnowledgeTripletHallucinationDetector<T> : TextSafetyModuleBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly double _threshold;
     private readonly string[] _referenceDocuments;

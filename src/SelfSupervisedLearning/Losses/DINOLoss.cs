@@ -1,3 +1,4 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -36,7 +37,7 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Emerging Properties in Self-Supervised Vision Transformers", "https://arxiv.org/abs/2104.14294", Year = 2021, Authors = "Mathilde Caron, Hugo Touvron, Ishan Misra, Hervé Jégou, Julien Mairal, Piotr Bojanowski, Armand Joulin")]
-public class DINOLoss<T>
+public class DINOLoss<T> : IContrastiveLoss<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
@@ -355,5 +356,13 @@ public class DINOLoss<T>
         }
 
         return new Tensor<T>(result, [batchSize, dim]);
+    }
+
+    /// <summary>
+    /// IContrastiveLoss implementation — delegates to ComputeLoss with default center update.
+    /// </summary>
+    T IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
+    {
+        return ComputeLoss(view1, view2);
     }
 }

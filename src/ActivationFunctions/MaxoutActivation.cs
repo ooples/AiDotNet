@@ -28,7 +28,7 @@ namespace AiDotNet.ActivationFunctions;
 /// </remarks>
 [ActivationCategory(ActivationCategory.Parametric)]
 [ActivationTask(ActivationTask.HiddenLayer)]
-[ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = false, HasLearnableParameters = true, IsDifferentiable = false, Cost = ComputeCost.Medium)]
+[ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = false, HasLearnableParameters = false, IsDifferentiable = false, Cost = ComputeCost.Medium)]
 public class MaxoutActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

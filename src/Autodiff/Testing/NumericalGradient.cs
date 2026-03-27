@@ -268,13 +268,15 @@ public static class NumericalGradient<T>
         double relativeTolerance = Defaults.RelativeTolerance,
         double absoluteTolerance = Defaults.AbsoluteTolerance)
     {
-        if (!expected.Shape.ToArray().SequenceEqual(actual.Shape.ToArray()))
+        var expectedShape = expected.Shape.ToArray();
+        var actualShape = actual.Shape.ToArray();
+        if (!expectedShape.SequenceEqual(actualShape))
         {
             return new ComparisonResult
             {
                 Passed = false,
                 MaxRelativeError = double.MaxValue,
-                Errors = { $"Shape mismatch: expected {FormatShape(expected.Shape.ToArray())}, got {FormatShape(actual.Shape.ToArray())}" }
+                Errors = { $"Shape mismatch: expected {FormatShape(expectedShape)}, got {FormatShape(actualShape)}" }
             };
         }
 

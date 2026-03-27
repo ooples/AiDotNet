@@ -2,6 +2,7 @@ using AiDotNet.Data.Structures;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.LossFunctions;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -42,7 +43,7 @@ namespace AiDotNet.MetaLearning;
 /// 5. All shared functionality (metrics, saving, evaluation) is handled automatically
 /// </para>
 /// </remarks>
-public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInput, TOutput>, IConfigurableModel<T>
+public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput, TOutput>, IMetaLearner<T, TInput, TOutput>, IConfigurableModel<T>
 {
     #region Fields
 
@@ -66,10 +67,7 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
     /// </summary>
     protected readonly IEpisodicDataLoader<T, TInput, TOutput>? DataLoader;
 
-    /// <summary>
-    /// Numeric operations for type T.
-    /// </summary>
-    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    // NumOps inherited from ModelBase
 
     /// <summary>
     /// Random number generator for stochastic operations.
@@ -100,21 +98,7 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
 
     #region Properties
 
-    /// <summary>
-    /// Gets the global execution engine for vectorized operations.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The execution engine provides CPU/GPU-accelerated vector and matrix operations.
-    /// All vectorized computations should use this engine rather than manual loops
-    /// for optimal performance and hardware acceleration.
-    /// </para>
-    /// <para><b>For Beginners:</b> This engine automatically chooses the best way to
-    /// run math operations - on your CPU with SIMD optimization, or on your GPU
-    /// for massive parallelism. You don't need to change your code to switch between them.
-    /// </para>
-    /// </remarks>
-    protected IEngine Engine => AiDotNetEngine.Current;
+    // Engine inherited from ModelBase
 
     /// <inheritdoc/>
     public IFullModel<T, TInput, TOutput> BaseModel => MetaModel;
@@ -1437,6 +1421,45 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : IMetaLearner<T, TInp
             $"Meta-learning algorithms require models that implement ICloneable " +
             $"to prevent parameter corruption during parallel task adaptation.");
     }
+
+    #endregion
+
+    #region ModelBase Overrides
+
+    /// <summary>
+    /// Predicts output by delegating to the meta-trained base model.
+    /// </summary>
+    public override TOutput Predict(TInput input) => MetaModel.Predict(input);
+
+    /// <summary>
+    /// Trains the meta-learner on a single input-output pair. For meta-learning,
+    /// use MetaTrain or Train() overload instead.
+    /// </summary>
+    public override void Train(TInput input, TOutput expectedOutput)
+    {
+        MetaModel.Train(input, expectedOutput);
+    }
+
+    /// <inheritdoc />
+    public override ILossFunction<T> DefaultLossFunction => LossFunction ?? new MeanSquaredErrorLoss<T>();
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters() => MetaModel.GetParameters();
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters) => MetaModel.SetParameters(parameters);
+
+    /// <inheritdoc />
+    public override IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+    {
+        var copy = DeepCopy();
+        copy.SetParameters(parameters);
+        return copy;
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, TInput, TOutput> DeepCopy()
+        => (MetaLearnerBase<T, TInput, TOutput>)MemberwiseClone();
 
     #endregion
 }

@@ -1,17 +1,12 @@
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
 public class Mamba2BlockGradientTest
 {
-    private static readonly string _logPath = Path.Combine(Path.GetTempPath(), "mamba2_gradtest.log");
-    private static void LogGrad(string msg) => File.AppendAllText(_logPath, msg + Environment.NewLine);
-
     [Fact]
     public void Mamba2Block_GradientCheck_AllGroups()
     {
@@ -28,12 +23,9 @@ public class Mamba2BlockGradientTest
         layer.ClearGradients();
         var output = layer.Forward(input);
         var outputGrad = new Tensor<double>(output.Shape.ToArray());
-        var projW = new double[output.Length];
         for (int i = 0; i < output.Length; i++)
         {
-            double w = rngLoss.NextDouble() * 2.0 - 1.0;
-            outputGrad[i] = w;
-            projW[i] = w;
+            outputGrad[i] = rngLoss.NextDouble() * 2.0 - 1.0;
         }
         layer.Backward(outputGrad);
         var analytical = layer.GetParameterGradients();
@@ -55,12 +47,11 @@ public class Mamba2BlockGradientTest
         int dParamSize = 2;
         int outProjSize = 32 * 16;
         int outBiasSize = 16;
-        int normGammaSize = 32;
 
         // inputProj: [16, 64]. Cols 0-31 are x-branch, cols 32-63 are z-branch.
         var groups = new[] {
-            ("inputProj_xBranch_r0c0", 0, 3),         // row 0, x-branch col 0-2
-            ("inputProj_zBranch_r0c32", 32, 3),        // row 0, z-branch col 32-34
+            ("inputProj_xBranch_r0c0", 0, 3),
+            ("inputProj_zBranch_r0c32", 32, 3),
             ("inputBias_x", inputProjSize, 3),
             ("inputBias_z", inputProjSize + 32, 3),
             ("convW", inputProjSize + inputBiasSize, 3),
@@ -69,9 +60,12 @@ public class Mamba2BlockGradientTest
             ("normGamma", inputProjSize + inputBiasSize + convSize + convBiasSize + bProjSize + cProjSize + aLogSize + dtProjSize + dtBiasSize + dParamSize + outProjSize + outBiasSize, 3),
         };
 
+        int totalFails = 0;
+        var failures = new List<string>();
+
         foreach (var (name, start, count) in groups)
         {
-            int passCount = 0, failCount = 0;
+            int failCount = 0;
             for (int p = start; p < Math.Min(start + count, parameters.Length); p++)
             {
                 double origVal = parameters[p];
@@ -91,16 +85,20 @@ public class Mamba2BlockGradientTest
                 double numerical = (lP - lM) / (2 * eps);
                 double anal = analytical[p];
                 double absMax = Math.Max(Math.Abs(numerical), Math.Abs(anal));
-                if (absMax < 1e-7) { passCount++; continue; }
+                if (absMax < 1e-7) continue;
                 double relErr = Math.Abs(numerical - anal) / (absMax + 1e-8);
 
-                if (relErr > 0.05) failCount++;
-                else passCount++;
-
-                LogGrad($"  {name}[{p - start}] (idx={p}): a={anal:G6} n={numerical:G6} relErr={relErr:G4}");
+                if (relErr > 0.05)
+                {
+                    failCount++;
+                    failures.Add($"{name}[{p - start}] (idx={p}): analytical={anal:G6} numerical={numerical:G6} relErr={relErr:G4}");
+                }
             }
             layer.SetParameters(parameters);
-            LogGrad($"{name}: {passCount} pass, {failCount} fail");
+            totalFails += failCount;
         }
+
+        Assert.True(totalFails == 0,
+            $"Gradient check failed for {totalFails} parameters:\n{string.Join("\n", failures)}");
     }
 }

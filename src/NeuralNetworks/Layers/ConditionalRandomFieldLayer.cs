@@ -743,7 +743,6 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         // Recompute viterbi scores for softmax weights (same as Forward training path)
         for (int b = 0; b < batchSize; b++)
         {
-            var batchSeq = _lastInput[b]; // [seqLen, numClasses]
             // Forward pass: recompute viterbi scores and cache softmax weights
             var viterbi = new double[_sequenceLength, _numClasses];
             var softmaxCache = new double[_sequenceLength, _numClasses, _numClasses]; // [t, prevC, c]

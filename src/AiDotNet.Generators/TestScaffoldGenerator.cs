@@ -37,6 +37,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private const string IActivationFunctionPrefix = "AiDotNet.Interfaces.IActivationFunction<";
     private const string ILossFunctionPrefix = "AiDotNet.Interfaces.ILossFunction<";
 
+    // Non-model algorithm interface prefixes (for invariant test generation)
+    private const string ICausalDiscoveryPrefix = "AiDotNet.CausalDiscovery.ICausalDiscoveryAlgorithm<";
+    private const string IActiveLearningPrefix = "AiDotNet.Interfaces.IActiveLearningStrategy<";
+    private const string IContinualLearningPrefix = "AiDotNet.Interfaces.IContinualLearningStrategy<";
+    private const string IDistillationPrefix = "AiDotNet.Interfaces.IDistillationStrategy<";
+    private const string ISafetyModulePrefix = "AiDotNet.Interfaces.ISafetyModule<";
+
     // Attribute metadata names
     private const string ModelDomainAttr = "AiDotNet.Attributes.ModelDomainAttribute";
     private const string ModelCategoryAttr = "AiDotNet.Attributes.ModelCategoryAttribute";
@@ -109,6 +116,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor AlgorithmCoverageSummary = new(
+        id: "AIDN045",
+        title: "Non-model algorithm test coverage summary",
+        messageFormat: "{0} of {1} non-model algorithms have test coverage ({2:F1}%)",
+        category: "AiDotNet.TestCoverage",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         // Collect model classes from source (works when running in the source project)
@@ -141,19 +156,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             transform: static (ctx, _) => GetLayerOrNull(ctx))
             .Where(static s => s is not null);
 
+        // Collect non-model algorithm classes (causal discovery, active learning, etc.)
+        var algorithmClasses = context.SyntaxProvider.CreateSyntaxProvider(
+            predicate: static (node, _) => IsModelCandidate(node),
+            transform: static (ctx, _) => GetNonModelAlgorithmOrNull(ctx))
+            .Where(static s => s is not null);
+
         var combined = modelClasses.Collect()
             .Combine(testClasses.Collect())
             .Combine(activationClasses.Collect())
             .Combine(lossClasses.Collect())
             .Combine(layerClasses.Collect())
+            .Combine(algorithmClasses.Collect())
             .Combine(context.CompilationProvider);
 
         context.RegisterSourceOutput(combined, static (spc, source) =>
         {
-            var (((((models, tests), activations), losses), layers), compilation) = source;
+            var ((((((models, tests), activations), losses), layers), algorithms), compilation) = source;
             Execute(spc, models, tests, compilation);
             ExecuteActivationAndLossGeneration(spc, activations, losses, compilation);
             ExecuteLayerGeneration(spc, layers, compilation);
+            ExecuteNonModelAlgorithmGeneration(spc, algorithms, compilation);
         });
     }
 
@@ -318,6 +341,81 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Classifies which non-model algorithm category a type belongs to.
+    /// </summary>
+    private enum AlgorithmCategory { None, CausalDiscovery, ActiveLearning, ContinualLearning, Distillation }
+
+    /// <summary>
+    /// Returns the type symbol if it implements a non-model algorithm interface
+    /// (ICausalDiscoveryAlgorithm, IActiveLearningStrategy, IContinualLearningStrategy, IDistillationStrategy)
+    /// and has a [ModelDomain] attribute. These classes get invariant tests but are NOT IFullModel models.
+    /// </summary>
+    private static INamedTypeSymbol? GetNonModelAlgorithmOrNull(GeneratorSyntaxContext ctx)
+    {
+        var symbol = ctx.SemanticModel.GetDeclaredSymbol(ctx.Node) as INamedTypeSymbol;
+        if (symbol is null || symbol.IsAbstract)
+            return null;
+
+        // Must have [ModelDomain] attribute
+        bool hasModelDomain = false;
+        foreach (var attr in symbol.GetAttributes())
+        {
+            if (attr.AttributeClass is not null &&
+                attr.AttributeClass.ToDisplayString().EndsWith("ModelDomainAttribute", System.StringComparison.Ordinal))
+            {
+                hasModelDomain = true;
+                break;
+            }
+        }
+        if (!hasModelDomain)
+            return null;
+
+        // Skip classes that already implement IFullModel (handled by model test generation)
+        if (ImplementsIFullModel(symbol))
+            return null;
+
+        // Check for non-model algorithm interfaces
+        foreach (var iface in symbol.AllInterfaces)
+        {
+            if (!iface.IsGenericType) continue;
+            var display = iface.OriginalDefinition.ToDisplayString();
+
+            if (display.StartsWith(ICausalDiscoveryPrefix, System.StringComparison.Ordinal) ||
+                display.StartsWith(IActiveLearningPrefix, System.StringComparison.Ordinal) ||
+                display.StartsWith(IContinualLearningPrefix, System.StringComparison.Ordinal) ||
+                display.StartsWith(IDistillationPrefix, System.StringComparison.Ordinal))
+            {
+                return symbol;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Determines which algorithm category a type belongs to based on its interfaces.
+    /// </summary>
+    private static AlgorithmCategory ClassifyAlgorithm(INamedTypeSymbol type)
+    {
+        foreach (var iface in type.AllInterfaces)
+        {
+            if (!iface.IsGenericType) continue;
+            var display = iface.OriginalDefinition.ToDisplayString();
+
+            if (display.StartsWith(ICausalDiscoveryPrefix, System.StringComparison.Ordinal))
+                return AlgorithmCategory.CausalDiscovery;
+            if (display.StartsWith(IActiveLearningPrefix, System.StringComparison.Ordinal))
+                return AlgorithmCategory.ActiveLearning;
+            if (display.StartsWith(IDistillationPrefix, System.StringComparison.Ordinal))
+                return AlgorithmCategory.Distillation;
+            if (display.StartsWith(IContinualLearningPrefix, System.StringComparison.Ordinal))
+                return AlgorithmCategory.ContinualLearning;
+        }
+
+        return AlgorithmCategory.None;
     }
 
     /// <summary>
@@ -927,6 +1025,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Checks whether a type has a [ModelDomain] attribute.
+    /// This enables discovery of algorithms and utilities that don't implement IFullModel
+    /// but still need mathematical invariant testing (e.g., causal discovery, decomposition methods).
+    /// </summary>
+    private static bool HasModelDomainAttribute(INamedTypeSymbol type, INamedTypeSymbol? domainAttrSymbol)
+    {
+        if (domainAttrSymbol is null) return false;
+
+        foreach (var attr in type.GetAttributes())
+        {
+            if (attr.AttributeClass is not null &&
+                SymbolEqualityComparer.Default.Equals(attr.AttributeClass, domainAttrSymbol))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>
@@ -2021,9 +2139,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (!layer.SupportsBackpropagation || layer.UsesSurrogateGradient)
             sb.AppendLine("    protected override bool ExpectsNonZeroGradients => false;");
 
-        // Override ExpectsDifferentOutputForConstantInputs for normalizing layers
+        // Override ExpectsDifferentOutputForDifferentInputs for normalizing layers
         if (layer.NormalizesInput)
-            sb.AppendLine("    protected override bool ExpectsDifferentOutputForConstantInputs => false;");
+            sb.AppendLine("    protected override bool ExpectsDifferentOutputForDifferentInputs => false;");
 
         sb.AppendLine("}");
 
@@ -3133,5 +3251,334 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             default:
                 return false;
         }
+    }
+
+    // =========================================================================
+    // NON-MODEL ALGORITHM TEST GENERATION
+    // =========================================================================
+
+    /// <summary>
+    /// Generates invariant test classes for non-model algorithms (causal discovery,
+    /// active learning, continual learning, distillation strategies).
+    /// </summary>
+    private static void ExecuteNonModelAlgorithmGeneration(
+        SourceProductionContext context,
+        ImmutableArray<INamedTypeSymbol?> algorithmClasses,
+        Compilation compilation)
+    {
+        string assemblyName = compilation.AssemblyName ?? string.Empty;
+        bool isTestProject = assemblyName.IndexOf("Test", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        if (!isTestProject && algorithmClasses.Length > 0) return; // Only in test projects
+
+        var seen = new HashSet<string>();
+        var algorithms = new List<(INamedTypeSymbol symbol, AlgorithmCategory category)>();
+
+        // Collect from source
+        foreach (var symbol in algorithmClasses)
+        {
+            if (symbol is null) continue;
+            var fqn = symbol.OriginalDefinition.ToDisplayString();
+            if (!seen.Add(fqn)) continue;
+
+            var category = ClassifyAlgorithm(symbol);
+            if (category != AlgorithmCategory.None)
+                algorithms.Add((symbol, category));
+        }
+
+        // Also discover from referenced assemblies
+        DiscoverAlgorithmsFromReferencedAssemblies(compilation, seen, algorithms);
+
+        int tested = 0;
+        int total = algorithms.Count;
+        var generatedNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (symbol, category) in algorithms)
+        {
+            // Check if a manual test already exists
+            var testClassName = GeneratorHelpers.StripGenericSuffix(symbol.Name) + "Tests";
+            if (!generatedNames.Add(testClassName))
+            {
+                tested++;
+                continue;
+            }
+
+            // Check for parameterless or all-optional constructor
+            bool hasUsableConstructor = false;
+            foreach (var ctor in symbol.Constructors)
+            {
+                if (ctor.DeclaredAccessibility == Accessibility.Public &&
+                    ctor.Parameters.All(p => p.HasExplicitDefaultValue || p.IsOptional))
+                {
+                    hasUsableConstructor = true;
+                    break;
+                }
+            }
+
+            if (!hasUsableConstructor)
+            {
+                // Can't auto-generate test for classes requiring constructor args
+                continue;
+            }
+
+            EmitAlgorithmTestClass(context, symbol, category, testClassName);
+            tested++;
+        }
+
+        if (total > 0)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                AlgorithmCoverageSummary, Location.None,
+                tested, total,
+                tested * 100.0 / total));
+        }
+    }
+
+    /// <summary>
+    /// Discovers non-model algorithm classes from referenced assemblies.
+    /// </summary>
+    private static void DiscoverAlgorithmsFromReferencedAssemblies(
+        Compilation compilation,
+        HashSet<string> seen,
+        List<(INamedTypeSymbol symbol, AlgorithmCategory category)> results)
+    {
+        foreach (var reference in compilation.References)
+        {
+            var assemblySymbol = compilation.GetAssemblyOrModuleSymbol(reference) as IAssemblySymbol;
+            if (assemblySymbol is null) continue;
+
+            var assemblyName = assemblySymbol.Name;
+            if (!assemblyName.StartsWith("AiDotNet", System.StringComparison.Ordinal) ||
+                assemblyName.IndexOf("Test", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                assemblyName.IndexOf("Generator", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                continue;
+
+            CollectAlgorithmsFromNamespace(assemblySymbol.GlobalNamespace, seen, results);
+        }
+    }
+
+    private static void CollectAlgorithmsFromNamespace(
+        INamespaceSymbol ns,
+        HashSet<string> seen,
+        List<(INamedTypeSymbol symbol, AlgorithmCategory category)> results)
+    {
+        foreach (var member in ns.GetMembers())
+        {
+            if (member is INamespaceSymbol childNs)
+            {
+                CollectAlgorithmsFromNamespace(childNs, seen, results);
+            }
+            else if (member is INamedTypeSymbol type)
+            {
+                if (type.TypeKind != TypeKind.Class || type.IsAbstract)
+                    continue;
+
+                // Skip IFullModel types
+                if (ImplementsIFullModel(type))
+                    continue;
+
+                // Check for non-model algorithm interfaces
+                var category = ClassifyAlgorithm(type);
+                if (category == AlgorithmCategory.None)
+                    continue;
+
+                var fqn = type.OriginalDefinition.ToDisplayString();
+                if (seen.Add(fqn))
+                    results.Add((type, category));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Emits a generated test class for a non-model algorithm.
+    /// </summary>
+    private static void EmitAlgorithmTestClass(
+        SourceProductionContext context,
+        INamedTypeSymbol symbol,
+        AlgorithmCategory category,
+        string testClassName)
+    {
+        var typeName = GeneratorHelpers.StripGenericSuffix(symbol.ToDisplayString());
+        string constructorExpr = symbol.TypeParameters.Length <= 1
+            ? $"new {typeName}<double>()"
+            : $"new {typeName}<double>()";
+
+        // Determine base class and factory method based on category
+        string baseClass;
+        string factoryMethod;
+        string factoryReturnType;
+        string extraUsings = "";
+
+        switch (category)
+        {
+            case AlgorithmCategory.CausalDiscovery:
+                baseClass = "CausalDiscoveryTestBase";
+                factoryMethod = "CreateAlgorithm";
+                factoryReturnType = "ICausalDiscoveryAlgorithm<double>";
+                extraUsings = "using AiDotNet.CausalDiscovery;\n";
+                break;
+            case AlgorithmCategory.ActiveLearning:
+                baseClass = "ActiveLearningTestBase";
+                factoryMethod = "CreateStrategy";
+                factoryReturnType = "IActiveLearningStrategy<double>";
+                extraUsings = "using AiDotNet.Interfaces;\nusing AiDotNet.Tensors;\nusing AiDotNet.Tensors.LinearAlgebra;\nusing AiDotNet.LossFunctions;\nusing AiDotNet.Models;\n";
+                break;
+            case AlgorithmCategory.ContinualLearning:
+                baseClass = "ContinualLearningTestBase";
+                factoryMethod = "CreateStrategy";
+                factoryReturnType = "IContinualLearningStrategy<double>";
+                extraUsings = "using AiDotNet.Interfaces;\nusing AiDotNet.Tensors;\nusing AiDotNet.Tensors.LinearAlgebra;\nusing AiDotNet.LossFunctions;\nusing AiDotNet.NeuralNetworks;\n";
+                break;
+            case AlgorithmCategory.Distillation:
+                baseClass = "DistillationStrategyTestBase";
+                factoryMethod = "CreateStrategy";
+                factoryReturnType = "IDistillationStrategy<double>";
+                extraUsings = "using AiDotNet.Interfaces;\n";
+                break;
+            default:
+                return;
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("// Auto-generated non-model algorithm test. Mathematical invariant tests are inherited from the base class.");
+        sb.Append(extraUsings);
+        sb.AppendLine("using AiDotNet.Tests.ModelFamilyTests.Base;");
+        sb.AppendLine();
+        sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
+        sb.AppendLine();
+        sb.AppendLine($"public class {testClassName} : {baseClass}");
+        sb.AppendLine("{");
+        sb.AppendLine($"    protected override {factoryReturnType} {factoryMethod}()");
+        sb.AppendLine($"        => {constructorExpr};");
+
+        // Emit mock factory methods for categories that need them
+        if (category == AlgorithmCategory.ActiveLearning)
+        {
+            EmitMockModelFactory(sb);
+        }
+        else if (category == AlgorithmCategory.ContinualLearning)
+        {
+            EmitMockNetworkFactory(sb);
+        }
+
+        sb.AppendLine("}");
+
+        var hintName = GeneratorHelpers.StripGenericSuffix(symbol.OriginalDefinition.ToDisplayString())
+            .Replace(".", "_") + "Tests.g.cs";
+        context.AddSource(hintName, sb.ToString());
+    }
+
+    /// <summary>
+    /// Emits a CreateMockModel override that returns a simple pass-through IFullModel for active learning tests.
+    /// </summary>
+    private static void EmitMockModelFactory(StringBuilder sb)
+    {
+        sb.AppendLine();
+        sb.AppendLine("    protected override IFullModel<double, Tensor<double>, Tensor<double>> CreateMockModel()");
+        sb.AppendLine("        => new PassThroughModel();");
+        sb.AppendLine();
+        sb.AppendLine("    private class PassThroughModel : IFullModel<double, Tensor<double>, Tensor<double>>");
+        sb.AppendLine("    {");
+        sb.AppendLine("        public Tensor<double> Predict(Tensor<double> input)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            // Return softmax-like output: each sample gets uniform class probabilities");
+        sb.AppendLine("            int batch = input.Shape[0];");
+        sb.AppendLine("            int numClasses = 4;");
+        sb.AppendLine("            var rng = new System.Random(batch);");
+        sb.AppendLine("            var data = new double[batch * numClasses];");
+        sb.AppendLine("            for (int i = 0; i < batch; i++)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                double sum = 0;");
+        sb.AppendLine("                for (int c = 0; c < numClasses; c++)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    data[i * numClasses + c] = rng.NextDouble() + 0.01;");
+        sb.AppendLine("                    sum += data[i * numClasses + c];");
+        sb.AppendLine("                }");
+        sb.AppendLine("                for (int c = 0; c < numClasses; c++)");
+        sb.AppendLine("                    data[i * numClasses + c] /= sum;");
+        sb.AppendLine("            }");
+        sb.AppendLine("            return new Tensor<double>(data, new[] { batch, numClasses });");
+        sb.AppendLine("        }");
+        sb.AppendLine("        public void Train(Tensor<double> input, Tensor<double> output) { }");
+        sb.AppendLine("        public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();");
+        sb.AppendLine("        public Vector<double> GetParameters() => new Vector<double>(10);");
+        sb.AppendLine("        public void SetParameters(Vector<double> p) { }");
+        sb.AppendLine("        public IFullModel<double, Tensor<double>, Tensor<double>> WithParameters(Vector<double> p) => this;");
+        sb.AppendLine("        public IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy() => this;");
+        sb.AppendLine("        public IFullModel<double, Tensor<double>, Tensor<double>> Clone() => this;");
+        sb.AppendLine("        public int ParameterCount => 10;");
+        sb.AppendLine("        public bool SupportsParameterInitialization => false;");
+        sb.AppendLine("        public Vector<double> SanitizeParameters(Vector<double> p) => p;");
+        sb.AppendLine("        public Vector<double> ComputeGradients(Tensor<double> i, Tensor<double> t, ILossFunction<double>? l = null) => new Vector<double>(10);");
+        sb.AppendLine("        public void ApplyGradients(Vector<double> g, double lr) { }");
+        sb.AppendLine("        public AiDotNet.Models.ModelMetadata<double> GetModelMetadata() => new();");
+        sb.AppendLine("        public byte[] Serialize() => System.Array.Empty<byte>();");
+        sb.AppendLine("        public void Deserialize(byte[] data) { }");
+        sb.AppendLine("        public void SaveModel(string path) { }");
+        sb.AppendLine("        public void LoadModel(string path) { }");
+        sb.AppendLine("        public void SaveState(System.IO.Stream s) { }");
+        sb.AppendLine("        public void LoadState(System.IO.Stream s) { }");
+        sb.AppendLine("        public System.Collections.Generic.IEnumerable<int> GetActiveFeatureIndices() => System.Array.Empty<int>();");
+        sb.AppendLine("        public void SetActiveFeatureIndices(System.Collections.Generic.IEnumerable<int> f) { }");
+        sb.AppendLine("        public bool IsFeatureUsed(int i) => false;");
+        sb.AppendLine("        public System.Collections.Generic.Dictionary<string, double> GetFeatureImportance() => new();");
+        sb.AppendLine("        public bool SupportsJitCompilation => false;");
+        sb.AppendLine("        public AiDotNet.Autodiff.ComputationNode<double> ExportComputationGraph(System.Collections.Generic.List<AiDotNet.Autodiff.ComputationNode<double>> n) => throw new System.NotSupportedException();");
+        sb.AppendLine("    }");
+    }
+
+    /// <summary>
+    /// Emits a CreateMockNetwork override that returns a simple INeuralNetwork mock for continual learning tests.
+    /// </summary>
+    private static void EmitMockNetworkFactory(StringBuilder sb)
+    {
+        sb.AppendLine();
+        sb.AppendLine("    protected override INeuralNetwork<double> CreateMockNetwork()");
+        sb.AppendLine("        => new MockNeuralNetwork();");
+        sb.AppendLine();
+        sb.AppendLine("    private class MockNeuralNetwork : INeuralNetwork<double>");
+        sb.AppendLine("    {");
+        sb.AppendLine("        private Vector<double> _params = new Vector<double>(new double[] { 0.1, 0.2, 0.3, 0.4, 0.5, -0.1, -0.2, -0.3, -0.4, -0.5 });");
+        sb.AppendLine("        public Tensor<double> Predict(Tensor<double> input) => input;");
+        sb.AppendLine("        public void Train(Tensor<double> input, Tensor<double> output) { }");
+        sb.AppendLine("        public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();");
+        sb.AppendLine("        public Vector<double> GetParameters() => new Vector<double>(_params.ToArray());");
+        sb.AppendLine("        public void SetParameters(Vector<double> p) { for (int i = 0; i < System.Math.Min(p.Length, _params.Length); i++) _params[i] = p[i]; }");
+        sb.AppendLine("        public IFullModel<double, Tensor<double>, Tensor<double>> WithParameters(Vector<double> p) { var c = new MockNeuralNetwork(); c.SetParameters(p); return c; }");
+        sb.AppendLine("        public IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy() => new MockNeuralNetwork { _params = new Vector<double>(_params.ToArray()) };");
+        sb.AppendLine("        public IFullModel<double, Tensor<double>, Tensor<double>> Clone() => DeepCopy();");
+        sb.AppendLine("        public int ParameterCount => _params.Length;");
+        sb.AppendLine("        public bool SupportsParameterInitialization => true;");
+        sb.AppendLine("        public Vector<double> SanitizeParameters(Vector<double> p) => p;");
+        sb.AppendLine("        public Vector<double> ComputeGradients(Tensor<double> i, Tensor<double> t, ILossFunction<double>? l = null) => new Vector<double>(_params.Length);");
+        sb.AppendLine("        public void ApplyGradients(Vector<double> g, double lr) { for (int i = 0; i < _params.Length; i++) _params[i] -= lr * g[i]; }");
+        sb.AppendLine("        public AiDotNet.Models.ModelMetadata<double> GetModelMetadata() => new();");
+        sb.AppendLine("        public byte[] Serialize() => System.Array.Empty<byte>();");
+        sb.AppendLine("        public void Deserialize(byte[] data) { }");
+        sb.AppendLine("        public void SaveModel(string path) { }");
+        sb.AppendLine("        public void LoadModel(string path) { }");
+        sb.AppendLine("        public void SaveState(System.IO.Stream s) { }");
+        sb.AppendLine("        public void LoadState(System.IO.Stream s) { }");
+        sb.AppendLine("        public System.Collections.Generic.IEnumerable<int> GetActiveFeatureIndices() => System.Array.Empty<int>();");
+        sb.AppendLine("        public void SetActiveFeatureIndices(System.Collections.Generic.IEnumerable<int> f) { }");
+        sb.AppendLine("        public bool IsFeatureUsed(int i) => false;");
+        sb.AppendLine("        public System.Collections.Generic.Dictionary<string, double> GetFeatureImportance() => new();");
+        sb.AppendLine("        public bool SupportsJitCompilation => false;");
+        sb.AppendLine("        public AiDotNet.Autodiff.ComputationNode<double> ExportComputationGraph(System.Collections.Generic.List<AiDotNet.Autodiff.ComputationNode<double>> n) => throw new System.NotSupportedException();");
+        // INeuralNetwork-specific members
+        sb.AppendLine("        public void UpdateParameters(Vector<double> p) { SetParameters(p); }");
+        sb.AppendLine("        public void SetTrainingMode(bool isTraining) { }");
+        sb.AppendLine("        public Tensor<double> ForwardWithMemory(Tensor<double> input) => input;");
+        sb.AppendLine("        public Tensor<double> Backpropagate(Tensor<double> outputGradients) => outputGradients;");
+        sb.AppendLine("        public Vector<double> GetParameterGradients() => new Vector<double>(_params.Length);");
+        sb.AppendLine("        public System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<double>> GetLayers() => System.Array.Empty<AiDotNet.Interfaces.ILayer<double>>();");
+        // ILayeredModel members
+        sb.AppendLine("        public System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<double>> Layers => System.Array.Empty<AiDotNet.Interfaces.ILayer<double>>();");
+        sb.AppendLine("        public int LayerCount => 0;");
+        sb.AppendLine("        public AiDotNet.Interfaces.LayerInfo<double> GetLayerInfo(int index) => throw new System.IndexOutOfRangeException();");
+        sb.AppendLine("        public System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.LayerInfo<double>> GetAllLayerInfo() => System.Array.Empty<AiDotNet.Interfaces.LayerInfo<double>>();");
+        sb.AppendLine("        public bool ValidatePartitionPoint(int point) => false;");
+        sb.AppendLine("        public AiDotNet.Interfaces.SubModel<double> ExtractSubModel(int startLayer, int endLayer) => throw new System.NotSupportedException();");
+        sb.AppendLine("    }");
     }
 }

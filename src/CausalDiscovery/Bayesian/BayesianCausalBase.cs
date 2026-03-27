@@ -26,8 +26,10 @@ public abstract class BayesianCausalBase<T> : CausalDiscoveryBase<T>
 
     /// <summary>
     /// Number of MCMC samples or variational iterations.
+    /// Per Friedman and Koller (2003), MCMC methods need sufficient samples
+    /// for the chain to mix properly. Default 5000.
     /// </summary>
-    protected int NumSamples { get; set; } = 1000;
+    protected int NumSamples { get; set; } = 5000;
 
     /// <summary>
     /// Random seed for reproducibility.

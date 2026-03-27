@@ -32,7 +32,8 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 /// simple" and represents the matrix using fewer numbers, making the optimization much faster.
 /// </para>
 /// <para>
-/// Reference: Fang et al. (2020), "Low-Rank DAG Learning", ICML Workshop.
+/// Reference: Fang et al. (2023), "On Low-Rank Directed Acyclic Graphs and Causal
+/// Structure Learning", IEEE Transactions on Signal Processing.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -43,13 +44,14 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 [ModelTask(ModelTask.CausalInference)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
-[ModelPaper("Low-Rank DAG Learning", "https://arxiv.org/abs/2006.13006", Year = 2020, Authors = "Zhuangyan Fang, Shengyu Zhu, Jiji Zhang, Yue Liu, Zhitang Chen, Yangbo He")]
+[ModelPaper("On Low-Rank Directed Acyclic Graphs and Causal Structure Learning", "https://arxiv.org/abs/2006.05691", Year = 2023, Authors = "Zhuangyan Fang, Shengyu Zhu, Jiji Zhang, Yue Liu, Zhitang Chen, Yangbo He")]
 public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
 {
     private readonly double _learningRateValue;
     private readonly int _maxRank;
     private readonly int _innerIterations;
     private readonly int? _seed;
+    private readonly double _initScale;
     private double _rhoMax = 1e+16;
 
     /// <inheritdoc/>
@@ -64,9 +66,12 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
     public NOTEARSLowRank(CausalDiscoveryOptions? options = null)
     {
         ApplyOptions(options);
-        _learningRateValue = options?.LearningRate ?? 0.001;
+        _learningRateValue = options?.LearningRate ?? 0.01;
         _maxRank = options?.MaxRank ?? 10;
         _innerIterations = options?.InnerIterations ?? 20;
+        // Small init scale so W = A*B^T ≈ 0 (matching NOTEARS reference W=0 init).
+        // L-BFGS builds up edges from near-zero. User can adjust via InitScale.
+        _initScale = options?.InitScale ?? 0.01;
         _seed = options?.Seed;
         if (options?.MaxPenalty is { } maxPenalty) _rhoMax = maxPenalty;
         if (_maxRank <= 0)
@@ -93,88 +98,165 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
         // Choose rank
         int rank = Math.Min(d, _maxRank);
 
-        // Initialize low-rank factors A, B (d x rank)
+        // Initialize low-rank factors using spectral initialization from OLS.
+        // Standard NOTEARS uses W=0, but for low-rank W=A*B^T, zero init creates
+        // a saddle point where gradients vanish (∂L/∂A = ∂L/∂W * B = 0 when B=0).
+        // Solution: A = I (identity, for r≤d), B = scale * OLS^T (transposed regression weights).
+        // This gives W = A*B^T = I * (scale * OLS^T)^T = scale * OLS, avoiding the saddle point
+        // while starting near a meaningful solution.
+        var cov = ComputeCovarianceMatrix(X);
         var A = new Matrix<T>(d, rank);
         var B = new Matrix<T>(d, rank);
-        T initScale = NumOps.FromDouble(0.01);
+        T initScale = NumOps.FromDouble(_initScale);
         var rng = _seed.HasValue
             ? Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed.Value)
             : Tensors.Helpers.RandomHelper.CreateSecureRandom();
+
         for (int i = 0; i < d; i++)
             for (int r = 0; r < rank; r++)
             {
-                A[i, r] = NumOps.Multiply(initScale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-                B[i, r] = NumOps.Multiply(initScale, NumOps.FromDouble(rng.NextDouble() - 0.5));
+                if (r < d)
+                {
+                    // A: identity for first d components (preserves direction)
+                    A[i, r] = (r == i) ? NumOps.One : NumOps.Zero;
+                    // B: scaled OLS weights transposed (OLS[r,i] = cov[r,i]/var[r])
+                    if (r != i)
+                    {
+                        T varR = cov[r, r];
+                        T olsW = NumOps.GreaterThan(varR, NumOps.FromDouble(1e-10))
+                            ? NumOps.Multiply(NumOps.Divide(cov[r, i], varR), initScale)
+                            : NumOps.Zero;
+                        B[i, r] = olsW;
+                    }
+                    else
+                    {
+                        B[i, r] = NumOps.Zero; // No self-edge
+                    }
+                }
+                else
+                {
+                    // Extra rank components beyond d: small noise
+                    T noise = NumOps.FromDouble(0.001 * (rng.NextDouble() - 0.5));
+                    A[i, r] = noise;
+                    B[i, r] = noise;
+                }
             }
 
-        T lr = NumOps.FromDouble(effectiveLr);
-
-        // Augmented Lagrangian
-        double rho = 1.0;
-        double alpha = 0.0;
-        double prevH = double.MaxValue;
+        // Augmented Lagrangian with L-BFGS inner solver (per NOTEARS reference)
+        T rhoT = NumOps.One;
+        T alphaLag = NumOps.Zero;
+        T prevH = NumOps.FromDouble(double.MaxValue);
+        var optimizer = new Optimizers.LBFGSFunctionOptimizer<T>();
+        int paramLen = 2 * d * rank;
 
         for (int outerIter = 0; outerIter < MaxIterations; outerIter++)
         {
-            // Inner optimization
-            for (int innerIter = 0; innerIter < _innerIterations; innerIter++)
-            {
-                // Reconstruct W = A * B^T with diagonal zeroed
-                var W = ReconstructW(A, B, d, rank);
+            // Flatten [A; B] into a single parameter vector
+            var initialParams = FlattenABToVector(A, B, d, rank);
 
-                // Compute L2 loss and gradient
-                var (loss, lossGrad) = ComputeL2Loss(X, W);
+            // Capture current Lagrangian coefficients for the closure
+            T currentAlpha = alphaLag;
+            T currentRho = rhoT;
 
-                // Compute acyclicity constraint and gradient
-                var (h, hGrad) = ComputeNOTEARSConstraint(W);
+            // Define the objective + gradient function for L-BFGS
+            var optimized = optimizer.Minimize(
+                initialParams,
+                (Vector<T> p) =>
+                {
+                    // Unflatten parameters
+                    var localA = new Matrix<T>(d, rank);
+                    var localB = new Matrix<T>(d, rank);
+                    UnflattenVectorToAB(p, localA, localB, d, rank);
+                    var W = ReconstructW(localA, localB, d, rank);
 
-                // Combined gradient: dL/dW_total = lossGrad + L1 sign + (alpha + rho*h) * hGrad
-                var totalGrad = new Matrix<T>(d, d);
-                T augCoeff = NumOps.FromDouble(alpha + rho * h);
+                    // Compute augmented Lagrangian objective
+                    var (loss, lossGrad) = ComputeL2Loss(X, W);
+                    var (h, hGrad) = ComputeNOTEARSConstraint(W);
+                    T augCoeff = NumOps.Add(currentAlpha, NumOps.Multiply(currentRho, NumOps.FromDouble(h)));
+                    T obj = NumOps.FromDouble(loss + NumOps.ToDouble(currentAlpha) * h
+                        + 0.5 * NumOps.ToDouble(currentRho) * h * h);
 
-                for (int i = 0; i < d; i++)
-                    for (int j = 0; j < d; j++)
-                    {
-                        T g = NumOps.Add(lossGrad[i, j],
-                              NumOps.Multiply(augCoeff, hGrad[i, j]));
-                        // Add L1 subgradient
-                        g = NumOps.Add(g, NumOps.FromDouble(Lambda1 * Math.Sign(NumOps.ToDouble(W[i, j]))));
-                        totalGrad[i, j] = g;
-                    }
-
-                // Chain rule: dL/dA = totalGrad * B, dL/dB = totalGrad^T * A
-                for (int i = 0; i < d; i++)
-                    for (int r = 0; r < rank; r++)
-                    {
-                        T gradA = NumOps.Zero;
-                        T gradB = NumOps.Zero;
-                        for (int j = 0; j < d; j++)
+                    // Chain rule to parameter space: ∂L/∂A, ∂L/∂B
+                    var grad = new Vector<T>(paramLen);
+                    for (int i = 0; i < d; i++)
+                        for (int r = 0; r < rank; r++)
                         {
-                            gradA = NumOps.Add(gradA, NumOps.Multiply(totalGrad[i, j], B[j, r]));
-                            gradB = NumOps.Add(gradB, NumOps.Multiply(totalGrad[j, i], A[j, r]));
+                            T gA = NumOps.Zero;
+                            T gB = NumOps.Zero;
+                            for (int j = 0; j < d; j++)
+                            {
+                                T totalGW = NumOps.Add(
+                                    NumOps.Add(lossGrad[i, j], NumOps.Multiply(augCoeff, hGrad[i, j])),
+                                    NumOps.FromDouble(Lambda1 * Math.Sign(NumOps.ToDouble(W[i, j]))));
+                                gA = NumOps.Add(gA, NumOps.Multiply(totalGW, localB[j, r]));
+
+                                T totalGWT = NumOps.Add(
+                                    NumOps.Add(lossGrad[j, i], NumOps.Multiply(augCoeff, hGrad[j, i])),
+                                    NumOps.FromDouble(Lambda1 * Math.Sign(NumOps.ToDouble(W[j, i]))));
+                                gB = NumOps.Add(gB, NumOps.Multiply(totalGWT, localA[j, r]));
+                            }
+                            grad[i * rank + r] = gA;
+                            grad[d * rank + i * rank + r] = gB;
                         }
 
-                        A[i, r] = NumOps.Subtract(A[i, r], NumOps.Multiply(lr, gradA));
-                        B[i, r] = NumOps.Subtract(B[i, r], NumOps.Multiply(lr, gradB));
-                    }
+                    return (obj, grad);
+                },
+                _innerIterations,
+                NumOps.FromDouble(1e-5));
+
+            // Unflatten optimized parameters back to A, B
+            UnflattenVectorToAB(optimized, A, B, d, rank);
+
+            // Outer: evaluate and update augmented Lagrangian
+            var outerW = ReconstructW(A, B, d, rank);
+            var (hVal, _) = ComputeNOTEARSConstraint(outerW);
+            T hValT = NumOps.FromDouble(hVal);
+
+            alphaLag = NumOps.Add(alphaLag, NumOps.Multiply(rhoT, hValT));
+            if (NumOps.GreaterThan(hValT, NumOps.Multiply(NumOps.FromDouble(0.25), prevH)))
+            {
+                T newRho = NumOps.Multiply(rhoT, NumOps.FromDouble(10));
+                T rhoMaxT = NumOps.FromDouble(_rhoMax);
+                rhoT = NumOps.GreaterThan(newRho, rhoMaxT) ? rhoMaxT : newRho;
             }
-
-            // Outer: evaluate and update Lagrangian
-            var finalW = ReconstructW(A, B, d, rank);
-            var (hVal, _) = ComputeNOTEARSConstraint(finalW);
-
-            alpha += rho * hVal;
-            if (hVal > 0.25 * prevH)
-                rho = Math.Min(rho * 10, _rhoMax);
-            prevH = hVal;
+            prevH = hValT;
 
             if (hVal < HTolerance) break;
-            if (rho >= _rhoMax) break;
+            if (NumOps.ToDouble(rhoT) >= _rhoMax) break;
         }
 
         // Final reconstruction and thresholding (with covariance fallback)
         var result = ReconstructW(A, B, d, rank);
         return ThresholdWithFallback(result, WThreshold, data);
+    }
+
+    /// <summary>
+    /// Flattens low-rank factors [A; B] into a single Vector for the optimizer.
+    /// </summary>
+    private static Vector<T> FlattenABToVector(Matrix<T> A, Matrix<T> B, int d, int rank)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var vec = new Vector<T>(2 * d * rank);
+        for (int i = 0; i < d; i++)
+            for (int r = 0; r < rank; r++)
+            {
+                vec[i * rank + r] = A[i, r];
+                vec[d * rank + i * rank + r] = B[i, r];
+            }
+        return vec;
+    }
+
+    /// <summary>
+    /// Unflattens a parameter Vector back into A, B matrices.
+    /// </summary>
+    private static void UnflattenVectorToAB(Vector<T> vec, Matrix<T> A, Matrix<T> B, int d, int rank)
+    {
+        for (int i = 0; i < d; i++)
+            for (int r = 0; r < rank; r++)
+            {
+                A[i, r] = vec[i * rank + r];
+                B[i, r] = vec[d * rank + i * rank + r];
+            }
     }
 
     /// <summary>

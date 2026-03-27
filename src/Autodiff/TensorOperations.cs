@@ -11591,8 +11591,49 @@ public static class TensorOperations<T>
         }
         else
         {
-            // General broadcasting: add element-wise where shapes match
-            throw new NotSupportedException($"Broadcasting from shape [{string.Join(", ", smaller.Shape.ToArray())}] to [{string.Join(", ", larger.Shape.ToArray())}] is not yet implemented for this shape combination.");
+            // General broadcasting following NumPy rules:
+            // Align shapes from the right, dimensions are compatible if equal or one is 1.
+            var largerShape = larger.Shape.ToArray();
+            var smallerShape = smaller.Shape.ToArray();
+            int maxRank = largerShape.Length;
+
+            // Pad smaller shape with 1s on the left to match rank
+            var paddedSmaller = new int[maxRank];
+            int offset = maxRank - smallerShape.Length;
+            for (int i = 0; i < maxRank; i++)
+                paddedSmaller[i] = i < offset ? 1 : smallerShape[i - offset];
+
+            // Iterate through all elements of the result (same shape as larger)
+            for (int flatIdx = 0; flatIdx < result.Length; flatIdx++)
+            {
+                // Convert flat index to multi-dimensional indices for the larger tensor
+                int remaining = flatIdx;
+                var indices = new int[maxRank];
+                for (int dim = maxRank - 1; dim >= 0; dim--)
+                {
+                    indices[dim] = remaining % largerShape[dim];
+                    remaining /= largerShape[dim];
+                }
+
+                // Map to smaller tensor indices (mod by 1 = always 0 for broadcast dims)
+                var smallerIndices = new int[smallerShape.Length];
+                for (int dim = 0; dim < smallerShape.Length; dim++)
+                {
+                    int largerDim = dim + offset;
+                    smallerIndices[dim] = paddedSmaller[largerDim] == 1 ? 0 : indices[largerDim];
+                }
+
+                // Compute flat index for smaller tensor
+                int smallerFlatIdx = 0;
+                int stride = 1;
+                for (int dim = smallerShape.Length - 1; dim >= 0; dim--)
+                {
+                    smallerFlatIdx += smallerIndices[dim] * stride;
+                    stride *= smallerShape[dim];
+                }
+
+                result[flatIdx] = numOps.Add(result[flatIdx], smaller[smallerFlatIdx]);
+            }
         }
 
         return result;
@@ -11650,8 +11691,48 @@ public static class TensorOperations<T>
             return result;
         }
 
-        throw new NotSupportedException(
-            $"Broadcasting multiplication from shape [{string.Join(", ", a.Shape.ToArray())}] and [{string.Join(", ", b.Shape.ToArray())}] is not yet implemented for this shape combination.");
+        // General broadcasting multiplication following NumPy rules
+        var mulLarger = a.Length >= b.Length ? a : b;
+        var mulSmaller = a.Length >= b.Length ? b : a;
+        var mulLargerShape = mulLarger.Shape.ToArray();
+        var mulSmallerShape = mulSmaller.Shape.ToArray();
+        int maxRank = mulLargerShape.Length;
+        int offset = maxRank - mulSmallerShape.Length;
+
+        var paddedSmaller = new int[maxRank];
+        for (int i = 0; i < maxRank; i++)
+            paddedSmaller[i] = i < offset ? 1 : mulSmallerShape[i - offset];
+
+        var mulResult = new Tensor<T>(mulLargerShape);
+        for (int flatIdx = 0; flatIdx < mulResult.Length; flatIdx++)
+        {
+            int remaining = flatIdx;
+            var indices = new int[maxRank];
+            for (int dim = maxRank - 1; dim >= 0; dim--)
+            {
+                indices[dim] = remaining % mulLargerShape[dim];
+                remaining /= mulLargerShape[dim];
+            }
+
+            var smallerIndices = new int[mulSmallerShape.Length];
+            for (int dim = 0; dim < mulSmallerShape.Length; dim++)
+            {
+                int largerDim = dim + offset;
+                smallerIndices[dim] = paddedSmaller[largerDim] == 1 ? 0 : indices[largerDim];
+            }
+
+            int smallerFlatIdx = 0;
+            int stride = 1;
+            for (int dim = mulSmallerShape.Length - 1; dim >= 0; dim--)
+            {
+                smallerFlatIdx += smallerIndices[dim] * stride;
+                stride *= mulSmallerShape[dim];
+            }
+
+            mulResult[flatIdx] = numOps.Multiply(mulLarger[flatIdx], mulSmaller[smallerFlatIdx]);
+        }
+
+        return mulResult;
     }
 
     /// <summary>

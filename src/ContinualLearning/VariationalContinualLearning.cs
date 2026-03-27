@@ -87,6 +87,10 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
     }
 
     /// <inheritdoc />
+    /// <inheritdoc />
+    /// <remarks>VCL shifts prior to last posterior without precision accumulation per the reference implementation.</remarks>
+    public bool AccumulatesAcrossTasks => false;
+
     public double Lambda
     {
         get => _lambda;
@@ -155,6 +159,10 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
             }
         }
 
+        // Per the VCL reference implementation (Nguyen et al., ICLR 2018):
+        // the posterior from this task becomes the prior for the next task.
+        // Variance is NOT explicitly tightened — it's learned via gradient descent
+        // during training. There is no precision accumulation like in EWC.
         _taskCount++;
     }
 

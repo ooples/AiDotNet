@@ -1,6 +1,8 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
@@ -35,9 +37,9 @@ namespace AiDotNet.SelfSupervisedLearning;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Emerging Properties in Self-Supervised Vision Transformers", "https://arxiv.org/abs/2104.14294", Year = 2021, Authors = "Mathilde Caron, Hugo Touvron, Ishan Misra, Hervé Jégou, Julien Mairal, Piotr Bojanowski, Armand Joulin")]
-public class CenteringMechanism<T>
+public class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    // NumOps inherited from ModelBase
 
     private readonly int _dimension;
     private readonly double _momentum;
@@ -263,4 +265,43 @@ public class CenteringMechanism<T>
 
         return (mean, std, min, max);
     }
+
+    #region ModelBase Overrides
+
+    /// <inheritdoc />
+    public override Tensor<T> Predict(Tensor<T> input) => ApplyCenter(input);
+
+    /// <inheritdoc />
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) => Update(input);
+
+    /// <inheritdoc />
+    public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters() => new Vector<T>(_center);
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        for (int i = 0; i < Math.Min(parameters.Length, _dimension); i++)
+            _center[i] = parameters[i];
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+    {
+        var copy = DeepCopy();
+        copy.SetParameters(parameters);
+        return copy;
+    }
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        var clone = (CenteringMechanism<T>)MemberwiseClone();
+        clone._center = (T[])_center.Clone();
+        return clone;
+    }
+
+    #endregion
 }

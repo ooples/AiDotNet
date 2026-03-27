@@ -1,3 +1,4 @@
+using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 
@@ -32,7 +33,10 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     /// <summary>
     /// Edge weight threshold for post-optimization pruning.
     /// </summary>
-    protected double WThreshold { get; set; } = 0.1;
+    /// <summary>
+    /// Edge weight threshold for pruning. Default matches the NOTEARS reference implementation (0.3).
+    /// </summary>
+    protected double WThreshold { get; set; } = 0.3;
 
     /// <summary>
     /// Maximum number of outer loop iterations.
@@ -80,15 +84,16 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
         int d = X.Columns;
 
         // Residual R = X - X @ W using Engine.DotProduct for each row-column product
+        // Pre-allocate reusable vectors to avoid per-iteration allocations
         var R = new Matrix<T>(n, d);
+        var xRow = new Vector<T>(d);
+        var wCol = new Vector<T>(d);
         for (int i = 0; i < n; i++)
         {
-            var xRow = new Vector<T>(d);
             for (int k = 0; k < d; k++) xRow[k] = X[i, k];
 
             for (int j = 0; j < d; j++)
             {
-                var wCol = new Vector<T>(d);
                 for (int k = 0; k < d; k++) wCol[k] = W[k, j];
                 R[i, j] = NumOps.Subtract(X[i, j], Engine.DotProduct(xRow, wCol));
             }
@@ -105,16 +110,17 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
         loss *= 0.5 / n;
 
         // Gradient = -(1/n) * X^T @ R using Engine.DotProduct for column products
+        // Pre-allocate reusable column vectors
         T nT = NumOps.FromDouble(n);
         var grad = new Matrix<T>(d, d);
+        var xColK = new Vector<T>(n);
+        var rColJ = new Vector<T>(n);
         for (int k = 0; k < d; k++)
         {
-            var xColK = new Vector<T>(n);
             for (int i = 0; i < n; i++) xColK[i] = X[i, k];
 
             for (int j = 0; j < d; j++)
             {
-                var rColJ = new Vector<T>(n);
                 for (int i = 0; i < n; i++) rColJ[i] = R[i, j];
                 grad[k, j] = NumOps.Negate(NumOps.Divide(Engine.DotProduct(xColK, rColJ), nT));
             }
@@ -204,23 +210,41 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
 
         if (!hasEdges)
         {
-            // No edges survived thresholding — use covariance-based edges
+            // No edges survived — use PARTIAL correlations to identify direct edges.
+            // Partial correlation removes indirect effects (e.g., X0↔X2 through X1)
+            // by conditioning on all other variables. Only direct relationships survive.
+            // This is computed from the precision matrix (inverse covariance):
+            // pcor(i,j) = -P[i,j] / sqrt(P[i,i] * P[j,j])
             var cov = ComputeCovarianceMatrix(data);
+
+            // Compute precision matrix via regularized inverse
+            var precision = InvertWithRidge(cov, d, NumOps.FromDouble(1e-4));
+
             for (int i = 0; i < d; i++)
                 for (int j = 0; j < d; j++)
                 {
                     if (i == j) continue;
-                    double varI = NumOps.ToDouble(cov[i, i]);
-                    if (varI < 1e-10) continue;
-                    double covIJ = NumOps.ToDouble(cov[i, j]);
-                    double weight = covIJ / varI;
-                    if (Math.Abs(weight) < threshold) continue;
+                    double pii = NumOps.ToDouble(precision[i, i]);
+                    double pjj = NumOps.ToDouble(precision[j, j]);
+                    if (pii <= 0 || pjj <= 0) continue;
 
+                    // Partial correlation from precision matrix:
+                    // pcor(i,j) = -P[i,j] / sqrt(P[i,i] * P[j,j])
+                    double partialCorr = -NumOps.ToDouble(precision[i, j]) / Math.Sqrt(pii * pjj);
+                    if (Math.Abs(partialCorr) < threshold) continue;
+
+                    // Direction: use variance ratio from raw covariance
+                    double varI = NumOps.ToDouble(cov[i, i]);
                     double varJ = NumOps.ToDouble(cov[j, j]);
+                    double covIJ = NumOps.ToDouble(cov[i, j]);
+                    if (varI < 1e-10) continue;
+
+                    double weight = covIJ / varI;
                     double reverseWeight = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
-                    // Use strict > to avoid creating both directions for ties.
-                    // For exact ties, use i < j as tie-breaker.
-                    if (Math.Abs(weight) > reverseWeight || (Math.Abs(weight) == reverseWeight && i < j))
+
+                    if (Math.Abs(weight) > reverseWeight)
+                        result[i, j] = NumOps.FromDouble(weight);
+                    else if (Math.Abs(Math.Abs(weight) - reverseWeight) < 1e-10 && i < j)
                         result[i, j] = NumOps.FromDouble(weight);
                 }
         }
@@ -332,5 +356,43 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Computes the precision matrix (inverse covariance) with ridge regularization
+    /// using the library's Matrix type and numeric operations.
+    /// </summary>
+    /// <param name="S">Covariance matrix to invert.</param>
+    /// <param name="d">Dimension.</param>
+    /// <param name="ridge">Ridge regularization to ensure invertibility.</param>
+    /// <returns>The precision matrix (S + ridge*I)^{-1}.</returns>
+    private Matrix<T> InvertWithRidge(Matrix<T> S, int d, T ridge)
+    {
+        // Build regularized matrix: S + ridge * I
+        var regularized = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                regularized[i, j] = i == j
+                    ? NumOps.Add(S[i, j], ridge)
+                    : S[i, j];
+
+        // Decompose once, then solve for each column of the identity matrix.
+        // This avoids recomputing LU decomposition d times.
+        var lu = new LuDecomposition<T>(regularized);
+        var precision = new Matrix<T>(d, d);
+        var rhs = new Vector<T>(d);
+        for (int col = 0; col < d; col++)
+        {
+            // Reset rhs to the col-th unit vector
+            if (col > 0) rhs[col - 1] = NumOps.Zero;
+            rhs[col] = NumOps.One;
+
+            var solution = lu.Solve(rhs);
+
+            for (int row = 0; row < d; row++)
+                precision[row, col] = solution[row];
+        }
+
+        return precision;
     }
 }

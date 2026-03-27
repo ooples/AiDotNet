@@ -55,7 +55,7 @@ namespace AiDotNet.GaussianProcesses;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Deep Gaussian Processes", "https://doi.org/10.48550/arXiv.1211.0358", Year = 2013, Authors = "Andreas Damianou, Neil D. Lawrence")]
-public class DeepGaussianProcess<T> : IGaussianProcess<T>
+public class DeepGaussianProcess<T> : GaussianProcessBase<T>
 {
     /// <summary>
     /// The GP layers in the deep architecture.
@@ -245,7 +245,7 @@ public class DeepGaussianProcess<T> : IGaussianProcess<T>
     /// which is done using Monte Carlo sampling.
     /// </para>
     /// </remarks>
-    public void Fit(Matrix<T> X, Vector<T> y)
+    public override void Fit(Matrix<T> X, Vector<T> y)
     {
         if (X == null) throw new ArgumentNullException(nameof(X));
         if (y == null) throw new ArgumentNullException(nameof(y));
@@ -393,7 +393,7 @@ public class DeepGaussianProcess<T> : IGaussianProcess<T>
     }
 
     /// <inheritdoc/>
-    public (T mean, T variance) Predict(Vector<T> x)
+    public override (T mean, T variance) Predict(Vector<T> x)
     {
         if (_X.IsEmpty || _y.IsEmpty)
         {
@@ -484,7 +484,7 @@ public class DeepGaussianProcess<T> : IGaussianProcess<T>
     }
 
     /// <inheritdoc/>
-    public void UpdateKernel(IKernelFunction<T> kernel)
+    public override void UpdateKernel(IKernelFunction<T> kernel)
     {
         // Update all layers with the new kernel
         foreach (var layer in _layers)

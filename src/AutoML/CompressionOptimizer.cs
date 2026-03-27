@@ -38,8 +38,7 @@ namespace AiDotNet.AutoML;
 /// <code>
 /// var optimizer = new CompressionOptimizer&lt;double&gt;(options);
 /// var bestCompression = await optimizer.OptimizeAsync(modelWeights, evaluator);
-/// // Result is available in the returned value
-/// // Result is available in the returned value
+/// // bestCompression contains the optimal compression configuration
 /// </code>
 /// </para>
 /// </remarks>

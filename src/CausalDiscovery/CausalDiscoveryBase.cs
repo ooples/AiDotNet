@@ -269,19 +269,19 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
         int n = data.Rows;
         int k = parents.Length;
 
+        // Use consistent BIC formula: BIC = n * log(residual_variance) + k * log(n)
+        // where k = number of parameters (parents + intercept for with-parents case).
+        // The n*log(2*pi) + n terms cancel when comparing models.
         if (k == 0)
         {
-            // No parents: BIC = n * log(var(variable))
+            // No parents: 1 parameter (mean), residual variance = sample variance
             double variance = ComputeVariance(data, variable);
-            return n * Math.Log(Math.Max(variance, 1e-15)) + Math.Log(n);
+            return n * Math.Log(Math.Max(variance, 1e-15)) + 1.0 * Math.Log(n);
         }
 
-        // Fit OLS: variable ~ parents
+        // With parents: k+1 parameters (k regression coefficients + intercept)
         double residualVariance = ComputeResidualVariance(data, variable, parents);
-        double logLikelihood = -0.5 * n * Math.Log(2 * Math.PI * Math.Max(residualVariance, 1e-15)) - 0.5 * n;
-        double bic = -2 * logLikelihood + (k + 1) * Math.Log(n);
-
-        return bic;
+        return n * Math.Log(Math.Max(residualVariance, 1e-15)) + (k + 1) * Math.Log(n);
     }
 
     /// <summary>

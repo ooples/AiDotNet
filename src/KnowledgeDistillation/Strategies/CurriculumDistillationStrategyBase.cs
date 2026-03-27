@@ -199,7 +199,7 @@ public abstract class CurriculumDistillationStrategyBase<T>
             for (int i = 0; i < outputDim; i++)
             {
                 var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(curriculumTemp * curriculumTemp));
+                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(curriculumTemp));
             }
 
             // Add hard gradient if labels provided
@@ -218,6 +218,12 @@ public abstract class CurriculumDistillationStrategyBase<T>
 
             gradientBatch.SetRow(r, gradient);
         }
+
+        // Average gradients over the batch
+        T oneOverBatch = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
+        for (int r2 = 0; r2 < batchSize; r2++)
+            for (int c = 0; c < outputDim; c++)
+                gradientBatch[r2, c] = NumOps.Multiply(gradientBatch[r2, c], oneOverBatch);
 
         return gradientBatch;
     }

@@ -1227,9 +1227,7 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// For example, you can check whether you loaded the right model:
     /// <code>
     /// var meta = beats.GetModelMetadata();
-    /// // Result is available in the returned value
-    /// // Result is available in the returned value
-    /// // Result is available in the returned value
+    /// // meta.Name, meta.Description, meta.FeatureCount are populated
     /// </code>
     /// </para>
     /// </remarks>
