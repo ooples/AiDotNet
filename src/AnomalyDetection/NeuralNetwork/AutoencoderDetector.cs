@@ -332,10 +332,10 @@ public class AutoencoderDetector<T> : AnomalyDetectorBase<T>
         // Encoder: encoded = ReLU(input * W_enc + b_enc)
         var encoded = new Vector<T>(encoderWeights.Columns);
 
-        // Pre-extract encoder weight columns for Engine.DotProduct
+        // Pre-allocate encoder column vector outside loop to avoid per-iteration allocation
+        var encCol = new Vector<T>(encoderWeights.Rows);
         for (int j = 0; j < encoderWeights.Columns; j++)
         {
-            var encCol = new Vector<T>(encoderWeights.Rows);
             for (int i = 0; i < encoderWeights.Rows; i++)
             {
                 encCol[i] = encoderWeights[i, j];

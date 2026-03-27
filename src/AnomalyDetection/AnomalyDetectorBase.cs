@@ -218,11 +218,6 @@ public abstract class AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, Vector<T>
     public override void SetParameters(Vector<T> parameters) { }
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// Default implementation creates a shallow copy via MemberwiseClone.
-    /// Concrete detectors with deep mutable state should override this
-    /// to properly clone their algorithm-specific internal state.
-    /// </remarks>
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
         return (AnomalyDetectorBase<T>)MemberwiseClone();

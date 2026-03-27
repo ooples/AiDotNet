@@ -14,11 +14,22 @@ public abstract class DistillationStrategyTestBase
     /// <summary>Factory method — subclasses return their concrete strategy instance.</summary>
     protected abstract IDistillationStrategy<double> CreateStrategy();
 
-    /// <summary>Batch size for test data.</summary>
+    /// <summary>Batch size for test data. Must be >= 2 for meaningful tests.</summary>
     protected virtual int BatchSize => 4;
 
-    /// <summary>Number of output classes for test data.</summary>
+    /// <summary>Number of output classes for test data. Must be >= 2 for meaningful tests.</summary>
     protected virtual int NumClasses => 8;
+
+    /// <summary>
+    /// Validates that test dimensions are sufficient for meaningful tests.
+    /// </summary>
+    private void ValidateDimensions()
+    {
+        Assert.True(BatchSize >= 2,
+            $"BatchSize must be >= 2 for meaningful distillation tests, but got {BatchSize}.");
+        Assert.True(NumClasses >= 2,
+            $"NumClasses must be >= 2 for meaningful distillation tests, but got {NumClasses}.");
+    }
 
     /// <summary>Whether the loss is always non-negative (true for KL, MSE, CE).</summary>
     protected virtual bool IsNonNegative => true;
@@ -57,6 +68,7 @@ public abstract class DistillationStrategyTestBase
     [Fact]
     public void ComputeLoss_IsNonNegative()
     {
+        ValidateDimensions();
         if (!IsNonNegative) return;
         var strategy = CreateStrategy();
         double loss = strategy.ComputeLoss(CreateStudentOutput(), CreateTeacherOutput());
@@ -244,8 +256,15 @@ public abstract class DistillationStrategyTestBase
         double originalLoss = strategy.ComputeLoss(student, teacher);
         var gradient = strategy.ComputeGradient(student, teacher);
 
-        // Take a small step in the negative gradient direction
-        double stepSize = 0.01;
+        // Take a small step in the negative gradient direction.
+        // Normalize step size by gradient magnitude to be scale-aware.
+        double gradNorm = 0;
+        for (int i = 0; i < gradient.Rows; i++)
+            for (int j = 0; j < gradient.Columns; j++)
+                gradNorm += gradient[i, j] * gradient[i, j];
+        gradNorm = Math.Sqrt(gradNorm);
+        double stepSize = gradNorm > 1e-10 ? 0.01 / gradNorm : 0.01;
+
         var updatedStudent = CloneMatrix(student);
         for (int i = 0; i < updatedStudent.Rows; i++)
             for (int j = 0; j < updatedStudent.Columns; j++)

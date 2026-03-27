@@ -490,14 +490,31 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     #region ModelBase Overrides
 
     /// <summary>
-    /// Predicts by running OCR recognition on the input tensor.
+    /// Runs OCR and returns region info as a tensor [numRegions, 6].
+    /// Columns: confidence, textLength, x1, y1, x2, y2.
     /// </summary>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // Run OCR recognition; result is text-based (OCRResult<T>), not tensor-based.
-        // Discard return since Predict must return a Tensor per IFullModel contract.
-        _ = Recognize(input);
-        return input;
+        var result = Recognize(input);
+        int regions = result.TextRegions.Count;
+        if (regions == 0)
+            return new Tensor<T>([0, 6]);
+
+        var output = new Tensor<T>([regions, 6]);
+        for (int i = 0; i < regions; i++)
+        {
+            var region = result.TextRegions[i];
+            output[i, 0] = region.Confidence;
+            output[i, 1] = NumOps.FromDouble(region.Text.Length);
+            if (region.Box is not null)
+            {
+                output[i, 2] = region.Box.X1;
+                output[i, 3] = region.Box.Y1;
+                output[i, 4] = region.Box.X2;
+                output[i, 5] = region.Box.Y2;
+            }
+        }
+        return output;
     }
 
     /// <inheritdoc />

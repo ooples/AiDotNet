@@ -220,12 +220,18 @@ public class ComponentMetadataValidationGenerator : IIncrementalGenerator
 
     private static bool HasAttributeEndingWith(ImmutableArray<AttributeData> attrs, string suffix)
     {
+        // Match only AiDotNet attributes to avoid false positives from third-party assemblies
+        const string aiDotNetPrefix = "AiDotNet.";
         foreach (var attr in attrs)
         {
-            if (attr.AttributeClass is not null &&
-                attr.AttributeClass.ToDisplayString().EndsWith(suffix, System.StringComparison.Ordinal))
+            if (attr.AttributeClass is not null)
             {
-                return true;
+                string fullName = attr.AttributeClass.ToDisplayString();
+                if (fullName.EndsWith(suffix, System.StringComparison.Ordinal) &&
+                    fullName.StartsWith(aiDotNetPrefix, System.StringComparison.Ordinal))
+                {
+                    return true;
+                }
             }
         }
         return false;

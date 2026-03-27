@@ -148,8 +148,8 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
                     double p_k = Convert.ToDouble(p[k]);
                     for (int m = 0; m < outputDim; m++)
                     {
-                        double dLdp_m = Convert.ToDouble(simGradEmbedding[r, m]);
-                        double p_m = Convert.ToDouble(p[m]);
+                        double dLdp_m = NumOps.ToDouble(simGradEmbedding[r, m]);
+                        double p_m = NumOps.ToDouble(p[m]);
                         double jacobian = p_m * ((m == k ? 1.0 : 0.0) - p_k);
                         dLdz_k += dLdp_m * jacobian;
                     }

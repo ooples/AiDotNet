@@ -64,11 +64,13 @@ public abstract class ActiveLearningTestBase
     public void SelectSamples_IndicesInRange()
     {
         var strategy = CreateStrategy();
-        var selected = strategy.SelectSamples(CreateMockModel(), CreateUnlabeledPool(), BatchSize);
+        var pool = CreateUnlabeledPool();
+        int actualPoolSize = pool.Shape[0];
+        var selected = strategy.SelectSamples(CreateMockModel(), pool, BatchSize);
         foreach (var idx in selected)
         {
-            Assert.True(idx >= 0 && idx < PoolSize,
-                $"Selected index {idx} out of range [0, {PoolSize}).");
+            Assert.True(idx >= 0 && idx < actualPoolSize,
+                $"Selected index {idx} out of range [0, {actualPoolSize}).");
         }
     }
 
