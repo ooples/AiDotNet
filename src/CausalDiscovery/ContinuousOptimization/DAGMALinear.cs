@@ -203,20 +203,22 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
             var (loss, lossGrad) = ComputeL2Loss(X, currentW);
             var (h, hGrad) = ComputeLogDetConstraint(currentW, s, d);
 
-            double obj = loss + Lambda1 * ComputeL1Norm(currentW) + mu * h;
+            // Per DAGMA reference: obj = mu*score + h (score weighted by mu, NOT h)
+            double obj = mu * (loss + Lambda1 * ComputeL1Norm(currentW)) + h;
 
-            // Full gradient = loss_grad + mu * h_grad + L1 subgradient
+            // Per reference: grad = mu*G_score + mu*lambda1*sign(W) + G_h
             double[] grad = new double[vecLen];
             for (int i = 0; i < d; i++)
             {
                 for (int j = 0; j < d; j++)
                 {
                     int idx = i * d + j;
-                    grad[idx] = NumOps.ToDouble(lossGrad[i, j]) + mu * NumOps.ToDouble(hGrad[i, j]);
+                    // mu weights the score gradient, h gradient is unweighted
+                    grad[idx] = mu * NumOps.ToDouble(lossGrad[i, j]) + NumOps.ToDouble(hGrad[i, j]);
 
                     if (i != j)
                     {
-                        grad[idx] += Lambda1 * Math.Sign(w[idx]);
+                        grad[idx] += mu * Lambda1 * Math.Sign(w[idx]);
                     }
                 }
             }
