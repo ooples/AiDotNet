@@ -1,3 +1,4 @@
+using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 
@@ -375,16 +376,18 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
                     ? NumOps.Add(S[i, j], ridge)
                     : S[i, j];
 
-        // Solve (S + ridge*I) * X = I column by column using the existing linear solver
+        // Decompose once, then solve for each column of the identity matrix.
+        // This avoids recomputing LU decomposition d times.
+        var lu = new LuDecomposition<T>(regularized);
         var precision = new Matrix<T>(d, d);
+        var rhs = new Vector<T>(d);
         for (int col = 0; col < d; col++)
         {
-            // Right-hand side is the col-th unit vector
-            var rhs = new Vector<T>(d);
+            // Reset rhs to the col-th unit vector
+            if (col > 0) rhs[col - 1] = NumOps.Zero;
             rhs[col] = NumOps.One;
 
-            var solution = MatrixSolutionHelper.SolveLinearSystem<T>(
-                regularized, rhs, MatrixDecompositionType.Lu);
+            var solution = lu.Solve(rhs);
 
             for (int row = 0; row < d; row++)
                 precision[row, col] = solution[row];
