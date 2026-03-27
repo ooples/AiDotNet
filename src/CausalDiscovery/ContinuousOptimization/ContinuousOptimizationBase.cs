@@ -204,16 +204,43 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
 
         if (!hasEdges)
         {
-            // No edges survived — run NOTEARSLinear as a robust fallback.
-            // This is better than covariance-based heuristics because it properly
-            // handles indirect correlations and enforces acyclicity.
-            var fallbackAlgo = new NOTEARSLinear<T>(new Models.Options.CausalDiscoveryOptions
-            {
-                EdgeThreshold = threshold,
-                MaxIterations = 50
-            });
-            var fallbackGraph = fallbackAlgo.DiscoverStructure(data);
-            result = fallbackGraph.AdjacencyMatrix;
+            // No edges survived — use PARTIAL correlations to identify direct edges.
+            // Partial correlation removes indirect effects (e.g., X0↔X2 through X1)
+            // by conditioning on all other variables. Only direct relationships survive.
+            // This is computed from the precision matrix (inverse covariance):
+            // pcor(i,j) = -P[i,j] / sqrt(P[i,i] * P[j,j])
+            var cov = ComputeCovarianceMatrix(data);
+
+            // Compute precision matrix via regularized inverse
+            var precision = InvertWithRidge(cov, d, NumOps.FromDouble(1e-4));
+
+            for (int i = 0; i < d; i++)
+                for (int j = 0; j < d; j++)
+                {
+                    if (i == j) continue;
+                    double pii = NumOps.ToDouble(precision[i, i]);
+                    double pjj = NumOps.ToDouble(precision[j, j]);
+                    if (pii <= 0 || pjj <= 0) continue;
+
+                    // Partial correlation from precision matrix:
+                    // pcor(i,j) = -P[i,j] / sqrt(P[i,i] * P[j,j])
+                    double partialCorr = -NumOps.ToDouble(precision[i, j]) / Math.Sqrt(pii * pjj);
+                    if (Math.Abs(partialCorr) < threshold) continue;
+
+                    // Direction: use variance ratio from raw covariance
+                    double varI = NumOps.ToDouble(cov[i, i]);
+                    double varJ = NumOps.ToDouble(cov[j, j]);
+                    double covIJ = NumOps.ToDouble(cov[i, j]);
+                    if (varI < 1e-10) continue;
+
+                    double weight = covIJ / varI;
+                    double reverseWeight = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
+
+                    if (Math.Abs(weight) > reverseWeight)
+                        result[i, j] = NumOps.FromDouble(weight);
+                    else if (Math.Abs(Math.Abs(weight) - reverseWeight) < 1e-10 && i < j)
+                        result[i, j] = NumOps.FromDouble(weight);
+                }
         }
 
         return result;
@@ -323,5 +350,41 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Computes the precision matrix (inverse covariance) with ridge regularization
+    /// using the library's Matrix type and numeric operations.
+    /// </summary>
+    /// <param name="S">Covariance matrix to invert.</param>
+    /// <param name="d">Dimension.</param>
+    /// <param name="ridge">Ridge regularization to ensure invertibility.</param>
+    /// <returns>The precision matrix (S + ridge*I)^{-1}.</returns>
+    private Matrix<T> InvertWithRidge(Matrix<T> S, int d, T ridge)
+    {
+        // Build regularized matrix: S + ridge * I
+        var regularized = new Matrix<T>(d, d);
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+                regularized[i, j] = i == j
+                    ? NumOps.Add(S[i, j], ridge)
+                    : S[i, j];
+
+        // Solve (S + ridge*I) * X = I column by column using the existing linear solver
+        var precision = new Matrix<T>(d, d);
+        for (int col = 0; col < d; col++)
+        {
+            // Right-hand side is the col-th unit vector
+            var rhs = new Vector<T>(d);
+            rhs[col] = NumOps.One;
+
+            var solution = MatrixSolutionHelper.SolveLinearSystem<T>(
+                regularized, rhs, MatrixDecompositionType.Lu);
+
+            for (int row = 0; row < d; row++)
+                precision[row, col] = solution[row];
+        }
+
+        return precision;
     }
 }
