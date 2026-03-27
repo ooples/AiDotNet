@@ -213,6 +213,16 @@ public class CausalDiscoveryOptions
     public int? MaxSegments { get; set; }
 
     /// <summary>
+    /// Initialization scale for weight matrices or low-rank factors. Default: null (algorithm-specific).
+    /// </summary>
+    /// <remarks>
+    /// <para>Controls the magnitude of initial weight values in optimization-based methods.
+    /// For NOTEARS Low-Rank, this sets the scale of A,B factors (A*B^T ≈ scale² * rank).
+    /// Too small values slow convergence; too large values cause acyclicity constraint issues.</para>
+    /// </remarks>
+    public double? InitScale { get; set; }
+
+    /// <summary>
     /// Maximum number of training epochs for deep learning-based methods. Default: null (algorithm-specific).
     /// </summary>
     /// <remarks>

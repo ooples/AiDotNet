@@ -50,6 +50,7 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
     private readonly int _maxRank;
     private readonly int _innerIterations;
     private readonly int? _seed;
+    private readonly double _initScale;
     private double _rhoMax = 1e+16;
 
     /// <inheritdoc/>
@@ -67,6 +68,7 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
         _learningRateValue = options?.LearningRate ?? 0.01;
         _maxRank = options?.MaxRank ?? 10;
         _innerIterations = options?.InnerIterations ?? 20;
+        _initScale = options?.InitScale ?? 0.1;
         _seed = options?.Seed;
         if (options?.MaxPenalty is { } maxPenalty) _rhoMax = maxPenalty;
         if (_maxRank <= 0)
@@ -93,10 +95,11 @@ public class NOTEARSLowRank<T> : ContinuousOptimizationBase<T>
         // Choose rank
         int rank = Math.Min(d, _maxRank);
 
-        // Initialize low-rank factors with small random values.
+        // Initialize low-rank factors with user-configurable scale.
+        // Default 0.1 balances gradient magnitude with acyclicity constraint.
         var A = new Matrix<T>(d, rank);
         var B = new Matrix<T>(d, rank);
-        T initScale = NumOps.FromDouble(0.01);
+        T initScale = NumOps.FromDouble(_initScale);
         var rng = _seed.HasValue
             ? Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed.Value)
             : Tensors.Helpers.RandomHelper.CreateSecureRandom();
