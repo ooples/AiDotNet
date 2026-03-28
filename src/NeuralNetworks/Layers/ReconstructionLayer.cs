@@ -46,6 +46,8 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// This layer processes the input and transforms it to the first hidden dimension.
     /// It applies the hidden activation function to its output.
     /// </remarks>
+    private readonly int _hidden1Dim;
+    private readonly int _hidden2Dim;
     private readonly FullyConnectedLayer<T> _fc1;
 
     /// <summary>
@@ -179,6 +181,8 @@ public class ReconstructionLayer<T> : LayerBase<T>
         : base([inputDimension], [outputDimension])
     {
         _useVectorActivation = false;
+        _hidden1Dim = hidden1Dimension;
+        _hidden2Dim = hidden2Dimension;
         hiddenActivation ??= new ReLUActivation<T>();
         outputActivation ??= new SigmoidActivation<T>();
 
@@ -229,6 +233,8 @@ public class ReconstructionLayer<T> : LayerBase<T>
         : base([inputDimension], [outputDimension])
     {
         _useVectorActivation = true;
+        _hidden1Dim = hidden1Dimension;
+        _hidden2Dim = hidden2Dimension;
         hiddenVectorActivation ??= new ReLUActivation<T>();
         outputVectorActivation ??= new SigmoidActivation<T>();
 
@@ -527,6 +533,14 @@ public class ReconstructionLayer<T> : LayerBase<T>
             _fc1.GetParameterGradients(),
             _fc2.GetParameterGradients(),
             _fc3.GetParameterGradients());
+    }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["Hidden1Dimension"] = _hidden1Dim.ToString();
+        metadata["Hidden2Dimension"] = _hidden2Dim.ToString();
+        return metadata;
     }
 
     public override void ClearGradients()

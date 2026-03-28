@@ -437,11 +437,12 @@ public static class DeserializationHelper
         else if (genericDef == typeof(Conv3DLayer<>))
         {
             // Conv3DLayer(int inputChannels, int outputChannels, int kernelSize, int inputDepth, int inputHeight, int inputWidth, int stride, int padding, IActivationFunction<T>?)
-            int inputChannels = inputShape.Length > 1 ? inputShape[1] : inputShape[0];
-            int inputDepthC = inputShape.Length > 2 ? inputShape[2] : 1;
-            int inputHeightC = inputShape.Length > 3 ? inputShape[3] : 1;
-            int inputWidthC = inputShape.Length > 4 ? inputShape[4] : 1;
-            int outputChannels = outputShape.Length > 1 ? outputShape[1] : outputShape[0];
+            // Input shape format: [channels, depth, height, width]
+            int inputChannels = inputShape.Length > 0 ? inputShape[0] : 1;
+            int inputDepthC = inputShape.Length > 1 ? inputShape[1] : 1;
+            int inputHeightC = inputShape.Length > 2 ? inputShape[2] : 1;
+            int inputWidthC = inputShape.Length > 3 ? inputShape[3] : 1;
+            int outputChannels = outputShape.Length > 0 ? outputShape[0] : 1;
             int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 3;
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             int padding = TryGetInt(additionalParams, "Padding") ?? 0;
@@ -466,6 +467,45 @@ public static class DeserializationHelper
             if (ctor is null)
                 throw new InvalidOperationException("Cannot find PrimaryCapsuleLayer constructor with expected signature.");
             instance = ctor.Invoke(new object?[] { inputChannels, capsuleChannels, capsuleDimension, kernelSize, stride, null });
+        }
+        else if (genericDef == typeof(DigitCapsuleLayer<>))
+        {
+            // DigitCapsuleLayer(int inputCapsules, int inputCapsuleDimension, int numClasses, int outputCapsuleDimension, int routingIterations)
+            int inputCapsules = TryGetInt(additionalParams, "InputCapsules") ?? inputShape[0];
+            int inputCapsuleDim = TryGetInt(additionalParams, "InputCapsuleDimension") ?? (inputShape.Length > 1 ? inputShape[1] : 8);
+            int numClasses = TryGetInt(additionalParams, "NumClasses") ?? outputShape[0];
+            int outputCapsuleDim = TryGetInt(additionalParams, "OutputCapsuleDimension") ?? (outputShape.Length > 1 ? outputShape[1] : 16);
+            int routingIter = TryGetInt(additionalParams, "RoutingIterations") ?? 3;
+
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int) });
+            if (ctor is null)
+                throw new InvalidOperationException("Cannot find DigitCapsuleLayer constructor with expected signature.");
+            instance = ctor.Invoke(new object[] { inputCapsules, inputCapsuleDim, numClasses, outputCapsuleDim, routingIter });
+        }
+        else if (genericDef == typeof(ReconstructionLayer<>))
+        {
+            // ReconstructionLayer(int inputDimension, int hidden1Dimension, int hidden2Dimension, int outputDimension, IActivationFunction<T>?, IActivationFunction<T>?)
+            int inputDim = inputShape[0];
+            int outputDim = outputShape[0];
+            int hidden1 = TryGetInt(additionalParams, "Hidden1Dimension") ?? Math.Max(inputDim / 2, 64);
+            int hidden2 = TryGetInt(additionalParams, "Hidden2Dimension") ?? Math.Max(inputDim / 4, 32);
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, activationFuncType });
+            if (ctor is null)
+                throw new InvalidOperationException("Cannot find ReconstructionLayer constructor.");
+            instance = ctor.Invoke(new object?[] { inputDim, hidden1, hidden2, outputDim, null, null });
+        }
+        else if (genericDef == typeof(MaxPool3DLayer<>))
+        {
+            // MaxPool3DLayer(int[] inputShape, int poolSize, int stride = 0)
+            int poolSize = TryGetInt(additionalParams, "PoolSize") ?? 2;
+            int stride = TryGetInt(additionalParams, "Stride") ?? 0;
+
+            var ctor = type.GetConstructor(new Type[] { typeof(int[]), typeof(int), typeof(int) });
+            if (ctor is null)
+                throw new InvalidOperationException("Cannot find MaxPool3DLayer constructor.");
+            instance = ctor.Invoke(new object[] { inputShape, poolSize, stride });
         }
         else if (genericDef == typeof(PoolingLayer<>))
         {
