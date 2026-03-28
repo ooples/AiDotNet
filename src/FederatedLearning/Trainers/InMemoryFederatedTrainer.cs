@@ -27,7 +27,6 @@ namespace AiDotNet.FederatedLearning.Trainers;
 public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
     FederatedTrainerBase<IFullModel<T, TInput, TOutput>, FederatedClientDataset<TInput, TOutput>, FederatedLearningMetadata, T>
 {
-    private static IEngine Engine => AiDotNetEngine.Current;
     private readonly IOptimizer<T, TInput, TOutput> _optimizerPrototype;
     private readonly double? _learningRateOverride;
     private readonly int? _randomSeed;
