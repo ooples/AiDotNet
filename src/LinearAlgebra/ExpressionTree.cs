@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Models;
@@ -1188,11 +1188,8 @@ public class ExpressionTree<T, TInput, TOutput> : ModelBase<T, TInput, TOutput>
         }
 
         // Apply gradient descent: params = params - learningRate * gradients
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            T update = NumOps.Multiply(learningRate, gradients[i]);
-            parameters[i] = NumOps.Subtract(parameters[i], update);
-        }
+        // Vectorized SGD
+        parameters = (Vector<T>)Engine.Subtract(parameters, Engine.Multiply(gradients, learningRate));
 
         SetParameters(parameters);
     }
