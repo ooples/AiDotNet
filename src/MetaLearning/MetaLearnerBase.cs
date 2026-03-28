@@ -630,36 +630,30 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
         T epsilon = NumOps.FromDouble(1e-3);
         T twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
         var delta = new Vector<T>(parameters.Length);
-        var perturbedParams = new Vector<T>(parameters.Length);
-        T negOne = NumOps.FromDouble(-1.0);
-        T posOne = NumOps.FromDouble(1.0);
         int numSamples = 3;
 
         for (int s = 0; s < numSamples; s++)
         {
             for (int i = 0; i < parameters.Length; i++)
-                delta[i] = RandomGenerator.NextDouble() < 0.5 ? negOne : posOne;
+                delta[i] = RandomGenerator.NextDouble() < 0.5 ? NumOps.FromDouble(-1.0) : NumOps.FromDouble(1.0);
 
-            for (int i = 0; i < parameters.Length; i++)
-                perturbedParams[i] = NumOps.Add(parameters[i], NumOps.Multiply(epsilon, delta[i]));
-            model.SetParameters(perturbedParams);
+            var eDelta = Engine.Multiply(delta, epsilon);
+            model.SetParameters(Engine.Add(parameters, eDelta));
             var predPlus = ConvertToVector(model.Predict(input));
             T lossPlus = predPlus is not null
                 ? LossFunction.CalculateLoss(predPlus, expectedVector)
                 : baseLoss;
 
-            for (int i = 0; i < parameters.Length; i++)
-                perturbedParams[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(epsilon, delta[i]));
-            model.SetParameters(perturbedParams);
+            model.SetParameters(Engine.Subtract(parameters, eDelta));
             var predMinus = ConvertToVector(model.Predict(input));
             T lossMinus = predMinus is not null
                 ? LossFunction.CalculateLoss(predMinus, expectedVector)
                 : baseLoss;
 
             T lossDiff = NumOps.Subtract(lossPlus, lossMinus);
-            for (int i = 0; i < parameters.Length; i++)
-                gradients[i] = NumOps.Add(gradients[i],
-                    NumOps.Divide(lossDiff, NumOps.Multiply(twoEpsilon, delta[i])));
+            var scaledDelta = Engine.Multiply(delta, twoEpsilon);
+            gradients = Engine.Add(gradients, Engine.Divide(
+                Engine.Fill(parameters.Length, lossDiff), scaledDelta));
         }
 
         gradients = Engine.Multiply(gradients, NumOps.FromDouble(1.0 / numSamples));

@@ -1735,31 +1735,25 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         T posOne = NumOps.FromDouble(1.0);
         int numSamples = 3;
 
+        var delta = new Vector<T>(parameters.Length);
+
         for (int s = 0; s < numSamples; s++)
         {
-            var delta = new Vector<T>(parameters.Length);
             for (int i = 0; i < parameters.Length; i++)
-                delta[i] = rng.NextDouble() < 0.5 ? negOne : posOne;
+                delta[i] = rng.NextDouble() < 0.5 ? NumOps.FromDouble(-1.0) : NumOps.FromDouble(1.0);
 
-            var perturbedPlus = new Vector<T>(parameters.Length);
-            var perturbedMinus = new Vector<T>(parameters.Length);
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                T eDelta = NumOps.Multiply(epsilon, delta[i]);
-                perturbedPlus[i] = NumOps.Add(parameters[i], eDelta);
-                perturbedMinus[i] = NumOps.Subtract(parameters[i], eDelta);
-            }
+            var eDelta = Engine.Multiply(delta, epsilon);
 
-            var modelPlus = (TimeSeriesModelBase<T>)WithParameters(perturbedPlus);
+            var modelPlus = (TimeSeriesModelBase<T>)WithParameters(Engine.Add(parameters, eDelta));
             var lossPlus = loss.CalculateLoss(modelPlus.Predict(input), target);
 
-            var modelMinus = (TimeSeriesModelBase<T>)WithParameters(perturbedMinus);
+            var modelMinus = (TimeSeriesModelBase<T>)WithParameters(Engine.Subtract(parameters, eDelta));
             var lossMinus = loss.CalculateLoss(modelMinus.Predict(input), target);
 
             T lossDiff = NumOps.Subtract(lossPlus, lossMinus);
-            for (int i = 0; i < parameters.Length; i++)
-                gradients[i] = NumOps.Add(gradients[i],
-                    NumOps.Divide(lossDiff, NumOps.Multiply(twoEpsilon, delta[i])));
+            var scaledDelta = Engine.Multiply(delta, twoEpsilon);
+            gradients = Engine.Add(gradients, Engine.Divide(
+                Engine.Fill(parameters.Length, lossDiff), scaledDelta));
         }
 
         gradients = Engine.Multiply(gradients, NumOps.FromDouble(1.0 / numSamples));

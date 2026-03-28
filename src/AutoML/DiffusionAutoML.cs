@@ -1117,31 +1117,25 @@ namespace AiDotNet.AutoML
             // Predict uses random noise — each call measures sampling noise, not parameter sensitivity.
             var rng = RandomHelper.CreateSecureRandom();
             var delta = new Vector<T>(parameters.Length);
-            var perturbedParams = new Vector<T>(parameters.Length);
             for (int i = 0; i < parameters.Length; i++)
                 delta[i] = NumOps.FromDouble(rng.NextDouble() < 0.5 ? -1.0 : 1.0);
 
-            // f(x + eps*delta)
-            for (int i = 0; i < parameters.Length; i++)
-                perturbedParams[i] = NumOps.Add(parameters[i], NumOps.Multiply(epsilon, delta[i]));
-            SetParameters(perturbedParams);
-            var predPlus = Predict(input);
-            T lossPlus = loss.ComputeLoss(predPlus, target);
+            // Vectorized perturbations: params ± epsilon * delta
+            var eDelta = Engine.Multiply(delta, epsilon);
 
-            // f(x - eps*delta)
-            for (int i = 0; i < parameters.Length; i++)
-                perturbedParams[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(epsilon, delta[i]));
-            SetParameters(perturbedParams);
-            var predMinus = Predict(input);
-            T lossMinus = loss.ComputeLoss(predMinus, target);
+            SetParameters(Engine.Add(parameters, eDelta));
+            T lossPlus = loss.ComputeLoss(Predict(input), target);
 
-            // SPSA gradient: g_i = (f+ - f-) / (2*eps*delta_i)
+            SetParameters(Engine.Subtract(parameters, eDelta));
+            T lossMinus = loss.ComputeLoss(Predict(input), target);
+
+            // Vectorized SPSA gradient: g = (L+ - L-) / (2*eps*delta)
             T lossDiff = NumOps.Subtract(lossPlus, lossMinus);
-            for (int i = 0; i < parameters.Length; i++)
-                gradients[i] = NumOps.Divide(lossDiff, NumOps.Multiply(twoEps, delta[i]));
+            var scaledDelta = Engine.Multiply(delta, twoEps);
+            var gradientVec = Engine.Divide(Engine.Fill(parameters.Length, lossDiff), scaledDelta);
 
             SetParameters(parameters);
-            return new Vector<T>(gradients);
+            return gradientVec;
         }
 
         public override void ApplyGradients(Vector<T> gradients, T learningRate)
