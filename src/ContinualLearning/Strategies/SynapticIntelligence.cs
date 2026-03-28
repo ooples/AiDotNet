@@ -328,18 +328,10 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
         // Add SI regularization gradient to the task gradient
         if (_omega != null && _taskStartParameters != null && HasPreviousTasks())
         {
-            var result = CloneVector(gradients);
-
-            for (int i = 0; i < gradients.Length; i++)
-            {
-                // SI gradient: λ × Ω_i × (θ_i - θ*_i)
-                var diff = NumOps.Subtract(_lastParameters[i], _taskStartParameters[i]);
-                var siGrad = NumOps.Multiply(_omega[i], diff);
-                siGrad = NumOps.Multiply(_lambda, siGrad);
-                result[i] = NumOps.Add(result[i], siGrad);
-            }
-
-            return result;
+            // Vectorized SI gradient: result = gradients + λ × Ω × (θ - θ*)
+            var diff = (Vector<T>)Engine.Subtract(_lastParameters, _taskStartParameters);
+            var siGrad = (Vector<T>)Engine.Multiply(Engine.Multiply(_omega, diff), _lambda);
+            return (Vector<T>)Engine.Add(gradients, siGrad);
         }
 
         return gradients;
@@ -517,12 +509,8 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
                 break;
 
             case ImportanceAccumulationMode.WeightedSum:
-                for (int i = 0; i < _omega.Length; i++)
-                {
-                    // Decay old importance and add new
-                    var decayed = NumOps.Multiply(_decayFactor, _omega[i]);
-                    _omega[i] = NumOps.Add(decayed, taskImportance[i]);
-                }
+                // Vectorized: omega = decay*omega + taskImportance
+                _omega = (Vector<T>)Engine.Add(Engine.Multiply(_omega, _decayFactor), taskImportance);
                 break;
         }
     }
