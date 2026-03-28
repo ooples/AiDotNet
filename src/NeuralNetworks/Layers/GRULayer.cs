@@ -1275,9 +1275,10 @@ public class GRULayer<T> : LayerBase<T>
             // z = sigmoid(z_pre), dz_pre = dz * z * (1-z)
             var dz_pre = dz.ElementwiseMultiply(_lastZ).ElementwiseMultiply(oneMinusLastZ);
 
-            // r gate gradient: d(r * h_prev) = dh_candidate_pre @ Uh
+            // r gate gradient: d(r * h_prev)/dr = h_prev (NOT h_t)
+            // h̃ = tanh(W·x + U·(r ⊙ h_{t-1})), so gradient flows through h_{t-1}
             var dr_times_h = dh_candidate_pre.Multiply(_Uh);
-            var dr = dr_times_h.ElementwiseMultiply(_lastHiddenState);
+            var dr = dr_times_h.ElementwiseMultiply(h_prev_for_dz);
             var onesR = new Tensor<T>(_lastR.Shape.ToArray());
             onesR.Fill(NumOps.One);
             var dr_pre = dr.ElementwiseMultiply(_lastR).ElementwiseMultiply(onesR.Subtract(_lastR));
