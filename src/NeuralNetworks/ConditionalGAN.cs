@@ -150,7 +150,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
             inputWidth: discriminatorArchitecture.InputWidth,
             inputDepth: inputDepth,
             outputSize: 1,
-            layers: null);
+            layers: discriminatorArchitecture.Layers);
     }
 
     /// <summary>
@@ -336,6 +336,14 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         Tensor<T> conditions,
         Tensor<T> noise)
     {
+        Guard.NotNull(realImages);
+        Guard.NotNull(conditions);
+        Guard.NotNull(noise);
+
+        if (realImages.Shape[0] != conditions.Shape[0] || realImages.Shape[0] != noise.Shape[0])
+            throw new ArgumentException(
+                $"Batch sizes must match: realImages={realImages.Shape[0]}, conditions={conditions.Shape[0]}, noise={noise.Shape[0]}.");
+
         Generator.SetTrainingMode(true);
         Discriminator.SetTrainingMode(true);
 
@@ -957,6 +965,30 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     {
         base.DeserializeNetworkSpecificData(reader);
         _numConditionClasses = reader.ReadInt32();
+
+        // Reconstruct original (pre-conditioning) architectures from the current
+        // (already-conditioned) ones by subtracting the condition dimensions.
+        // This prevents double-conditioning in CreateNewInstance().
+        _originalGeneratorArchitecture = Generator.Architecture;
+
+        var discArch = Discriminator.Architecture;
+        int origInputSize = discArch.InputSize > 0
+            ? discArch.InputSize - _numConditionClasses
+            : 0;
+        int origInputDepth = (discArch.InputHeight > 0 && discArch.InputWidth > 0)
+            ? discArch.InputDepth - _numConditionClasses
+            : discArch.InputDepth;
+
+        _originalDiscriminatorArchitecture = new NeuralNetworkArchitecture<T>(
+            inputType: discArch.InputType,
+            taskType: discArch.TaskType,
+            complexity: discArch.Complexity,
+            inputSize: origInputSize,
+            inputHeight: discArch.InputHeight,
+            inputWidth: discArch.InputWidth,
+            inputDepth: origInputDepth,
+            outputSize: discArch.OutputSize,
+            layers: discArch.Layers);
     }
 
     /// <inheritdoc/>
