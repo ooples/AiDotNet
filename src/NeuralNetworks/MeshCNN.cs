@@ -317,7 +317,18 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
 
         foreach (var layer in Layers)
         {
-            output = layer.Forward(output);
+            // GlobalPoolingLayer expects 3D+ input. MeshCNN data is [edges, channels] (2D).
+            // Reshape to [1, edges, channels] so GlobalPoolingLayer processes it normally
+            // and caches the input for backward pass gradient computation.
+            if (layer is GlobalPoolingLayer<T> && output.Rank == 2)
+            {
+                output = output.Reshape([1, output.Shape[0], output.Shape[1]]);
+                output = layer.Forward(output);
+            }
+            else
+            {
+                output = layer.Forward(output);
+            }
 
             if (layer is MeshPoolLayer<T> poolLayer && poolLayer.UpdatedAdjacency != null)
             {
@@ -382,7 +393,24 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        return Forward(input);
+        bool wasTraining = IsTrainingMode;
+
+        // Disable training mode on all layers (disables dropout)
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(false);
+        IsTrainingMode = false;
+
+        try
+        {
+            return Forward(input);
+        }
+        finally
+        {
+            // Restore prior training state even if Forward throws
+            foreach (var layer in Layers)
+                layer.SetTrainingMode(wasTraining);
+            IsTrainingMode = wasTraining;
+        }
     }
 
     /// <summary>
