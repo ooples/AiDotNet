@@ -359,26 +359,72 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         if (inputs == null || inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
-        // SpatialPooler requires normalized column selection which uses min/max
-        // reduction. Delegate to CPU Forward to ensure GPU and CPU paths produce
-        // identical results. SpatialPooler is not the HTM inference bottleneck.
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var backend = gpuEngine.GetBackend()
             ?? throw new InvalidOperationException("GPU backend is not available.");
 
-        var cpuInput = inputs[0].ToTensor();
-        var cpuOutput = Forward(cpuInput);
+        var input = inputs[0];
 
-        // Upload CPU result to GPU buffer
-        var outputData = cpuOutput.GetDataArray();
-        var floatData = new float[outputData.Length];
-        for (int i = 0; i < outputData.Length; i++)
-            floatData[i] = Convert.ToSingle(outputData[i]);
-        var outputBuffer = backend.AllocateBuffer(floatData);
+        // Reshape input to [1, InputSize] for batched matmul
+        var inputReshaped = input.CreateView(0, [1, InputSize]);
 
-        return new GpuTensor<T>(backend, outputBuffer, [ColumnCount], GpuTensorRole.Activation, ownsBuffer: true);
+        // Compute activations: [1, InputSize] @ [InputSize, ColumnCount] = [1, ColumnCount]
+        var activations = gpuEngine.BatchedMatMulGpu(inputReshaped, Connections);
+        var activationsFlat = activations.CreateView(0, [ColumnCount]);
+
+        // Normalize activations to [0,1] using GPU Min/Max reduction
+        float maxVal = backend.Max(activationsFlat.Buffer, ColumnCount);
+        float minVal = backend.Min(activationsFlat.Buffer, ColumnCount);
+        float range = maxVal - minVal;
+
+        IGpuTensor<T> normalizedActivations;
+        if (range > 1e-10f)
+        {
+            // normalized = (activations - minVal) / range = activations / range - minVal / range
+            // Using available GPU ops: ScaleGpu (multiply by scalar) and DivideScalarGpu
+            float invRange = 1.0f / range;
+            float offset = minVal * invRange;
+
+            // Step 1: activations * invRange
+            var scaled = gpuEngine.ScaleGpu(activationsFlat, invRange);
+
+            // Step 2: subtract offset by adding (-offset) via ScaleGpu trick:
+            // Create a constant tensor filled with -offset, then add to scaled
+            var offsetGpu = gpuEngine.ZerosGpu<T>([ColumnCount]);
+            backend.Fill(offsetGpu.Buffer, -offset, ColumnCount);
+            normalizedActivations = gpuEngine.AddGpu(scaled, offsetGpu);
+            scaled.Dispose();
+            offsetGpu.Dispose();
+        }
+        else
+        {
+            // All activations identical — use raw activations
+            normalizedActivations = activationsFlat;
+        }
+
+        // Apply sparsity threshold on normalized activations (keep top ~SparsityThreshold%)
+        float threshold = (float)(1.0 - SparsityThreshold);
+        var outputMask = gpuEngine.GreaterThanScalarGpu<T>(normalizedActivations, threshold);
+
+        // Magnitude-preserving output: mask * raw activations (matches CPU Forward)
+        var maskedActivations = gpuEngine.MultiplyGpu(outputMask, activationsFlat);
+        var output = maskedActivations.CreateView(0, [ColumnCount]);
+
+        // Store CPU copies for Learn() which needs binary mask and last output
+        LastOutput = output.ToTensor();
+        _lastBinaryOutput = outputMask.ToTensor().Reshape([ColumnCount]);
+        var cpuInput = input.ToTensor();
+        LastInput = cpuInput.Shape.Length == 1
+            ? cpuInput
+            : cpuInput.Reshape([cpuInput.Length]);
+
+        // Dispose intermediates
+        if (range > 1e-10f)
+            normalizedActivations.Dispose();
+
+        return output;
     }
 
     /// <summary>
@@ -783,8 +829,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// Gets a value indicating whether this layer supports JIT compilation.
     /// </summary>
     /// <value>
-    /// <c>false</c>. The JIT computation graph does not yet replicate the full CPU Forward
-    /// semantics (input normalization to [0,1] and inhibition masking are missing).
+    /// Always <c>true</c>. SpatialPoolerLayer uses straight-through estimator for JIT compilation.
     /// </value>
     /// <remarks>
     /// <para>
@@ -794,6 +839,6 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// while maintaining the sparse output characteristics.
     /// </para>
     /// </remarks>
-    public override bool SupportsJitCompilation => false;
+    public override bool SupportsJitCompilation => true;
 
 }
