@@ -1485,14 +1485,12 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
             variance /= vec.Length;
 
             double stddev = Math.Sqrt(variance + 1e-6);
-            var normalized = new Tensor<T>(new[] { vec.Length });
-            for (int i = 0; i < vec.Length && i < gamma.Length; i++)
-            {
-                double norm = (Convert.ToDouble(vec[i]) - mean) / stddev;
-                normalized[i] = NumOps.Add(
-                    NumOps.Multiply(gamma[i], NumOps.FromDouble(norm)),
-                    beta[i]);
-            }
+            // Vectorized LayerNorm: normalized = gamma * ((vec - mean) / std) + beta
+            var meanTensor = Tensor<T>.CreateDefault(new[] { vec.Length }, NumOps.FromDouble(mean));
+            var centered = Engine.TensorSubtract(vec, meanTensor);
+            var normTensor = Engine.TensorMultiplyScalar<T>(centered, NumOps.FromDouble(1.0 / stddev));
+            var scaled = Engine.TensorMultiply(normTensor, gamma);
+            var normalized = Engine.TensorAdd(scaled, beta);
             output.Add(normalized);
         }
         return output;
@@ -1523,19 +1521,19 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
             variance /= n;
             double stddev = Math.Sqrt(variance + 1e-6);
 
-            var dInp = new Tensor<T>(new[] { n });
-            for (int i = 0; i < n && i < gamma.Length; i++)
-            {
-                double x = Convert.ToDouble(inp[i]);
-                double norm = (x - mean) / stddev;
-                double dout = Convert.ToDouble(dOut[i]);
+            // Vectorized LayerNorm backward
+            var meanT = Tensor<T>.CreateDefault(new[] { n }, NumOps.FromDouble(mean));
+            var normTensor = Engine.TensorMultiplyScalar<T>(
+                Engine.TensorSubtract(inp, meanT), NumOps.FromDouble(1.0 / stddev));
 
-                dGamma[i] = NumOps.Add(dGamma[i], NumOps.FromDouble(dout * norm));
-                dBeta[i] = NumOps.Add(dBeta[i], NumOps.FromDouble(dout));
+            // dGamma += dOut * normalized, dBeta += dOut
+            var dOutNorm = Engine.TensorMultiply(dOut, normTensor);
+            dGamma = Engine.TensorAdd(dGamma, dOutNorm);
+            dBeta = Engine.TensorAdd(dBeta, dOut);
 
-                double dNorm = dout * Convert.ToDouble(gamma[i]);
-                dInp[i] = NumOps.FromDouble(dNorm / stddev);
-            }
+            // dInput = (dOut * gamma) / stddev
+            var dNormTensor = Engine.TensorMultiply(dOut, gamma);
+            var dInp = Engine.TensorMultiplyScalar<T>(dNormTensor, NumOps.FromDouble(1.0 / stddev));
             dInput.Add(dInp);
         }
 
