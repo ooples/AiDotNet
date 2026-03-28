@@ -2002,14 +2002,17 @@ public class LSTMLayer<T> : LayerBase<T>
         var dNextH = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
         var dNextC = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
 
+        // Pre-allocate zero tensors for t=0 to avoid per-iteration allocation
+        var zerosHidden = new Tensor<T>(new int[] { batchSize, _hiddenSize });
+
         for (int t = timeSteps - 1; t >= 0; t--)
         {
             // Slice along time dimension (dim 1) for all 3D tensors
             var dh = outGrad3D.GetSliceAlongDimension(t, 1).Add(dNextH);
             var xt = _lastInput.GetSliceAlongDimension(t, 1);
-            // Use cached states - slice along time dimension
-            var prevH = t > 0 ? _cachedHiddenStates.GetSliceAlongDimension(t - 1, 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
-            var prevC = t > 0 ? _cachedCellStates.GetSliceAlongDimension(t - 1, 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
+            // Use cached states - slice along time dimension, pre-allocated zeros for t=0
+            var prevH = t > 0 ? _cachedHiddenStates.GetSliceAlongDimension(t - 1, 1) : zerosHidden;
+            var prevC = t > 0 ? _cachedCellStates.GetSliceAlongDimension(t - 1, 1) : zerosHidden;
 
             var (dxt, dprevH, dprevC, dWfi, dWii, dWci, dWoi, dWfh, dWih, dWch, dWoh, dbf, dbi, dbc, dbo) =
                 BackwardStep(dh, dNextC, xt, prevH, prevC);
@@ -2112,14 +2115,17 @@ public class LSTMLayer<T> : LayerBase<T>
 
         var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
+        // Pre-allocate zero tensor for t=0 to avoid per-iteration allocation
+        var zerosHiddenAD = new Tensor<T>(new int[] { batchSize, _hiddenSize });
+
         // Process each time step using autodiff
         for (int t = timeSteps - 1; t >= 0; t--)
         {
             // Get input and states for this time step - slice along time dimension (dim 1)
             var xt = _lastInput.GetSliceAlongDimension(t, 1);
-            // Use cached states for previous time step (they are 3D: [batch, time, hidden])
-            var prevH = t > 0 ? _cachedHiddenStates.GetSliceAlongDimension(t - 1, 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
-            var prevC = t > 0 ? _cachedCellStates.GetSliceAlongDimension(t - 1, 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
+            // Use cached states for previous time step, pre-allocated zeros for t=0
+            var prevH = t > 0 ? _cachedHiddenStates.GetSliceAlongDimension(t - 1, 1) : zerosHiddenAD;
+            var prevC = t > 0 ? _cachedCellStates.GetSliceAlongDimension(t - 1, 1) : zerosHiddenAD;
             var gradSlice = outGrad3D.GetSliceAlongDimension(t, 1);
 
             // Convert parameters to computation nodes with gradient tracking

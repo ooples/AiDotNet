@@ -564,11 +564,13 @@ internal class MambaBlock<T> : LayerBase<T>
                 .Reshape(1, _innerDimension);
         }
 
+        // Pre-allocate zeros tensor for bias broadcast (reused each timestep)
+        var zerosBatch = new Tensor<T>(new[] { batchSize, _innerDimension });
+
         for (int t = 0; t < seqLen; t++)
         {
             // Start with bias: broadcast [1, innerDim] to [batch, innerDim]
-            var result_t = Engine.TensorBroadcastAdd(
-                new Tensor<T>(new[] { batchSize, _innerDimension }), bias2D);
+            var result_t = Engine.TensorBroadcastAdd(zerosBatch, bias2D);
 
             for (int k = 0; k < _convKernelSize; k++)
             {
