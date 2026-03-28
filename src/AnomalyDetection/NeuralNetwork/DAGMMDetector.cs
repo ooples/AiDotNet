@@ -703,51 +703,32 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Weights not initialized.");
         }
 
-        // Pre-allocate reusable column vectors to avoid per-iteration allocations
-        var wColInput = new Vector<T>(_inputDim);
-        var wColHidden = new Vector<T>(_hiddenDim);
-        var wColLatent = new Vector<T>(_latentDim);
-        var wColZ = new Vector<T>(_zDim);
+        // Vectorized encoder/decoder forward using Engine.TensorMatMul
+        // Each linear layer: output = tanh(input @ W + b)
 
-        // Encoder layer 1
-        var encH = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = encB1[j];
-            for (int ii = 0; ii < _inputDim; ii++) wColInput[ii] = encW1[ii, j];
-            sum = NumOps.Add(sum, Engine.DotProduct(x, wColInput));
-            encH[j] = NumOps.FromDouble(Math.Tanh(NumOps.ToDouble(sum)));
-        }
+        // Encoder layer 1: encH = tanh(x @ encW1 + encB1)
+        var xTensor = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
+        var encH1 = Engine.TensorMatMul(xTensor, Tensor<T>.FromMatrix(encW1));
+        encH1 = Engine.TensorBroadcastAdd(encH1, Tensor<T>.FromVector(encB1).Reshape(1, _hiddenDim));
+        encH1 = Engine.Tanh(encH1);
+        var encH = encH1.Reshape(_hiddenDim).ToVector();
 
-        // Encoder layer 2
-        var z = new Vector<T>(_latentDim);
-        for (int j = 0; j < _latentDim; j++)
-        {
-            T sum = encB2[j];
-            for (int ii = 0; ii < _hiddenDim; ii++) wColHidden[ii] = encW2[ii, j];
-            sum = NumOps.Add(sum, Engine.DotProduct(encH, wColHidden));
-            z[j] = NumOps.FromDouble(Math.Tanh(NumOps.ToDouble(sum)));
-        }
+        // Encoder layer 2: z = tanh(encH @ encW2 + encB2)
+        var encH2 = Engine.TensorMatMul(encH1, Tensor<T>.FromMatrix(encW2));
+        encH2 = Engine.TensorBroadcastAdd(encH2, Tensor<T>.FromVector(encB2).Reshape(1, _latentDim));
+        encH2 = Engine.Tanh(encH2);
+        var z = encH2.Reshape(_latentDim).ToVector();
 
-        // Decoder layer 1
-        var decH = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = decB1[j];
-            for (int ii = 0; ii < _latentDim; ii++) wColLatent[ii] = decW1[ii, j];
-            sum = NumOps.Add(sum, Engine.DotProduct(z, wColLatent));
-            decH[j] = NumOps.FromDouble(Math.Tanh(NumOps.ToDouble(sum)));
-        }
+        // Decoder layer 1: decH = tanh(z @ decW1 + decB1)
+        var decH1 = Engine.TensorMatMul(encH2, Tensor<T>.FromMatrix(decW1));
+        decH1 = Engine.TensorBroadcastAdd(decH1, Tensor<T>.FromVector(decB1).Reshape(1, _hiddenDim));
+        decH1 = Engine.Tanh(decH1);
+        var decH = decH1.Reshape(_hiddenDim).ToVector();
 
-        // Decoder layer 2
-        var xRecon = new Vector<T>(_inputDim);
-        for (int j = 0; j < _inputDim; j++)
-        {
-            T sum = decB2[j];
-            for (int ii = 0; ii < _hiddenDim; ii++) wColHidden[ii] = decW2[ii, j];
-            sum = NumOps.Add(sum, Engine.DotProduct(decH, wColHidden));
-            xRecon[j] = sum;
-        }
+        // Decoder layer 2: xRecon = z @ decW2 + decB2 (no activation)
+        var decH2 = Engine.TensorMatMul(decH1, Tensor<T>.FromMatrix(decW2));
+        decH2 = Engine.TensorBroadcastAdd(decH2, Tensor<T>.FromVector(decB2).Reshape(1, _inputDim));
+        var xRecon = decH2.Reshape(_inputDim).ToVector();
 
         // Compute reconstruction features using Engine.DotProduct
         var diffVec = new Vector<T>(_inputDim);
@@ -776,25 +757,22 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         zc[_latentDim] = NumOps.FromDouble(eucDist);
         zc[_latentDim + 1] = NumOps.FromDouble(cosSim);
 
-        // Estimation network layer 1 (reuse wColZ and wColHidden pre-allocated above)
-        var estH = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = estB1[j];
-            for (int ii = 0; ii < _zDim; ii++) wColZ[ii] = estW1[ii, j];
-            sum = NumOps.Add(sum, Engine.DotProduct(zc, wColZ));
-            estH[j] = NumOps.FromDouble(Math.Tanh(NumOps.ToDouble(sum)));
-        }
+        // Estimation network layer 1: estH = tanh(zc @ estW1 + estB1)
+        var zcTensor = Tensor<T>.FromVector(zc).Reshape(1, _zDim);
+        var estH1 = Engine.TensorMatMul(zcTensor, Tensor<T>.FromMatrix(estW1));
+        estH1 = Engine.TensorBroadcastAdd(estH1, Tensor<T>.FromVector(estB1).Reshape(1, _hiddenDim));
+        estH1 = Engine.Tanh(estH1);
+        var estH = estH1.Reshape(_hiddenDim).ToVector();
 
-        // Estimation network layer 2
+        // Estimation network layer 2: logits = estH @ estW2 + estB2
+        var estH2 = Engine.TensorMatMul(estH1, Tensor<T>.FromMatrix(estW2));
+        estH2 = Engine.TensorBroadcastAdd(estH2, Tensor<T>.FromVector(estB2).Reshape(1, _numMixtures));
+        var logitVec = estH2.Reshape(_numMixtures).ToVector();
         var logits = new double[_numMixtures];
         double maxLogit = double.MinValue;
         for (int j = 0; j < _numMixtures; j++)
         {
-            T sum = estB2[j];
-            for (int ii = 0; ii < _hiddenDim; ii++) wColHidden[ii] = estW2[ii, j];
-            sum = NumOps.Add(sum, Engine.DotProduct(estH, wColHidden));
-            logits[j] = NumOps.ToDouble(sum);
+            logits[j] = NumOps.ToDouble(logitVec[j]);
             if (logits[j] > maxLogit) maxLogit = logits[j];
         }
 
