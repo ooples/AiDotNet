@@ -287,7 +287,7 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
 
         // Adam with lower learning rate + gradient clipping for GRU stability
         _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.0005 });
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.00005 });
         var paramGradients = ClipGradient(GetParameterGradients());
         var currentParams = GetParameters();
         var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGradients);

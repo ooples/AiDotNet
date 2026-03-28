@@ -2556,16 +2556,16 @@ public static class LayerHelper<T>
         yield return new RecurrentLayer<T>(
             inputSize: inputSize,
             hiddenSize: hiddenSize,
-            activationFunction: new SiLUActivation<T>()
+            activationFunction: new TanhActivation<T>()
         );
 
-        // Additional RNN layers
+        // Additional RNN layers (Elman 1990 — standard tanh activation)
         for (int i = 1; i < recurrentLayerCount; i++)
         {
             yield return new RecurrentLayer<T>(
                 inputSize: hiddenSize,
                 hiddenSize: hiddenSize,
-                activationFunction: new SiLUActivation<T>()
+                activationFunction: new TanhActivation<T>()
             );
         }
 

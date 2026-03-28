@@ -98,6 +98,7 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// is null before the first forward pass or after a reset.
     /// </remarks>
     private Tensor<T>? _lastInput;
+    private Tensor<T>? _lastPreActivation;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
@@ -371,6 +372,7 @@ public class RecurrentLayer<T> : LayerBase<T>
         // Allocate output tensor (cannot rent — reshape at end creates new tensor,
         // leaving rented buffer unreturned and potentially reused with stale data)
         var output = new Tensor<T>([sequenceLength, batchSize, hiddenSize]);
+        var preActivations = new Tensor<T>([sequenceLength, batchSize, hiddenSize]);
         var hiddenState = new Tensor<T>([sequenceLength + 1, batchSize, hiddenSize]);
         hiddenState.Fill(NumOps.Zero);
 
@@ -397,6 +399,9 @@ public class RecurrentLayer<T> : LayerBase<T>
             var preActivation = Engine.TensorAdd(inputContribution, hiddenContribution);
             preActivation = Engine.TensorBroadcastAdd(preActivation, _biases); // Broadcasting biases across batch
 
+            // Cache pre-activation for backward pass derivative
+            Engine.TensorSetSliceAxis(preActivations, preActivation, 0, t);
+
             // Apply activation
             var newHidden = ApplyActivation(preActivation);
 
@@ -407,6 +412,7 @@ public class RecurrentLayer<T> : LayerBase<T>
 
         _lastHiddenState = hiddenState;
         _lastOutput = output;
+        if (IsTrainingMode) _lastPreActivation = preActivations;
 
         // Restore original batch dimensions for any-rank support
         if (_originalInputShape != null && _originalInputShape.Length > 3)
@@ -675,16 +681,23 @@ public class RecurrentLayer<T> : LayerBase<T>
             var outputAtT = Engine.TensorSliceAxis(_lastOutput, 0, t); // [batchSize, hiddenSize]
 
             // Compute activation derivative: dL/dz = dL/dh * f'(z)
+            // Use pre-activation values (not output) for correct derivative computation.
+            // f'(z) needs z, not f(z) — using f(z) gives f'(f(z)) which is wrong
+            // for non-involutory activations like SiLU, GELU, etc.
             Tensor<T> preActivationGrad;
+            var preActAtT = _lastPreActivation != null
+                ? Engine.TensorSliceAxis(_lastPreActivation, 0, t)
+                : outputAtT; // fallback for legacy compatibility
+
             if (VectorActivation != null)
             {
-                var actDeriv = VectorActivation.Derivative(outputAtT);
+                var actDeriv = VectorActivation.Derivative(preActAtT);
                 preActivationGrad = Engine.TensorMultiply(currentGradient, actDeriv);
             }
             else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
             {
                 var activation = ScalarActivation;
-                var activationDerivative = outputAtT.Transform((x, _) => activation.Derivative(x));
+                var activationDerivative = preActAtT.Transform((x, _) => activation.Derivative(x));
                 preActivationGrad = Engine.TensorMultiply(currentGradient, activationDerivative);
             }
             else
@@ -1203,6 +1216,7 @@ public class RecurrentLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastHiddenState = null;
         _lastOutput = null;
+        _lastPreActivation = null;
         _inputWeightsGradient = null;
         _hiddenWeightsGradient = null;
         _biasesGradient = null;
