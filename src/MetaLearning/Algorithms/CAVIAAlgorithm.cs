@@ -385,10 +385,7 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
             // Update context: psi = psi - alpha * grad
             T lr = NumOps.FromDouble(_caviaOptions.InnerLearningRate);
-            for (int i = 0; i < context.Length; i++)
-            {
-                context[i] = NumOps.Subtract(context[i], NumOps.Multiply(lr, contextGradients[i]));
-            }
+            context = Engine.Subtract(context, Engine.Multiply(contextGradients, lr));
         }
 
         return context;

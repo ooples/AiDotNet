@@ -710,10 +710,8 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     public override void UpdateParameters(T learningRate)
     {
         if (_kernelGradients is null || _biasGradients is null) return;
-        for (int i = 0; i < _kernels.Length; i++)
-            _kernels[i] = NumOps.Subtract(_kernels[i], NumOps.Multiply(learningRate, _kernelGradients[i]));
-        for (int i = 0; i < _biases.Length; i++)
-            _biases[i] = NumOps.Subtract(_biases[i], NumOps.Multiply(learningRate, _biasGradients[i]));
+        _kernels = Engine.TensorSubtract(_kernels, Engine.TensorMultiplyScalar<T>(_kernelGradients, learningRate));
+        _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar<T>(_biasGradients, learningRate));
         _kernelGradients = null;
         _biasGradients = null;
     }
