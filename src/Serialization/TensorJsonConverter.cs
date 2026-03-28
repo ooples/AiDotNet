@@ -75,7 +75,34 @@ namespace AiDotNet.Serialization
             {
                 throw new JsonSerializationException($"Cannot serialize tensor: Shape or Length property returned null.");
             }
-            var shape = (int[])shapeObj;
+            // Shape may be int[] or TensorShape (which has a ToArray() method)
+            int[] shape;
+            if (shapeObj is int[] shapeArray)
+            {
+                shape = shapeArray;
+            }
+            else
+            {
+                var shapeToArray = shapeObj.GetType().GetMethod("ToArray");
+                if (shapeToArray != null)
+                {
+                    var result = shapeToArray.Invoke(shapeObj, null);
+                    if (result is int[] intArray)
+                    {
+                        shape = intArray;
+                    }
+                    else
+                    {
+                        throw new JsonSerializationException(
+                            $"Cannot serialize tensor: Shape.ToArray() returned '{result?.GetType().Name ?? "null"}' instead of int[].");
+                    }
+                }
+                else
+                {
+                    throw new JsonSerializationException(
+                        $"Cannot serialize tensor: Shape property returned unsupported type '{shapeObj.GetType().Name}'.");
+                }
+            }
             // Normalize scalar tensors to shape [1] for consistent round-trip behavior
             if (shape.Length == 0)
             {

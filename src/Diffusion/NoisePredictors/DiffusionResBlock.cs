@@ -192,7 +192,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
             {
                 timeProj = timeProj.Reshape(timeProj.Shape[0], _outChannels, 1, 1);
             }
-            h = Engine.TensorAdd(h, timeProj);
+            h = h.BroadcastAdd(timeProj);
         }
 
         // Skip connection

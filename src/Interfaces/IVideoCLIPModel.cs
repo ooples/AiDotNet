@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Interfaces;
@@ -46,10 +47,7 @@ public interface IVideoCLIPModel<T> : IMultimodalEmbedding<T>
     /// <summary>
     /// Gets the temporal aggregation method used.
     /// </summary>
-    /// <remarks>
-    /// Common methods: "mean_pooling", "temporal_transformer", "late_fusion"
-    /// </remarks>
-    string TemporalAggregation { get; }
+    TemporalAggregationType TemporalAggregation { get; }
 
     /// <summary>
     /// Converts a video (sequence of frames) into an embedding vector.

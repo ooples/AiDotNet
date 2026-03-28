@@ -13,4 +13,11 @@ public class BIRCHTests : ClusteringModelTestBase
             NumClusters = NumClusters,
             Threshold = 5.0 // Data has cluster spacing of 10, std=1
         });
+
+    protected override IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
+        => new BIRCH<double>(new AiDotNet.Clustering.Options.BIRCHOptions<double>
+        {
+            NumClusters = 1,
+            Threshold = 5.0
+        });
 }

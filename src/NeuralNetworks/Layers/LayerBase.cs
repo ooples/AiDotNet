@@ -2054,8 +2054,18 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </remarks>
     protected Tensor<T> ApplyActivationDerivative(Tensor<T> input, Tensor<T> outputGradient)
     {
-        if (input.Rank != outputGradient.Rank)
-            throw new ArgumentException("Input and output gradient tensors must have the same rank.");
+        // Reshape outputGradient to match input rank if they differ but have the same total elements.
+        // This happens when a layer reshapes internally (e.g., 1D→2D in DenseLayer, RecurrentLayer).
+        if (input.Rank != outputGradient.Rank && input.Length == outputGradient.Length)
+        {
+            outputGradient = outputGradient.Reshape(input.Shape.ToArray());
+        }
+        else if (input.Rank != outputGradient.Rank)
+        {
+            throw new ArgumentException(
+                $"Input rank {input.Rank} and output gradient rank {outputGradient.Rank} differ " +
+                $"with different element counts ({input.Length} vs {outputGradient.Length}).");
+        }
 
         if (VectorActivation != null)
         {
