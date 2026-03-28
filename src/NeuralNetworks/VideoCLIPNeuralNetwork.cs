@@ -1614,11 +1614,23 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
                 for (int d = 0; d < _visionHiddenDim; d++)
                     frameGrad[0, d] = currentGradient[f, d];
 
-                // Backward through frame encoder layers then patch embedding
+                // Backward through frame encoder layers
                 var grad = frameGrad;
                 for (int i = _frameEncoderLayers.Count - 1; i >= 0; i--)
                     grad = _frameEncoderLayers[i].Backward(grad);
-                _patchEmbedding.Backward(grad);
+
+                // Strip CLS token (row 0) before passing to patch embedding backward.
+                // _patchEmbedding.Forward() produced patch tokens only (no CLS), so its
+                // backward must receive the same shape: [numPatches, hiddenDim].
+                int patchCount = seqLen - 1;
+                if (patchCount > 0)
+                {
+                    var patchGrad = new Tensor<T>([patchCount, _visionHiddenDim]);
+                    for (int p = 0; p < patchCount; p++)
+                        for (int d = 0; d < _visionHiddenDim; d++)
+                            patchGrad[p, d] = grad[p + 1, d];
+                    _patchEmbedding.Backward(patchGrad);
+                }
             }
         }
 
@@ -1681,10 +1693,15 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
 
         Backward(gradient);
 
-        // Update parameters using the optimizer's gradient-based update
+        // Update all parameters (layers + non-layer trainable state like CLS token,
+        // positional embeddings) using the full parameter/gradient vector approach
+        var paramGrads = GetParameterGradients();
+        var currentParams = GetParameters();
+
         if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gradOptimizer)
         {
-            gradOptimizer.UpdateParameters(Layers);
+            var updatedParams = gradOptimizer.UpdateParameters(currentParams, paramGrads);
+            UpdateParameters(updatedParams);
         }
         else
         {
@@ -2056,6 +2073,13 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        if (!_useNativeMode)
+        {
+            throw new NotSupportedException(
+                "Clone/serialization is not supported for ONNX-mode VideoCLIP models. " +
+                "ONNX models require the original model path for reconstruction.");
+        }
+
         return new VideoCLIPNeuralNetwork<T>(
             Architecture,
             _imageSize,

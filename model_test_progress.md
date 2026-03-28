@@ -1,6 +1,7 @@
 # Model Family Test Progress
 
 ## Test Coverage by Category
+
 | Category | Pass Rate | Notes |
 |---|---|---|
 | ActivationFunctions | 260/260 (100%) | Fixed in other PR |

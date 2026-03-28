@@ -176,12 +176,11 @@ public abstract class RegressionModelTestBase
     [Fact]
     public void IrrelevantFeature_ShouldNotImprove_Predictions()
     {
-        if (Features < 2)
-        {
-            // Univariate models (e.g., SimpleRegression) can't compare N vs N+1 features
-            // since they only accept exactly 1 feature. Skip this test.
-            return;
-        }
+        // Univariate models can't compare N vs N+1 features — this invariant
+        // is structurally inapplicable, not a quality gap to hide.
+        Assert.True(Features >= 2,
+            "NoiseFeature_ShouldNotImprovePerformance requires Features >= 2. " +
+            "Override Features in univariate model test classes.");
 
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
@@ -362,12 +361,10 @@ public abstract class RegressionModelTestBase
     [Fact]
     public void FeaturePermutation_ShouldGiveConsistentPredictions()
     {
-        if (Features < 2)
-        {
-            // Feature permutation requires at least 2 features to swap.
-            // Univariate models pass trivially (no permutation possible).
-            return;
-        }
+        // Feature permutation requires at least 2 features — structurally inapplicable for univariate.
+        Assert.True(Features >= 2,
+            "FeaturePermutation_ShouldGiveConsistentPredictions requires Features >= 2. " +
+            "Override Features in univariate model test classes.");
 
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);

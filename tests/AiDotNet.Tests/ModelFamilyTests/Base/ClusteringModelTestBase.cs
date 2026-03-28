@@ -463,15 +463,25 @@ public abstract class ClusteringModelTestBase
 
     /// <summary>
     /// Creates a model configured for single-cluster detection. For k-based models
-    /// (KMeans, MiniBatchKMeans), this should return the model with k=1.
+    /// (KMeans, MiniBatchKMeans), this MUST be overridden to return the model with k=1.
     /// Default: returns the standard model (correct for auto-k algorithms like DBSCAN, MeanShift).
     /// </summary>
     protected virtual IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
         => CreateModel();
 
+    /// <summary>
+    /// Set to true for k-based clustering models that need a k=1 override for SingleCluster tests.
+    /// When true and CreateSingleClusterModel is not overridden, the test will fail with a clear message.
+    /// </summary>
+    protected virtual bool RequiresSingleClusterOverride => false;
+
     [Fact]
     public void SingleClusterData_ShouldAssignSameCluster()
     {
+        Assert.False(RequiresSingleClusterOverride && CreateSingleClusterModel() == CreateModel(),
+            "This k-based model requires a CreateSingleClusterModel() override with k=1. " +
+            "Without it, the single-cluster invariant cannot be verified.");
+
         var rng = ModelTestHelpers.CreateSeededRandom();
         var model = CreateSingleClusterModel();
 
