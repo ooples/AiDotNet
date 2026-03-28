@@ -288,10 +288,10 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// During the forward pass:
     /// - The input tensor is converted to a vector for easier processing
     /// - For each column, the layer calculates how strongly it responds to the input
-    /// - Columns with a strong enough response (above the sparsity threshold) are activated (set to 1)
-    /// - All other columns remain inactive (set to 0)
+    /// - Columns with activations above the sparsity threshold are kept (magnitude-preserving)
+    /// - All other columns are zeroed out (masked)
     /// - The result is a sparse output where only a small percentage of columns are active
-    /// 
+    ///
     /// This sparse representation helps the network focus on the most important features
     /// and ignore noise or irrelevant details.
     /// </para>
@@ -549,12 +549,20 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// <returns>The gradient of the loss with respect to the layer's input.</returns>
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
-        // Use Engine tensor operations: inputGrad = Connections @ outputGrad
+        // Mask the gradient by the sparse output: inactive columns (zeroed in Forward)
+        // must not propagate gradients. This respects the sparse activation pattern.
+        var maskedGrad = outputGradient;
+        if (LastOutput is not null)
+        {
+            var mask = Engine.TensorGreaterThan(LastOutput, NumOps.Zero);
+            maskedGrad = Engine.TensorMultiply(outputGradient, mask);
+        }
+
+        // Use Engine tensor operations: inputGrad = Connections @ maskedGrad
         // Connections is [InputSize, ColumnCount], no transpose needed
-        // outputGradient expected shape [ColumnCount]
-        var gradTensor = outputGradient.Shape.Length == 1
-            ? outputGradient.Reshape([ColumnCount, 1])
-            : outputGradient;
+        var gradTensor = maskedGrad.Shape.Length == 1
+            ? maskedGrad.Reshape([ColumnCount, 1])
+            : maskedGrad;
 
         var inputGradTensor = Engine.TensorMatMul(Connections, gradTensor);
 
