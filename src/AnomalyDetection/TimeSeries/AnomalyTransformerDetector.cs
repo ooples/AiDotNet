@@ -1089,8 +1089,7 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
             for (int j = 0; j < _modelDim; j++)
             {
                 T sum = b2[j];
-                for (int ii = 0; ii < ffDim; ii++) wCol[ii] = W2[ii, j];
-                sum = NumOps.Add(sum, Engine.DotProduct(h, wCol));
+                { var wc0 = new Vector<T>(ffDim); for (int ii = 0; ii < ffDim; ii++) wc0[ii] = W2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h, wc0)); }
                 // Residual connection
                 output[t, j] = NumOps.Add(sum, x[t, j]);
             }

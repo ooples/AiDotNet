@@ -95,6 +95,7 @@ public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
         T eps = NumOps.FromDouble(1e-10);
         var result = new Matrix<T>(d, d);
 
+        int edgeCount = 0;
         for (int j = 0; j < d; j++)
         {
             int[] parents = bestAssignment[j];
@@ -105,6 +106,7 @@ public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
                     result[p, j] = NumOps.Divide(cov[p, j], varP);
                 else
                     result[p, j] = NumOps.One;
+                edgeCount++;
             }
         }
 

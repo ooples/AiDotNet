@@ -237,6 +237,7 @@ public class DYNOTEARSAlgorithm<T> : TimeSeriesCausalBase<T>
 
             // Gradient of loss w.r.t. W: -1/n * Xt' * R using Engine.DotProduct
             T nT = NumOps.FromDouble(n);
+            // Gradient of loss w.r.t. W: -1/n * Xt' * R using Engine.DotProduct
             var gradW = new Matrix<T>(d, d);
             // Pre-allocate reusable column vectors
             var colVec = new Vector<T>(n);

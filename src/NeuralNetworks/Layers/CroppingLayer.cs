@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 8, 8, 1", TestConstructorArgs = "new[] { 1, 8, 8, 1 }, new[] { 0, 1, 0, 0 }, new[] { 0, 1, 0, 0 }, new[] { 0, 0, 1, 0 }, new[] { 0, 0, 1, 0 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = false, ChangesShape = true, TestInputShape = "1, 8, 8", TestConstructorArgs = "new[] { 1, 8, 8 }, new[] { 0, 1, 1 }, new[] { 0, 1, 1 }, new[] { 0, 1, 1 }, new[] { 0, 1, 1 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public class CroppingLayer<T> : LayerBase<T>
 {
 
@@ -476,12 +476,10 @@ public class CroppingLayer<T> : LayerBase<T>
         var inputNCHW = input4D.Transpose([0, 3, 1, 2]);
 
         // Perform crop on NCHW format
-        // input4D is NHWC [batch, H, W, C], so H crop = _cropTop[1], W crop = _cropLeft[2]
-        int hCropIdx = _cropTop.Length >= 4 ? 1 : 0;
-        int wCropIdx = _cropLeft.Length >= 4 ? 2 : 1;
-        int hDim = input4D.Shape[1] - _cropTop[hCropIdx] - _cropBottom[hCropIdx];
-        int wDim = input4D.Shape[2] - _cropLeft[wCropIdx] - _cropRight[wCropIdx];
-        var croppedNCHW = Engine.Crop(inputNCHW, _cropTop[hCropIdx], _cropLeft[wCropIdx], hDim, wDim);
+        // inputShape is [H, W, C], so _cropTop[0]=H crop, _cropLeft[1]=W crop
+        // GetOutputShape()=[outH, outW, outC]
+        var cropOutShape = GetOutputShape();
+        var croppedNCHW = Engine.Crop(inputNCHW, _cropTop[0], _cropLeft[1], cropOutShape[0], cropOutShape[1]);
 
         // Convert back from NCHW to NHWC [batch, height, width, channels]
         var cropped = croppedNCHW.Transpose([0, 2, 3, 1]);

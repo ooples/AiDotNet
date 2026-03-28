@@ -1898,6 +1898,7 @@ public class ConvLSTMLayer<T> : LayerBase<T>
         var dWci = Engine.Conv2DBackwardKernel(dcNCHW, xtNCHW, kernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
         var dWoi = Engine.Conv2DBackwardKernel(doNCHW, xtNCHW, kernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
 
+
         var hKernelShape = _weightsFh.Transpose([3, 2, 0, 1]).Shape.ToArray();
         var dWfh = Engine.Conv2DBackwardKernel(dfNCHW, prevHNCHW, hKernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
         var dWih = Engine.Conv2DBackwardKernel(diNCHW, prevHNCHW, hKernelShape, stride, padding, dilation).Transpose([2, 3, 1, 0]);
