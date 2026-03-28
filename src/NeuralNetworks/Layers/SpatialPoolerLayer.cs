@@ -307,11 +307,35 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
 
         var connectionsT = Engine.TensorTranspose(Connections);
         var activations = Engine.TensorMatMul(connectionsT, inputTensor);
+        var activationsFlat = activations.Reshape([ColumnCount]);
 
-        // Apply threshold to get sparse binary output
-        T threshold = NumOps.FromDouble(SparsityThreshold);
-        var outputMask = Engine.TensorGreaterThan(activations, threshold);
-        var output = outputMask.Reshape([ColumnCount]);
+        // Normalize activations to [0,1] range for meaningful thresholding.
+        // Raw activations scale with input magnitude, making a fixed threshold useless.
+        T maxVal = Engine.TensorMaxValue(activationsFlat);
+        T minVal = Engine.TensorMinValue(activationsFlat);
+        T range = NumOps.Subtract(maxVal, minVal);
+        Tensor<T> normalizedActivations;
+        if (NumOps.GreaterThan(range, NumOps.FromDouble(1e-10)))
+        {
+            var shifted = Engine.TensorSubtractScalar(activationsFlat, minVal);
+            normalizedActivations = Engine.TensorDivideScalar(shifted, range);
+        }
+        else
+        {
+            // All activations identical — produce uniform output
+            normalizedActivations = activationsFlat;
+        }
+
+        // Apply sparsity threshold on normalized activations
+        // SparsityThreshold (default 0.02) means keep top ~2% of columns active
+        T threshold = NumOps.FromDouble(1.0 - SparsityThreshold);
+        var outputMask = Engine.TensorGreaterThan(normalizedActivations, threshold);
+
+        // Multiply mask by RAW activations (not normalized) to preserve input magnitude
+        // This ensures different input magnitudes produce different output values
+        // Normalization is only used for column selection, not output values
+        var maskedActivations = Engine.TensorMultiply(outputMask, activationsFlat);
+        var output = maskedActivations.Reshape([ColumnCount]);
 
         LastOutput = output;
         return output;
@@ -447,7 +471,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     {
         var colSums = Engine.ReduceSum(Connections, new[] { 0 }, keepDims: true);
         var safeSums = Engine.TensorMax(colSums, NumOps.FromDouble(1e-12));
-        Connections = Engine.TensorDivide(Connections, safeSums);
+        Connections = Engine.TensorBroadcastDivide(Connections, safeSums);
     }
 
     /// <summary>
