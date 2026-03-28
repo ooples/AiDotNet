@@ -384,32 +384,10 @@ public class SymmetricProjector<T> : IProjectorHead<T>
 
     private Tensor<T> LinearBackward(Tensor<T> gradOutput, T[] weight, int inDim, int outDim)
     {
-        var batchSize = gradOutput.Shape[0];
-        var gradInput = new T[batchSize * inDim];
-
-        // gradInput = gradOutput @ weight.T
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Extract gradOutput row for this batch
-            var gradRow = new Vector<T>(outDim);
-            for (int j = 0; j < outDim; j++)
-            {
-                gradRow[j] = gradOutput[b, j];
-            }
-
-            for (int i = 0; i < inDim; i++)
-            {
-                // Extract weight row (contiguous in flat array: weight[i*outDim .. i*outDim+outDim])
-                var weightRow = new Vector<T>(outDim);
-                for (int j = 0; j < outDim; j++)
-                {
-                    weightRow[j] = weight[i * outDim + j];
-                }
-                gradInput[b * inDim + i] = Engine.DotProduct(gradRow, weightRow);
-            }
-        }
-
-        return new Tensor<T>(gradInput, [batchSize, inDim]);
+        // Vectorized: gradInput = gradOutput @ weight^T using Engine.TensorMatMul
+        var weightTensor = new Tensor<T>(weight, [inDim, outDim]);
+        var weightT = weightTensor.Transpose([1, 0]);
+        return Engine.TensorMatMul(gradOutput, weightT);
     }
 
     private Tensor<T> ReLUBackward(Tensor<T> gradOutput, Tensor<T> preActivation)
