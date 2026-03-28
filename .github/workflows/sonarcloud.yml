@@ -211,6 +211,25 @@ jobs:
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
+          - name: Unit - 08e NN-Remaining (catch-all)
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              Category!=GPU&Category!=Stress&
+              FullyQualifiedName~ModelFamilyTests.NeuralNetworks&
+              FullyQualifiedName!~ResNetNetworkTests&
+              FullyQualifiedName!~VGGNetworkTests&
+              FullyQualifiedName!~DenseNetTests&
+              FullyQualifiedName!~MobileNetTests&
+              FullyQualifiedName!~EfficientNetTests&
+              FullyQualifiedName!~BlipNeuralNetworkTests&
+              FullyQualifiedName!~Blip2NeuralNetworkTests&
+              FullyQualifiedName!~ClipNeuralNetworkTests&
+              FullyQualifiedName!~LoRAAdapterTests&
+              FullyQualifiedName!~LoRALayerTests&
+              FullyQualifiedName!~VBLoRAAdapterTests&
+              FullyQualifiedName!~AdvancedAlgebraNetworkTests&
+              FullyQualifiedName!~MixtureOfExpertsNeuralNetworkTests
           - name: Unit - 09 Optimizers/RAG
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
