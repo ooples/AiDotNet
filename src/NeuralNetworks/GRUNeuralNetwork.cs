@@ -52,6 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly GRUOptions _options;
+    private T _learningRate;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
@@ -92,11 +93,12 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     {
     }
 
-    public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, GRUOptions? options = null) :
+    public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, GRUOptions? options = null, double learningRate = 0.001) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _options = options ?? new GRUOptions();
         Options = _options;
+        _learningRate = NumOps.FromDouble(learningRate);
         InitializeGRULayers();
     }
 
@@ -288,9 +290,10 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
         gradTensor = ClipGradient(gradTensor);
         Backpropagate(gradTensor);
 
-        // Adam with lower learning rate + gradient clipping for GRU stability
+        // Use _learningRate but cap for Adam stability (Cho et al. 2014 — GRUs need conservative LR)
+        double effectiveLR = Math.Min(NumOps.ToDouble(_learningRate), 0.0005);
         _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.00005 });
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = effectiveLR });
         var paramGradients = ClipGradient(GetParameterGradients());
         var currentParams = GetParameters();
         var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGradients);
@@ -385,8 +388,7 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        // GRU has no network-specific state beyond base class (layers + parameters).
-        // Optimizer state is reconstructed on deserialization with default LR.
+        writer.Write(Convert.ToDouble(_learningRate));
     }
 
     /// <summary>
@@ -409,6 +411,7 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
+        _learningRate = NumOps.FromDouble(reader.ReadDouble());
     }
 
     /// <summary>

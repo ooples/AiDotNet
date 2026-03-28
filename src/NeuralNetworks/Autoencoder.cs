@@ -854,8 +854,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             // Store the last loss value
             LastLoss = epochLoss;
 
-            // Report progress
-            Console.WriteLine($"Epoch {epoch + 1}/{_epochs}, Loss: {epochLoss}");
+            // Progress is available via LastLoss property for callers to monitor
         }
     }
 
