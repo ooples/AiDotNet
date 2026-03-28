@@ -326,35 +326,25 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Generator weights not initialized.");
         }
 
-        // Layer 1
-        var h1 = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = genB1[j];
-            { var wCol_0 = new Vector<T>(_latentDim); for (int ii = 0; ii < _latentDim; ii++) wCol_0[ii] = genW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(z, wCol_0)); }
-            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
-            h1[j] = NumOps.FromDouble(leakyVal);
-        }
+        // Vectorized generator forward using Engine.TensorMatMul
+        // Layer 1: h1 = LeakyReLU(z @ genW1 + genB1)
+        var zTensor = Tensor<T>.FromVector(z).Reshape(1, _latentDim);
+        var layer1 = Engine.TensorMatMul(zTensor, Tensor<T>.FromMatrix(genW1));
+        layer1 = Engine.TensorBroadcastAdd(layer1, Tensor<T>.FromVector(genB1).Reshape(1, _hiddenDim));
+        layer1 = Engine.LeakyReLU(layer1, NumOps.FromDouble(0.2));
+        var h1 = layer1.Reshape(_hiddenDim).ToVector();
 
-        // Layer 2
-        var h2 = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = genB2[j];
-            { var wCol_1 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_1[ii] = genW2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_1)); }
-            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
-            h2[j] = NumOps.FromDouble(leakyVal);
-        }
+        // Layer 2: h2 = LeakyReLU(h1 @ genW2 + genB2)
+        var layer2 = Engine.TensorMatMul(layer1, Tensor<T>.FromMatrix(genW2));
+        layer2 = Engine.TensorBroadcastAdd(layer2, Tensor<T>.FromVector(genB2).Reshape(1, _hiddenDim));
+        layer2 = Engine.LeakyReLU(layer2, NumOps.FromDouble(0.2));
+        var h2 = layer2.Reshape(_hiddenDim).ToVector();
 
-        // Output layer (tanh for bounded output)
-        var output = new Vector<T>(_inputDim);
-        for (int j = 0; j < _inputDim; j++)
-        {
-            T sum = genB3[j];
-            { var wCol_2 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_2[ii] = genW3[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h2, wCol_2)); }
-            double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
-            output[j] = NumOps.FromDouble(tanhVal);
-        }
+        // Output layer: output = tanh(h2 @ genW3 + genB3)
+        var layer3 = Engine.TensorMatMul(layer2, Tensor<T>.FromMatrix(genW3));
+        layer3 = Engine.TensorBroadcastAdd(layer3, Tensor<T>.FromVector(genB3).Reshape(1, _inputDim));
+        layer3 = Engine.Tanh(layer3);
+        var output = layer3.Reshape(_inputDim).ToVector();
 
         return output;
     }
@@ -374,30 +364,24 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Discriminator weights not initialized.");
         }
 
-        // Layer 1
-        var h1 = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = discB1[j];
-            { var wCol_3 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_3[ii] = discW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_3)); }
-            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
-            h1[j] = NumOps.FromDouble(leakyVal);
-        }
+        // Vectorized discriminator forward
+        // Layer 1: h1 = LeakyReLU(x @ discW1 + discB1)
+        var xTensor = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
+        var dLayer1 = Engine.TensorMatMul(xTensor, Tensor<T>.FromMatrix(discW1));
+        dLayer1 = Engine.TensorBroadcastAdd(dLayer1, Tensor<T>.FromVector(discB1).Reshape(1, _hiddenDim));
+        dLayer1 = Engine.LeakyReLU(dLayer1, NumOps.FromDouble(0.2));
+        var h1 = dLayer1.Reshape(_hiddenDim).ToVector();
 
-        // Layer 2 (feature layer)
-        var h2 = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = discB2[j];
-            { var wCol_4 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_4[ii] = discW2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_4)); }
-            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
-            h2[j] = NumOps.FromDouble(leakyVal);
-        }
+        // Layer 2: h2 = LeakyReLU(h1 @ discW2 + discB2)
+        var dLayer2 = Engine.TensorMatMul(dLayer1, Tensor<T>.FromMatrix(discW2));
+        dLayer2 = Engine.TensorBroadcastAdd(dLayer2, Tensor<T>.FromVector(discB2).Reshape(1, _hiddenDim));
+        dLayer2 = Engine.LeakyReLU(dLayer2, NumOps.FromDouble(0.2));
+        var h2 = dLayer2.Reshape(_hiddenDim).ToVector();
 
-        // Output layer (sigmoid for probability)
-        T outputSum = discB3[0];
-        { var _e0 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _e0[_i] = discW3[_i, 0]; outputSum = NumOps.Add(outputSum, Engine.DotProduct(h2, _e0)); }
-        double sigVal = Sigmoid(NumOps.ToDouble(outputSum));
+        // Output layer: sigmoid(h2 @ discW3 + discB3)
+        var dLayer3 = Engine.TensorMatMul(dLayer2, Tensor<T>.FromMatrix(discW3));
+        dLayer3 = Engine.TensorBroadcastAdd(dLayer3, Tensor<T>.FromVector(discB3).Reshape(1, 1));
+        double sigVal = Sigmoid(NumOps.ToDouble(dLayer3[0]));
         T output = NumOps.FromDouble(sigVal);
 
         return (output, h2);
