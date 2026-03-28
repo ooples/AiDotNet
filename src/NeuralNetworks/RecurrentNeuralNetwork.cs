@@ -324,12 +324,17 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
         // Compute loss gradient
         var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
 
-        // Backpropagate error through time
-        BackpropagateError(Tensor<T>.FromVector(lossGrad));
+        // Clip loss gradient before backprop (Pascanu et al. 2013 — essential for RNNs)
+        var clippedLossGrad = ClipGradient(Tensor<T>.FromVector(lossGrad));
 
-        // Update parameters using Adam optimizer
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        var paramGrads = GetParameterGradients();
+        // Backpropagate error through time
+        BackpropagateError(clippedLossGrad);
+
+        // Update parameters using Adam with lower learning rate for RNNs
+        // Per Pascanu et al. 2013: RNNs need careful learning rate + gradient clipping
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.001 });
+        var paramGrads = ClipGradient(GetParameterGradients());
         var currentParams = GetParameters();
         var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
         UpdateParameters(updatedParams);

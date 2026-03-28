@@ -281,11 +281,14 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             gradTensor = gradTensor.Reshape(output.Shape.ToArray());
         }
+        // Clip loss gradient before backprop (Cho et al. 2014 — essential for GRUs)
+        gradTensor = ClipGradient(gradTensor);
         Backpropagate(gradTensor);
 
-        // Persistent Adam optimizer handles vanishing gradients in deep RNNs
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        var paramGradients = GetParameterGradients();
+        // Adam with lower learning rate + gradient clipping for GRU stability
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.0005 });
+        var paramGradients = ClipGradient(GetParameterGradients());
         var currentParams = GetParameters();
         var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGradients);
         UpdateParameters(updatedParams);

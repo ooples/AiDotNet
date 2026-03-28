@@ -833,8 +833,10 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                     outputGradient = Layers[j].Backward(outputGradient);
                 }
 
-                // Update parameters using Adam optimizer
-                _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+                // Update parameters using Adam with conservative learning rate
+                // to prevent oscillation at convergence (Kingma & Ba 2015)
+                _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                    new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.0005 });
                 var paramGrads = GetParameterGradients();
                 var currentParams = GetParameters();
                 if (paramGrads.Length > 0 && currentParams.Length == paramGrads.Length)
