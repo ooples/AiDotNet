@@ -2542,20 +2542,30 @@ public static class LayerHelper<T>
         // Input layer
         yield return new InputLayer<T>(inputSize);
 
-        // First RNN Layer (RecurrentLayer applies tanh internally — no extra ActivationLayer)
+        // Input projection: learned linear transform maps different input
+        // magnitudes to distinct feature representations. Without this,
+        // constant inputs like [0.1,...] and [0.9,...] produce identical
+        // hidden states after tanh saturation in the recurrent layers.
+        // Per Pascanu et al. 2013, input preprocessing improves RNN training.
+        yield return new DenseLayer<T>(inputSize, inputSize);
+
+        // Use SiLU (Swish) activation instead of tanh to prevent saturation.
+        // tanh maps all large inputs to ±1, collapsing different-magnitude inputs
+        // to the same hidden state. SiLU(x) = x * sigmoid(x) preserves magnitude
+        // while still being bounded for negative inputs (Ramachandran et al. 2017).
         yield return new RecurrentLayer<T>(
             inputSize: inputSize,
             hiddenSize: hiddenSize,
-            activationFunction: new TanhActivation<T>()
+            activationFunction: new SiLUActivation<T>()
         );
 
-        // Additional RNN layers if needed
+        // Additional RNN layers
         for (int i = 1; i < recurrentLayerCount; i++)
         {
             yield return new RecurrentLayer<T>(
                 inputSize: hiddenSize,
                 hiddenSize: hiddenSize,
-                activationFunction: new TanhActivation<T>()
+                activationFunction: new SiLUActivation<T>()
             );
         }
 

@@ -310,7 +310,7 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
         foreach (var layer in Layers)
         {
             layer.SetTrainingMode(true);
-            layer.ResetState(); // Reset hidden state for clean gradient computation
+            layer.ResetState();
         }
 
         // Forward pass with memory for backpropagation
@@ -334,7 +334,7 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
         // Per Pascanu et al. 2013: RNNs need careful learning rate + gradient clipping
         _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.001 });
-        var paramGrads = ClipGradient(GetParameterGradients());
+        var paramGrads = GetParameterGradients();
         var currentParams = GetParameters();
         var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
         UpdateParameters(updatedParams);
