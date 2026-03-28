@@ -783,7 +783,8 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// Gets a value indicating whether this layer supports JIT compilation.
     /// </summary>
     /// <value>
-    /// Always <c>true</c>. SpatialPoolerLayer uses straight-through estimator for JIT compilation.
+    /// <c>false</c>. The JIT computation graph does not yet replicate the full CPU Forward
+    /// semantics (input normalization to [0,1] and inhibition masking are missing).
     /// </value>
     /// <remarks>
     /// <para>
@@ -793,6 +794,6 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// while maintaining the sparse output characteristics.
     /// </para>
     /// </remarks>
-    public override bool SupportsJitCompilation => true;
+    public override bool SupportsJitCompilation => false;
 
 }
