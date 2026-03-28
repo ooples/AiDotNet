@@ -3984,20 +3984,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         var loss = lossFunction ?? DefaultLossFunction;
 
+        // Forward pass
         var prediction = Predict(input);
+
+        // Compute loss gradient dL/d(output)
         var lossDerivative = loss.CalculateDerivative(prediction.ToVector(), target.ToVector());
         var outputGradients = new Tensor<T>(prediction.Shape.ToArray(), lossDerivative);
 
+        // Backward pass through all layers (accumulates parameter gradients)
         Backpropagate(outputGradients);
 
-        var gradients = new List<T>();
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            gradients.AddRange(layerParams.ToArray());
-        }
-
-        return new Vector<T>(gradients.ToArray());
+        // Collect accumulated parameter gradients from all layers
+        return GetParameterGradients();
     }
 
     /// <summary>
