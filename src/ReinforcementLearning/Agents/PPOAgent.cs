@@ -592,13 +592,10 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             _policyNetwork.Backpropagate(gradTensor);
         }
 
-        // Apply gradients
+        // Apply gradients (vectorized)
         var grads = _policyNetwork.GetParameters();
-        for (int i = 0; i < params_.Length; i++)
-        {
-            var update = NumOps.Multiply(_ppoOptions.PolicyLearningRate, grads[i]);
-            params_[i] = NumOps.Add(params_[i], update);
-        }
+        var scaledGrads = Engine.Multiply(grads, _ppoOptions.PolicyLearningRate);
+        params_ = (Vector<T>)Engine.Add(params_, scaledGrads);
 
         _policyNetwork.UpdateParameters(params_);
     }
@@ -628,11 +625,8 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         var grads = _valueNetwork.GetParameters();
-        for (int i = 0; i < params_.Length; i++)
-        {
-            var update = NumOps.Multiply(_ppoOptions.ValueLearningRate, grads[i]);
-            params_[i] = NumOps.Subtract(params_[i], update);
-        }
+        var scaledGrads = Engine.Multiply(grads, _ppoOptions.ValueLearningRate);
+        params_ = (Vector<T>)Engine.Subtract(params_, scaledGrads);
 
         _valueNetwork.UpdateParameters(params_);
     }
