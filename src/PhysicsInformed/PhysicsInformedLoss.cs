@@ -90,7 +90,7 @@ namespace AiDotNet.PhysicsInformed
         /// <param name="derivatives">Derivatives needed for PDE computation.</param>
         /// <param name="inputs">Input points where predictions were made.</param>
         /// <returns>The total loss value.</returns>
-        public T ComputePhysicsLoss(T[] predictions, T[]? targets, PDEDerivatives<T> derivatives, T[] inputs)
+        public T ComputePhysicsLoss(Vector<T> predictions, Vector<T>? targets, PDEDerivatives<T> derivatives, Vector<T> inputs)
         {
             T totalLoss = NumOps.Zero;
 
@@ -132,7 +132,7 @@ namespace AiDotNet.PhysicsInformed
         /// This overload is domain-specific and intentionally separate from <see cref="ILossFunction{T}"/>.
         /// Prefer <see cref="ComputePhysicsLoss"/> for clarity.
         /// </remarks>
-        public T ComputeLoss(T[] predictions, T[]? targets, PDEDerivatives<T> derivatives, T[] inputs)
+        public T ComputeLoss(Vector<T> predictions, Vector<T>? targets, PDEDerivatives<T> derivatives, Vector<T> inputs)
         {
             return ComputePhysicsLoss(predictions, targets, derivatives, inputs);
         }
@@ -146,10 +146,10 @@ namespace AiDotNet.PhysicsInformed
         /// <param name="inputs">Input points where predictions were made.</param>
         /// <returns>The loss and gradients for this sample.</returns>
         public PhysicsLossGradient<T> ComputePhysicsLossGradients(
-            T[] predictions,
-            T[]? targets,
+            Vector<T> predictions,
+            Vector<T>? targets,
             PDEDerivatives<T> derivatives,
-            T[] inputs)
+            Vector<T> inputs)
         {
             if (predictions == null)
             {
@@ -229,9 +229,10 @@ namespace AiDotNet.PhysicsInformed
 
             if (_initialCondition != null && _initialCondition.IsAtInitialTime(inputs))
             {
-                T[] spatialInputs = new T[inputs.Length - 1];
-                Array.Copy(inputs, spatialInputs, spatialInputs.Length);
-                T[] expectedValues = _initialCondition.ComputeInitialValue(spatialInputs);
+                var spatialInputs = new Vector<T>(inputs.Length - 1);
+                for (int si = 0; si < spatialInputs.Length; si++)
+                    spatialInputs[si] = inputs[si];
+                var expectedValues = _initialCondition.ComputeInitialValue(spatialInputs);
                 int count = Math.Min(predictions.Length, expectedValues.Length);
 
                 if (count > 0)
@@ -259,8 +260,8 @@ namespace AiDotNet.PhysicsInformed
         }
 
         private PDEResidualGradient<T> ComputeResidualGradient(
-            T[] inputs,
-            T[] predictions,
+            Vector<T> inputs,
+            Vector<T> predictions,
             PDEDerivatives<T> derivatives)
         {
             if (_pdeSpecification is IPDEResidualGradient<T> gradientProvider)
@@ -277,8 +278,8 @@ namespace AiDotNet.PhysicsInformed
 
         private PDEResidualGradient<T> ComputeBoundaryResidualGradient(
             IBoundaryCondition<T> boundaryCondition,
-            T[] inputs,
-            T[] predictions,
+            Vector<T> inputs,
+            Vector<T> predictions,
             PDEDerivatives<T> derivatives)
         {
             if (boundaryCondition is IBoundaryConditionGradient<T> gradientProvider)
@@ -294,9 +295,9 @@ namespace AiDotNet.PhysicsInformed
         }
 
         private PDEResidualGradient<T> ComputeResidualGradientFallback(
-            Func<T[], T[], PDEDerivatives<T>, T> residualFunction,
-            T[] inputs,
-            T[] predictions,
+            Func<Vector<T>, Vector<T>, PDEDerivatives<T>, T> residualFunction,
+            Vector<T> inputs,
+            Vector<T> predictions,
             PDEDerivatives<T> derivatives)
         {
             int outputDim = predictions.Length;
@@ -306,8 +307,7 @@ namespace AiDotNet.PhysicsInformed
             T eps = NumOps.FromDouble(1e-4);
             T invTwoEps = NumOps.Divide(NumOps.One, NumOps.Multiply(NumOps.FromDouble(2.0), eps));
 
-            var outputCopy = new T[outputDim];
-            Array.Copy(predictions, outputCopy, outputDim);
+            var outputCopy = new Vector<T>(predictions);
 
             for (int i = 0; i < outputDim; i++)
             {
@@ -458,7 +458,7 @@ namespace AiDotNet.PhysicsInformed
         /// <summary>
         /// Computes the data fitting loss (Mean Squared Error).
         /// </summary>
-        private T ComputeDataLoss(T[] predictions, T[] targets)
+        private T ComputeDataLoss(Vector<T> predictions, Vector<T> targets)
         {
             if (predictions.Length != targets.Length)
             {
@@ -478,7 +478,7 @@ namespace AiDotNet.PhysicsInformed
         /// <summary>
         /// Computes the PDE residual loss.
         /// </summary>
-        private T ComputePDELoss(T[] inputs, T[] predictions, PDEDerivatives<T> derivatives)
+        private T ComputePDELoss(Vector<T> inputs, Vector<T> predictions, PDEDerivatives<T> derivatives)
         {
             if (_pdeSpecification == null)
             {
@@ -492,7 +492,7 @@ namespace AiDotNet.PhysicsInformed
         /// <summary>
         /// Computes the boundary condition loss.
         /// </summary>
-        private T ComputeBoundaryLoss(T[] inputs, T[] predictions, PDEDerivatives<T> derivatives)
+        private T ComputeBoundaryLoss(Vector<T> inputs, Vector<T> predictions, PDEDerivatives<T> derivatives)
         {
             if (_boundaryConditions == null || _boundaryConditions.Length == 0)
             {
@@ -517,7 +517,7 @@ namespace AiDotNet.PhysicsInformed
         /// <summary>
         /// Computes the initial condition loss.
         /// </summary>
-        private T ComputeInitialLoss(T[] inputs, T[] predictions)
+        private T ComputeInitialLoss(Vector<T> inputs, Vector<T> predictions)
         {
             if (_initialCondition == null)
             {
@@ -530,10 +530,11 @@ namespace AiDotNet.PhysicsInformed
             }
 
             // Extract spatial coordinates (all except the last which is time)
-            T[] spatialInputs = new T[inputs.Length - 1];
-            Array.Copy(inputs, spatialInputs, spatialInputs.Length);
+            var spatialInputs = new Vector<T>(inputs.Length - 1);
+            for (int si = 0; si < spatialInputs.Length; si++)
+                spatialInputs[si] = inputs[si];
 
-            T[] expectedValues = _initialCondition.ComputeInitialValue(spatialInputs);
+            var expectedValues = _initialCondition.ComputeInitialValue(spatialInputs);
 
             int count = Math.Min(predictions.Length, expectedValues.Length);
             if (count == 0)

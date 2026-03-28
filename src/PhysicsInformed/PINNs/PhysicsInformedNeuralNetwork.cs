@@ -430,9 +430,9 @@ namespace AiDotNet.PhysicsInformed.PINNs
                         }
 
                         var outputGradients = new Tensor<T>(outputs.Shape.ToArray());
-                        var point = new T[inputDim];
-                        var output = new T[outputDim];
-                        var targetBuffer = new T[outputDim];
+                        var point = new Vector<T>(inputDim);
+                        var output = new Vector<T>(outputDim);
+                        var targetBuffer = new Vector<T>(outputDim);
 
                         // Process each point in the batch using autodiff derivatives
                         for (int b = 0; b < batchCount; b++)
@@ -455,11 +455,11 @@ namespace AiDotNet.PhysicsInformed.PINNs
                             // This uses GradientTape with analytic fallback, avoiding finite differences
                             var derivatives = NeuralNetworkDerivatives<T>.ComputeDerivatives(
                                 this,
-                                point,
+                                point.ToArray(),
                                 outputDim);
 
                             // Prepare targets if available
-                            T[]? targets = null;
+                            Vector<T>? targets = null;
                             if (hasTargets[row])
                             {
                                 for (int j = 0; j < outputDim; j++)
@@ -561,8 +561,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 }
 
                 int inputDim = _pdeSpecification.InputDimension;
-                var point = new T[inputDim];
-                var output = new T[outputDim];
+                var point = new Vector<T>(inputDim);
+                var output = new Vector<T>(outputDim);
 
                 for (int i = 0; i < _collocationPoints.GetLength(0); i++)
                 {
@@ -599,9 +599,9 @@ namespace AiDotNet.PhysicsInformed.PINNs
                         $"Expected {outputDim} outputs from the network, got {dataPredictions.Shape[1]}.");
                 }
 
-                var point = new T[dataInputs.GetLength(1)];
-                var target = new T[dataOutputs.GetLength(1)];
-                var output = new T[outputDim];
+                var point = new Vector<T>(dataInputs.GetLength(1));
+                var target = new Vector<T>(dataOutputs.GetLength(1));
+                var output = new Vector<T>(outputDim);
 
                 for (int i = 0; i < dataInputs.GetLength(0); i++)
                 {
@@ -714,7 +714,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 point,
                 _pdeSpecification.OutputDimension);
 
-            return _pdeSpecification.ComputeResidual(point, output, derivatives);
+            return _pdeSpecification.ComputeResidual(new Vector<T>(point), new Vector<T>(output), derivatives);
         }
 
         /// <summary>

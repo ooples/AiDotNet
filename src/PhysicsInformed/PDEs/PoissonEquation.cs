@@ -2,6 +2,7 @@ using System;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.PhysicsInformed.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.PhysicsInformed.PDEs
 {
@@ -58,7 +59,7 @@ namespace AiDotNet.PhysicsInformed.PDEs
         }
 
         /// <inheritdoc/>
-        public override T ComputeResidual(T[] inputs, T[] outputs, PDEDerivatives<T> derivatives)
+        public override T ComputeResidual(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives)
         {
             var secondDerivs = derivatives.SecondDerivatives;
             if (secondDerivs is null)
@@ -82,7 +83,7 @@ namespace AiDotNet.PhysicsInformed.PDEs
         }
 
         /// <inheritdoc/>
-        public PDEResidualGradient<T> ComputeResidualGradient(T[] inputs, T[] outputs, PDEDerivatives<T> derivatives)
+        public PDEResidualGradient<T> ComputeResidualGradient(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives)
         {
             if (derivatives.SecondDerivatives is null)
             {

@@ -2,6 +2,7 @@ using System;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.PhysicsInformed.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.PhysicsInformed.PDEs
 {
@@ -51,7 +52,7 @@ namespace AiDotNet.PhysicsInformed.PDEs
         }
 
         /// <inheritdoc/>
-        public abstract T ComputeResidual(T[] inputs, T[] outputs, PDEDerivatives<T> derivatives);
+        public abstract T ComputeResidual(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives);
 
         /// <inheritdoc/>
         public abstract int InputDimension { get; }

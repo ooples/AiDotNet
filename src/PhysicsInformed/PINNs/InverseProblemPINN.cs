@@ -420,7 +420,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 }
 
                 // Compute PDE residual
-                T residual = _currentPDE.ComputeResidual(inputArray, outputArray, derivatives);
+                T residual = _currentPDE.ComputeResidual(new Vector<T>(inputArray), new Vector<T>(outputArray), derivatives);
                 loss = NumOps.Add(loss, NumOps.Multiply(residual, residual));
             }
 
