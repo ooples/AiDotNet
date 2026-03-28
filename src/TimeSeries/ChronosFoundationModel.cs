@@ -1680,48 +1680,22 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
 
     private Tensor<T> MatVecMul(Tensor<T> matrix, Tensor<T> vec)
     {
+        // Direct tensor matmul: matrix [rows, cols] @ vec [cols, 1] -> [rows, 1] -> [rows]
         int rows = matrix.Shape[0];
-        int cols = matrix.Shape[1];
-
-        // Engine-accelerated matrix-vector multiply using BLAS
-        var mat = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                mat[i, j] = matrix[i, j];
-
-        var colMat = new Matrix<T>(Math.Min(cols, vec.Length), 1);
-        for (int j = 0; j < colMat.Rows; j++)
-            colMat[j, 0] = vec[j];
-
-        var resultMat = (Matrix<T>)Engine.MatrixMultiply(mat, colMat);
-
-        var result = new Tensor<T>(new[] { rows });
-        for (int i = 0; i < rows; i++)
-            result[i] = resultMat[i, 0];
-        return result;
+        var vecCol = vec.Reshape(vec.Length, 1);
+        var result = Engine.TensorMatMul(matrix, vecCol);
+        return result.Reshape(rows);
     }
 
     private Tensor<T> MatVecMulTranspose(Tensor<T> matrix, Tensor<T> vec)
     {
-        int rows = matrix.Shape[0];
         int cols = matrix.Shape[1];
 
-        // Engine-accelerated transpose matrix-vector multiply: result = M^T * v
-        var matT = new Matrix<T>(cols, rows);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                matT[j, i] = matrix[i, j];
-
-        var colMat = new Matrix<T>(Math.Min(rows, vec.Length), 1);
-        for (int i = 0; i < colMat.Rows; i++)
-            colMat[i, 0] = vec[i];
-
-        var resultMat = (Matrix<T>)Engine.MatrixMultiply(matT, colMat);
-
-        var result = new Tensor<T>(new[] { cols });
-        for (int j = 0; j < cols; j++)
-            result[j] = resultMat[j, 0];
-        return result;
+        // Direct: M^T @ v using tensor transpose + matmul
+        var matT = matrix.Transpose([1, 0]);
+        var vecCol = vec.Reshape(vec.Length, 1);
+        var result = Engine.TensorMatMul(matT, vecCol);
+        return result.Reshape(cols);
     }
 
     private T DotProduct(Tensor<T> a, Tensor<T> b)
