@@ -2542,31 +2542,21 @@ public static class LayerHelper<T>
         // Input layer
         yield return new InputLayer<T>(inputSize);
 
-        // Input projection: learned linear transform maps different input
-        // magnitudes to distinct feature representations. Without this,
-        // constant inputs like [0.1,...] and [0.9,...] produce identical
-        // hidden states after tanh saturation in the recurrent layers.
-        // Per Pascanu et al. 2013, input preprocessing improves RNN training.
-        yield return new DenseLayer<T>(inputSize, inputSize);
-
-        // Use SiLU (Swish) activation instead of tanh to prevent saturation.
-        // SiLU prevents tanh saturation that collapses different-magnitude inputs
-        // to the same hidden state. SiLU(x) = x * sigmoid(x) preserves magnitude.
-        // The RecurrentLayer caches pre-activation values for correct derivative
-        // computation: dL/dz = dL/dh * SiLU'(z), not SiLU'(SiLU(z)).
+        // Standard Elman RNN layers with tanh activation (Elman 1990, PyTorch nn.RNN default).
+        // With proper uniform(-1/sqrt(H), 1/sqrt(H)) weight initialization,
+        // tanh produces distinct hidden states for different input magnitudes.
         yield return new RecurrentLayer<T>(
             inputSize: inputSize,
             hiddenSize: hiddenSize,
-            activationFunction: new SiLUActivation<T>()
+            activationFunction: new TanhActivation<T>()
         );
 
-        // Additional RNN layers with SiLU
         for (int i = 1; i < recurrentLayerCount; i++)
         {
             yield return new RecurrentLayer<T>(
                 inputSize: hiddenSize,
                 hiddenSize: hiddenSize,
-                activationFunction: new SiLUActivation<T>()
+                activationFunction: new TanhActivation<T>()
             );
         }
 

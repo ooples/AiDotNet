@@ -1315,30 +1315,36 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // VECTORIZED: Initialize weights and biases (Xavier/Glorot initialization)
+        // PyTorch nn.RNN initialization: uniform(-k, k) where k = 1/sqrt(hidden_size)
+        // Reference: https://pytorch.org/docs/stable/generated/torch.nn.RNN.html
         int hiddenSize = _inputWeights.Shape[0];
-        int inputSize = _inputWeights.Shape[1];
-
-        T inputScale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (hiddenSize + inputSize))));
-        T hiddenScale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (hiddenSize + hiddenSize))));
+        double k = 1.0 / Math.Sqrt(hiddenSize);
+        T twoK = NumOps.FromDouble(2.0 * k);
         T half = NumOps.FromDouble(0.5);
 
-        // Generate random input weights: (random - 0.5) * scale
-        var inputRandom = Tensor<T>.CreateRandom(_inputWeights.Length, 1).Reshape(_inputWeights.Shape.ToArray());
+        // Use secure random for non-pathological initialization (PyTorch default behavior)
+        var rng = RandomHelper.CreateSecureRandom();
+
+        // Input weights: uniform(-k, k) per PyTorch
+        var inputRandom = Tensor<T>.CreateRandom(rng, _inputWeights.Shape.ToArray());
         var inputHalf = new Tensor<T>(_inputWeights.Shape.ToArray());
         inputHalf.Fill(half);
         var inputCentered = Engine.TensorSubtract(inputRandom, inputHalf);
-        _inputWeights = Engine.TensorMultiplyScalar(inputCentered, inputScale);
+        _inputWeights = Engine.TensorMultiplyScalar(inputCentered, twoK);
 
-        // Generate random hidden weights: (random - 0.5) * scale
-        var hiddenRandom = Tensor<T>.CreateRandom(_hiddenWeights.Length, 1).Reshape(_hiddenWeights.Shape.ToArray());
+        // Hidden weights: uniform(-k, k)
+        var hiddenRandom = Tensor<T>.CreateRandom(rng, _hiddenWeights.Shape.ToArray());
         var hiddenHalf = new Tensor<T>(_hiddenWeights.Shape.ToArray());
         hiddenHalf.Fill(half);
         var hiddenCentered = Engine.TensorSubtract(hiddenRandom, hiddenHalf);
-        _hiddenWeights = Engine.TensorMultiplyScalar(hiddenCentered, hiddenScale);
+        _hiddenWeights = Engine.TensorMultiplyScalar(hiddenCentered, twoK);
 
-        // Initialize biases to zero (standard practice per Elman 1990)
-        _biases.Fill(NumOps.Zero);
+        // Biases: uniform(-k, k) per PyTorch
+        var biasRandom = Tensor<T>.CreateRandom(rng, _biases.Shape.ToArray());
+        var biasHalf = new Tensor<T>(_biases.Shape.ToArray());
+        biasHalf.Fill(half);
+        var biasCentered = Engine.TensorSubtract(biasRandom, biasHalf);
+        _biases = Engine.TensorMultiplyScalar(biasCentered, twoK);
     }
 
     /// <summary>
