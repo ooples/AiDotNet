@@ -81,6 +81,11 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     /// </remarks>
     private int _numConditionClasses;
 
+    // Store original (pre-conditioning) architectures for CreateNewInstance()
+    // to avoid double-conditioning the discriminator.
+    private NeuralNetworkArchitecture<T>? _originalGeneratorArchitecture;
+    private NeuralNetworkArchitecture<T>? _originalDiscriminatorArchitecture;
+
     /// <summary>
     /// Creates the combined ConditionalGAN architecture with correct dimension handling.
     /// </summary>
@@ -197,8 +202,12 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         ILossFunction<T>? lossFunction = null,
         ConditionalGANOptions? options = null)
         : base(
-            CreateConditionalGeneratorArchitecture(generatorArchitecture, numConditionClasses),
-            CreateConditionalDiscriminatorArchitecture(discriminatorArchitecture, numConditionClasses),
+            CreateConditionalGeneratorArchitecture(
+                generatorArchitecture ?? throw new ArgumentNullException(nameof(generatorArchitecture)),
+                numConditionClasses > 0 ? numConditionClasses : throw new ArgumentOutOfRangeException(nameof(numConditionClasses), numConditionClasses, "Number of condition classes must be positive.")),
+            CreateConditionalDiscriminatorArchitecture(
+                discriminatorArchitecture ?? throw new ArgumentNullException(nameof(discriminatorArchitecture)),
+                numConditionClasses),
             inputType,
             generatorOptimizer,
             discriminatorOptimizer,
@@ -207,21 +216,9 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         _options = options ?? new ConditionalGANOptions();
         Options = _options;
 
-        // Input validation
-        if (generatorArchitecture is null)
-        {
-            throw new ArgumentNullException(nameof(generatorArchitecture));
-        }
-
-        if (discriminatorArchitecture is null)
-        {
-            throw new ArgumentNullException(nameof(discriminatorArchitecture));
-        }
-
-        if (numConditionClasses <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(numConditionClasses), numConditionClasses, "Number of condition classes must be positive.");
-        }
+        // Store original architectures before conditioning was applied
+        _originalGeneratorArchitecture = generatorArchitecture;
+        _originalDiscriminatorArchitecture = discriminatorArchitecture;
 
         _numConditionClasses = numConditionClasses;
     }
@@ -299,13 +296,14 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         var generatorInput = ConcatenateTensors(noise, conditions);
         var output = PredictBatched(Generator, generatorInput);
 
-        // Preserve input rank: 1D input -> 1D output
-        if (wasSingleSample && output.Rank > 1)
+        // Single sample: squeeze batch dimension [1, ...] → [...]
+        // Preserves spatial shape for CNN generators (e.g., [1,H,W,C] → [H,W,C])
+        if (wasSingleSample && output.Rank > 1 && output.Shape[0] == 1)
         {
-            var flat = new Tensor<T>(new int[] { output.Length });
-            for (int i = 0; i < output.Length; i++)
-                flat[i] = output.GetFlatIndexValue(i);
-            return flat;
+            var fullShape = output.Shape.ToArray();
+            var squeezedShape = new int[fullShape.Length - 1];
+            Array.Copy(fullShape, 1, squeezedShape, 0, squeezedShape.Length);
+            return output.Reshape(squeezedShape);
         }
 
         return output;
@@ -912,16 +910,19 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     {
         int batchSize = expectedOutput.Shape[0];
 
-        // Generate random conditions for training (random class for each sample)
+        // Per Mirza & Osindero 2014, the discriminator must see real images with
+        // consistent class labels. Since Train(input, expectedOutput) doesn't provide
+        // separate labels, derive a deterministic class from each sample's content
+        // (hash of first element). This ensures the same input always maps to the
+        // same class, providing a consistent signal to the discriminator.
         var conditions = new Tensor<T>(new int[] { batchSize, _numConditionClasses });
-        var random = RandomHelper.ThreadSafeRandom;
-
         for (int b = 0; b < batchSize; b++)
         {
-            int randomClass = random.Next(_numConditionClasses);
+            double sampleVal = NumOps.ToDouble(expectedOutput.GetFlatIndexValue(b * (expectedOutput.Length / batchSize)));
+            int classIdx = ((int)(Math.Abs(sampleVal) * 1000)) % _numConditionClasses;
             for (int c = 0; c < _numConditionClasses; c++)
             {
-                conditions[b, c] = c == randomClass ? NumOps.One : NumOps.Zero;
+                conditions[b, c] = c == classIdx ? NumOps.One : NumOps.Zero;
             }
         }
 
@@ -961,13 +962,18 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        // Use the ORIGINAL (pre-conditioning) architectures to avoid double-conditioning.
+        // CreateConditionalDiscriminatorArchitecture is called again by the constructor,
+        // so passing the already-conditioned Discriminator.Architecture would add
+        // numConditionClasses to the input size a second time.
         return new ConditionalGAN<T>(
-            Generator.Architecture,
-            Discriminator.Architecture,
+            _originalGeneratorArchitecture ?? Generator.Architecture,
+            _originalDiscriminatorArchitecture ?? Discriminator.Architecture,
             _numConditionClasses,
             Architecture.InputType,
-            null, // Use default optimizer
-            null, // Use default optimizer
-            null); // Use default loss function
+            null,
+            null,
+            null,
+            _options);
     }
 }
