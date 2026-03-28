@@ -1248,10 +1248,7 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
         // Combine residual gradients
         for (int t = 0; t < dResidual1.Count; t++)
         {
-            for (int i = 0; i < _embeddingDim; i++)
-            {
-                dResidual1[t][i] = NumOps.Add(dResidual1[t][i], dResidual1FromNorm[t][i]);
-            }
+            dResidual1[t] = Engine.TensorAdd(dResidual1[t], dResidual1FromNorm[t]);
         }
 
         // Backprop through attention residual
@@ -1268,13 +1265,10 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
         gradients["layerNorm1Gamma"] = dGamma1;
         gradients["layerNorm1Beta"] = dBeta1;
 
-        // Combine input gradients
+        // Combine input gradients (vectorized)
         for (int t = 0; t < dInput.Count; t++)
         {
-            for (int i = 0; i < _embeddingDim; i++)
-            {
-                dInput[t][i] = NumOps.Add(dInput[t][i], dInputFromNorm[t][i]);
-            }
+            dInput[t] = Engine.TensorAdd(dInput[t], dInputFromNorm[t]);
         }
 
         return (dInput, gradients);
@@ -1638,10 +1632,7 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
         var output = new List<Tensor<T>>();
         for (int t = 0; t < input.Count; t++)
         {
-            var vec = new Tensor<T>(new[] { input[t].Length });
-            for (int i = 0; i < input[t].Length && i < residual[t].Length; i++)
-                vec[i] = NumOps.Add(input[t][i], residual[t][i]);
-            output.Add(vec);
+            output.Add(Engine.TensorAdd(input[t], residual[t]));
         }
         return output;
     }
