@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(NormalizesInput = true, IsTrainable = true, SupportsBackpropagation = false, ChangesShape = true, TestInputShape = "1, 8", TestConstructorArgs = "8, 4, 0.02")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, TestInputShape = "1, 8", TestConstructorArgs = "8, 4, 0.02")]
 public class SpatialPoolerLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -237,8 +237,13 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public SpatialPoolerLayer(int inputSize, int columnCount, double sparsityThreshold)
-        : base([inputSize], [columnCount])
+        : base(
+            [inputSize > 0 ? inputSize : throw new ArgumentOutOfRangeException(nameof(inputSize), "Must be positive.")],
+            [columnCount > 0 ? columnCount : throw new ArgumentOutOfRangeException(nameof(columnCount), "Must be positive.")])
     {
+        if (sparsityThreshold < 0 || sparsityThreshold > 1)
+            throw new ArgumentOutOfRangeException(nameof(sparsityThreshold), "Must be between 0 and 1.");
+
         InputSize = inputSize;
         ColumnCount = columnCount;
         SparsityThreshold = sparsityThreshold;
@@ -374,9 +379,16 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         var activations = gpuEngine.BatchedMatMulGpu(inputReshaped, Connections);
         var activationsFlat = activations.CreateView(0, [ColumnCount]);
 
-        // Normalize activations to [0,1] using GPU Min/Max reduction
-        float maxVal = backend.Max(activationsFlat.Buffer, ColumnCount);
-        float minVal = backend.Min(activationsFlat.Buffer, ColumnCount);
+        // Normalize activations to [0,1] — download to CPU for min/max reduction
+        var cpuData = backend.DownloadBuffer(activationsFlat.Buffer);
+        float maxVal = float.MinValue;
+        float minVal = float.MaxValue;
+        for (int i = 0; i < Math.Min(ColumnCount, cpuData.Length); i++)
+        {
+            float val = cpuData[i];
+            if (val > maxVal) maxVal = val;
+            if (val < minVal) minVal = val;
+        }
         float range = maxVal - minVal;
 
         IGpuTensor<T> normalizedActivations;
@@ -847,6 +859,6 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// while maintaining the sparse output characteristics.
     /// </para>
     /// </remarks>
-    public override bool SupportsJitCompilation => true;
+    public override bool SupportsJitCompilation => false;
 
 }
