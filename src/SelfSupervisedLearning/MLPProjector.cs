@@ -590,15 +590,10 @@ public class MLPProjector<T> : IProjectorHead<T>
 
     private Tensor<T> ReLUBackward(Tensor<T> outputGrad, Tensor<T> input)
     {
-        var size = outputGrad.Length;
-        var result = new T[size];
-
-        for (int i = 0; i < size; i++)
-        {
-            result[i] = NumOps.GreaterThan(input.Data.Span[i], NumOps.Zero) ? outputGrad.Data.Span[i] : NumOps.Zero;
-        }
-
-        return new Tensor<T>(result, outputGrad.Shape.ToArray());
+        // Vectorized ReLU backward: grad * (input > 0)
+        var mask = Engine.TensorGreaterThan(input, NumOps.Zero);
+        var zeros = Tensor<T>.CreateDefault(outputGrad.Shape.ToArray(), NumOps.Zero);
+        return Engine.TensorWhere(mask, outputGrad, zeros);
     }
 
     private static void AddTensorToList(List<T> list, Tensor<T> tensor)

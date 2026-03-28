@@ -392,21 +392,10 @@ public class SymmetricProjector<T> : IProjectorHead<T>
 
     private Tensor<T> ReLUBackward(Tensor<T> gradOutput, Tensor<T> preActivation)
     {
-        var batchSize = gradOutput.Shape[0];
-        var dim = gradOutput.Shape[1];
-        var gradInput = new T[batchSize * dim];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < dim; i++)
-            {
-                // Gradient is passed through only where input was positive
-                var wasPositive = NumOps.GreaterThan(preActivation[b, i], NumOps.Zero);
-                gradInput[b * dim + i] = wasPositive ? gradOutput[b, i] : NumOps.Zero;
-            }
-        }
-
-        return new Tensor<T>(gradInput, [batchSize, dim]);
+        // Vectorized ReLU backward: grad * (preActivation > 0)
+        var mask = Engine.TensorGreaterThan(preActivation, NumOps.Zero);
+        var zeros = Tensor<T>.CreateDefault(gradOutput.Shape.ToArray(), NumOps.Zero);
+        return Engine.TensorWhere(mask, gradOutput, zeros);
     }
 
     /// <summary>
