@@ -114,6 +114,15 @@ public class Conv3DLayer<T> : LayerBase<T>
 
     public override void ClearGradients() { base.ClearGradients(); _kernelsGradient = null; _biasesGradient = null; }
 
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["KernelSize"] = KernelSize.ToString();
+        metadata["Stride"] = Stride.ToString();
+        metadata["Padding"] = Padding.ToString();
+        return metadata;
+    }
+
     /// <summary>
     /// Gets a value indicating whether this layer supports JIT compilation for accelerated execution.
     /// </summary>

@@ -1006,6 +1006,17 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         return new Vector<T>(_weightsGradient.ToArray());
     }
 
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["InputCapsules"] = _inputCapsules.ToString();
+        metadata["InputCapsuleDimension"] = _inputCapsuleDimension.ToString();
+        metadata["NumClasses"] = _numClasses.ToString();
+        metadata["OutputCapsuleDimension"] = _outputCapsuleDimension.ToString();
+        metadata["RoutingIterations"] = _routingIterations.ToString();
+        return metadata;
+    }
+
     public override void ClearGradients()
     {
         _weightsGradient = null;
