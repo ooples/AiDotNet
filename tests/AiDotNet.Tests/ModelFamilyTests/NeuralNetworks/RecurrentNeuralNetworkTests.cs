@@ -6,7 +6,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
 public class RecurrentNeuralNetworkTests : NeuralNetworkModelTestBase
 {
-    protected override int[] InputShape => [128];
+    // RNNs process sequences: [seqLen, features]. Default arch has inputSize=128.
+    // Using 4 timesteps with 128 features tests actual recurrent behavior.
+    protected override int[] InputShape => [4, 128];
     protected override int[] OutputShape => [1];
 
     protected override INeuralNetworkModel<double> CreateNetwork()

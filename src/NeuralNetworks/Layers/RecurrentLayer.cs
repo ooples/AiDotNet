@@ -1323,7 +1323,7 @@ public class RecurrentLayer<T> : LayerBase<T>
         var hiddenCentered = Engine.TensorSubtract(hiddenRandom, hiddenHalf);
         _hiddenWeights = Engine.TensorMultiplyScalar(hiddenCentered, hiddenScale);
 
-        // Initialize biases to zero
+        // Initialize biases to zero (standard practice per Elman 1990)
         _biases.Fill(NumOps.Zero);
     }
 
