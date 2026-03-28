@@ -516,9 +516,10 @@ public class NEAT<T> : NeuralNetworkBase<T>
     private Genome<T> Crossover(Genome<T> parent1, Genome<T> parent2)
     {
         var child = new Genome<T>(Architecture.InputSize, Architecture.OutputSize);
+        var seenInnovations = new HashSet<int>();
         foreach (var conn in parent1.Connections.Concat(parent2.Connections))
         {
-            if (!child.Connections.Any(c => c.Innovation == conn.Innovation))
+            if (seenInnovations.Add(conn.Innovation))
             {
                 child.AddConnection(conn.FromNode, conn.ToNode, conn.Weight, conn.IsEnabled, conn.Innovation);
             }
@@ -794,8 +795,17 @@ public class NEAT<T> : NeuralNetworkBase<T>
             }
         }
 
-        // Sort by fitness and return the best
-        return _population.OrderByDescending(g => g.Fitness).First();
+        // Find the genome with highest fitness (O(n) instead of O(n log n) sort)
+        var best = _population[0];
+        for (int i = 1; i < _population.Count; i++)
+        {
+            if (NumOps.GreaterThan(_population[i].Fitness, best.Fitness))
+            {
+                best = _population[i];
+            }
+        }
+
+        return best;
     }
 
     /// <summary>
@@ -938,23 +948,29 @@ public class NEAT<T> : NeuralNetworkBase<T>
 
         // Sort connections
         var sortedConnections = new List<Connection<T>>();
+        var sortedSet = new HashSet<int>(); // Track sorted connections by innovation for O(1) lookup
+
+        // Pre-filter enabled connections to avoid repeated enumeration
+        var enabledConnections = genome.Connections.Where(c => c.IsEnabled).ToList();
+        int enabledCount = enabledConnections.Count;
 
         // Process until all connections are sorted
-        while (sortedConnections.Count < genome.Connections.Count(c => c.IsEnabled))
+        while (sortedConnections.Count < enabledCount)
         {
             bool addedConnection = false;
 
             // Check each enabled connection
-            foreach (var conn in genome.Connections.Where(c => c.IsEnabled))
+            foreach (var conn in enabledConnections)
             {
-                // Skip if already in sorted list
-                if (sortedConnections.Contains(conn)) continue;
+                // Skip if already in sorted list (O(1) with HashSet)
+                if (sortedSet.Contains(conn.Innovation)) continue;
 
                 // Check if from node is processed
                 if (processedNodes.ContainsKey(conn.FromNode) && processedNodes[conn.FromNode])
                 {
                     // Add connection to sorted list
                     sortedConnections.Add(conn);
+                    sortedSet.Add(conn.Innovation);
 
                     // Mark to node as processed
                     processedNodes[conn.ToNode] = true;
@@ -964,7 +980,6 @@ public class NEAT<T> : NeuralNetworkBase<T>
             }
 
             // If no connections were added in this iteration, we might have a cycle
-            // In an evolved network, this shouldn't happen with proper constraints
             if (!addedConnection) break;
         }
 
