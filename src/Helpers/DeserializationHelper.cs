@@ -162,9 +162,24 @@ public static class DeserializationHelper
             int imageWidth = inputShape[2];
             int patchEmbedDim = outputShape[1];
             int numPatches = outputShape[0];
-            // Derive patchSize: numPatches = (H/P) * (W/P), and for square patches with square images: P = H / sqrt(numPatches * H/W)
-            int patchSize = TryGetInt(additionalParams, "PatchSize")
-                ?? (imageHeight / (int)Math.Round(Math.Sqrt((double)numPatches * imageHeight / imageWidth)));
+
+            int patchSize;
+            int? metadataPatchSize = TryGetInt(additionalParams, "PatchSize");
+            if (metadataPatchSize.HasValue)
+            {
+                patchSize = metadataPatchSize.Value;
+            }
+            else if (numPatches > 0 && imageWidth > 0)
+            {
+                // Derive: numPatches = (H/P) * (W/P) → P = H / sqrt(numPatches * H/W)
+                double sqrtVal = Math.Sqrt((double)numPatches * imageHeight / imageWidth);
+                patchSize = sqrtVal > 0 ? (imageHeight / (int)Math.Round(sqrtVal)) : 16;
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"PatchEmbeddingLayer requires PatchSize metadata or valid shape (numPatches={numPatches}, imageWidth={imageWidth}).");
+            }
 
             // Constructor: PatchEmbeddingLayer(int, int, int, int, int, IActivationFunction?, IInitializationStrategy?)
             var ctor = type.GetConstructors()

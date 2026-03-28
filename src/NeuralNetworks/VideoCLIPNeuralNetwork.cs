@@ -67,7 +67,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
 
     #region Execution Mode
 
-    private readonly bool _useNativeMode;
+    private bool _useNativeMode;
 
     #endregion
 
@@ -98,6 +98,9 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
 
     // Gradient checkpointing: cached frames from the last forward pass for backward recomputation
     private List<Tensor<T>>? _cachedTrainingFrames;
+
+    // Cached pre-normalized embedding for L2 normalization backward
+    private Vector<T>? _cachedPreNormEmbedding;
 
     #endregion
 
@@ -1143,6 +1146,12 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             }
         }
 
+        // Cache pre-normalized embedding for backward L2 norm Jacobian
+        if (IsTrainingMode)
+        {
+            _cachedPreNormEmbedding = pooled;
+        }
+
         return Normalize(pooled);
     }
 
@@ -1499,6 +1508,47 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         }
 
         var currentGradient = gradient;
+
+        // 0. Backward through L2 normalization.
+        // Forward: y = x / ||x||. Jacobian: dL/dx_i = (dL/dy_i - y_i * dot(dL/dy, y)) / ||x||
+        if (_cachedPreNormEmbedding is not null)
+        {
+            int dim = currentGradient.Rank == 2 ? currentGradient.Shape[1] : currentGradient.Shape[0];
+            double norm = 0;
+            for (int i = 0; i < _cachedPreNormEmbedding.Length; i++)
+                norm += NumOps.ToDouble(_cachedPreNormEmbedding[i]) * NumOps.ToDouble(_cachedPreNormEmbedding[i]);
+            norm = Math.Sqrt(norm);
+            if (norm > 1e-12)
+            {
+                // y = normalized output, gradIn = dL/dy
+                double dotGradY = 0;
+                for (int i = 0; i < dim; i++)
+                {
+                    double yi = NumOps.ToDouble(_cachedPreNormEmbedding[i]) / norm;
+                    double gi = currentGradient.Rank == 2
+                        ? NumOps.ToDouble(currentGradient[0, i])
+                        : NumOps.ToDouble(currentGradient[i]);
+                    dotGradY += gi * yi;
+                }
+
+                var normGrad = currentGradient.Rank == 2
+                    ? Tensor<T>.CreateDefault(currentGradient.Shape.ToArray(), NumOps.Zero)
+                    : Tensor<T>.CreateDefault([dim], NumOps.Zero);
+                for (int i = 0; i < dim; i++)
+                {
+                    double yi = NumOps.ToDouble(_cachedPreNormEmbedding[i]) / norm;
+                    double gi = currentGradient.Rank == 2
+                        ? NumOps.ToDouble(currentGradient[0, i])
+                        : NumOps.ToDouble(currentGradient[i]);
+                    double val = (gi - yi * dotGradY) / norm;
+                    if (currentGradient.Rank == 2)
+                        normGrad[0, i] = NumOps.FromDouble(val);
+                    else
+                        normGrad[i] = NumOps.FromDouble(val);
+                }
+                currentGradient = normGrad;
+            }
+        }
 
         // 1. Backward through video projection (embeddingDim → visionHiddenDim)
         if (_videoProjection is not null)
@@ -1929,7 +1979,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         _ = reader.ReadInt32(); // numFrames
         _ = reader.ReadDouble(); // frameRate
         _temporalAggregation = (TemporalAggregationType)reader.ReadInt32();
-        _ = reader.ReadBoolean(); // useNativeMode
+        _useNativeMode = reader.ReadBoolean();
 
         // Restore positional embeddings and CLS token
         _visionClsToken = DeserializeMatrix(reader);

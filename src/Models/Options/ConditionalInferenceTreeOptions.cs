@@ -28,13 +28,23 @@ public class ConditionalInferenceTreeOptions : DecisionTreeOptions
     public ConditionalInferenceTreeOptions(ConditionalInferenceTreeOptions other) : base()
     {
         Guard.NotNull(other);
+
+        // ModelOptions
+        Seed = other.Seed;
+
+        // DecisionTreeOptions
+        MaxDepth = other.MaxDepth;
+        MinSamplesSplit = other.MinSamplesSplit;
+        MinSamplesLeaf = other.MinSamplesLeaf;
+        MaxFeatures = other.MaxFeatures;
+        SplitCriterion = other.SplitCriterion;
+        UseSoftTree = other.UseSoftTree;
+        SoftTreeTemperature = other.SoftTreeTemperature;
+
+        // ConditionalInferenceTreeOptions
         SignificanceLevel = other.SignificanceLevel;
         StatisticalTest = other.StatisticalTest;
         MaxDegreeOfParallelism = other.MaxDegreeOfParallelism;
-        MinSamplesLeaf = other.MinSamplesLeaf;
-        MinSamplesSplit = other.MinSamplesSplit;
-        MaxDepth = other.MaxDepth;
-        Seed = other.Seed;
     }
 
     /// <summary>

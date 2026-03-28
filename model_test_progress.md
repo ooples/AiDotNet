@@ -11,6 +11,7 @@
 | TimeSeries | 377/377 (100%) | 29 models × 13 invariants — ALL PASS |
 
 ## Blocked
+
 | Category | Status |
 |---|---|
 | Classification | Test host crashes during xUnit discovery (47 models, too many total test classes) |
