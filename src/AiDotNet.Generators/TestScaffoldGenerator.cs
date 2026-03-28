@@ -1384,11 +1384,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 }
                 else
                 {
-                    // Multi-type-parameter models (e.g., Model<T, TInput, TOutput>)
-                    string inputType = model.UsesTensorInput ? "Tensor<double>" : "Matrix<double>";
-                    string outputType = model.UsesVectorOutput ? "Vector<double>" :
-                                        model.UsesTensorInput ? "Tensor<double>" : "Vector<double>";
-                    constructorExpr = $"new {typeName}<double, {inputType}, {outputType}>()";
+                    // Multi-type-parameter models: resolve type args from IFullModel type parameters
+                    if (model.TypeParameterCount == 2)
+                    {
+                        // Arity-2: Model<T, TData> — single data type for both input/output
+                        string dataType = model.UsesTensorInput ? "Tensor<double>" :
+                                          model.UsesMatrixInput ? "Matrix<double>" : "Vector<double>";
+                        constructorExpr = $"new {typeName}<double, {dataType}>()";
+                    }
+                    else
+                    {
+                        // Arity-3: Model<T, TInput, TOutput>
+                        string inputType = model.UsesTensorInput ? "Tensor<double>" :
+                                           model.UsesMatrixInput ? "Matrix<double>" : "Vector<double>";
+                        string outputType = model.UsesVectorOutput ? "Vector<double>" :
+                                            model.UsesTensorInput ? "Tensor<double>" :
+                                            model.UsesMatrixInput ? "Matrix<double>" : "Vector<double>";
+                        constructorExpr = $"new {typeName}<double, {inputType}, {outputType}>()";
+                    }
                 }
             }
             else
@@ -1408,11 +1421,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 {
                     constructorExpr = $"new {typeName}<double>({archExpr})";
                 }
+                else if (model.TypeParameterCount == 2)
+                {
+                    string dataType = model.UsesTensorInput ? "Tensor<double>" :
+                                      model.UsesMatrixInput ? "Matrix<double>" : "Vector<double>";
+                    constructorExpr = $"new {typeName}<double, {dataType}>({archExpr})";
+                }
                 else
                 {
-                    string inputType = model.UsesTensorInput ? "Tensor<double>" : "Matrix<double>";
+                    string inputType = model.UsesTensorInput ? "Tensor<double>" :
+                                       model.UsesMatrixInput ? "Matrix<double>" : "Vector<double>";
                     string outputType = model.UsesVectorOutput ? "Vector<double>" :
-                                        model.UsesTensorInput ? "Tensor<double>" : "Vector<double>";
+                                        model.UsesTensorInput ? "Tensor<double>" :
+                                        model.UsesMatrixInput ? "Matrix<double>" : "Vector<double>";
                     constructorExpr = $"new {typeName}<double, {inputType}, {outputType}>({archExpr})";
                 }
             }

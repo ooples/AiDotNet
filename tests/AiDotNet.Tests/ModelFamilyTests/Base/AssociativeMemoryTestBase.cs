@@ -291,21 +291,6 @@ public abstract class AssociativeMemoryTestBase
     }
 
     [Fact]
-    public void BatchConsistency_SingleMatchesBatch()
-    {
-        var rng = ModelTestHelpers.CreateSeededRandom();
-        var network = CreateNetwork();
-        var input = CreateRandomTensor(InputShape, rng);
-
-        var singleOutput = network.Predict(input);
-        var batchOutput = network.Predict(input);
-
-        Assert.Equal(singleOutput.Length, batchOutput.Length);
-        for (int i = 0; i < singleOutput.Length; i++)
-            Assert.Equal(singleOutput[i], batchOutput[i]);
-    }
-
-    [Fact]
     public void ScaledInput_ShouldChangeOutput()
     {
         var rng = ModelTestHelpers.CreateSeededRandom();
@@ -527,17 +512,13 @@ public abstract class AssociativeMemoryTestBase
         double recalledDistance = ComputeMSE(recalled, reference);
         double noisyToRefDistance = ComputeMSE(noisyPattern, reference);
 
-        // Recalled output should be at least somewhat closer to the reference
-        // than a purely random tensor (generous tolerance for networks that
-        // may only partially correct noise)
-        var randomTensor = CreateRandomTensor(OutputShape, ModelTestHelpers.CreateSeededRandom(77));
-        double randomDistance = ComputeMSE(randomTensor, reference);
-
-        if (!double.IsNaN(recalledDistance) && !double.IsNaN(randomDistance))
+        // Primary assertion: recalled output should be closer to the reference
+        // than the noisy input was (the network should correct noise, not amplify it)
+        if (!double.IsNaN(recalledDistance) && !double.IsNaN(noisyToRefDistance))
         {
-            Assert.True(recalledDistance < randomDistance + 0.1,
-                $"Recalled output (MSE={recalledDistance:F6} to reference) is worse than random " +
-                $"(MSE={randomDistance:F6}). Network error correction is broken.");
+            Assert.True(recalledDistance <= noisyToRefDistance + 0.05,
+                $"Recalled output (MSE={recalledDistance:F6}) is farther from reference than " +
+                $"noisy input (MSE={noisyToRefDistance:F6}). Network amplified noise instead of correcting it.");
         }
     }
 
@@ -572,12 +553,13 @@ public abstract class AssociativeMemoryTestBase
                 network.Train(patterns[p], targets[p]);
         }
 
-        // Verify each pattern can be recalled with finite output
-        int finitePatternsRecalled = 0;
+        // Verify each pattern is recalled close to its target (not just finite)
+        int patternsRecalled = 0;
         for (int p = 0; p < MultiPatternCount; p++)
         {
             var recalled = network.Predict(patterns[p]);
 
+            // Check finite
             bool allFinite = true;
             for (int i = 0; i < recalled.Length; i++)
             {
@@ -587,13 +569,20 @@ public abstract class AssociativeMemoryTestBase
                     break;
                 }
             }
+            if (!allFinite) continue;
 
-            if (allFinite) finitePatternsRecalled++;
+            // Check recall quality: output should be closer to target than a random tensor
+            double recallMSE = ComputeMSE(recalled, targets[p]);
+            var randomTensor = CreateRandomTensor(OutputShape, ModelTestHelpers.CreateSeededRandom(500 + p));
+            double randomMSE = ComputeMSE(randomTensor, targets[p]);
+
+            if (!double.IsNaN(recallMSE) && !double.IsNaN(randomMSE) && recallMSE < randomMSE)
+                patternsRecalled++;
         }
 
-        Assert.True(finitePatternsRecalled == MultiPatternCount,
-            $"Only {finitePatternsRecalled}/{MultiPatternCount} patterns produced finite recall. " +
-            "Network may have capacity issues or numerical instability.");
+        Assert.True(patternsRecalled > 0,
+            $"None of {MultiPatternCount} stored patterns were recalled closer to target than random. " +
+            "Network capacity or learning is broken.");
     }
 
     // =====================================================

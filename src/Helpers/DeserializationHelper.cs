@@ -656,6 +656,34 @@ public static class DeserializationHelper
                 throw new NotSupportedException($"Cannot find MambaBlock constructor for deserialization.");
             }
         }
+        else if (openGenericType.FullName != null && openGenericType.FullName.Contains("ContinuumMemorySystemLayer"))
+        {
+            // ContinuumMemorySystemLayer(int[] inputShape, int hiddenDim, ...)
+            // All parameters after the first two have default values
+            int hiddenDim = inputShape.Length > 0 ? inputShape[inputShape.Length - 1] : 256;
+            var ctor = type.GetConstructors()
+                .Where(c => c.GetParameters().Length >= 2 &&
+                       c.GetParameters()[0].ParameterType == typeof(int[]) &&
+                       c.GetParameters()[1].ParameterType == typeof(int))
+                .OrderBy(c => c.GetParameters().Length)
+                .FirstOrDefault();
+            if (ctor != null)
+            {
+                var parameters = ctor.GetParameters();
+                var args = new object?[parameters.Length];
+                args[0] = inputShape;
+                args[1] = hiddenDim;
+                for (int pi = 2; pi < parameters.Length; pi++)
+                {
+                    args[pi] = parameters[pi].HasDefaultValue ? parameters[pi].DefaultValue : null;
+                }
+                instance = ctor.Invoke(args);
+            }
+            else
+            {
+                throw new NotSupportedException($"Cannot find ContinuumMemorySystemLayer constructor for deserialization.");
+            }
+        }
         else
         {
             // Default: pass inputShape as first parameter

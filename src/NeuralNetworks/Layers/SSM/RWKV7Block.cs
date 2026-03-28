@@ -600,9 +600,9 @@ public class RWKV7Block<T> : LayerBase<T>
 
             // Cache for backward
             SafeSetSlice(allRGate, t, rGate, batchSize, _modelDimension);
-            SafeSetSliceDim(allSiLU, t, kSiLU, batchSize, _ffnDimension);
+            SafeSetSlice(allSiLU, t, kSiLU, batchSize, _ffnDimension);
             SafeSetSlice(allVProj, t, vProj, batchSize, _modelDimension);
-            SafeSetSliceDim(allKProj, t, kProj, batchSize, _ffnDimension);
+            SafeSetSlice(allKProj, t, kProj, batchSize, _ffnDimension);
 
             xPrev = x_t;
         }
@@ -1098,12 +1098,6 @@ public class RWKV7Block<T> : LayerBase<T>
                 dest[new[] { bi, t, d }] = slice[new[] { bi, d }];
     }
 
-    private static void SafeSetSliceDim(Tensor<T> dest, int t, Tensor<T> slice, int batch, int dim)
-    {
-        for (int bi = 0; bi < batch; bi++)
-            for (int d = 0; d < dim; d++)
-                dest[new[] { bi, t, d }] = slice[new[] { bi, d }];
-    }
 
     /// <summary>
     /// LayerNorm backward: returns gradient w.r.t. input.
