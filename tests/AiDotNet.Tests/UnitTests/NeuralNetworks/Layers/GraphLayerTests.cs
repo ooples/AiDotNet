@@ -1,5 +1,6 @@
 using System;
 using AiDotNet.Enums;
+using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
@@ -447,6 +448,227 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
             var output = layer.Forward(input);
 
             // Assert - should complete without error
+            Assert.NotNull(output);
+            Assert.Equal(8, output.Shape[2]);
+        }
+
+        #endregion
+
+        #region GraphAttentionLayer IInitializationStrategy Constructor Tests
+
+        [Fact]
+        public void GraphAttentionLayer_Constructor_WithNullInitStrategy_UsesDefaultEagerStrategy()
+        {
+            // Arrange & Act — explicit null for initializationStrategy should use default (Eager)
+            var layer = new GraphAttentionLayer<double>(
+                inputFeatures: 8,
+                outputFeatures: 4,
+                numHeads: 1,
+                alpha: 0.2,
+                dropoutRate: 0.0,
+                activationFunction: null,
+                initializationStrategy: null);
+
+            // Assert — layer must be created with default strategy
+            Assert.NotNull(layer);
+            Assert.Equal(8, layer.InputFeatures);
+            Assert.Equal(4, layer.OutputFeatures);
+        }
+
+        [Fact]
+        public void GraphAttentionLayer_Constructor_WithEagerInitStrategy_InitializesCorrectly()
+        {
+            // Arrange
+            var initStrategy = new EagerInitializationStrategy<double>();
+
+            // Act
+            var layer = new GraphAttentionLayer<double>(
+                inputFeatures: 8,
+                outputFeatures: 4,
+                numHeads: 2,
+                alpha: 0.2,
+                dropoutRate: 0.0,
+                activationFunction: null,
+                initializationStrategy: initStrategy);
+
+            // Assert
+            Assert.NotNull(layer);
+            Assert.Equal(8, layer.InputFeatures);
+            Assert.Equal(4, layer.OutputFeatures);
+        }
+
+        [Fact]
+        public void GraphAttentionLayer_Constructor_WithHeInitStrategy_InitializesCorrectly()
+        {
+            // Arrange
+            var initStrategy = new HeInitializationStrategy<double>();
+
+            // Act
+            var layer = new GraphAttentionLayer<double>(
+                inputFeatures: 10,
+                outputFeatures: 5,
+                numHeads: 1,
+                alpha: 0.2,
+                dropoutRate: 0.0,
+                activationFunction: null,
+                initializationStrategy: initStrategy);
+
+            // Assert
+            Assert.NotNull(layer);
+            Assert.Equal(10, layer.InputFeatures);
+            Assert.Equal(5, layer.OutputFeatures);
+            Assert.True(layer.SupportsTraining);
+        }
+
+        [Fact]
+        public void GraphAttentionLayer_Constructor_WithZeroInitStrategy_InitializesCorrectly()
+        {
+            // Arrange — ZeroInitializationStrategy zeros out all weights
+            var initStrategy = new ZeroInitializationStrategy<double>();
+
+            // Act
+            var layer = new GraphAttentionLayer<double>(
+                inputFeatures: 6,
+                outputFeatures: 3,
+                numHeads: 2,
+                alpha: 0.1,
+                dropoutRate: 0.0,
+                activationFunction: null,
+                initializationStrategy: initStrategy);
+
+            // Assert
+            Assert.NotNull(layer);
+            Assert.Equal(6, layer.InputFeatures);
+            Assert.Equal(3, layer.OutputFeatures);
+        }
+
+        [Fact]
+        public void GraphAttentionLayer_Constructor_WithInitStrategy_ParameterCountIsCorrect()
+        {
+            // Arrange
+            int inputFeatures = 8;
+            int outputFeatures = 4;
+            int numHeads = 2;
+            var initStrategy = new EagerInitializationStrategy<double>();
+
+            // Act
+            var layer = new GraphAttentionLayer<double>(
+                inputFeatures: inputFeatures,
+                outputFeatures: outputFeatures,
+                numHeads: numHeads,
+                alpha: 0.2,
+                dropoutRate: 0.0,
+                activationFunction: null,
+                initializationStrategy: initStrategy);
+
+            // Assert
+            // weights: [numHeads, inputFeatures, outputFeatures] = 2 * 8 * 4 = 64
+            // attentionWeights: [numHeads, 2 * outputFeatures] = 2 * 8 = 16
+            // bias: [outputFeatures] = 4
+            // total = 84
+            int expectedParamCount = (numHeads * inputFeatures * outputFeatures)
+                                   + (numHeads * 2 * outputFeatures)
+                                   + outputFeatures;
+            Assert.Equal(expectedParamCount, layer.ParameterCount);
+        }
+
+        [Fact]
+        public void GraphAttentionLayer_Constructor_WithInitStrategy_ForwardPassProducesCorrectShape()
+        {
+            // Arrange
+            var initStrategy = new EagerInitializationStrategy<double>();
+            var layer = new GraphAttentionLayer<double>(
+                inputFeatures: 8,
+                outputFeatures: 4,
+                numHeads: 2,
+                alpha: 0.2,
+                dropoutRate: 0.0,
+                activationFunction: null,
+                initializationStrategy: initStrategy);
+
+            int batchSize = 1;
+            int numNodes = 3;
+            var input = new Tensor<double>([batchSize, numNodes, 8]);
+            var adjacency = new Tensor<double>([batchSize, numNodes, numNodes]);
+
+            for (int i = 0; i < input.Length; i++)
+                input[i] = 0.1 * (i % 5);
+
+            for (int i = 0; i < numNodes; i++)
+            {
+                adjacency[0, i, i] = 1.0;
+                if (i < numNodes - 1)
+                    adjacency[0, i, i + 1] = 1.0;
+            }
+
+            layer.SetAdjacencyMatrix(adjacency);
+
+            // Act
+            var output = layer.Forward(input);
+
+            // Assert
+            Assert.Equal(3, output.Rank);
+            Assert.Equal(batchSize, output.Shape[0]);
+            Assert.Equal(numNodes, output.Shape[1]);
+            Assert.Equal(4, output.Shape[2]);
+        }
+
+        [Fact]
+        public void GraphAttentionLayer_Constructor_WithAndWithoutInitStrategy_ProducesValidLayers()
+        {
+            // Arrange & Act — both constructor forms (with and without init strategy) should work
+            var layerWithoutStrategy = new GraphAttentionLayer<double>(
+                inputFeatures: 8,
+                outputFeatures: 4);
+
+            var layerWithStrategy = new GraphAttentionLayer<double>(
+                inputFeatures: 8,
+                outputFeatures: 4,
+                numHeads: 1,
+                alpha: 0.2,
+                dropoutRate: 0.0,
+                activationFunction: null,
+                initializationStrategy: new EagerInitializationStrategy<double>());
+
+            // Assert — both are valid layers with identical shapes
+            Assert.NotNull(layerWithoutStrategy);
+            Assert.NotNull(layerWithStrategy);
+            Assert.Equal(layerWithoutStrategy.InputFeatures, layerWithStrategy.InputFeatures);
+            Assert.Equal(layerWithoutStrategy.OutputFeatures, layerWithStrategy.OutputFeatures);
+            Assert.Equal(layerWithoutStrategy.ParameterCount, layerWithStrategy.ParameterCount);
+        }
+
+        [Fact]
+        public void GraphAttentionLayer_Constructor_WithInitStrategy_MultipleHeads_ForwardPassWorks()
+        {
+            // Arrange — regression check: multi-head GAT with explicit init strategy
+            var initStrategy = new HeInitializationStrategy<double>();
+            var layer = new GraphAttentionLayer<double>(
+                inputFeatures: 4,
+                outputFeatures: 8,
+                numHeads: 4,
+                alpha: 0.2,
+                dropoutRate: 0.0,
+                activationFunction: null,
+                initializationStrategy: initStrategy);
+
+            var input = new Tensor<double>([1, 3, 4]);
+            var adjacency = new Tensor<double>([1, 3, 3]);
+
+            // Fully connected graph
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 3; j++)
+                    adjacency[0, i, j] = 1.0;
+
+            for (int i = 0; i < input.Length; i++)
+                input[i] = 0.5;
+
+            layer.SetAdjacencyMatrix(adjacency);
+
+            // Act
+            var output = layer.Forward(input);
+
+            // Assert
             Assert.NotNull(output);
             Assert.Equal(8, output.Shape[2]);
         }

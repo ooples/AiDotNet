@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.IO;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Initialization;
+using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using Xunit;
 
@@ -375,5 +377,253 @@ namespace AiDotNetTests.UnitTests.Helpers
             Assert.NotNull(layer);
             Assert.IsType<PoolingLayer<double>>(layer);
         }
+
+        #region GraphAttentionLayer Deserialization Tests
+
+        [Fact]
+        public void CreateLayerFromType_WithGraphAttentionLayer_CreatesCorrectly()
+        {
+            // Arrange
+            var inputShape = new int[] { 16 };
+            var outputShape = new int[] { 8 };
+
+            // Act
+            var layer = DeserializationHelper.CreateLayerFromType<double>("GraphAttentionLayer`1", inputShape, outputShape);
+
+            // Assert
+            Assert.NotNull(layer);
+            Assert.IsType<GraphAttentionLayer<double>>(layer);
+        }
+
+        [Fact]
+        public void CreateLayerFromType_WithGraphAttentionLayer_SetsInputAndOutputFeatures()
+        {
+            // Arrange
+            var inputShape = new int[] { 32 };
+            var outputShape = new int[] { 16 };
+
+            // Act
+            var layer = (GraphAttentionLayer<double>)DeserializationHelper.CreateLayerFromType<double>(
+                "GraphAttentionLayer`1", inputShape, outputShape);
+
+            // Assert
+            Assert.Equal(32, layer.InputFeatures);
+            Assert.Equal(16, layer.OutputFeatures);
+        }
+
+        [Fact]
+        public void CreateLayerFromType_WithGraphAttentionLayer_DefaultParams_UsesDefaultValues()
+        {
+            // Arrange
+            var inputShape = new int[] { 8 };
+            var outputShape = new int[] { 4 };
+
+            // Act — no additionalParams: numHeads defaults to 1, alpha to 0.2, dropout to 0.0
+            var layer = DeserializationHelper.CreateLayerFromType<double>("GraphAttentionLayer`1", inputShape, outputShape, null);
+
+            // Assert
+            Assert.NotNull(layer);
+            Assert.IsType<GraphAttentionLayer<double>>(layer);
+        }
+
+        [Fact]
+        public void CreateLayerFromType_WithGraphAttentionLayer_WithNumHeads_CreatesCorrectly()
+        {
+            // Arrange
+            var inputShape = new int[] { 16 };
+            var outputShape = new int[] { 8 };
+            var additionalParams = new Dictionary<string, object>
+            {
+                { "NumHeads", 4 }
+            };
+
+            // Act
+            var layer = DeserializationHelper.CreateLayerFromType<double>("GraphAttentionLayer`1", inputShape, outputShape, additionalParams);
+
+            // Assert
+            Assert.NotNull(layer);
+            Assert.IsType<GraphAttentionLayer<double>>(layer);
+        }
+
+        [Fact]
+        public void CreateLayerFromType_WithGraphAttentionLayer_WithAlpha_CreatesCorrectly()
+        {
+            // Arrange
+            var inputShape = new int[] { 16 };
+            var outputShape = new int[] { 8 };
+            var additionalParams = new Dictionary<string, object>
+            {
+                { "Alpha", 0.1 }
+            };
+
+            // Act
+            var layer = DeserializationHelper.CreateLayerFromType<double>("GraphAttentionLayer`1", inputShape, outputShape, additionalParams);
+
+            // Assert
+            Assert.NotNull(layer);
+            Assert.IsType<GraphAttentionLayer<double>>(layer);
+        }
+
+        [Fact]
+        public void CreateLayerFromType_WithGraphAttentionLayer_WithDropoutRate_CreatesCorrectly()
+        {
+            // Arrange
+            var inputShape = new int[] { 16 };
+            var outputShape = new int[] { 8 };
+            var additionalParams = new Dictionary<string, object>
+            {
+                { "DropoutRate", 0.5 }
+            };
+
+            // Act
+            var layer = DeserializationHelper.CreateLayerFromType<double>("GraphAttentionLayer`1", inputShape, outputShape, additionalParams);
+
+            // Assert
+            Assert.NotNull(layer);
+            Assert.IsType<GraphAttentionLayer<double>>(layer);
+        }
+
+        [Fact]
+        public void CreateLayerFromType_WithGraphAttentionLayer_WithAllParams_CreatesCorrectly()
+        {
+            // Arrange
+            var inputShape = new int[] { 32 };
+            var outputShape = new int[] { 16 };
+            var additionalParams = new Dictionary<string, object>
+            {
+                { "NumHeads", 2 },
+                { "Alpha", 0.3 },
+                { "DropoutRate", 0.2 }
+            };
+
+            // Act
+            var layer = DeserializationHelper.CreateLayerFromType<double>("GraphAttentionLayer`1", inputShape, outputShape, additionalParams);
+
+            // Assert
+            Assert.NotNull(layer);
+            Assert.IsType<GraphAttentionLayer<double>>(layer);
+        }
+
+        [Fact]
+        public void CreateLayerFromType_WithGraphAttentionLayer_WithSemicolonEncodedNumHeads_CreatesCorrectly()
+        {
+            // Arrange — semicolon-encoded constructor metadata in the layer type string
+            var inputShape = new int[] { 16 };
+            var outputShape = new int[] { 8 };
+
+            // Act
+            var layer = DeserializationHelper.CreateLayerFromType<double>(
+                "GraphAttentionLayer`1;NumHeads=4", inputShape, outputShape);
+
+            // Assert
+            Assert.NotNull(layer);
+            Assert.IsType<GraphAttentionLayer<double>>(layer);
+        }
+
+        [Fact]
+        public void CreateLayerFromType_WithGraphAttentionLayer_WithSemicolonEncodedAllParams_CreatesCorrectly()
+        {
+            // Arrange
+            var inputShape = new int[] { 16 };
+            var outputShape = new int[] { 8 };
+
+            // Act
+            var layer = DeserializationHelper.CreateLayerFromType<double>(
+                "GraphAttentionLayer`1;NumHeads=2;Alpha=0.1;DropoutRate=0.3", inputShape, outputShape);
+
+            // Assert
+            Assert.NotNull(layer);
+            Assert.IsType<GraphAttentionLayer<double>>(layer);
+        }
+
+        [Fact]
+        public void CreateLayerFromType_WithGraphAttentionLayer_FloatType_CreatesCorrectly()
+        {
+            // Arrange
+            var inputShape = new int[] { 16 };
+            var outputShape = new int[] { 8 };
+
+            // Act
+            var layer = DeserializationHelper.CreateLayerFromType<float>("GraphAttentionLayer`1", inputShape, outputShape);
+
+            // Assert
+            Assert.NotNull(layer);
+            Assert.IsType<GraphAttentionLayer<float>>(layer);
+        }
+
+        [Fact]
+        public void CreateLayerFromType_WithGraphAttentionLayer_ImplementsILayer()
+        {
+            // Arrange
+            var inputShape = new int[] { 16 };
+            var outputShape = new int[] { 8 };
+
+            // Act
+            var layer = DeserializationHelper.CreateLayerFromType<double>("GraphAttentionLayer`1", inputShape, outputShape);
+
+            // Assert — returned instance must implement ILayer<T>
+            Assert.IsAssignableFrom<ILayer<double>>(layer);
+        }
+
+        [Fact]
+        public void CreateLayerFromType_WithGraphAttentionLayer_EmptyInputShape_ThrowsArgumentException()
+        {
+            // Arrange
+            var inputShape = new int[] { };
+            var outputShape = new int[] { 8 };
+
+            // Act & Assert
+            Assert.Throws<ArgumentException>(() =>
+                DeserializationHelper.CreateLayerFromType<double>("GraphAttentionLayer`1", inputShape, outputShape));
+        }
+
+        [Fact]
+        public void CreateLayerFromType_WithGraphAttentionLayer_EmptyOutputShape_ThrowsArgumentException()
+        {
+            // Arrange
+            var inputShape = new int[] { 16 };
+            var outputShape = new int[] { };
+
+            // Act & Assert
+            Assert.Throws<ArgumentException>(() =>
+                DeserializationHelper.CreateLayerFromType<double>("GraphAttentionLayer`1", inputShape, outputShape));
+        }
+
+        [Fact]
+        public void CreateLayerFromType_WithGraphAttentionLayer_SemicolonParamsMergeWithAdditionalParams()
+        {
+            // Arrange — NumHeads in the type string, Alpha in additionalParams; merged result drives construction
+            var inputShape = new int[] { 16 };
+            var outputShape = new int[] { 8 };
+            var additionalParams = new Dictionary<string, object>
+            {
+                { "Alpha", 0.15 }
+            };
+
+            // Act
+            var layer = DeserializationHelper.CreateLayerFromType<double>(
+                "GraphAttentionLayer`1;NumHeads=2", inputShape, outputShape, additionalParams);
+
+            // Assert
+            Assert.NotNull(layer);
+            Assert.IsType<GraphAttentionLayer<double>>(layer);
+        }
+
+        [Fact]
+        public void CreateLayerFromType_WithGraphAttentionLayer_SupportsTraining()
+        {
+            // Arrange
+            var inputShape = new int[] { 16 };
+            var outputShape = new int[] { 8 };
+
+            // Act
+            var layer = (GraphAttentionLayer<double>)DeserializationHelper.CreateLayerFromType<double>(
+                "GraphAttentionLayer`1", inputShape, outputShape);
+
+            // Assert — deserialized layer must support training
+            Assert.True(layer.SupportsTraining);
+        }
+
+        #endregion
     }
 }
