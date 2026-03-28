@@ -310,10 +310,22 @@ public class SparseLinearLayer<T> : LayerBase<T>
         // Apply activation derivative to get the true gradient (chain rule)
         var delta = ApplyActivationDerivativeFromOutput(activOutput, outGrad);
 
-        // delta is always 2D after the 1D→2D expansion above
+        // delta is now always 2D (we expanded 1D inputs above), use directly
         bool wasSingleSample = outputWas1D;
-        int batchSize = delta.Shape[0];
-        var gradTensor = delta;
+        int batchSize = delta.Rank == 1 ? 1 : delta.Shape[0];
+        Tensor<T> gradTensor;
+
+        if (delta.Rank == 1)
+        {
+            // Should not happen after expansion, but handle gracefully
+            gradTensor = new Tensor<T>([1, OutputFeatures]);
+            for (int o = 0; o < OutputFeatures; o++)
+                gradTensor[0, o] = delta[o];
+        }
+        else
+        {
+            gradTensor = delta;
+        }
 
         // Initialize gradients
         _weightsGradient = new Matrix<T>(OutputFeatures, InputFeatures);

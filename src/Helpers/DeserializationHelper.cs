@@ -173,8 +173,7 @@ public static class DeserializationHelper
             {
                 // Derive: numPatches = (H/P) * (W/P) → P = H / sqrt(numPatches * H/W)
                 double sqrtVal = Math.Sqrt((double)numPatches * imageHeight / imageWidth);
-                int roundedSqrt = (int)Math.Round(sqrtVal);
-                patchSize = roundedSqrt > 0 ? (imageHeight / roundedSqrt) : 16;
+                patchSize = sqrtVal > 0 ? (imageHeight / (int)Math.Round(sqrtVal)) : 16;
             }
             else
             {
