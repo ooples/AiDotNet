@@ -46,8 +46,8 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// This layer processes the input and transforms it to the first hidden dimension.
     /// It applies the hidden activation function to its output.
     /// </remarks>
-    private readonly int _hidden1Dim;
-    private readonly int _hidden2Dim;
+    private int _hidden1Dim;
+    private int _hidden2Dim;
     private readonly FullyConnectedLayer<T> _fc1;
 
     /// <summary>
