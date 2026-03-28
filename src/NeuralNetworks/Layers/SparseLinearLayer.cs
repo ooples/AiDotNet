@@ -289,26 +289,41 @@ public class SparseLinearLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Backward called before Forward.");
         }
 
-        // Apply activation derivative to get the true gradient (chain rule)
-        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
+        // For single-sample (1D) output, expand to 2D before applying activation derivative.
+        // Forward processes internally in 2D (batch format), so _cachedPreActivationInput is 2D
+        // even when the returned output is 1D. We must match ranks for the derivative computation.
+        bool outputWas1D = _lastOutput.Rank == 1;
+        Tensor<T> activOutput = _lastOutput;
+        Tensor<T> outGrad = outputGradient;
 
-        bool wasSingleSample = delta.Rank == 1;
-        int batchSize;
-        Tensor<T> gradTensor;
-
-        if (wasSingleSample)
+        if (outputWas1D)
         {
-            batchSize = 1;
-            // Convert 1D to 2D for processing
-            gradTensor = new Tensor<T>([1, OutputFeatures]);
+            activOutput = new Tensor<T>([1, OutputFeatures]);
+            outGrad = new Tensor<T>([1, OutputFeatures]);
             for (int o = 0; o < OutputFeatures; o++)
             {
-                gradTensor[0, o] = delta[o];
+                activOutput[0, o] = _lastOutput[o];
+                outGrad[0, o] = outputGradient[o];
             }
+        }
+
+        // Apply activation derivative to get the true gradient (chain rule)
+        var delta = ApplyActivationDerivativeFromOutput(activOutput, outGrad);
+
+        // delta is now always 2D (we expanded 1D inputs above), use directly
+        bool wasSingleSample = outputWas1D;
+        int batchSize = delta.Rank == 1 ? 1 : delta.Shape[0];
+        Tensor<T> gradTensor;
+
+        if (delta.Rank == 1)
+        {
+            // Should not happen after expansion, but handle gracefully
+            gradTensor = new Tensor<T>([1, OutputFeatures]);
+            for (int o = 0; o < OutputFeatures; o++)
+                gradTensor[0, o] = delta[o];
         }
         else
         {
-            batchSize = delta.Shape[0];
             gradTensor = delta;
         }
 

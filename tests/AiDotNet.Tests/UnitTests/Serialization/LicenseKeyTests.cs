@@ -157,7 +157,8 @@ public class LicenseKeyTests
     [Fact]
     public void LicenseValidator_NullServerUrl_ReturnsActive()
     {
-        var license = new AiDotNetLicenseKey("test-key");
+        // Use a valid aidn.{id}.{signature} format key for offline validation
+        var license = new AiDotNetLicenseKey("aidn.test123.abc456");
         var validator = new LicenseValidator(license);
 
         var result = validator.Validate();
@@ -168,7 +169,7 @@ public class LicenseKeyTests
     [Fact]
     public void LicenseValidator_NullServerUrl_SetsOfflineMessage()
     {
-        var license = new AiDotNetLicenseKey("test-key");
+        var license = new AiDotNetLicenseKey("aidn.test123.abc456");
         var validator = new LicenseValidator(license);
 
         var result = validator.Validate();

@@ -473,12 +473,24 @@ public class DeepGaussianProcess<T> : GaussianProcessBase<T>
         double relDist = Math.Sqrt(minDistSq / dataScale);
 
         // Interpolate variance: at training points → noise level, far away → sample variance.
-        // Keep moderate uncertainty between training points for CI coverage.
-        // noiseLevel = 10% of sample variance ensures CIs are wide enough to cover
-        // prediction errors from the approximation.
-        double noiseLevel = Math.Max(1e-3, variance * 0.1);
+        // DGPs with few MC samples often underestimate variance (all samples collapse to
+        // similar values). Use training data variance as a floor to ensure CIs are calibrated.
+        double yVar = 0;
+        double yMeanLocal = 0;
+        for (int i = 0; i < _y.Length; i++) yMeanLocal += _numOps.ToDouble(_y[i]);
+        yMeanLocal /= _y.Length;
+        for (int i = 0; i < _y.Length; i++)
+        {
+            double d = _numOps.ToDouble(_y[i]) - yMeanLocal;
+            yVar += d * d;
+        }
+        yVar /= Math.Max(1, _y.Length - 1);
+
+        // Noise floor: 5% of training variance ensures CIs are wide enough to cover
+        // approximation errors even when MC samples collapse.
+        double noiseLevel = Math.Max(yVar * 0.05, 1e-4);
         double interpFactor = Math.Min(1.0, relDist * 3.0);
-        variance = noiseLevel + interpFactor * Math.Max(variance - noiseLevel, 0);
+        variance = noiseLevel + interpFactor * Math.Max(variance, noiseLevel);
 
         return (_numOps.FromDouble(mean), _numOps.FromDouble(variance));
     }

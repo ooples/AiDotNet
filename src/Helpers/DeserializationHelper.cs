@@ -145,6 +145,62 @@ public static class DeserializationHelper
             }
             instance = ctor.Invoke(new object[] { vocabSize, embeddingDim });
         }
+        else if (genericDef == typeof(PatchEmbeddingLayer<>))
+        {
+            // PatchEmbeddingLayer(int imageHeight, int imageWidth, int channels, int patchSize, int embeddingDim)
+            // Input shape: [channels, imageHeight, imageWidth]
+            // Output shape: [numPatches, embeddingDim]
+            if (inputShape.Length < 3)
+                throw new InvalidOperationException(
+                    $"PatchEmbeddingLayer requires input shape [channels, height, width] but got {inputShape.Length} dimensions.");
+            if (outputShape.Length < 2)
+                throw new InvalidOperationException(
+                    $"PatchEmbeddingLayer requires output shape [numPatches, embeddingDim] but got {outputShape.Length} dimensions.");
+
+            int channels = inputShape[0];
+            int imageHeight = inputShape[1];
+            int imageWidth = inputShape[2];
+            int patchEmbedDim = outputShape[1];
+            int numPatches = outputShape[0];
+
+            int patchSize;
+            int? metadataPatchSize = TryGetInt(additionalParams, "PatchSize");
+            if (metadataPatchSize.HasValue)
+            {
+                patchSize = metadataPatchSize.Value;
+            }
+            else if (numPatches > 0 && imageWidth > 0)
+            {
+                // Derive: numPatches = (H/P) * (W/P) → P = H / sqrt(numPatches * H/W)
+                double sqrtVal = Math.Sqrt((double)numPatches * imageHeight / imageWidth);
+                patchSize = sqrtVal > 0 ? (imageHeight / (int)Math.Round(sqrtVal)) : 16;
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"PatchEmbeddingLayer requires PatchSize metadata or valid shape (numPatches={numPatches}, imageWidth={imageWidth}).");
+            }
+
+            // Constructor: PatchEmbeddingLayer(int, int, int, int, int, IActivationFunction?, IInitializationStrategy?)
+            var ctor = type.GetConstructors()
+                .FirstOrDefault(c => c.GetParameters().Length >= 5 &&
+                    c.GetParameters().Take(5).All(p => p.ParameterType == typeof(int)));
+            if (ctor is null)
+            {
+                throw new InvalidOperationException("Cannot find PatchEmbeddingLayer constructor.");
+            }
+            // Build args: 5 required ints + fill optional params with null
+            var ctorParams = ctor.GetParameters();
+            var args = new object?[ctorParams.Length];
+            args[0] = imageHeight;
+            args[1] = imageWidth;
+            args[2] = channels;
+            args[3] = patchSize;
+            args[4] = patchEmbedDim;
+            for (int i = 5; i < ctorParams.Length; i++)
+                args[i] = null;
+            instance = ctor.Invoke(args);
+        }
         else if (genericDef == typeof(PositionalEncodingLayer<>))
         {
             // PositionalEncodingLayer(int maxSequenceLength, int embeddingSize)

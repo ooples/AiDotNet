@@ -9,4 +9,7 @@ public class FuzzyCMeansTests : ClusteringModelTestBase
 {
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateModel()
         => new FuzzyCMeans<double>(new AiDotNet.Clustering.Options.FuzzyCMeansOptions<double> { NumClusters = NumClusters });
+
+    protected override IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
+        => new FuzzyCMeans<double>(new AiDotNet.Clustering.Options.FuzzyCMeansOptions<double> { NumClusters = 1 });
 }

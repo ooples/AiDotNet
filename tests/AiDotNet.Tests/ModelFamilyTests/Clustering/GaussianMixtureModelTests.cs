@@ -13,4 +13,7 @@ public class GaussianMixtureModelTests : ClusteringModelTestBase
         {
             NumComponents = NumClusters
         });
+
+    protected override IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
+        => new GaussianMixtureModel<double>(new GMMOptions<double> { NumComponents = 1 });
 }

@@ -681,6 +681,13 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         _gpuHasBatch = false;
     }
 
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["PatchSize"] = _patchSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
+
     /// <summary>
     /// Performs GPU-accelerated forward pass for patch embedding.
     /// </summary>

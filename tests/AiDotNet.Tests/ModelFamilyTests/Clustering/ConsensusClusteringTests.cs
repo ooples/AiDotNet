@@ -13,4 +13,11 @@ public class ConsensusClusteringTests : ClusteringModelTestBase
             NumClusters = NumClusters,
             Seed = 42
         });
+
+    protected override IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
+        => new ConsensusClustering<double>(new AiDotNet.Clustering.Ensemble.ConsensusClusteringOptions<double>
+        {
+            NumClusters = 1,
+            Seed = 42
+        });
 }
