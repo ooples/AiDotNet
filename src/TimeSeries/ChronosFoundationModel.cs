@@ -1388,21 +1388,26 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
             var dAttnWeights = new double[q + 1];
             for (int k = 0; k <= q; k++)
             {
+                // Build dv vector for all dimensions at once
+                var dvVec = new Tensor<T>(new[] { _embeddingDim });
                 for (int d = 0; d < _embeddingDim; d++)
                 {
-                    // Gradient to values: d(weighted_value)/d(attn_weight) = value
-                    var dv = NumOps.Multiply(NumOps.FromDouble(attnWeights[k]), dWeightedValue[d]);
-                    // Accumulate to value projection gradients
-                    for (int i = 0; i < _embeddingDim; i++)
-                    {
-                        dValueProj[d, i] = NumOps.Add(dValueProj[d, i],
-                            NumOps.Multiply(dv, input[k][i]));
-                        dInput[k][i] = NumOps.Add(dInput[k][i],
-                            NumOps.Multiply(_valueProj[d, i], dv));
-                    }
-                    // Gradient w.r.t. attention weights from this value dimension
+                    dvVec[d] = NumOps.Multiply(NumOps.FromDouble(attnWeights[k]), dWeightedValue[d]);
                     dAttnWeights[k] += Convert.ToDouble(NumOps.Multiply(dWeightedValue[d], values[k][d]));
                 }
+
+                // dValueProj += outer(dv, input[k]): dValueProj[d,i] += dv[d] * input[k][i]
+                for (int d = 0; d < _embeddingDim; d++)
+                {
+                    var scaled = Engine.TensorMultiplyScalar<T>(input[k], dvVec[d]);
+                    for (int i = 0; i < _embeddingDim; i++)
+                        dValueProj[d, i] = NumOps.Add(dValueProj[d, i], scaled[i]);
+                }
+
+                // dInput[k] += _valueProj^T @ dv (vectorized matmul)
+                var dvCol = dvVec.Reshape(_embeddingDim, 1);
+                var dInputContrib = Engine.TensorMatMul(_valueProj.Transpose([1, 0]), dvCol);
+                dInput[k] = Engine.TensorAdd(dInput[k], dInputContrib.Reshape(_embeddingDim));
             }
 
             // Backprop through softmax: d(softmax)/d(score) = softmax * (delta - softmax)
@@ -1428,33 +1433,33 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
             {
                 T dScoreScaled = NumOps.FromDouble(dScores[k] * scale);
 
-                // Gradient to query at position q
+                // Vectorized query gradient: dQ_vec = dScoreScaled * keys[k]
+                var dQVec = Engine.TensorMultiplyScalar<T>(keys[k], dScoreScaled);
+                // dQueryProj += outer(dQ, input[q])
                 for (int d = 0; d < _embeddingDim; d++)
                 {
-                    T dQ = NumOps.Multiply(dScoreScaled, keys[k][d]);
-                    // Accumulate to query projection gradients
+                    var scaled = Engine.TensorMultiplyScalar<T>(input[q], dQVec[d]);
                     for (int i = 0; i < _embeddingDim; i++)
-                    {
-                        dQueryProj[d, i] = NumOps.Add(dQueryProj[d, i],
-                            NumOps.Multiply(dQ, input[q][i]));
-                        dInput[q][i] = NumOps.Add(dInput[q][i],
-                            NumOps.Multiply(_queryProj[d, i], dQ));
-                    }
+                        dQueryProj[d, i] = NumOps.Add(dQueryProj[d, i], scaled[i]);
                 }
+                // dInput[q] += _queryProj^T @ dQ (vectorized matmul)
+                var dQCol = dQVec.Reshape(_embeddingDim, 1);
+                var dInputQ = Engine.TensorMatMul(_queryProj.Transpose([1, 0]), dQCol);
+                dInput[q] = Engine.TensorAdd(dInput[q], dInputQ.Reshape(_embeddingDim));
 
-                // Gradient to key at position k
+                // Vectorized key gradient: dK_vec = dScoreScaled * queries[q]
+                var dKVec = Engine.TensorMultiplyScalar<T>(queries[q], dScoreScaled);
+                // dKeyProj += outer(dK, input[k])
                 for (int d = 0; d < _embeddingDim; d++)
                 {
-                    T dK = NumOps.Multiply(dScoreScaled, queries[q][d]);
-                    // Accumulate to key projection gradients
+                    var scaledK = Engine.TensorMultiplyScalar<T>(input[k], dKVec[d]);
                     for (int i = 0; i < _embeddingDim; i++)
-                    {
-                        dKeyProj[d, i] = NumOps.Add(dKeyProj[d, i],
-                            NumOps.Multiply(dK, input[k][i]));
-                        dInput[k][i] = NumOps.Add(dInput[k][i],
-                            NumOps.Multiply(_keyProj[d, i], dK));
-                    }
+                        dKeyProj[d, i] = NumOps.Add(dKeyProj[d, i], scaledK[i]);
                 }
+                // dInput[k] += _keyProj^T @ dK (vectorized matmul)
+                var dKCol = dKVec.Reshape(_embeddingDim, 1);
+                var dInputK = Engine.TensorMatMul(_keyProj.Transpose([1, 0]), dKCol);
+                dInput[k] = Engine.TensorAdd(dInput[k], dInputK.Reshape(_embeddingDim));
             }
         }
 
