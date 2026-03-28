@@ -1556,16 +1556,12 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
         foreach (var vec in input)
         {
             var hidden = MatVecMul(_ffn1, vec);
-            for (int i = 0; i < hidden.Length; i++)
-            {
-                hidden[i] = NumOps.Add(hidden[i], _ffn1Bias[i]);
-                hidden[i] = GELU(hidden[i]);
-            }
+            hidden = Engine.TensorAdd(hidden, _ffn1Bias);
+            hidden = Engine.GELU(hidden);
             _cachedFfnHidden.Add(hidden);
 
             var result = MatVecMul(_ffn2, hidden);
-            for (int i = 0; i < result.Length; i++)
-                result[i] = NumOps.Add(result[i], _ffn2Bias[i]);
+            result = Engine.TensorAdd(result, _ffn2Bias);
             output.Add(result);
         }
         return output;
@@ -1591,9 +1587,10 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
             var inp = input[t];
 
             // Backprop through second linear
+            // Vectorized FFN2 bias gradient
+            dFfn2Bias = Engine.TensorAdd(dFfn2Bias, dOut);
             for (int i = 0; i < _embeddingDim; i++)
             {
-                dFfn2Bias[i] = NumOps.Add(dFfn2Bias[i], dOut[i]);
                 for (int j = 0; j < ffnDim; j++)
                 {
                     dFfn2[i, j] = NumOps.Add(dFfn2[i, j],
@@ -1603,42 +1600,13 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
 
             var dHidden = MatVecMulTranspose(_ffn2, dOut);
 
-            // Backprop through GELU using the proper derivative
-            // GELU(x) ≈ 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x^3)))
-            // Let k = sqrt(2/π) ≈ 0.7978845608, c = 0.044715
-            // d/dx GELU(x) = 0.5 * (1 + tanh(y)) + 0.5 * x * sech^2(y) * k * (1 + 3*c*x^2)
-            // where y = k * (x + c * x^3)
-            const double k = 0.7978845608028654;  // sqrt(2/π)
-            const double c = 0.044715;
+            // Vectorized GELU backward using Engine
+            dHidden = Engine.GeluBackward(dHidden, hidden);
+
+            // Vectorized FFN1 bias gradient + weight gradient
+            dFfn1Bias = Engine.TensorAdd(dFfn1Bias, dHidden);
             for (int i = 0; i < ffnDim; i++)
             {
-                // Get the pre-activation value (before GELU was applied)
-                // We need to recover x from GELU(x), but we stored the post-activation hidden
-                // For numerical stability, we'll approximate using the stored hidden value
-                // In practice, we should store pre-activation values, but for now compute gradient
-                // using a more accurate approximation
-                double h = Convert.ToDouble(hidden[i]);
-
-                // Approximate inverse: if GELU(x) ≈ x for x > 2, else solve numerically
-                // For simplicity, use the stored value directly with a better gradient approximation
-                double x = h; // Use hidden as approximation (works reasonably for positive values)
-                double y = k * (x + c * x * x * x);
-                double tanhY = Math.Tanh(y);
-                double sech2Y = 1.0 - tanhY * tanhY;
-
-                // d/dx GELU(x) = 0.5 * (1 + tanh(y)) + 0.5 * x * sech^2(y) * k * (1 + 3*c*x^2)
-                double geluGrad = 0.5 * (1.0 + tanhY) + 0.5 * x * sech2Y * k * (1.0 + 3.0 * c * x * x);
-
-                // Clamp gradient for numerical stability
-                geluGrad = Math.Max(-10.0, Math.Min(10.0, geluGrad));
-
-                dHidden[i] = NumOps.Multiply(dHidden[i], NumOps.FromDouble(geluGrad));
-            }
-
-            // Backprop through first linear
-            for (int i = 0; i < ffnDim; i++)
-            {
-                dFfn1Bias[i] = NumOps.Add(dFfn1Bias[i], dHidden[i]);
                 for (int j = 0; j < _embeddingDim; j++)
                 {
                     dFfn1[i, j] = NumOps.Add(dFfn1[i, j],
