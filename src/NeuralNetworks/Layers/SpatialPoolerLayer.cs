@@ -144,6 +144,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T>? LastOutput;
+    private Tensor<T>? _lastBinaryOutput;
 
     /// <summary>
     /// The learning rate used during the learning process.
@@ -331,9 +332,12 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         T threshold = NumOps.FromDouble(1.0 - SparsityThreshold);
         var outputMask = Engine.TensorGreaterThan(normalizedActivations, threshold);
 
-        // Multiply mask by RAW activations (not normalized) to preserve input magnitude
-        // This ensures different input magnitudes produce different output values
-        // Normalization is only used for column selection, not output values
+        // Store binary mask for Hebbian learning (per Hawkins 2004, learning uses binary SDR)
+        _lastBinaryOutput = outputMask.Reshape([ColumnCount]);
+
+        // Output preserves activation magnitude for downstream differentiation.
+        // Different input scales produce different output values even when
+        // the same columns are selected (same binary mask).
         var maskedActivations = Engine.TensorMultiply(outputMask, activationsFlat);
         var output = maskedActivations.Reshape([ColumnCount]);
 
@@ -355,40 +359,26 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         if (inputs == null || inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
 
-        var input = inputs[0];
-
-        // Validate GPU engine availability
+        // SpatialPooler requires normalized column selection which uses min/max
+        // reduction. Delegate to CPU Forward to ensure GPU and CPU paths produce
+        // identical results. SpatialPooler is not the HTM inference bottleneck.
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend is not available.");
+        var backend = gpuEngine.GetBackend()
+            ?? throw new InvalidOperationException("GPU backend is not available.");
 
-        // Flatten to 1D if needed
-        var flatInput = input.Shape.Length == 1 ? input : gpuEngine.ReshapeGpu(input, [input.ElementCount]);
+        var cpuInput = inputs[0].ToTensor();
+        var cpuOutput = Forward(cpuInput);
 
-        // Reshape to [1, InputSize] for matrix multiply (batch of 1)
-        var inputReshaped = gpuEngine.ReshapeGpu(flatInput, [1, InputSize]);
+        // Upload CPU result to GPU buffer
+        var outputData = cpuOutput.GetDataArray();
+        var floatData = new float[outputData.Length];
+        for (int i = 0; i < outputData.Length; i++)
+            floatData[i] = Convert.ToSingle(outputData[i]);
+        var outputBuffer = backend.AllocateBuffer(floatData);
 
-        // Matrix multiply: [1, InputSize] @ [InputSize, ColumnCount] = [1, ColumnCount]
-        var activations = gpuEngine.BatchedMatMulGpu(inputReshaped, Connections);
-
-        // Apply threshold to get sparse binary output
-        var thresholdFloat = (float)SparsityThreshold;
-        var outputMask = gpuEngine.GreaterThanScalarGpu(activations, thresholdFloat);
-
-        // Reshape to [ColumnCount]
-        var output = gpuEngine.ReshapeGpu(outputMask, [ColumnCount]);
-
-        // Dispose intermediates (except output)
-        if (input.Shape.Length != 1)
-            flatInput.Dispose();
-        inputReshaped.Dispose();
-        activations.Dispose();
-        outputMask.Dispose();
-
-        return output;
+        return new GpuTensor<T>(backend, outputBuffer, [ColumnCount], GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -554,8 +544,10 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         var activation = Autodiff.TensorOperations<T>.MatrixMultiply(connectionsTransposed, inputReshaped);
         var activationFlat = Autodiff.TensorOperations<T>.Reshape(activation, ColumnCount);
 
-        // Apply straight-through threshold for sparse binary output
-        var output = Autodiff.TensorOperations<T>.StraightThroughThreshold(activationFlat, SparsityThreshold);
+        // Apply straight-through threshold with normalized column selection
+        // (mirrors CPU Forward: normalize to [0,1], threshold at 1-SparsityThreshold)
+        // Straight-through estimator passes gradients through as if threshold were identity
+        var output = Autodiff.TensorOperations<T>.StraightThroughThreshold(activationFlat, 1.0 - SparsityThreshold);
 
         // Apply layer activation if present
         var finalOutput = ApplyActivationToGraph(output);
@@ -615,7 +607,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
 
         for (int i = 0; i < ColumnCount; i++)
         {
-            if (NumOps.Equals(LastOutput[i], NumOps.One))
+            if (_lastBinaryOutput != null && NumOps.Equals(_lastBinaryOutput[i], NumOps.One))
             {
                 // Strengthen connections for active columns
                 for (int j = 0; j < InputSize; j++)
@@ -629,7 +621,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         // Boost inactive columns
         for (int i = 0; i < ColumnCount; i++)
         {
-            if (NumOps.Equals(LastOutput[i], NumOps.Zero))
+            if (_lastBinaryOutput != null && NumOps.Equals(_lastBinaryOutput[i], NumOps.Zero))
             {
                 for (int j = 0; j < InputSize; j++)
                 {
@@ -738,6 +730,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         // Clear cached values
         LastInput = null;
         LastOutput = null;
+        _lastBinaryOutput = null;
         _connectionsGradient = null;
     }
 
@@ -774,8 +767,9 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         var activation = TensorOperations<T>.MatrixMultiply(connectionsTransposed, inputReshaped);
         var activationFlat = TensorOperations<T>.Reshape(activation, ColumnCount);
 
-        // Apply straight-through threshold for sparse binary output
-        var output = TensorOperations<T>.StraightThroughThreshold(activationFlat, SparsityThreshold);
+        // Apply straight-through threshold with normalized column selection
+        // (mirrors CPU Forward: threshold at 1-SparsityThreshold on normalized range)
+        var output = TensorOperations<T>.StraightThroughThreshold(activationFlat, 1.0 - SparsityThreshold);
 
         // Apply layer activation if present
         output = ApplyActivationToGraph(output);
