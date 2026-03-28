@@ -354,6 +354,13 @@ namespace AiDotNet.Autodiff
             return current;
         }
 
+        /// <summary>
+        /// Threshold above which SPSA is used instead of per-dimension finite differences.
+        /// For PINN with 2-4 spatial dims, exact finite differences is fast (8-24 passes).
+        /// For higher-dim inputs, SPSA avoids the O(N²) cross-term explosion.
+        /// </summary>
+        private const int SPSAThreshold = 16;
+
         private static PDEDerivatives<T> ComputeDerivativesFiniteDifference(
             NeuralNetworkBase<T> network,
             T[] inputs,
@@ -362,6 +369,12 @@ namespace AiDotNet.Autodiff
         {
             var numOps = MathHelper.GetNumericOperations<T>();
             int inputDim = inputs.Length;
+
+            // For high-dimensional inputs, use SPSA to avoid O(N²) forward passes
+            if (inputDim > SPSAThreshold)
+            {
+                return ComputeDerivativesSPSA(network, inputs, outputDim, step);
+            }
 
             var derivatives = new PDEDerivatives<T>
             {
@@ -375,9 +388,11 @@ namespace AiDotNet.Autodiff
             var epsSquared = numOps.Multiply(epsilon, epsilon);
             var fourEpsSquared = numOps.Multiply(numOps.FromDouble(4.0), epsSquared);
 
+            // Reuse single perturbation array across all dimensions
             var perturbed = new T[inputDim];
             Array.Copy(inputs, perturbed, inputDim);
 
+            // First derivatives + diagonal Hessian: 2N forward passes
             for (int i = 0; i < inputDim; i++)
             {
                 T original = perturbed[i];
@@ -403,6 +418,7 @@ namespace AiDotNet.Autodiff
                 perturbed[i] = original;
             }
 
+            // Cross-terms: 4 * N*(N-1)/2 forward passes (acceptable for small N)
             for (int i = 0; i < inputDim; i++)
             {
                 for (int j = i + 1; j < inputDim; j++)
@@ -438,6 +454,104 @@ namespace AiDotNet.Autodiff
 
                     perturbed[i] = originalI;
                     perturbed[j] = originalJ;
+                }
+            }
+
+            return derivatives;
+        }
+
+        /// <summary>
+        /// SPSA-based derivative estimation for high-dimensional inputs.
+        /// First derivatives: O(2*numSamples) forward passes regardless of input dimension.
+        /// Second derivatives: O(4*numSamples) forward passes for stochastic Hessian estimate.
+        /// Reference: Spall, J.C., "Multivariate Stochastic Approximation Using a Simultaneous
+        /// Perturbation Gradient Approximation", IEEE TAC, 1992.
+        /// </summary>
+        private static PDEDerivatives<T> ComputeDerivativesSPSA(
+            NeuralNetworkBase<T> network,
+            T[] inputs,
+            int outputDim,
+            double step = 1e-3,
+            int numSamples = 8)
+        {
+            var numOps = MathHelper.GetNumericOperations<T>();
+            int inputDim = inputs.Length;
+            var rng = RandomHelper.CreateSeededRandom(42);
+
+            var derivatives = new PDEDerivatives<T>
+            {
+                FirstDerivatives = new T[outputDim, inputDim],
+                SecondDerivatives = new T[outputDim, inputDim, inputDim]
+            };
+
+            var baseOutput = EvaluateOutput(network, inputs, outputDim);
+            var epsilon = numOps.FromDouble(step);
+            var twoEpsilon = numOps.FromDouble(2.0 * step);
+
+            var perturbed = new T[inputDim];
+            var delta = new T[inputDim];
+
+            for (int s = 0; s < numSamples; s++)
+            {
+                // Rademacher random direction
+                for (int i = 0; i < inputDim; i++)
+                    delta[i] = numOps.FromDouble(rng.NextDouble() < 0.5 ? -1.0 : 1.0);
+
+                // f(x + eps*delta)
+                for (int i = 0; i < inputDim; i++)
+                    perturbed[i] = numOps.Add(inputs[i], numOps.Multiply(epsilon, delta[i]));
+                var plus = EvaluateOutput(network, perturbed, outputDim);
+
+                // f(x - eps*delta)
+                for (int i = 0; i < inputDim; i++)
+                    perturbed[i] = numOps.Subtract(inputs[i], numOps.Multiply(epsilon, delta[i]));
+                var minus = EvaluateOutput(network, perturbed, outputDim);
+
+                // Accumulate first derivatives: g_i += (f+ - f-) / (2*eps*delta_i)
+                for (int outIdx = 0; outIdx < outputDim; outIdx++)
+                {
+                    var lossDiff = numOps.Subtract(plus[outIdx], minus[outIdx]);
+                    for (int i = 0; i < inputDim; i++)
+                    {
+                        var grad = numOps.Divide(lossDiff, numOps.Multiply(twoEpsilon, delta[i]));
+                        derivatives.FirstDerivatives[outIdx, i] = numOps.Add(
+                            derivatives.FirstDerivatives[outIdx, i], grad);
+                    }
+
+                    // Stochastic Hessian estimate: H_ij += (f+ + f- - 2*f0) / (eps^2 * delta_i * delta_j)
+                    var hessNumerator = numOps.Subtract(
+                        numOps.Add(plus[outIdx], minus[outIdx]),
+                        numOps.Multiply(numOps.FromDouble(2.0), baseOutput[outIdx]));
+                    var epsSquared = numOps.Multiply(epsilon, epsilon);
+
+                    for (int i = 0; i < inputDim; i++)
+                    {
+                        for (int j = i; j < inputDim; j++)
+                        {
+                            var denom = numOps.Multiply(epsSquared, numOps.Multiply(delta[i], delta[j]));
+                            var hess = numOps.Divide(hessNumerator, denom);
+                            derivatives.SecondDerivatives[outIdx, i, j] = numOps.Add(
+                                derivatives.SecondDerivatives[outIdx, i, j], hess);
+                            if (i != j)
+                                derivatives.SecondDerivatives[outIdx, j, i] = derivatives.SecondDerivatives[outIdx, i, j];
+                        }
+                    }
+                }
+            }
+
+            // Average over samples
+            var invSamples = numOps.FromDouble(1.0 / numSamples);
+            for (int outIdx = 0; outIdx < outputDim; outIdx++)
+            {
+                for (int i = 0; i < inputDim; i++)
+                {
+                    derivatives.FirstDerivatives[outIdx, i] = numOps.Multiply(
+                        derivatives.FirstDerivatives[outIdx, i], invSamples);
+                    for (int j = 0; j < inputDim; j++)
+                    {
+                        derivatives.SecondDerivatives[outIdx, i, j] = numOps.Multiply(
+                            derivatives.SecondDerivatives[outIdx, i, j], invSamples);
+                    }
                 }
             }
 
