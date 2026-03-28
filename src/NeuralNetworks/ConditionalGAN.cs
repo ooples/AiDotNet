@@ -231,7 +231,8 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     /// </summary>
     private static Tensor<T> PredictBatched(NeuralNetworkBase<T> network, Tensor<T> batchedInput)
     {
-        if (batchedInput.Rank <= 1)
+        // Only split 2D [B, N] feed-forward inputs; leave higher-rank spatial tensors intact
+        if (batchedInput.Rank != 2)
             return network.Predict(batchedInput);
 
         int batchSize = batchedInput.Shape[0];
@@ -249,7 +250,8 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     /// </summary>
     private static Tensor<T> BackpropagateBatched(NeuralNetworkBase<T> network, Tensor<T> batchedGradient)
     {
-        if (batchedGradient.Rank <= 1)
+        // Only split 2D [B, N] feed-forward gradients; leave higher-rank spatial tensors intact
+        if (batchedGradient.Rank != 2)
             return network.Backpropagate(batchedGradient);
 
         int batchSize = batchedGradient.Shape[0];
@@ -265,11 +267,14 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     /// <summary>
     /// Predicts output by treating the input as noise and adding default conditions.
     /// </summary>
+    /// <param name="input">Noise tensor of size <c>latentDim</c> (1D) or <c>[batch, latentDim]</c> (2D).
+    /// This is smaller than the generator's actual input because condition features are appended internally.</param>
     /// <remarks>
     /// <para>
     /// The standard Predict interface accepts noise-only input (latentDim features).
-    /// Conditions are generated internally (class 0 by default). To control the class,
-    /// use <see cref="GenerateConditional"/> instead.
+    /// Conditions (one-hot class 0 by default) are concatenated internally, producing
+    /// a generator input of size <c>latentDim + numConditionClasses</c>.
+    /// To control the class, use <see cref="GenerateConditional"/> instead.
     /// </para>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)

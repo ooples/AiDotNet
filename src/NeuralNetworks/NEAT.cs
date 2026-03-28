@@ -1272,8 +1272,10 @@ public class NEAT<T> : NeuralNetworkBase<T>
         }
         result["OutputNodes"] = outputActivation;
 
+        // Exclude the reserved bias node (ID = InputSize + OutputSize) from hidden nodes
+        int biasNodeId = Architecture.InputSize + Architecture.OutputSize;
         var hiddenNodes = activations.Keys
-            .Where(k => k >= Architecture.InputSize + Architecture.OutputSize)
+            .Where(k => k > biasNodeId)
             .OrderBy(k => k)
             .ToList();
 
