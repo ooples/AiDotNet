@@ -247,13 +247,13 @@ public class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             else
             {
                 if (accumulatedEncoderMeanGrad != null)
-                    AccumulateVectors(accumulatedEncoderMeanGrad, encMeanGrad);
+                    accumulatedEncoderMeanGrad = AccumulateVectors(accumulatedEncoderMeanGrad, encMeanGrad);
                 if (accumulatedEncoderVarGrad != null)
-                    AccumulateVectors(accumulatedEncoderVarGrad, encVarGrad);
+                    accumulatedEncoderVarGrad = AccumulateVectors(accumulatedEncoderVarGrad, encVarGrad);
                 if (accumulatedDecoderGrad != null)
-                    AccumulateVectors(accumulatedDecoderGrad, decGrad);
+                    accumulatedDecoderGrad = AccumulateVectors(accumulatedDecoderGrad, decGrad);
                 if (accumulatedFeatureGrad != null)
-                    AccumulateVectors(accumulatedFeatureGrad, featGrad);
+                    accumulatedFeatureGrad = AccumulateVectors(accumulatedFeatureGrad, featGrad);
             }
         }
 
@@ -265,10 +265,10 @@ public class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 
         // Average and apply gradients
         T batchSizeT = NumOps.FromDouble(taskBatch.BatchSize);
-        DivideVector(accumulatedEncoderMeanGrad, batchSizeT);
-        DivideVector(accumulatedEncoderVarGrad, batchSizeT);
-        DivideVector(accumulatedDecoderGrad, batchSizeT);
-        DivideVector(accumulatedFeatureGrad, batchSizeT);
+        accumulatedEncoderMeanGrad = DivideVector(accumulatedEncoderMeanGrad, batchSizeT);
+        accumulatedEncoderVarGrad = DivideVector(accumulatedEncoderVarGrad, batchSizeT);
+        accumulatedDecoderGrad = DivideVector(accumulatedDecoderGrad, batchSizeT);
+        accumulatedFeatureGrad = DivideVector(accumulatedFeatureGrad, batchSizeT);
 
         // Clip gradients if configured
         if (_leoOptions.GradientClipThreshold.HasValue && _leoOptions.GradientClipThreshold.Value > 0)
@@ -465,38 +465,26 @@ public class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// </summary>
     private (Vector<T> mean, Vector<T> variance) EncodeToLatent(Vector<T> embeddings)
     {
-        var mean = new Vector<T>(_leoOptions.LatentDimension);
-        var variance = new Vector<T>(_leoOptions.LatentDimension);
+        int latentDim = _leoOptions.LatentDimension;
+        int embDim = Math.Min(embeddings.Length, _leoOptions.EmbeddingDimension);
 
-        // Linear projection for mean
-        for (int i = 0; i < _leoOptions.LatentDimension; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < Math.Min(embeddings.Length, _leoOptions.EmbeddingDimension); j++)
-            {
-                int weightIdx = i * _leoOptions.EmbeddingDimension + j;
-                if (weightIdx < _encoderWeightsMean.Length)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(embeddings[j], _encoderWeightsMean[weightIdx]));
-                }
-            }
-            mean[i] = sum;
-        }
+        // Reshape flat weight vectors to [latentDim, embDim] tensors for matmul
+        var embTensor = Tensor<T>.FromVector(embeddings).Reshape(embDim, 1);
 
-        // Linear projection for log-variance (then exp to get variance)
-        for (int i = 0; i < _leoOptions.LatentDimension; i++)
+        // Mean projection: mean = W_mean @ embeddings via Engine.TensorMatMul
+        var wMeanTensor = Tensor<T>.FromVector(_encoderWeightsMean).Reshape(latentDim, embDim);
+        var meanTensor = Engine.TensorMatMul(wMeanTensor, embTensor).Reshape(latentDim);
+        var mean = meanTensor.ToVector();
+
+        // Variance projection: logVar = W_var @ embeddings, then softplus
+        var wVarTensor = Tensor<T>.FromVector(_encoderWeightsVar).Reshape(latentDim, embDim);
+        var logVarTensor = Engine.TensorMatMul(wVarTensor, embTensor).Reshape(latentDim);
+
+        // Apply softplus: log(1 + exp(min(x, 20))) for numerical stability
+        var variance = new Vector<T>(latentDim);
+        for (int i = 0; i < latentDim; i++)
         {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < Math.Min(embeddings.Length, _leoOptions.EmbeddingDimension); j++)
-            {
-                int weightIdx = i * _leoOptions.EmbeddingDimension + j;
-                if (weightIdx < _encoderWeightsVar.Length)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(embeddings[j], _encoderWeightsVar[weightIdx]));
-                }
-            }
-            // Softplus activation for positive variance
-            double logVar = NumOps.ToDouble(sum);
+            double logVar = NumOps.ToDouble(logVarTensor[i]);
             variance[i] = NumOps.FromDouble(Math.Log(1 + Math.Exp(Math.Min(logVar, 20))));
         }
 
@@ -533,24 +521,14 @@ public class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     private Vector<T> DecodeLatent(Vector<T> latentCode)
     {
         int outputDim = _leoOptions.EmbeddingDimension * _leoOptions.NumClasses;
-        var classifierParams = new Vector<T>(outputDim);
+        int latentDim = latentCode.Length;
 
-        // Linear projection from latent space to classifier weights
-        for (int i = 0; i < outputDim; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < latentCode.Length; j++)
-            {
-                int weightIdx = i * _leoOptions.LatentDimension + j;
-                if (weightIdx < _decoderWeights.Length)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(latentCode[j], _decoderWeights[weightIdx]));
-                }
-            }
-            classifierParams[i] = sum;
-        }
+        // Reshape flat decoder weights to [outputDim, latentDim] and use Engine.TensorMatMul
+        var wDecTensor = Tensor<T>.FromVector(_decoderWeights).Reshape(outputDim, latentDim);
+        var latentTensor = Tensor<T>.FromVector(latentCode).Reshape(latentDim, 1);
+        var resultTensor = Engine.TensorMatMul(wDecTensor, latentTensor).Reshape(outputDim);
 
-        return classifierParams;
+        return resultTensor.ToVector();
     }
 
     #endregion
@@ -581,12 +559,9 @@ public class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             var latentGradients = ComputeLatentGradients(
                 adaptedCode, currentParams, supportInput, supportOutput);
 
-            // Update latent code
-            for (int i = 0; i < adaptedCode.Length; i++)
-            {
-                T update = NumOps.Multiply(NumOps.FromDouble(_leoOptions.InnerLearningRate), latentGradients[i]);
-                adaptedCode[i] = NumOps.Subtract(adaptedCode[i], update);
-            }
+            // Update latent code — vectorized SGD step
+            var scaledGrad = Engine.Multiply(latentGradients, NumOps.FromDouble(_leoOptions.InnerLearningRate));
+            adaptedCode = (Vector<T>)Engine.Subtract(adaptedCode, scaledGrad);
 
             // Decode updated latent code
             currentParams = DecodeLatent(adaptedCode);
@@ -847,24 +822,17 @@ public class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// <summary>
     /// Accumulates vectors element-wise.
     /// </summary>
-    private void AccumulateVectors(Vector<T> target, Vector<T> source)
+    private Vector<T> AccumulateVectors(Vector<T> target, Vector<T> source)
     {
-        int len = Math.Min(target.Length, source.Length);
-        for (int i = 0; i < len; i++)
-        {
-            target[i] = NumOps.Add(target[i], source[i]);
-        }
+        return (Vector<T>)Engine.Add(target, source);
     }
 
     /// <summary>
     /// Divides all elements of a vector by a scalar.
     /// </summary>
-    private void DivideVector(Vector<T> vec, T divisor)
+    private Vector<T> DivideVector(Vector<T> vec, T divisor)
     {
-        for (int i = 0; i < vec.Length; i++)
-        {
-            vec[i] = NumOps.Divide(vec[i], divisor);
-        }
+        return (Vector<T>)Engine.Divide(vec, divisor);
     }
 
     #endregion

@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -296,59 +297,40 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Decode
             var reconstruction = _vaeDecoder.Predict(Tensor<T>.FromVector(latentSample)).ToVector();
 
-            // Reconstruction loss (MSE)
-            var reconDiff = new Vector<T>(reconstruction.Length);
-            for (int i = 0; i < reconstruction.Length; i++)
-            {
-                reconDiff[i] = NumOps.Subtract(stateVector[i], reconstruction[i]);
-            }
-            T reconLoss = Engine.DotProduct(reconDiff, reconDiff);
+            // Reconstruction loss (MSE) — vectorized
+            var reconDiff = (Vector<T>)Engine.Subtract(stateVector, reconstruction);
+            T reconLoss = VectorHelper.DotProduct(reconDiff, reconDiff);
 
-            // KL divergence loss: KL(N(mean, var) || N(0, 1)) = 0.5 * sum(1 + logVar - mean² - exp(logVar))
-            T klLoss = NumOps.Zero;
-            for (int i = 0; i < latentMean.Length; i++)
-            {
-                var meanSquared = NumOps.Multiply(latentMean[i], latentMean[i]);
-                var expLogVar = NumOps.Exp(latentLogVar[i]);
-                // KL = 0.5 * (1 + logVar - mean² - exp(logVar))
-                var klTerm = NumOps.Add(
-                    NumOps.One,
-                    NumOps.Add(
-                        latentLogVar[i],
-                        NumOps.Subtract(
-                            NumOps.Negate(meanSquared),
-                            expLogVar
-                        )
-                    )
-                );
-                klLoss = NumOps.Add(klLoss, klTerm);
-            }
-            klLoss = NumOps.Multiply(NumOps.FromDouble(_options.VAEBeta * 0.5), klLoss);
+            // KL divergence: 0.5 * sum(1 + logVar - mean² - exp(logVar)) — vectorized
+            var meanSquared = Engine.Multiply(latentMean, latentMean);
+            var expLogVar = Engine.Exp(latentLogVar);
+            // klTerms = 1 + logVar - mean² - exp(logVar)
+            var onesVec = (Vector<T>)Engine.Fill<T>(latentMean.Length, NumOps.One);
+            var klTerms = (Vector<T>)Engine.Subtract(Engine.Add(onesVec, latentLogVar), Engine.Add(meanSquared, expLogVar));
+            // Sum via dot product with ones vector
+            T klSum = VectorHelper.DotProduct(klTerms, onesVec);
+            T klLoss = NumOps.Multiply(NumOps.FromDouble(_options.VAEBeta * 0.5), klSum);
 
             var loss = NumOps.Add(reconLoss, klLoss);
             totalLoss = NumOps.Add(totalLoss, loss);
 
-            // Backpropagation through both decoder and encoder
-            // Step 1: Decoder gradient (reconstruction error)
-            var decoderGradient = new Vector<T>(reconstruction.Length);
-            for (int i = 0; i < decoderGradient.Length; i++)
-            {
-                decoderGradient[i] = NumOps.Subtract(reconstruction[i], stateVector[i]);
-            }
+            // Backpropagation — decoder gradient (reconstruction error) — vectorized
+            var decoderGradient = (Vector<T>)Engine.Subtract(reconstruction, stateVector);
             _vaeDecoder.Backpropagate(Tensor<T>.FromVector(decoderGradient));
 
-            // Step 2: Encoder gradient (KL divergence)
-            // Gradient of KL divergence w.r.t. mean and logVar
+            // Encoder KL gradient — vectorized for both halves
+            // d(KL)/d(mean) = beta * mean
+            var meanGrad = (Vector<T>)Engine.Multiply(latentMean, NumOps.FromDouble(_options.VAEBeta));
+            // d(KL)/d(logVar) = beta * 0.5 * (exp(logVar) - 1)
+            var logVarGrad = (Vector<T>)Engine.Multiply(
+                Engine.Subtract(Engine.Exp(latentLogVar), (Vector<T>)Engine.Fill<T>(latentLogVar.Length, NumOps.One)),
+                NumOps.FromDouble(_options.VAEBeta * 0.5));
+            // Assemble into encoder gradient [meanGrad | logVarGrad]
             var encoderGradient = new Vector<T>(encoderOutput.Length);
             for (int i = 0; i < latentMean.Length; i++)
             {
-                // d(KL)/d(mean) = mean
-                encoderGradient[i] = NumOps.Multiply(NumOps.FromDouble(_options.VAEBeta), latentMean[i]);
-                // d(KL)/d(logVar) = 0.5 * (exp(logVar) - 1)
-                encoderGradient[_options.LatentSize + i] = NumOps.Multiply(
-                    NumOps.FromDouble(_options.VAEBeta * 0.5),
-                    NumOps.Subtract(NumOps.Exp(latentLogVar[i]), NumOps.One)
-                );
+                encoderGradient[i] = meanGrad[i];
+                encoderGradient[_options.LatentSize + i] = logVarGrad[i];
             }
             _vaeEncoder.Backpropagate(Tensor<T>.FromVector(encoderGradient));
 

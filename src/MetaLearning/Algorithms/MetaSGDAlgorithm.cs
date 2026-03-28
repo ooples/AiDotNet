@@ -6,6 +6,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.MetaLearning.Data;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
+using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 using AiDotNet.Data.Structures;
@@ -168,7 +169,7 @@ public class MetaSGDAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, T
 
         // Initialize per-parameter optimizer with learned coefficients
         var numParams = MetaModel.GetParameters().Length;
-        _optimizer = new PerParameterOptimizer<T, TInput, TOutput>(numParams, _metaSGDOptions);
+        _optimizer = new PerParameterOptimizer<T, TInput, TOutput>(numParams, _metaSGDOptions, Engine);
 
         // Initialize optimizer with warm-start values if enabled
         if (_metaSGDOptions.UseWarmStart)
@@ -706,21 +707,22 @@ public class PerParameterOptimizer<T, TInput, TOutput>
 
     private readonly int _numParameters;
     private readonly MetaSGDOptions<T, TInput, TOutput> _options;
+    private readonly IEngine _engine;
 
-    // Per-parameter learned coefficients
-    private readonly T[] _learningRates;
-    private readonly T[] _momentums;
-    private readonly T[] _directions;
+    // Per-parameter learned coefficients (Vector<T> for Engine vectorization)
+    private Vector<T> _learningRates;
+    private Vector<T> _momentums;
+    private Vector<T> _directions;
 
     // Adam-specific parameters
-    private readonly T[] _adamBeta1;
-    private readonly T[] _adamBeta2;
-    private readonly T[] _adamEpsilon;
+    private Vector<T> _adamBeta1;
+    private Vector<T> _adamBeta2;
+    private Vector<T> _adamEpsilon;
 
     // Optimizer state
-    private readonly T[] _firstMoments;
-    private readonly T[] _secondMoments;
-    private readonly T[] _velocities;
+    private Vector<T> _firstMoments;
+    private Vector<T> _secondMoments;
+    private Vector<T> _velocities;
 
     /// <summary>
     /// Gets the number of model parameters this optimizer manages.
@@ -732,35 +734,23 @@ public class PerParameterOptimizer<T, TInput, TOutput>
     /// </summary>
     /// <param name="numParameters">Number of model parameters.</param>
     /// <param name="options">Meta-SGD options.</param>
-    public PerParameterOptimizer(int numParameters, MetaSGDOptions<T, TInput, TOutput> options)
+    /// <param name="engine">Engine instance for vectorized operations.</param>
+    public PerParameterOptimizer(int numParameters, MetaSGDOptions<T, TInput, TOutput> options, IEngine engine)
     {
         _numParameters = numParameters;
         _options = options;
+        _engine = engine;
 
-        // Initialize per-parameter arrays
-        _learningRates = new T[numParameters];
-        _momentums = new T[numParameters];
-        _directions = new T[numParameters];
-        _adamBeta1 = new T[numParameters];
-        _adamBeta2 = new T[numParameters];
-        _adamEpsilon = new T[numParameters];
-        _firstMoments = new T[numParameters];
-        _secondMoments = new T[numParameters];
-        _velocities = new T[numParameters];
-
-        // Initialize with default values
-        for (int i = 0; i < numParameters; i++)
-        {
-            _learningRates[i] = NumOps.FromDouble(options.InnerLearningRate);
-            _momentums[i] = NumOps.Zero;
-            _directions[i] = NumOps.One;
-            _adamBeta1[i] = NumOps.FromDouble(options.AdamBeta1Init);
-            _adamBeta2[i] = NumOps.FromDouble(options.AdamBeta2Init);
-            _adamEpsilon[i] = NumOps.FromDouble(options.AdamEpsilonInit);
-            _firstMoments[i] = NumOps.Zero;
-            _secondMoments[i] = NumOps.Zero;
-            _velocities[i] = NumOps.Zero;
-        }
+        // Initialize per-parameter vectors with default values
+        _learningRates = Vector<T>.CreateDefault(numParameters, NumOps.FromDouble(options.InnerLearningRate));
+        _momentums = new Vector<T>(numParameters);
+        _directions = Vector<T>.CreateDefault(numParameters, NumOps.One);
+        _adamBeta1 = Vector<T>.CreateDefault(numParameters, NumOps.FromDouble(options.AdamBeta1Init));
+        _adamBeta2 = Vector<T>.CreateDefault(numParameters, NumOps.FromDouble(options.AdamBeta2Init));
+        _adamEpsilon = Vector<T>.CreateDefault(numParameters, NumOps.FromDouble(options.AdamEpsilonInit));
+        _firstMoments = new Vector<T>(numParameters);
+        _secondMoments = new Vector<T>(numParameters);
+        _velocities = new Vector<T>(numParameters);
     }
 
     /// <summary>
@@ -990,7 +980,7 @@ public class PerParameterOptimizer<T, TInput, TOutput>
     /// <returns>A new PerParameterOptimizer with copied state.</returns>
     public PerParameterOptimizer<T, TInput, TOutput> Clone()
     {
-        var cloned = new PerParameterOptimizer<T, TInput, TOutput>(_numParameters, _options);
+        var cloned = new PerParameterOptimizer<T, TInput, TOutput>(_numParameters, _options, _engine);
 
         Array.Copy(_learningRates, cloned._learningRates, _numParameters);
         Array.Copy(_momentums, cloned._momentums, _numParameters);
@@ -1035,54 +1025,33 @@ public class PerParameterOptimizer<T, TInput, TOutput>
     /// </summary>
     private void ApplyRegularization()
     {
-        // Apply L2 regularization to learning rates
+        // Apply L2 regularization to learning rates — vectorized Engine.Multiply
         if (_options.LearningRateL2Reg > 0.0)
         {
             T regFactor = NumOps.FromDouble(1.0 - _options.LearningRateL2Reg);
-            for (int i = 0; i < _numParameters; i++)
-            {
-                _learningRates[i] = NumOps.Multiply(_learningRates[i], regFactor);
-            }
+            _learningRates = (Vector<T>)_engine.Multiply(_learningRates, regFactor);
         }
 
-        // Clip learning rates to valid range
-        double minLR = _options.MinLearningRate;
-        double maxLR = _options.MaxLearningRate;
+        // Clip learning rates to valid range — vectorized Engine.Clamp
+        _learningRates = _engine.Clamp(_learningRates, NumOps.FromDouble(_options.MinLearningRate), NumOps.FromDouble(_options.MaxLearningRate));
 
-        for (int i = 0; i < _numParameters; i++)
-        {
-            double val = NumOps.ToDouble(_learningRates[i]);
-            _learningRates[i] = NumOps.FromDouble(Math.Max(minLR, Math.Min(maxLR, val)));
-        }
-
-        // Clip momentum to [0, 1]
+        // Clip momentum to [0, 1] — vectorized Engine.Clamp
         if (_options.LearnMomentum)
         {
-            for (int i = 0; i < _numParameters; i++)
-            {
-                double val = NumOps.ToDouble(_momentums[i]);
-                _momentums[i] = NumOps.FromDouble(Math.Max(0.0, Math.Min(1.0, val)));
-            }
+            _momentums = _engine.Clamp(_momentums, NumOps.Zero, NumOps.One);
         }
 
-        // Clip Adam betas to valid range
+        // Clip Adam betas to valid range — vectorized Engine.Clamp
         if (_options.UpdateRuleType == MetaSGDUpdateRuleType.Adam && _options.LearnAdamBetas)
         {
-            const double minBeta = 0.0001;
-            const double maxBeta = 0.9999;
-            const double minEps = 1e-10;
-            const double maxEps = 1e-4;
+            T minBeta = NumOps.FromDouble(0.0001);
+            T maxBeta = NumOps.FromDouble(0.9999);
+            T minEps = NumOps.FromDouble(1e-10);
+            T maxEps = NumOps.FromDouble(1e-4);
 
-            for (int i = 0; i < _numParameters; i++)
-            {
-                double b1 = NumOps.ToDouble(_adamBeta1[i]);
-                double b2 = NumOps.ToDouble(_adamBeta2[i]);
-                double eps = NumOps.ToDouble(_adamEpsilon[i]);
-
-                _adamBeta1[i] = NumOps.FromDouble(Math.Max(minBeta, Math.Min(maxBeta, b1)));
-                _adamBeta2[i] = NumOps.FromDouble(Math.Max(minBeta, Math.Min(maxBeta, b2)));
-                _adamEpsilon[i] = NumOps.FromDouble(Math.Max(minEps, Math.Min(maxEps, eps)));
-            }
+            _adamBeta1 = _engine.Clamp(_adamBeta1, minBeta, maxBeta);
+            _adamBeta2 = _engine.Clamp(_adamBeta2, minBeta, maxBeta);
+            _adamEpsilon = _engine.Clamp(_adamEpsilon, minEps, maxEps);
         }
     }
 }

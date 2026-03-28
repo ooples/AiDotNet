@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -243,13 +244,9 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             var dynamicsInput = ConcatenateVectors(latentState, experience.Action);
             var predictedNextLatent = _dynamicsNetwork.Predict(Tensor<T>.FromVector(dynamicsInput)).ToVector();
 
-            // Dynamics loss: predict next latent state
-            T dynamicsLoss = NumOps.Zero;
-            for (int i = 0; i < predictedNextLatent.Length; i++)
-            {
-                var diff = NumOps.Subtract(nextLatentState[i], predictedNextLatent[i]);
-                dynamicsLoss = NumOps.Add(dynamicsLoss, NumOps.Multiply(diff, diff));
-            }
+            // Dynamics loss: MSE — vectorized Engine.Subtract + DotProduct
+            var dynamicsDiff = (Vector<T>)Engine.Subtract(nextLatentState, predictedNextLatent);
+            T dynamicsLoss = VectorHelper.DotProduct(dynamicsDiff, dynamicsDiff);
 
             // Reward prediction loss
             var predictedReward = _rewardNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector()[0];
@@ -266,13 +263,9 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             var loss = NumOps.Add(dynamicsLoss, NumOps.Add(rewardLoss, continueLoss));
             totalLoss = NumOps.Add(totalLoss, loss);
 
-            // Backprop through world model (accumulate gradients, don't update yet)
-            // MSE derivative: d/dx[(pred - target)^2] = 2(pred - target)
-            var gradient = new Vector<T>(predictedNextLatent.Length);
-            for (int i = 0; i < gradient.Length; i++)
-            {
-                gradient[i] = NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Subtract(predictedNextLatent[i], nextLatentState[i]));
-            }
+            // MSE derivative: d/dx[(pred - target)^2] = 2(pred - target) — vectorized
+            var gradient = (Vector<T>)Engine.Multiply(
+                Engine.Subtract(predictedNextLatent, nextLatentState), NumOps.FromDouble(2.0));
 
             _dynamicsNetwork.Backpropagate(Tensor<T>.FromVector(gradient));
 
@@ -344,44 +337,28 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             valueGradient[0] = NumOps.Multiply(NumOps.FromDouble(-2.0), valueDiff);
             _valueNetwork.Backpropagate(Tensor<T>.FromVector(valueGradient));
 
-            // Apply gradients using optimizer or manual gradient descent
+            // Apply gradients — vectorized SGD step
             var valueParams = _valueNetwork.GetParameters();
             var valueGrads = _valueNetwork.GetParameterGradients();
             var learningRate = _options.LearningRate is not null ? _options.LearningRate : NumOps.FromDouble(0.001);
-            for (int i = 0; i < valueParams.Length && i < valueGrads.Length; i++)
-            {
-                valueParams[i] = NumOps.Subtract(valueParams[i], NumOps.Multiply(learningRate, valueGrads[i]));
-            }
-            _valueNetwork.UpdateParameters(valueParams);
+            var updatedValueParams = (Vector<T>)Engine.Subtract(valueParams, Engine.Multiply(valueGrads, learningRate));
+            _valueNetwork.UpdateParameters(updatedValueParams);
 
             // Actor maximizes expected return using policy gradient
             // For Dreamer, the actor loss is -E[V(imagination)] where we want to maximize V
             var action = _actorNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector();
-            var actorGradient = new Vector<T>(action.Length);
-
-            // Policy gradient: maximize value function, so gradient is -dV/daction
-            // Since we're using the imagined return as the value estimate,
-            // the gradient signal is the advantage (return - baseline)
+            // Policy gradient: maximize value function — fill with negated advantage
             var advantage = valueDiff; // (imaginedReturns - predictedValue)
-
-            // For each action dimension, propagate the advantage signal
-            // Negative because we want to maximize (gradient ascent), but networks do gradient descent
-            for (int i = 0; i < actorGradient.Length; i++)
-            {
-                actorGradient[i] = NumOps.Negate(advantage);
-            }
+            var actorGradient = (Vector<T>)Engine.Fill<T>(action.Length, NumOps.Negate(advantage));
 
             _actorNetwork.Backpropagate(Tensor<T>.FromVector(actorGradient));
 
-            // Apply gradients to actor parameters
+            // Apply gradients to actor — vectorized SGD step
             var actorParams = _actorNetwork.GetParameters();
             var actorGrads = _actorNetwork.GetParameterGradients();
             var actorLearningRate = _options.LearningRate is not null ? _options.LearningRate : NumOps.FromDouble(0.001);
-            for (int i = 0; i < actorParams.Length && i < actorGrads.Length; i++)
-            {
-                actorParams[i] = NumOps.Subtract(actorParams[i], NumOps.Multiply(actorLearningRate, actorGrads[i]));
-            }
-            _actorNetwork.UpdateParameters(actorParams);
+            var updatedActorParams = (Vector<T>)Engine.Subtract(actorParams, Engine.Multiply(actorGrads, actorLearningRate));
+            _actorNetwork.UpdateParameters(updatedActorParams);
 
             totalLoss = NumOps.Add(totalLoss, valueLoss);
         }

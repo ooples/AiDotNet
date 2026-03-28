@@ -1253,10 +1253,11 @@ public class GRULayer<T> : LayerBase<T>
                 dh = dh.Reshape(_lastZ.Shape.ToArray());
             }
 
-            // Vectorized: compute (1 - _lastZ) using Tensor operations
+            // Vectorized: compute (1 - _lastZ) using pre-allocated ones tensor
             var ones1 = new Tensor<T>(_lastZ.Shape.ToArray());
             ones1.Fill(NumOps.One);
             var oneMinusLastZ = ones1.Subtract(_lastZ);
+            // Note: ones1 reused below for tanh derivative
 
             var dh_candidate = dh.ElementwiseMultiply(oneMinusLastZ);
             // dh/dz = h_prev - h_candidate. For single timestep, h_prev = 0
@@ -1278,9 +1279,7 @@ public class GRULayer<T> : LayerBase<T>
             // r gate gradient: d(r * h_prev) = dh_candidate_pre @ Uh
             var dr_times_h = dh_candidate_pre.Multiply(_Uh);
             var dr = dr_times_h.ElementwiseMultiply(_lastHiddenState);
-            var onesR = new Tensor<T>(_lastR.Shape.ToArray());
-            onesR.Fill(NumOps.One);
-            var dr_pre = dr.ElementwiseMultiply(_lastR).ElementwiseMultiply(onesR.Subtract(_lastR));
+            var dr_pre = dr.ElementwiseMultiply(_lastR).ElementwiseMultiply(ones1.Subtract(_lastR));
 
             // Input gradient: dx = dz_pre @ Wz + dr_pre @ Wr + dh_candidate_pre @ Wh
             var dx = dz_pre.Multiply(_Wz)
@@ -1344,6 +1343,11 @@ public class GRULayer<T> : LayerBase<T>
             // Initialize hidden state gradient for the next timestep
             var dhNext = new Tensor<T>([batchSize, _hiddenSize]);
 
+            // Pre-allocate reusable tensors to avoid per-timestep allocations
+            var onesGate = new Tensor<T>([batchSize, _hiddenSize]);
+            onesGate.Fill(NumOps.One);
+            var zerosHidden = new Tensor<T>([batchSize, _hiddenSize]);
+
             // Recompute hidden states and activations for each time step (needed for backward pass)
             List<Tensor<T>> timeStepHidden = new List<Tensor<T>>(sequenceLength);
             List<Tensor<T>> timeStepZ = new List<Tensor<T>>(sequenceLength);
@@ -1359,10 +1363,8 @@ public class GRULayer<T> : LayerBase<T>
                 var r = ComputeGate(xt, currentH, _Wr, _Ur, _br, true);
                 var h_candidate = ComputeGate(xt, r.ElementwiseMultiply(currentH), _Wh, _Uh, _bh, false);
 
-                // Vectorized: compute (1 - z) using Tensor operations
-                var ones2 = new Tensor<T>(z.Shape.ToArray());
-                ones2.Fill(NumOps.One);
-                var oneMinusZ2 = ones2.Subtract(z);
+                // Vectorized: compute (1 - z) using pre-allocated ones tensor
+                var oneMinusZ2 = onesGate.Subtract(z);
 
                 var newH = z.ElementwiseMultiply(currentH).Add(
                     oneMinusZ2.ElementwiseMultiply(h_candidate)
@@ -1390,14 +1392,11 @@ public class GRULayer<T> : LayerBase<T>
                 var r = timeStepR[t];
                 var h_candidate = timeStepHCandidate[t];
 
-                // Get previous hidden state (or zeros for t=0)
-                var h_prev = t > 0 ? timeStepHidden[t - 1] : new Tensor<T>([batchSize, _hiddenSize]);
+                // Get previous hidden state (or pre-allocated zeros for t=0)
+                var h_prev = t > 0 ? timeStepHidden[t - 1] : zerosHidden;
 
-                // Calculate gradients for this timestep
-                // Vectorized: compute (1 - z) using Tensor operations
-                var ones3 = new Tensor<T>(z.Shape.ToArray());
-                ones3.Fill(NumOps.One);
-                var oneMinusZ3 = ones3.Subtract(z);
+                // Calculate gradients — reuse pre-allocated ones tensor
+                var oneMinusZ3 = onesGate.Subtract(z);
 
                 // dh flows through two paths: z * h_prev and (1-z) * h_candidate
                 var dz = dh.ElementwiseMultiply(h_prev.Subtract(h_candidate));
@@ -1405,7 +1404,7 @@ public class GRULayer<T> : LayerBase<T>
 
                 // h_candidate = tanh(Wh @ x + Uh @ (r * h_prev) + bh)
                 // d(tanh_pre) = dh_candidate * tanh'(h_candidate) = dh_candidate * (1 - h_candidate^2)
-                var tanhDeriv = ones3.Subtract(h_candidate.ElementwiseMultiply(h_candidate));
+                var tanhDeriv = onesGate.Subtract(h_candidate.ElementwiseMultiply(h_candidate));
                 var dh_candidate_pre = dh_candidate.ElementwiseMultiply(tanhDeriv);
 
                 // dz flows through sigmoid: dz_pre = dz * sigmoid'(z) = dz * z * (1-z)
@@ -1416,9 +1415,7 @@ public class GRULayer<T> : LayerBase<T>
                 var dr_times_h = dh_candidate_pre.Multiply(_Uh);
                 var dr = dr_times_h.ElementwiseMultiply(h_prev);
                 // dr flows through sigmoid: dr_pre = dr * sigmoid'(r) = dr * r * (1-r)
-                var onesR = new Tensor<T>(r.Shape.ToArray());
-                onesR.Fill(NumOps.One);
-                var dr_pre = dr.ElementwiseMultiply(r).ElementwiseMultiply(onesR.Subtract(r));
+                var dr_pre = dr.ElementwiseMultiply(r).ElementwiseMultiply(onesGate.Subtract(r));
 
                 // Input gradient: dxt = dz_pre @ Wz + dr_pre @ Wr + dh_candidate_pre @ Wh
                 var dxt = dz_pre.Multiply(_Wz)

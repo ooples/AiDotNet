@@ -249,17 +249,11 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             {
                 if (accumulatedBodyGradients != null)
                 {
-                    for (int i = 0; i < accumulatedBodyGradients.Length; i++)
-                    {
-                        accumulatedBodyGradients[i] = NumOps.Add(accumulatedBodyGradients[i], bodyGrads[i]);
-                    }
+                    accumulatedBodyGradients = (Vector<T>)Engine.Add(accumulatedBodyGradients, bodyGrads);
                 }
                 if (accumulatedHeadGradients != null)
                 {
-                    for (int i = 0; i < accumulatedHeadGradients.Length; i++)
-                    {
-                        accumulatedHeadGradients[i] = NumOps.Add(accumulatedHeadGradients[i], headGrads[i]);
-                    }
+                    accumulatedHeadGradients = (Vector<T>)Engine.Add(accumulatedHeadGradients, headGrads);
                 }
             }
         }
@@ -269,16 +263,10 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             throw new InvalidOperationException("Failed to compute meta-gradients.");
         }
 
-        // Average gradients
+        // Average gradients — vectorized Engine.Divide
         T batchSizeT = NumOps.FromDouble(taskBatch.BatchSize);
-        for (int i = 0; i < accumulatedBodyGradients.Length; i++)
-        {
-            accumulatedBodyGradients[i] = NumOps.Divide(accumulatedBodyGradients[i], batchSizeT);
-        }
-        for (int i = 0; i < accumulatedHeadGradients.Length; i++)
-        {
-            accumulatedHeadGradients[i] = NumOps.Divide(accumulatedHeadGradients[i], batchSizeT);
-        }
+        accumulatedBodyGradients = (Vector<T>)Engine.Divide(accumulatedBodyGradients, batchSizeT);
+        accumulatedHeadGradients = (Vector<T>)Engine.Divide(accumulatedHeadGradients, batchSizeT);
 
         // Clip gradients if configured
         if (_boilOptions.GradientClipThreshold.HasValue && _boilOptions.GradientClipThreshold.Value > 0)
