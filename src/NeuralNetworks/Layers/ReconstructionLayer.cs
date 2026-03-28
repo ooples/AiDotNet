@@ -426,6 +426,8 @@ public class ReconstructionLayer<T> : LayerBase<T>
     public override void Serialize(BinaryWriter writer)
     {
         writer.Write(_useVectorActivation);
+        writer.Write(_hidden1Dim);
+        writer.Write(_hidden2Dim);
         _fc1.Serialize(writer);
         _fc2.Serialize(writer);
         _fc3.Serialize(writer);
@@ -459,6 +461,8 @@ public class ReconstructionLayer<T> : LayerBase<T>
     public override void Deserialize(BinaryReader reader)
     {
         _useVectorActivation = reader.ReadBoolean();
+        _hidden1Dim = reader.ReadInt32();
+        _hidden2Dim = reader.ReadInt32();
         _fc1.Deserialize(reader);
         _fc2.Deserialize(reader);
         _fc3.Deserialize(reader);
