@@ -420,8 +420,10 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         T lr = NumOps.FromDouble(LearningRate);
         T bf = NumOps.FromDouble(BoostFactor);
 
-        // Strengthen active columns: Connections += lr * (input - Connections) * activeMask
-        var activeMask = LastOutput.Reshape([1, ColumnCount]);
+        // Use binary mask for Hebbian learning (per Hawkins 2004, learning uses binary SDR).
+        // LastOutput stores magnitude-preserving activations; _lastBinaryOutput is the true binary mask.
+        var binaryMask = _lastBinaryOutput ?? LastOutput;
+        var activeMask = binaryMask.Reshape([1, ColumnCount]);
         var inputRow = LastInput.Reshape([InputSize, 1]);
         var onesCol = new Tensor<T>([1, ColumnCount]);
         onesCol.Fill(NumOps.One);
