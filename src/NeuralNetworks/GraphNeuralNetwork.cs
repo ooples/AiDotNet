@@ -855,7 +855,7 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         parameterGradients = ClipGradient(parameterGradients);
 
         // Reuse optimizer across Train calls to preserve Adam momentum state.
-        // Use lower learning rate (0.0005) for GNNs — graph convolution aggregates
+        // Use lower learning rate (0.0001) for GNNs — graph convolution aggregates
         // neighbor features which amplifies gradient magnitudes.
         _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.0001 });
