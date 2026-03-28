@@ -85,41 +85,21 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
         }
         if (options.EdgeThreshold.HasValue)
         {
-            if (double.IsNaN(options.EdgeThreshold.Value) || double.IsInfinity(options.EdgeThreshold.Value) || options.EdgeThreshold.Value < 0)
-                throw new ArgumentException("EdgeThreshold must be a non-negative finite value.");
+            if (double.IsNaN(options.EdgeThreshold.Value) || options.EdgeThreshold.Value < 0 || options.EdgeThreshold.Value > 1)
+                throw new ArgumentException("EdgeThreshold must be a finite value between 0 and 1.");
             EdgeThreshold = options.EdgeThreshold.Value;
         }
         if (options.LearningRate.HasValue)
         {
-            if (double.IsNaN(options.LearningRate.Value) || double.IsInfinity(options.LearningRate.Value) || options.LearningRate.Value <= 0)
+            if (double.IsNaN(options.LearningRate.Value) || options.LearningRate.Value <= 0)
                 throw new ArgumentException("LearningRate must be a positive finite value.");
             LearningRate = options.LearningRate.Value;
         }
-        if (options.InitialLogVariance.HasValue)
-        {
-            if (double.IsNaN(options.InitialLogVariance.Value) || double.IsInfinity(options.InitialLogVariance.Value))
-                throw new ArgumentException("InitialLogVariance must be a finite value.");
-            InitialLogVariance = options.InitialLogVariance.Value;
-        }
-        if (options.DefaultKlWeight.HasValue)
-        {
-            if (double.IsNaN(options.DefaultKlWeight.Value) || double.IsInfinity(options.DefaultKlWeight.Value) || options.DefaultKlWeight.Value < 0)
-                throw new ArgumentException("DefaultKlWeight must be a non-negative finite value.");
-            DefaultKlWeight = options.DefaultKlWeight.Value;
-        }
-        if (options.MaxKlWeight.HasValue)
-        {
-            if (double.IsNaN(options.MaxKlWeight.Value) || double.IsInfinity(options.MaxKlWeight.Value) || options.MaxKlWeight.Value < 0)
-                throw new ArgumentException("MaxKlWeight must be a non-negative finite value.");
-            MaxKlWeight = options.MaxKlWeight.Value;
-        }
+        if (options.InitialLogVariance.HasValue) InitialLogVariance = options.InitialLogVariance.Value;
+        if (options.DefaultKlWeight.HasValue) DefaultKlWeight = options.DefaultKlWeight.Value;
+        if (options.MaxKlWeight.HasValue) MaxKlWeight = options.MaxKlWeight.Value;
         if (options.UseKlWarmUp.HasValue) UseKlWarmUp = options.UseKlWarmUp.Value;
-        if (options.MaxPenalty.HasValue)
-        {
-            if (double.IsNaN(options.MaxPenalty.Value) || double.IsInfinity(options.MaxPenalty.Value) || options.MaxPenalty.Value <= 0)
-                throw new ArgumentException("MaxPenalty must be a positive finite value.");
-            MaxPenaltyValue = options.MaxPenalty.Value;
-        }
+        if (options.MaxPenalty.HasValue) MaxPenaltyValue = options.MaxPenalty.Value;
     }
 
     /// <summary>
@@ -138,23 +118,19 @@ public abstract class DeepCausalBase<T> : CausalDiscoveryBase<T>
             for (int j = 0; j < d; j++)
             {
                 if (i == j) continue;
-
-                // Only add edge if learned probability exceeds threshold
-                if (learnedP[i, j] < 0.3) continue;
-
-                // Direction: edge i→j only if P[i,j] > P[j,i]
-                // For ties, only process the (i,j) pair where i < j to avoid 2-cycles.
-                if (learnedP[i, j] < learnedP[j, i]) continue;
-                if (Math.Abs(learnedP[i, j] - learnedP[j, i]) < 1e-10 && i > j) continue;
-
-                // Use covariance for edge weight
                 double varI = NumOps.ToDouble(cov[i, i]);
                 if (varI < 1e-10) continue;
                 double covIJ = NumOps.ToDouble(cov[i, j]);
                 double weight = covIJ / varI;
                 if (Math.Abs(weight) < EdgeThreshold) continue;
 
-                result[i, j] = NumOps.FromDouble(weight);
+                double varJ = NumOps.ToDouble(cov[j, j]);
+                double reverseWeight = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
+                bool learnedDirection = learnedP[i, j] >= learnedP[j, i];
+                bool statisticalDirection = Math.Abs(weight) >= reverseWeight;
+
+                if (learnedDirection || statisticalDirection)
+                    result[i, j] = NumOps.FromDouble(weight);
             }
         return result;
     }

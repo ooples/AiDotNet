@@ -1,6 +1,4 @@
 using System.IO;
-using AiDotNet.LossFunctions;
-using AiDotNet.Models;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Detection.Necks;
@@ -21,9 +19,12 @@ namespace AiDotNet.ComputerVision.Detection.Necks;
 /// - BiFPN (Bidirectional FPN): Weighted bidirectional fusion
 /// </para>
 /// </remarks>
-public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+public abstract class NeckBase<T>
 {
-    // NumOps and Engine inherited from ModelBase
+    /// <summary>
+    /// Numeric operations for type T.
+    /// </summary>
+    protected readonly INumericOperations<T> NumOps;
 
     /// <summary>
     /// Whether the neck is in training mode.
@@ -54,6 +55,7 @@ public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// </summary>
     protected NeckBase()
     {
+        NumOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         IsTrainingMode = false;
     }
 
@@ -269,43 +271,6 @@ public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         }
         return output;
     }
-
-    #region ModelBase Overrides
-
-    /// <summary>
-    /// Predicts by running the neck forward pass on a single feature map.
-    /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
-    {
-        var features = Forward(new List<Tensor<T>> { input });
-        return features.Count > 0 ? features[0] : new Tensor<T>(new[] { 1, 0 });
-    }
-
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
-
-    /// <inheritdoc />
-    public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters() => new Vector<T>(0);
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters) { }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
-    {
-        var copy = DeepCopy();
-        copy.SetParameters(parameters);
-        return copy;
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        => (NeckBase<T>)MemberwiseClone();
-
-    #endregion
 }
 
 /// <summary>

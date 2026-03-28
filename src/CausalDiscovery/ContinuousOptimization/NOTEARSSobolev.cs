@@ -230,13 +230,12 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
         var preAct = new T[h];
 
         // Vectorized forward pass using Engine.DotProduct
-        // Pre-allocate reusable vectors outside the inner loop
         var inputVec = new Vector<T>(d);
         for (int i = 0; i < d; i++) inputVec[i] = data[sample, i];
 
-        var wCol = new Vector<T>(d);
         for (int k = 0; k < h; k++)
         {
+            var wCol = new Vector<T>(d);
             for (int i = 0; i < d; i++) wCol[i] = _W1[j][i, k];
             T sum = NumOps.Add(_b1[j][0, k], Engine.DotProduct(inputVec, wCol));
             preAct[k] = sum;

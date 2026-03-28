@@ -92,7 +92,7 @@ public class OCSEAlgorithm<T> : InfoTheoreticBase<T>
                 deltaY[t] = transitions[t, target];
 
             // Check if transitions are near-constant (deterministic trend).
-            // If so, skip this target since constant transitions carry no MI.
+            // If so, use raw data values instead, since constant transitions carry no MI.
             double deltaVar = 0;
             double deltaMean = 0;
             for (int t = 0; t < effectiveN; t++)

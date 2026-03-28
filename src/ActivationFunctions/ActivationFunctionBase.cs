@@ -119,17 +119,9 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
     {
         // Use TensorAllocator.RentUninitialized — all elements are immediately overwritten below
         Tensor<T> output = TensorAllocator.RentUninitialized<T>(input.Shape.ToArray());
-        try
+        for (int i = 0; i < input.Length; i++)
         {
-            for (int i = 0; i < input.Length; i++)
-            {
-                output[i] = Activate(input[i]);
-            }
-        }
-        catch
-        {
-            TensorAllocator.Return(output);
-            throw;
+            output[i] = Activate(input[i]);
         }
 
         return output;

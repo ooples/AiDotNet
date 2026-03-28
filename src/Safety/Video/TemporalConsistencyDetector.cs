@@ -51,6 +51,7 @@ namespace AiDotNet.Safety.Video;
     Authors = "Various")]
 public class TemporalConsistencyDetector<T> : VideoSafetyModuleBase<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly T _threshold;
 

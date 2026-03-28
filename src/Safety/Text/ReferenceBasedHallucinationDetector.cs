@@ -42,6 +42,7 @@ namespace AiDotNet.Safety.Text;
     Authors = "Vectara")]
 public class ReferenceBasedHallucinationDetector<T> : TextSafetyModuleBase<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly double _threshold;
     private readonly string[] _referenceDocuments;

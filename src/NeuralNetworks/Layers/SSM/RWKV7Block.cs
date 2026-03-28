@@ -370,7 +370,7 @@ public class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> TimeMixingForward(Tensor<T> x, int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State: [batch, numHeads, headDim, headDim] - matrix-valued per head
         var state = _recurrentState ?? new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
@@ -540,7 +540,7 @@ public class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ChannelMixingForward(Tensor<T> x, int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
+        var output = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
         var xPrev = _prevChannelToken ?? new Tensor<T>(new[] { batchSize, _modelDimension });
 
         // Caches for backward pass
@@ -600,9 +600,9 @@ public class RWKV7Block<T> : LayerBase<T>
 
             // Cache for backward
             SafeSetSlice(allRGate, t, rGate, batchSize, _modelDimension);
-            SafeSetSlice(allSiLU, t, kSiLU, batchSize, _ffnDimension);
+            SafeSetSliceDim(allSiLU, t, kSiLU, batchSize, _ffnDimension);
             SafeSetSlice(allVProj, t, vProj, batchSize, _modelDimension);
-            SafeSetSlice(allKProj, t, kProj, batchSize, _ffnDimension);
+            SafeSetSliceDim(allKProj, t, kProj, batchSize, _ffnDimension);
 
             xPrev = x_t;
         }
@@ -1092,6 +1092,13 @@ public class RWKV7Block<T> : LayerBase<T>
     /// Uses explicit per-element copy to avoid SetSlice position bugs.
     /// </summary>
     private static void SafeSetSlice(Tensor<T> dest, int t, Tensor<T> slice, int batch, int dim)
+    {
+        for (int bi = 0; bi < batch; bi++)
+            for (int d = 0; d < dim; d++)
+                dest[new[] { bi, t, d }] = slice[new[] { bi, d }];
+    }
+
+    private static void SafeSetSliceDim(Tensor<T> dest, int t, Tensor<T> slice, int batch, int dim)
     {
         for (int bi = 0; bi < batch; bi++)
             for (int d = 0; d < dim; d++)

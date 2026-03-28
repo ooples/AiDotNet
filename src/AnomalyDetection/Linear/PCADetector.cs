@@ -232,11 +232,11 @@ public class PCADetector<T> : AnomalyDetectorBase<T>
     {
         var cov = new Matrix<T>(d, d);
 
-        // Pre-allocate column vectors outside all loops
-        var colI = new Vector<T>(n);
-        var colJ = new Vector<T>(n);
         for (int i = 0; i < d; i++)
         {
+            // Pre-allocate column vectors outside inner loop
+            var colI = new Vector<T>(n);
+            var colJ = new Vector<T>(n);
             for (int k = 0; k < n; k++) colI[k] = centered[k, i];
 
             for (int j = i; j < d; j++)

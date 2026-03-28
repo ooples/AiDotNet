@@ -133,11 +133,10 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T>
             var studentSoft = DistillationHelper<T>.Softmax(studentOutput, Temperature);
             var teacherSoft = DistillationHelper<T>.Softmax(teacherOutput, Temperature);
 
-            // Soft gradient: T² from loss scaling × 1/T from softmax chain rule = net factor T
             for (int i = 0; i < outputDim; i++)
             {
                 var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature));
+                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature));
             }
 
             if (trueLabels != null)
@@ -155,12 +154,6 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T>
 
             gradientBatch.SetRow(r, gradient);
         }
-
-        // Average gradients over the batch
-        T oneOverBatch = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
-        for (int r = 0; r < batchSize; r++)
-            for (int c = 0; c < outputDim; c++)
-                gradientBatch[r, c] = NumOps.Multiply(gradientBatch[r, c], oneOverBatch);
 
         return gradientBatch;
     }

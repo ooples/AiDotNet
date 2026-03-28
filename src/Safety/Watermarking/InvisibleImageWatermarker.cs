@@ -34,6 +34,7 @@ namespace AiDotNet.Safety.Watermarking;
     Authors = "Matthew Tancik, Ben Mildenhall, Ren Ng")]
 public class InvisibleImageWatermarker<T> : ImageWatermarkerBase<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <inheritdoc />
     public override string ModuleName => "InvisibleImageWatermarker";

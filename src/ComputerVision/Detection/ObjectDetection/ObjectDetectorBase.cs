@@ -2,8 +2,6 @@ using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
 using AiDotNet.ComputerVision.Weights;
-using AiDotNet.LossFunctions;
-using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
@@ -25,9 +23,17 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection;
 /// - Head: Produces final predictions (boxes, classes, scores)
 /// </para>
 /// </remarks>
-public abstract class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+public abstract class ObjectDetectorBase<T>
 {
-    // Engine and NumOps inherited from ModelBase
+    /// <summary>
+    /// Provides access to the hardware-accelerated tensor engine.
+    /// </summary>
+    protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
+    /// Numeric operations for type T.
+    /// </summary>
+    protected readonly INumericOperations<T> NumOps;
 
     /// <summary>
     /// Configuration options for this detector.
@@ -91,6 +97,7 @@ public abstract class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// <param name="options">Configuration options for the detector.</param>
     protected ObjectDetectorBase(ObjectDetectionOptions<T> options)
     {
+        NumOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         Options = options;
         Nms = new NMS<T>();
         WeightDownloader = new WeightDownloader();
@@ -466,43 +473,4 @@ public abstract class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             "toothbrush"
         };
     }
-
-    #region ModelBase Overrides
-
-    /// <summary>
-    /// Predicts by running the forward pass and returning raw network outputs concatenated.
-    /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input)
-    {
-        var outputs = Forward(input);
-        return outputs.Count > 0 ? outputs[0] : new Tensor<T>(new[] { 1, 0 });
-    }
-
-    /// <summary>
-    /// Training object detectors requires specialized loss. Override in subclasses.
-    /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
-
-    /// <inheritdoc />
-    public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters() => new Vector<T>(0);
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters) { }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
-    {
-        var copy = DeepCopy();
-        copy.SetParameters(parameters);
-        return copy;
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        => (ObjectDetectorBase<T>)MemberwiseClone();
-
-    #endregion
 }

@@ -20,9 +20,18 @@ namespace AiDotNet.Safety.Multimodal;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class MultimodalSafetyModuleBase<T> : SafetyModuleBase<T>, IMultimodalSafetyModule<T>
+public abstract class MultimodalSafetyModuleBase<T> : IMultimodalSafetyModule<T>
 {
-    // NumOps, Engine, ModuleName, IsReady inherited from SafetyModuleBase
+    /// <summary>
+    /// Numeric operations for type T.
+    /// </summary>
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <inheritdoc />
+    public abstract string ModuleName { get; }
+
+    /// <inheritdoc />
+    public virtual bool IsReady => true;
 
     /// <inheritdoc />
     public abstract IReadOnlyList<SafetyFinding> EvaluateTextImage(string text, Tensor<T> image);
@@ -35,7 +44,7 @@ public abstract class MultimodalSafetyModuleBase<T> : SafetyModuleBase<T>, IMult
     }
 
     /// <inheritdoc />
-    public override IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
+    public virtual IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
         return Array.Empty<SafetyFinding>();
     }

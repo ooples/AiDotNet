@@ -46,6 +46,7 @@ namespace AiDotNet.Safety.Text;
     Authors = "André V. Duarte, Xuandong Zhao, Arlindo L. Oliveira, Lei Li")]
 public class EmbeddingCopyrightDetector<T> : TextSafetyModuleBase<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly double _threshold;
     private readonly int _embeddingDim;

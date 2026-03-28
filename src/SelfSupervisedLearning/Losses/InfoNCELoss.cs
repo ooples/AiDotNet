@@ -1,5 +1,4 @@
 using AiDotNet.Attributes;
-using AiDotNet.Interfaces;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
@@ -34,7 +33,7 @@ namespace AiDotNet.SelfSupervisedLearning.Losses;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ModelPaper("Momentum Contrast for Unsupervised Visual Representation Learning", "https://arxiv.org/abs/1911.05722", Year = 2020, Authors = "Kaiming He, Haoqi Fan, Yuxin Wu, Saining Xie, Ross Girshick")]
-public class InfoNCELoss<T> : IContrastiveLoss<T>
+public class InfoNCELoss<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static IEngine Engine => AiDotNetEngine.Current;
@@ -428,13 +427,5 @@ public class InfoNCELoss<T> : IContrastiveLoss<T>
         }
 
         return new Tensor<T>(result, [batchSize, dim]);
-    }
-
-    /// <summary>
-    /// IContrastiveLoss implementation — delegates to in-batch contrastive loss.
-    /// </summary>
-    T IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
-    {
-        return ComputeLossInBatch(view1, view2);
     }
 }

@@ -38,32 +38,26 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
     /// The steepness parameter that controls how quickly the function transitions between -1 and 1.
     /// </summary>
     private readonly T _beta;
-    private readonly double _saturationThreshold;
 
     /// <summary>
     /// Initializes a new instance of the ScaledTanhActivation class with the specified steepness parameter.
     /// </summary>
     /// <param name="beta">The steepness parameter. Higher values make the curve steeper. Default is 1.0.</param>
-    /// <param name="saturationThreshold">
-    /// When |beta*x| exceeds this value, tanh is clamped to ±1 to prevent exp() overflow.
-    /// Default is 20.0, which gives tanh accuracy within 1e-17 of the true value.
-    /// </param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The beta parameter controls how "steep" the S-curve of the function is.
     /// - A higher beta value (e.g., 2.0) makes the transition from -1 to 1 happen more quickly
     /// - A lower beta value (e.g., 0.5) makes the transition more gradual
     /// - When beta = 2.0, this function is exactly equivalent to the standard tanh function
-    ///
+    /// 
     /// The default value of 1.0 works well for most applications, but you might adjust it if:
     /// - Your network is learning too slowly (try increasing beta)
     /// - Your network is unstable during training (try decreasing beta)
     /// </para>
     /// </remarks>
-    public ScaledTanhActivation(double beta = 1.0, double saturationThreshold = 20.0)
+    public ScaledTanhActivation(double beta = 1.0)
     {
         _beta = NumOps.FromDouble(beta);
-        _saturationThreshold = saturationThreshold;
     }
 
     /// <summary>
@@ -98,9 +92,9 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
         // For large positive ßx: exp(-ßx) → 0, result → 1
         // For large negative ßx: exp(-ßx) → ∞, result → -1
         double betaX = NumOps.ToDouble(NumOps.Multiply(_beta, input));
-        if (betaX > _saturationThreshold)
+        if (betaX > 20.0)
             return NumOps.One;
-        if (betaX < -_saturationThreshold)
+        if (betaX < -20.0)
             return NumOps.Negate(NumOps.One);
 
         T negBetaX = NumOps.Negate(NumOps.Multiply(_beta, input));

@@ -41,6 +41,7 @@ namespace AiDotNet.Safety.Audio;
     Authors = "Various")]
 public class PerturbationVoiceProtector<T> : AudioSafetyModuleBase<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly T _perturbationStrength;
     private readonly FastFourierTransform<T> _fft;

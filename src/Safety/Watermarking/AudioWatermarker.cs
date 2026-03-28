@@ -4,7 +4,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Safety;
-using AiDotNet.Safety.Audio;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Watermarking;
@@ -52,8 +51,10 @@ namespace AiDotNet.Safety.Watermarking;
     "https://arxiv.org/abs/2401.17264",
     Year = 2024,
     Authors = "Robin San Roman, Pierre Fernandez, et al.")]
-public class AudioWatermarker<T> : AudioSafetyModuleBase<T>
+public class AudioWatermarker<T> : IAudioSafetyModule<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     private readonly T _detectionThreshold;
     private readonly T _watermarkStrength;
     private readonly FastFourierTransform<T> _fft;
@@ -64,10 +65,10 @@ public class AudioWatermarker<T> : AudioSafetyModuleBase<T>
     private static readonly T Epsilon = NumOps.FromDouble(1e-10);
 
     /// <inheritdoc />
-    public override string ModuleName => "AudioWatermarker";
+    public string ModuleName => "AudioWatermarker";
 
     /// <inheritdoc />
-    public override bool IsReady => true;
+    public bool IsReady => true;
 
     /// <summary>
     /// Initializes a new audio watermarker.
@@ -101,7 +102,7 @@ public class AudioWatermarker<T> : AudioSafetyModuleBase<T>
     /// <summary>
     /// Detects whether the given audio contains a watermark.
     /// </summary>
-    public override IReadOnlyList<SafetyFinding> EvaluateAudio(Vector<T> audioSamples, int sampleRate)
+    public IReadOnlyList<SafetyFinding> EvaluateAudio(Vector<T> audioSamples, int sampleRate)
     {
         var findings = new List<SafetyFinding>();
 
@@ -131,7 +132,7 @@ public class AudioWatermarker<T> : AudioSafetyModuleBase<T>
     }
 
     /// <inheritdoc />
-    public override IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
+    public IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
         return EvaluateAudio(content, 16000);
     }

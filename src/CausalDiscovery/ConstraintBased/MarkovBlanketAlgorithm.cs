@@ -36,16 +36,12 @@ namespace AiDotNet.CausalDiscovery.ConstraintBased;
 public class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
 {
     private const int DefaultDiscretizationBins = 10;
-    // MI threshold must account for finite-sample bias. For independent variables with k bins
-    // and n samples, expected spurious MI ≈ (k-1)²/(2n·ln2). With k=10, n=200 → ~0.29 bits.
-    // A safe threshold is ~2x the expected bias to avoid false positives.
-    private const double DefaultMIThreshold = 0.6;
+    private const double DefaultMIThreshold = 0.01;
     private const double MinDiscretizationRange = 1e-10;
-    private const int DefaultMinGroupSizeForMI = 5;
+    private const int MinGroupSizeForMI = 5;
 
-    private readonly int _nBins;
-    private readonly double _miThreshold;
-    private readonly int _minGroupSizeForMI;
+    private readonly int _nBins = DefaultDiscretizationBins;
+    private readonly double _miThreshold = DefaultMIThreshold;
 
     /// <inheritdoc/>
     public override string Name => "Markov Blanket (Grow-Shrink)";
@@ -56,24 +52,8 @@ public class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
     /// <inheritdoc/>
     public override bool SupportsNonlinear => false;
 
-    /// <summary>
-    /// Creates a new Markov Blanket algorithm instance.
-    /// </summary>
-    /// <param name="options">Causal discovery options.</param>
-    /// <param name="discretizationBins">Number of bins for discretizing continuous data. Default: 10.</param>
-    /// <param name="miThreshold">Mutual information threshold for independence testing.
-    /// Must be above the expected spurious MI for your sample size to avoid false positives.
-    /// Default: 0.6 (safe for n >= 200 with 10 bins).</param>
-    /// <param name="minGroupSizeForMI">Minimum bin count for MI computation. Default: 5.</param>
-    public MarkovBlanketAlgorithm(
-        CausalDiscoveryOptions? options = null,
-        int discretizationBins = DefaultDiscretizationBins,
-        double miThreshold = DefaultMIThreshold,
-        int minGroupSizeForMI = DefaultMinGroupSizeForMI)
+    public MarkovBlanketAlgorithm(CausalDiscoveryOptions? options = null)
     {
-        _nBins = discretizationBins;
-        _miThreshold = miThreshold;
-        _minGroupSizeForMI = minGroupSizeForMI;
         ApplyConstraintOptions(options);
     }
 
@@ -248,7 +228,7 @@ public class MarkovBlanketAlgorithm<T> : ConstraintBasedBase<T>
         double condMI = 0;
         foreach (var group in groups.Values)
         {
-            if (group.Count <= _minGroupSizeForMI) continue;
+            if (group.Count <= MinGroupSizeForMI) continue;
             int groupN = group.Count;
 
             var jointCounts = new Dictionary<(int, int), int>();

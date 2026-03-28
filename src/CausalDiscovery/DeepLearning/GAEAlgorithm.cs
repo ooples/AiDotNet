@@ -205,13 +205,12 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                         // Log-variance gradient via reparameterization:
                         // dL/d(logvar_s) = dL/dz_s * epsilon_s * 0.5 * exp(0.5*logvar_s)
                         // Chain rule: ∂L/∂logvar_s = gradScale * z_t[j,k] * ε_s[i,k] * 0.5 * std_s
-                        // Use the SAME clamped std as forward pass for consistency
-                        T stdS = NumOps.FromDouble(stdSArr[i, k]);
+                        T stdS = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZsLogVar[i, k])));
                         gradZsLogVar[i, k] = NumOps.Add(gradZsLogVar[i, k],
                             NumOps.Multiply(gradScale, NumOps.Multiply(Zt[j, k],
                             NumOps.Multiply(epsilonS[i, k],
                             NumOps.Multiply(NumOps.FromDouble(0.5), stdS)))));
-                        T stdT = NumOps.FromDouble(stdTArr[j, k]);
+                        T stdT = NumOps.FromDouble(Math.Exp(0.5 * NumOps.ToDouble(ZtLogVar[j, k])));
                         gradZtLogVar[j, k] = NumOps.Add(gradZtLogVar[j, k],
                             NumOps.Multiply(gradScale, NumOps.Multiply(Zs[i, k],
                             NumOps.Multiply(epsilonT[j, k],
@@ -262,8 +261,7 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
         }
 
         // Final output: use trained P matrix for structure, covariance for weights.
-        // The learned P matrix is the PRIMARY signal — only add edges where
-        // P[i,j] exceeds a threshold. Covariance provides the edge weight.
+        // Two-stage approach: (1) P determines direction, (2) covariance provides weight.
         var result = new Matrix<T>(d, d);
         for (int i = 0; i < d; i++)
             for (int j = 0; j < d; j++)
@@ -271,23 +269,24 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
                 if (i == j) continue;
                 double pij = NumOps.ToDouble(lastP[i, j]);
                 double pji = NumOps.ToDouble(lastP[j, i]);
-
-                // Only add edge if learned probability exceeds threshold
-                if (pij < 0.3) continue;
-
-                // Direction: edge i→j only if P[i,j] > P[j,i]
-                // For ties, only process the (i,j) pair where i < j to avoid 2-cycles.
-                if (pij < pji) continue;
-                if (Math.Abs(pij - pji) < 1e-10 && i > j) continue;
-
-                // Use covariance for edge weight
                 double varI = NumOps.ToDouble(cov[i, i]);
-                if (varI < 1e-10) continue;
                 double covIJ = NumOps.ToDouble(cov[i, j]);
+
+                if (varI < 1e-10) continue;
                 double weight = covIJ / varI;
                 if (Math.Abs(weight) < EdgeThreshold) continue;
 
-                result[i, j] = NumOps.FromDouble(weight);
+                // Edge i→j if: learned probability P[i,j] >= P[j,i] (asymmetric direction)
+                // OR if covariance ratio |cov/var_i| > |cov/var_j| (statistical direction)
+                double varJ = NumOps.ToDouble(cov[j, j]);
+                double reverseWeight = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
+                // Use strict inequality to avoid creating both i→j and j→i (2-cycle).
+                // For ties, only process the (i,j) pair where i < j.
+                bool learnedDirection = pij > pji || (pij == pji && i < j);
+                bool statisticalDirection = Math.Abs(weight) > reverseWeight;
+
+                if (learnedDirection || statisticalDirection)
+                    result[i, j] = NumOps.FromDouble(weight);
             }
 
         return result;

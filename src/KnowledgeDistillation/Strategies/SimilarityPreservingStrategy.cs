@@ -113,7 +113,7 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
             for (int i = 0; i < outputDim; i++)
             {
                 var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature));
+                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature * Temperature));
             }
 
             if (trueLabels != null)
@@ -134,40 +134,18 @@ public class SimilarityPreservingStrategy<T> : DistillationStrategyBase<T>
 
         if (_similarityWeight > 0)
         {
-            // Similarity gradient is w.r.t. softmax outputs (embeddings).
-            // Must apply softmax Jacobian to convert to gradient w.r.t. logits.
-            var simGradEmbedding = ComputeSimilarityGradient(studentEmbeddings, teacherEmbeddings);
+            var similarityGradient = ComputeSimilarityGradient(studentEmbeddings, teacherEmbeddings);
 
             for (int r = 0; r < batchSize; r++)
             {
-                // Apply softmax Jacobian: ∂L/∂z_k = Σ_m (∂L/∂p_m) * p_m * (δ_{mk} - p_k) / T
-                var p = studentEmbeddings[r]; // softmax output
-                for (int k = 0; k < outputDim; k++)
+                for (int c = 0; c < outputDim; c++)
                 {
-                    double dLdz_k = 0;
-                    double p_k = Convert.ToDouble(p[k]);
-                    for (int m = 0; m < outputDim; m++)
-                    {
-                        double dLdp_m = NumOps.ToDouble(simGradEmbedding[r, m]);
-                        double p_m = NumOps.ToDouble(p[m]);
-                        double jacobian = p_m * ((m == k ? 1.0 : 0.0) - p_k);
-                        dLdz_k += dLdp_m * jacobian;
-                    }
-                    // Divide by T because softmax input is z/T
-                    dLdz_k /= Temperature;
-
-                    var standardGrad = NumOps.Multiply(gradientBatch[r, k], NumOps.FromDouble(1.0 - _similarityWeight));
-                    var simGrad = NumOps.Multiply(NumOps.FromDouble(dLdz_k), NumOps.FromDouble(_similarityWeight));
-                    gradientBatch[r, k] = NumOps.Add(standardGrad, simGrad);
+                    var standardGrad = NumOps.Multiply(gradientBatch[r, c], NumOps.FromDouble(1.0 - _similarityWeight));
+                    var simGrad = NumOps.Multiply(similarityGradient[r, c], NumOps.FromDouble(_similarityWeight));
+                    gradientBatch[r, c] = NumOps.Add(standardGrad, simGrad);
                 }
             }
         }
-
-        // Average gradients over the batch
-        T oneOverBatch = NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize));
-        for (int r2 = 0; r2 < batchSize; r2++)
-            for (int c = 0; c < outputDim; c++)
-                gradientBatch[r2, c] = NumOps.Multiply(gradientBatch[r2, c], oneOverBatch);
 
         return gradientBatch;
     }

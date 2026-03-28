@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.LossFunctions;
-using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
 
 namespace AiDotNet.ReinforcementLearning.Policies
@@ -13,9 +11,12 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// Provides common functionality for numeric operations, random number generation, and resource management.
     /// </summary>
     /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-    public abstract class PolicyBase<T> : ModelBase<T, Vector<T>, Vector<T>>, IPolicy<T>
+    public abstract class PolicyBase<T> : IPolicy<T>
     {
-        // NumOps inherited from ModelBase
+        /// <summary>
+        /// Numeric operations helper for type-agnostic calculations.
+        /// </summary>
+        protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
         /// <summary>
         /// Random number generator for stochastic policies.
@@ -103,74 +104,6 @@ namespace AiDotNet.ReinforcementLearning.Policies
                 throw new ArgumentException("State must have positive size.", paramName);
             }
         }
-
-        #region ModelBase Overrides
-
-        /// <summary>
-        /// Predicts an action for the given state (inference mode).
-        /// </summary>
-        public override Vector<T> Predict(Vector<T> input) => SelectAction(input, training: false);
-
-        /// <summary>
-        /// Training is handled by RL algorithms, not directly on the policy.
-        /// </summary>
-        public override void Train(Vector<T> input, Vector<T> expectedOutput) { }
-
-        /// <inheritdoc />
-        public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
-
-        /// <inheritdoc />
-        public override Vector<T> GetParameters()
-        {
-            var networks = GetNetworks();
-            if (networks.Count == 0)
-                return new Vector<T>(0);
-
-            // Collect parameters from all networks
-            var allParams = new List<T>();
-            foreach (var network in networks)
-            {
-                var p = network.GetParameters();
-                for (int i = 0; i < p.Length; i++)
-                    allParams.Add(p[i]);
-            }
-
-            return new Vector<T>(allParams.ToArray());
-        }
-
-        /// <inheritdoc />
-        public override void SetParameters(Vector<T> parameters)
-        {
-            var networks = GetNetworks();
-            if (networks.Count == 0)
-                return;
-
-            int offset = 0;
-            foreach (var network in networks)
-            {
-                var currentParams = network.GetParameters();
-                int count = currentParams.Length;
-                var segment = new Vector<T>(count);
-                for (int i = 0; i < count; i++)
-                    segment[i] = parameters[offset + i];
-                network.SetParameters(segment);
-                offset += count;
-            }
-        }
-
-        /// <inheritdoc />
-        public override IFullModel<T, Vector<T>, Vector<T>> WithParameters(Vector<T> parameters)
-        {
-            var copy = DeepCopy();
-            copy.SetParameters(parameters);
-            return copy;
-        }
-
-        /// <inheritdoc />
-        public override IFullModel<T, Vector<T>, Vector<T>> DeepCopy()
-            => (PolicyBase<T>)MemberwiseClone();
-
-        #endregion
 
         /// <summary>
         /// Releases the unmanaged resources used by the policy and optionally releases the managed resources.

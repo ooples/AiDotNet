@@ -3,7 +3,6 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Safety;
-using AiDotNet.Safety.Image;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Adversarial;
@@ -43,15 +42,17 @@ namespace AiDotNet.Safety.Adversarial;
     "https://arxiv.org/abs/1704.01155",
     Year = 2018,
     Authors = "Weilin Xu, David Evans, Yanjun Qi")]
-public class AdversarialImageEvaluator<T> : ImageSafetyModuleBase<T>
+public class AdversarialImageEvaluator<T> : IImageSafetyModule<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     private readonly double _threshold;
 
     /// <inheritdoc />
-    public override string ModuleName => "AdversarialImageEvaluator";
+    public string ModuleName => "AdversarialImageEvaluator";
 
     /// <inheritdoc />
-    public override bool IsReady => true;
+    public bool IsReady => true;
 
     /// <summary>
     /// Initializes a new adversarial image evaluator.
@@ -69,7 +70,7 @@ public class AdversarialImageEvaluator<T> : ImageSafetyModuleBase<T>
     }
 
     /// <inheritdoc />
-    public override IReadOnlyList<SafetyFinding> EvaluateImage(Tensor<T> image)
+    public IReadOnlyList<SafetyFinding> EvaluateImage(Tensor<T> image)
     {
         var findings = new List<SafetyFinding>();
         var span = image.Data.Span;
@@ -107,7 +108,7 @@ public class AdversarialImageEvaluator<T> : ImageSafetyModuleBase<T>
     }
 
     /// <inheritdoc />
-    public override IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
+    public IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
         var tensor = new Tensor<T>(content.ToArray(), new[] { content.Length });
         return EvaluateImage(tensor);

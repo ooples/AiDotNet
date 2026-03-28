@@ -2,6 +2,7 @@ using AiDotNet.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Engines.Gpu.Graph;
 using AiDotNet.Tensors.Helpers;
+using CompiledGraphCache = AiDotNet.Tensors.Helpers.CompiledGraphCache;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
 

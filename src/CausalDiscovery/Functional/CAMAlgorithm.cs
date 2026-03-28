@@ -43,7 +43,7 @@ namespace AiDotNet.CausalDiscovery.Functional;
 [ModelPaper("CAM: Causal Additive Models, High-Dimensional Order Search and Penalized Regression", "https://doi.org/10.1214/14-AOS1260", Year = 2014, Authors = "Peter Buhlmann, Jonas Peters, Jan Ernest")]
 public class CAMAlgorithm<T> : FunctionalBase<T>
 {
-    private readonly double _threshold = 0.01;
+    private readonly double _threshold = 0.1;
     private readonly int _backfittingIterations = 5;
 
     /// <inheritdoc/>
@@ -150,14 +150,9 @@ public class CAMAlgorithm<T> : FunctionalBase<T>
                     ? n * Math.Log(reducedResidVar / fullResidVar)
                     : 0;
 
-                // Edge selection: parent must explain meaningful variance.
-                // Use both LR test and variance reduction — either sufficient.
-                // BIC penalty for one additional parameter in kernel regression.
                 double bicPenalty = Math.Log(n);
-                bool significantByLR = llRatio > bicPenalty;
-                bool significantByVariance = varianceReduction > _threshold;
 
-                if (significantByLR || significantByVariance)
+                if (llRatio > bicPenalty && varianceReduction > _threshold * _threshold)
                 {
                     W[parent, target] = NumOps.FromDouble(Math.Sqrt(Math.Max(0, varianceReduction)));
                 }

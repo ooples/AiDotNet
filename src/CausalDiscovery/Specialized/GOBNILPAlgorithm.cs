@@ -95,6 +95,7 @@ public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
         T eps = NumOps.FromDouble(1e-10);
         var result = new Matrix<T>(d, d);
 
+        int edgeCount = 0;
         for (int j = 0; j < d; j++)
         {
             int[] parents = bestAssignment[j];
@@ -105,13 +106,14 @@ public class GOBNILPAlgorithm<T> : CausalDiscoveryBase<T>
                     result[p, j] = NumOps.Divide(cov[p, j], varP);
                 else
                     result[p, j] = NumOps.One;
+                edgeCount++;
             }
         }
 
-        // An empty DAG can be the true ILP optimum when all nodes are independent
-        // (empty parent set scores best for every variable). Do NOT override this
-        // with a heuristic fallback — it would break the "globally optimal DAG
-        // under BIC" contract that GOBNILP guarantees.
+        // An empty DAG (edgeCount == 0) can be the true ILP optimum when all nodes
+        // are independent (empty parent set scores best for every variable). Do NOT
+        // override this with a heuristic fallback — it would break the "globally
+        // optimal DAG under BIC" contract that GOBNILP guarantees.
 
         return result;
     }

@@ -9,9 +9,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
 using AiDotNet.Attributes;
-using AiDotNet.LossFunctions;
 using AiDotNet.Tensors.Helpers;
-using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.PhysicsInformed.ScientificML
 {
@@ -70,35 +68,36 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
     [ModelPaper("Distilling Free-Form Natural Laws from Experimental Data", "https://doi.org/10.1126/science.1165893", Year = 2009, Authors = "Michael Schmidt, Hod Lipson")]
-    public class SymbolicPhysicsLearner<T> : ModelBase<T, Matrix<T>, Vector<T>>
+    public class SymbolicPhysicsLearner<T>
     {
+        private readonly INumericOperations<T> _numOps;
         private readonly List<SymbolicUnaryOperator<T>> _unaryOperators;
         private readonly List<SymbolicBinaryOperator<T>> _binaryOperators;
         private readonly Random _random;
-        private SymbolicExpression<T>? _discoveredEquation;
 
         public SymbolicPhysicsLearner()
         {
+            _numOps = MathHelper.GetNumericOperations<T>();
             _random = RandomHelper.CreateSeededRandom(42);
             _unaryOperators = new List<SymbolicUnaryOperator<T>>
             {
-                new SymbolicUnaryOperator<T>("neg", x => NumOps.Negate(x), value => $"-({value})"),
-                new SymbolicUnaryOperator<T>("square", x => NumOps.Multiply(x, x), value => $"({value})^2"),
-                new SymbolicUnaryOperator<T>("reciprocal", x => NumOps.Divide(NumOps.One, x), value => $"1/({value})"),
-                new SymbolicUnaryOperator<T>("sqrt", x => NumOps.Sqrt(x), value => $"sqrt({value})"),
+                new SymbolicUnaryOperator<T>("neg", x => _numOps.Negate(x), value => $"-({value})"),
+                new SymbolicUnaryOperator<T>("square", x => _numOps.Multiply(x, x), value => $"({value})^2"),
+                new SymbolicUnaryOperator<T>("reciprocal", x => _numOps.Divide(_numOps.One, x), value => $"1/({value})"),
+                new SymbolicUnaryOperator<T>("sqrt", x => _numOps.Sqrt(x), value => $"sqrt({value})"),
                 new SymbolicUnaryOperator<T>("sin", MathHelper.Sin, value => $"sin({value})"),
                 new SymbolicUnaryOperator<T>("cos", MathHelper.Cos, value => $"cos({value})"),
-                new SymbolicUnaryOperator<T>("exp", NumOps.Exp, value => $"exp({value})"),
-                new SymbolicUnaryOperator<T>("log", NumOps.Log, value => $"log({value})")
+                new SymbolicUnaryOperator<T>("exp", _numOps.Exp, value => $"exp({value})"),
+                new SymbolicUnaryOperator<T>("log", _numOps.Log, value => $"log({value})")
             };
 
             _binaryOperators = new List<SymbolicBinaryOperator<T>>
             {
-                new SymbolicBinaryOperator<T>("+", NumOps.Add, (left, right) => $"({left} + {right})"),
-                new SymbolicBinaryOperator<T>("-", NumOps.Subtract, (left, right) => $"({left} - {right})"),
-                new SymbolicBinaryOperator<T>("*", NumOps.Multiply, (left, right) => $"({left} * {right})"),
-                new SymbolicBinaryOperator<T>("/", NumOps.Divide, (left, right) => $"({left} / {right})"),
-                new SymbolicBinaryOperator<T>("pow", NumOps.Power, (left, right) => $"pow({left}, {right})")
+                new SymbolicBinaryOperator<T>("+", _numOps.Add, (left, right) => $"({left} + {right})"),
+                new SymbolicBinaryOperator<T>("-", _numOps.Subtract, (left, right) => $"({left} - {right})"),
+                new SymbolicBinaryOperator<T>("*", _numOps.Multiply, (left, right) => $"({left} * {right})"),
+                new SymbolicBinaryOperator<T>("/", _numOps.Divide, (left, right) => $"({left} / {right})"),
+                new SymbolicBinaryOperator<T>("pow", _numOps.Power, (left, right) => $"pow({left}, {right})")
             };
         }
 
@@ -283,7 +282,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         private SymbolicExpression<T> CreateRandomExpression(int variableCount, int maxDepth)
         {
             var root = CreateRandomNode(variableCount, maxDepth);
-            return new SymbolicExpression<T>(root, NumOps);
+            return new SymbolicExpression<T>(root, _numOps);
         }
 
         private IEnumerable<SymbolicExpression<T>> CreateSeedExpressions(int variableCount)
@@ -297,7 +296,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             var addOperator = _binaryOperators.FirstOrDefault(op => op.Name == "+");
             for (int i = 0; i < variableCount; i++)
             {
-                seeds.Add(new SymbolicExpression<T>(new SymbolicExpressionNode<T>(i), NumOps));
+                seeds.Add(new SymbolicExpression<T>(new SymbolicExpressionNode<T>(i), _numOps));
 
                 if (addOperator != null)
                 {
@@ -305,7 +304,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                         addOperator,
                         new SymbolicExpressionNode<T>(i),
                         new SymbolicExpressionNode<T>(i));
-                    seeds.Add(new SymbolicExpression<T>(doubled, NumOps));
+                    seeds.Add(new SymbolicExpression<T>(doubled, _numOps));
                 }
 
                 if (seeds.Count >= 8)
@@ -346,7 +345,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             }
 
             double constant = (_random.NextDouble() * 2.0) - 1.0;
-            return new SymbolicExpressionNode<T>(NumOps.FromDouble(constant));
+            return new SymbolicExpressionNode<T>(_numOps.FromDouble(constant));
         }
 
         private SymbolicExpression<T> Mutate(SymbolicExpression<T> expression, int variableCount, int maxDepth)
@@ -445,7 +444,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 return double.PositiveInfinity;
             }
 
-            T sumSquared = NumOps.Zero;
+            T sumSquared = _numOps.Zero;
             var variables = new T[features];
 
             for (int i = 0; i < samples; i++)
@@ -465,17 +464,17 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                     return double.PositiveInfinity;
                 }
 
-                if (NumOps.IsNaN(prediction) || NumOps.IsInfinity(prediction))
+                if (_numOps.IsNaN(prediction) || _numOps.IsInfinity(prediction))
                 {
                     return double.PositiveInfinity;
                 }
 
-                T error = NumOps.Subtract(prediction, outputs[i]);
-                sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(error, error));
+                T error = _numOps.Subtract(prediction, outputs[i]);
+                sumSquared = _numOps.Add(sumSquared, _numOps.Multiply(error, error));
             }
 
-            T mse = NumOps.Divide(sumSquared, NumOps.FromDouble(samples));
-            double mseValue = NumOps.ToDouble(mse);
+            T mse = _numOps.Divide(sumSquared, _numOps.FromDouble(samples));
+            double mseValue = _numOps.ToDouble(mse);
 
             return double.IsNaN(mseValue) || double.IsInfinity(mseValue) ? double.PositiveInfinity : mseValue;
         }
@@ -490,7 +489,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 return double.PositiveInfinity;
             }
 
-            T sumSquared = NumOps.Zero;
+            T sumSquared = _numOps.Zero;
             var variables = new T[features];
 
             for (int i = 0; i < samples; i++)
@@ -510,17 +509,17 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                     return double.PositiveInfinity;
                 }
 
-                if (NumOps.IsNaN(prediction) || NumOps.IsInfinity(prediction))
+                if (_numOps.IsNaN(prediction) || _numOps.IsInfinity(prediction))
                 {
                     return double.PositiveInfinity;
                 }
 
-                T error = NumOps.Subtract(prediction, outputs[i]);
-                sumSquared = NumOps.Add(sumSquared, NumOps.Multiply(error, error));
+                T error = _numOps.Subtract(prediction, outputs[i]);
+                sumSquared = _numOps.Add(sumSquared, _numOps.Multiply(error, error));
             }
 
-            T mse = NumOps.Divide(sumSquared, NumOps.FromDouble(samples));
-            double mseValue = NumOps.ToDouble(mse);
+            T mse = _numOps.Divide(sumSquared, _numOps.FromDouble(samples));
+            double mseValue = _numOps.ToDouble(mse);
 
             if (double.IsNaN(mseValue) || double.IsInfinity(mseValue))
             {
@@ -588,8 +587,8 @@ namespace AiDotNet.PhysicsInformed.ScientificML
 
             for (int i = 0; i < sampleCount; i++)
             {
-                double x = NumOps.ToDouble(inputs[i, 0]);
-                double y = NumOps.ToDouble(outputs[i]);
+                double x = _numOps.ToDouble(inputs[i, 0]);
+                double y = _numOps.ToDouble(outputs[i]);
                 sumX += x;
                 sumY += y;
                 sumXX += x * x;
@@ -616,8 +615,8 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 return null;
             }
 
-            var coefficients = new Vector<T>(new[] { NumOps.FromDouble(slope) });
-            return BuildLinearExpression(coefficients, NumOps.FromDouble(intercept), includeIntercept: true);
+            var coefficients = new Vector<T>(new[] { _numOps.FromDouble(slope) });
+            return BuildLinearExpression(coefficients, _numOps.FromDouble(intercept), includeIntercept: true);
         }
 
         private SymbolicExpression<T>? TryConvertModelToExpression(IFullModel<T, Matrix<T>, Vector<T>> model)
@@ -625,7 +624,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             if (model is ExpressionTree<T, Matrix<T>, Vector<T>> expressionTree)
             {
                 var root = ConvertExpressionTreeNode(expressionTree);
-                return new SymbolicExpression<T>(root, NumOps);
+                return new SymbolicExpression<T>(root, _numOps);
             }
 
             if (model is RegressionBase<T> regression)
@@ -635,7 +634,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
 
             if (model is VectorModel<T> vectorModel)
             {
-                return BuildLinearExpression(vectorModel.Coefficients, NumOps.Zero, false);
+                return BuildLinearExpression(vectorModel.Coefficients, _numOps.Zero, false);
             }
 
             return null;
@@ -650,7 +649,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             for (int i = 0; i < coefficients.Length; i++)
             {
                 var coefficient = coefficients[i];
-                if (NumOps.Equals(coefficient, NumOps.Zero))
+                if (_numOps.Equals(coefficient, _numOps.Zero))
                 {
                     continue;
                 }
@@ -663,14 +662,14 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 root = root == null ? term : new SymbolicExpressionNode<T>(addOperator, root, term);
             }
 
-            if (includeIntercept && !NumOps.Equals(intercept, NumOps.Zero))
+            if (includeIntercept && !_numOps.Equals(intercept, _numOps.Zero))
             {
                 var interceptNode = new SymbolicExpressionNode<T>(intercept);
                 root = root == null ? interceptNode : new SymbolicExpressionNode<T>(addOperator, root, interceptNode);
             }
 
-            root ??= new SymbolicExpressionNode<T>(NumOps.Zero);
-            return new SymbolicExpression<T>(root, NumOps);
+            root ??= new SymbolicExpressionNode<T>(_numOps.Zero);
+            return new SymbolicExpression<T>(root, _numOps);
         }
 
         private SymbolicExpressionNode<T> ConvertExpressionTreeNode(ExpressionTree<T, Matrix<T>, Vector<T>> node)
@@ -680,7 +679,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 case ExpressionNodeType.Constant:
                     return new SymbolicExpressionNode<T>(node.Value);
                 case ExpressionNodeType.Variable:
-                    int index = NumOps.ToInt32(node.Value);
+                    int index = _numOps.ToInt32(node.Value);
                     if (index < 0)
                     {
                         index = 0;
@@ -689,25 +688,25 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 case ExpressionNodeType.Add:
                     return new SymbolicExpressionNode<T>(
                         GetBinaryOperator("+"),
-                        ConvertExpressionTreeNode(node.Left ?? new ExpressionTree<T, Matrix<T>, Vector<T>>(ExpressionNodeType.Constant, NumOps.Zero)),
-                        ConvertExpressionTreeNode(node.Right ?? new ExpressionTree<T, Matrix<T>, Vector<T>>(ExpressionNodeType.Constant, NumOps.Zero)));
+                        ConvertExpressionTreeNode(node.Left ?? new ExpressionTree<T, Matrix<T>, Vector<T>>(ExpressionNodeType.Constant, _numOps.Zero)),
+                        ConvertExpressionTreeNode(node.Right ?? new ExpressionTree<T, Matrix<T>, Vector<T>>(ExpressionNodeType.Constant, _numOps.Zero)));
                 case ExpressionNodeType.Subtract:
                     return new SymbolicExpressionNode<T>(
                         GetBinaryOperator("-"),
-                        ConvertExpressionTreeNode(node.Left ?? new ExpressionTree<T, Matrix<T>, Vector<T>>(ExpressionNodeType.Constant, NumOps.Zero)),
-                        ConvertExpressionTreeNode(node.Right ?? new ExpressionTree<T, Matrix<T>, Vector<T>>(ExpressionNodeType.Constant, NumOps.Zero)));
+                        ConvertExpressionTreeNode(node.Left ?? new ExpressionTree<T, Matrix<T>, Vector<T>>(ExpressionNodeType.Constant, _numOps.Zero)),
+                        ConvertExpressionTreeNode(node.Right ?? new ExpressionTree<T, Matrix<T>, Vector<T>>(ExpressionNodeType.Constant, _numOps.Zero)));
                 case ExpressionNodeType.Multiply:
                     return new SymbolicExpressionNode<T>(
                         GetBinaryOperator("*"),
-                        ConvertExpressionTreeNode(node.Left ?? new ExpressionTree<T, Matrix<T>, Vector<T>>(ExpressionNodeType.Constant, NumOps.Zero)),
-                        ConvertExpressionTreeNode(node.Right ?? new ExpressionTree<T, Matrix<T>, Vector<T>>(ExpressionNodeType.Constant, NumOps.Zero)));
+                        ConvertExpressionTreeNode(node.Left ?? new ExpressionTree<T, Matrix<T>, Vector<T>>(ExpressionNodeType.Constant, _numOps.Zero)),
+                        ConvertExpressionTreeNode(node.Right ?? new ExpressionTree<T, Matrix<T>, Vector<T>>(ExpressionNodeType.Constant, _numOps.Zero)));
                 case ExpressionNodeType.Divide:
                     return new SymbolicExpressionNode<T>(
                         GetBinaryOperator("/"),
-                        ConvertExpressionTreeNode(node.Left ?? new ExpressionTree<T, Matrix<T>, Vector<T>>(ExpressionNodeType.Constant, NumOps.Zero)),
-                        ConvertExpressionTreeNode(node.Right ?? new ExpressionTree<T, Matrix<T>, Vector<T>>(ExpressionNodeType.Constant, NumOps.Zero)));
+                        ConvertExpressionTreeNode(node.Left ?? new ExpressionTree<T, Matrix<T>, Vector<T>>(ExpressionNodeType.Constant, _numOps.Zero)),
+                        ConvertExpressionTreeNode(node.Right ?? new ExpressionTree<T, Matrix<T>, Vector<T>>(ExpressionNodeType.Constant, _numOps.Zero)));
                 default:
-                    return new SymbolicExpressionNode<T>(NumOps.Zero);
+                    return new SymbolicExpressionNode<T>(_numOps.Zero);
             }
         }
 
@@ -720,71 +719,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             }
 
             return op;
-        }
-
-        // === ModelBase abstract implementations ===
-
-        /// <summary>
-        /// Trains the symbolic physics learner by discovering an equation from the data.
-        /// </summary>
-        public override void Train(Matrix<T> input, Vector<T> expectedOutput)
-        {
-            var inputs = new T[input.Rows, input.Columns];
-            for (int i = 0; i < input.Rows; i++)
-                for (int j = 0; j < input.Columns; j++)
-                    inputs[i, j] = input[i, j];
-
-            var outputs = expectedOutput.ToArray();
-            _discoveredEquation = DiscoverEquation(inputs, outputs);
-        }
-
-        /// <summary>
-        /// Predicts outputs using the discovered symbolic equation.
-        /// </summary>
-        public override Vector<T> Predict(Matrix<T> input)
-        {
-            if (_discoveredEquation is null)
-                throw new InvalidOperationException("Model has not been trained. Call Train() first.");
-
-            var result = new Vector<T>(input.Rows);
-            for (int i = 0; i < input.Rows; i++)
-            {
-                var row = new T[input.Columns];
-                for (int j = 0; j < input.Columns; j++)
-                    row[j] = input[i, j];
-                result[i] = _discoveredEquation.Evaluate(row);
-            }
-            return result;
-        }
-
-        /// <inheritdoc/>
-        public override ILossFunction<T> DefaultLossFunction =>
-            new MeanSquaredErrorLoss<T>();
-
-        /// <inheritdoc/>
-        public override Vector<T> GetParameters() => new Vector<T>(0);
-
-        /// <inheritdoc/>
-        public override void SetParameters(Vector<T> parameters) { }
-
-        /// <inheritdoc/>
-        public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
-        {
-            var clone = new SymbolicPhysicsLearner<T>();
-            if (_discoveredEquation is not null)
-            {
-                // Re-discover would be expensive — just share the immutable expression tree
-                clone._discoveredEquation = _discoveredEquation;
-            }
-            return clone;
-        }
-
-        /// <inheritdoc/>
-        public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
-        {
-            var clone = DeepCopy();
-            clone.SetParameters(parameters);
-            return clone;
         }
     }
 
@@ -969,11 +903,11 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     /// </summary>
     public class SymbolicExpression<T>
     {
-        private readonly INumericOperations<T> NumOps;
+        private readonly INumericOperations<T> _numOps;
 
         internal SymbolicExpression(SymbolicExpressionNode<T> root, INumericOperations<T> numOps)
         {
-            NumOps = numOps;
+            _numOps = numOps;
             Root = root;
         }
 
@@ -1013,12 +947,12 @@ namespace AiDotNet.PhysicsInformed.ScientificML
 
         internal T Evaluate(T[] variables)
         {
-            return Root.Evaluate(variables, NumOps);
+            return Root.Evaluate(variables, _numOps);
         }
 
         public SymbolicExpression<T> Clone()
         {
-            return new SymbolicExpression<T>(Root.Clone(), NumOps);
+            return new SymbolicExpression<T>(Root.Clone(), _numOps);
         }
 
         private static SymbolicExpressionNode<T> ParseExpression(string expression, SymbolicExpressionType type)

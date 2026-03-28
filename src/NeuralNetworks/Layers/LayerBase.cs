@@ -1730,7 +1730,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// IOutputDerivative (e.g., GELU, SiLU, ELU). Without this, the fallback computes
     /// f'(f(x)) instead of the correct f'(x).
     /// </summary>
-    private readonly Stack<Tensor<T>> _preActivationCache = new();
+    private Tensor<T>? _cachedPreActivationInput;
 
     /// <summary>
     /// Applies the activation function to a tensor and caches the pre-activation input
@@ -1740,7 +1740,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// <returns>The activated tensor.</returns>
     protected Tensor<T> ApplyActivation(Tensor<T> input)
     {
-        _preActivationCache.Push(input);
+        _cachedPreActivationInput = input;
 
         if (VectorActivation != null)
         {
@@ -2121,9 +2121,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         // Use cached pre-activation input if available, otherwise fall back to output.
         // This prevents computing f'(f(x)) instead of f'(x) for activations like GELU
         // that don't implement IOutputDerivative.
-        var preActivationInput = _preActivationCache.Count > 0
-            ? _preActivationCache.Pop()
-            : output;
+        var preActivationInput = _cachedPreActivationInput ?? output;
         return ApplyActivationDerivative(preActivationInput, outputGradient);
     }
 

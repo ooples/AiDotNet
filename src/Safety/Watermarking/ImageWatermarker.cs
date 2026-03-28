@@ -4,7 +4,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Safety;
-using AiDotNet.Safety.Image;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Watermarking;
@@ -52,8 +51,10 @@ namespace AiDotNet.Safety.Watermarking;
     "https://arxiv.org/abs/2510.09263",
     Year = 2025,
     Authors = "Google DeepMind")]
-public class ImageWatermarker<T> : ImageSafetyModuleBase<T>
+public class ImageWatermarker<T> : IImageSafetyModule<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     private readonly T _detectionThreshold;
     private readonly T _watermarkStrength;
     private readonly FastFourierTransform<T> _fft;
@@ -64,10 +65,10 @@ public class ImageWatermarker<T> : ImageSafetyModuleBase<T>
     private static readonly T Epsilon = NumOps.FromDouble(1e-10);
 
     /// <inheritdoc />
-    public override string ModuleName => "ImageWatermarker";
+    public string ModuleName => "ImageWatermarker";
 
     /// <inheritdoc />
-    public override bool IsReady => true;
+    public bool IsReady => true;
 
     /// <summary>
     /// Initializes a new image watermarker.
@@ -101,7 +102,7 @@ public class ImageWatermarker<T> : ImageSafetyModuleBase<T>
     /// <summary>
     /// Detects whether the given image contains a watermark by analyzing frequency-domain statistics.
     /// </summary>
-    public override IReadOnlyList<SafetyFinding> EvaluateImage(Tensor<T> image)
+    public IReadOnlyList<SafetyFinding> EvaluateImage(Tensor<T> image)
     {
         var findings = new List<SafetyFinding>();
 
@@ -132,7 +133,7 @@ public class ImageWatermarker<T> : ImageSafetyModuleBase<T>
     }
 
     /// <inheritdoc />
-    public override IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
+    public IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
         var tensor = new Tensor<T>(content.ToArray(), new[] { content.Length });
         return EvaluateImage(tensor);

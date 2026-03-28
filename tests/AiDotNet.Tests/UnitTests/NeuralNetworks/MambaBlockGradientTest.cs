@@ -1,6 +1,7 @@
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
@@ -26,13 +27,20 @@ public class MambaBlockGradientTest
 
         double epsilon = 1e-5;
 
-        // Forward + backward for analytical gradient
+        // Random projection loss
         var rngLoss = RandomHelper.CreateSeededRandom(12345);
+
+        // Forward + backward for analytical gradient
         layer.ClearGradients();
         var output = layer.Forward(input);
         var outputGrad = new Tensor<double>(output.Shape.ToArray());
+        var projW = new double[output.Length];
         for (int i = 0; i < output.Length; i++)
-            outputGrad[i] = rngLoss.NextDouble() * 2.0 - 1.0;
+        {
+            double w = rngLoss.NextDouble() * 2.0 - 1.0;
+            outputGrad[i] = w;
+            projW[i] = w;
+        }
         layer.Backward(outputGrad);
         var analyticalGradients = layer.GetParameterGradients();
         double analytical = analyticalGradients[paramIdx];
@@ -75,6 +83,8 @@ public class MambaBlockGradientTest
     [Fact]
     public void MambaBlock_OutputProjectionWeightGradient_IsCorrect()
     {
+        // Test the LAST parameter group (output projection weights)
+        // These should be correct since they're closest to the loss
         var layer = new MambaBlock<double>(4, 16, 4);
         layer.SetTrainingMode(true);
 
@@ -85,16 +95,25 @@ public class MambaBlockGradientTest
 
         double epsilon = 1e-5;
 
+        // Get parameter count breakdown
+        // Order: inputProj, inputBias, conv, convBias, xProj, dtProj, dtBias, aLog, dParam, outProj, outBias
         var parameters = layer.GetParameters();
         int totalParams = parameters.Length;
+
+        // Test last few params (output bias — simplest gradient)
         int outBiasStart = totalParams - 16; // last 16 = output bias
 
-        var rngLoss = RandomHelper.CreateSeededRandom(12345);
         layer.ClearGradients();
         var output = layer.Forward(input);
         var outputGrad = new Tensor<double>(output.Shape.ToArray());
+        var rngLoss = RandomHelper.CreateSeededRandom(12345);
+        var projW = new double[output.Length];
         for (int i = 0; i < output.Length; i++)
-            outputGrad[i] = rngLoss.NextDouble() * 2.0 - 1.0;
+        {
+            double w = rngLoss.NextDouble() * 2.0 - 1.0;
+            outputGrad[i] = w;
+            projW[i] = w;
+        }
         layer.Backward(outputGrad);
         var analyticalGradients = layer.GetParameterGradients();
 

@@ -32,7 +32,6 @@ namespace AiDotNet.AutoML.NAS
     /// Architecture&lt;float&gt; architecture = gdas.DeriveArchitecture();
     /// </code>
     /// </example>
-    [ModelMetadataExempt]
     [ModelDomain(ModelDomain.MachineLearning)]
     [ModelCategory(ModelCategory.NeuralNetwork)]
     [ModelCategory(ModelCategory.Optimization)]

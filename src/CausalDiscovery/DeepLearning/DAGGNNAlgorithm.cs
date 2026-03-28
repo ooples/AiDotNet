@@ -158,9 +158,27 @@ public class DAGGNNAlgorithm<T> : DeepCausalBase<T>
                 finalP[i, j] = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
             }
 
-        // Use shared BuildFinalAdjacency which properly handles edge thresholding
-        // and direction without introducing false edges or 2-cycles.
-        return BuildFinalAdjacency(finalP, cov, d);
+        for (int i = 0; i < d; i++)
+            for (int j = 0; j < d; j++)
+            {
+                if (i == j) continue;
+                double varI = NumOps.ToDouble(cov[i, i]);
+                if (varI < 1e-10) continue;
+                double covIJ = NumOps.ToDouble(cov[i, j]);
+                double weight = covIJ / varI;
+                if (Math.Abs(weight) < EdgeThreshold) continue;
+
+                // Edge i→j if learned P favors it or covariance ratio does
+                double varJ = NumOps.ToDouble(cov[j, j]);
+                double reverseWeight = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
+                bool learnedDirection = finalP[i, j] >= finalP[j, i];
+                bool statisticalDirection = Math.Abs(weight) >= reverseWeight;
+
+                if (learnedDirection || statisticalDirection)
+                    result[i, j] = NumOps.FromDouble(weight);
+            }
+
+        return result;
     }
 
 }

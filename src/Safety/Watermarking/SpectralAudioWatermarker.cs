@@ -33,6 +33,7 @@ namespace AiDotNet.Safety.Watermarking;
     Authors = "Various")]
 public class SpectralAudioWatermarker<T> : AudioWatermarkerBase<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <inheritdoc />
     public override string ModuleName => "SpectralAudioWatermarker";

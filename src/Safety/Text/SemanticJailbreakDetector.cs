@@ -50,6 +50,7 @@ namespace AiDotNet.Safety.Text;
     Authors = "Seungju Han, Kavel Rao, Allyson Ettinger, et al.")]
 public class SemanticJailbreakDetector<T> : TextSafetyModuleBase<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly T _threshold;
     private readonly int _embeddingDim;

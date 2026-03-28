@@ -51,6 +51,7 @@ namespace AiDotNet.Safety.Image;
     Authors = "Chuangchuang Tan, Renshuai Tao, et al.")]
 public class ProvenanceDeepfakeDetector<T> : ImageSafetyModuleBase<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly double _threshold;
 

@@ -1,16 +1,12 @@
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LossFunctions;
-using AiDotNet.Models;
-using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
 /// <summary>
 /// Abstract base class for self-supervised learning methods.
-/// Extends <see cref="ModelBase{T, TInput, TOutput}"/> for unified model framework participation.
 /// </summary>
 /// <typeparam name="T">The numeric type used for computations (typically float or double).</typeparam>
 /// <remarks>
@@ -20,9 +16,22 @@ namespace AiDotNet.SelfSupervisedLearning;
 /// <para>Derived classes (SimCLR, MoCo, BYOL, etc.) implement the specific training logic
 /// in the <see cref="TrainStepCore"/> method.</para>
 /// </remarks>
-public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISSLMethod<T>
+public abstract class SSLMethodBase<T> : ISSLMethod<T>
 {
-    // NumOps and Engine are inherited from ModelBase
+    /// <summary>
+    /// Numeric operations for generic type T.
+    /// </summary>
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>
+    /// Gets the global execution engine for vector operations and GPU/CPU acceleration.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The engine handles hardware-accelerated computations.
+    /// It automatically selects the best available hardware (GPU if available, otherwise CPU)
+    /// for matrix operations, making SSL training much faster.</para>
+    /// </remarks>
+    protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// The main encoder neural network.
@@ -73,7 +82,7 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
     public abstract bool UsesMomentumEncoder { get; }
 
     /// <inheritdoc />
-    public override int ParameterCount
+    public int ParameterCount
     {
         get
         {
@@ -138,9 +147,6 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
     protected abstract SSLStepResult<T> TrainStepCore(Tensor<T> batch, SSLAugmentationContext<T>? augmentationContext);
 
     /// <inheritdoc />
-    public override Tensor<T> Predict(Tensor<T> input) => Encode(input);
-
-    /// <inheritdoc />
     public virtual Tensor<T> Encode(Tensor<T> input)
     {
         if (input is null)
@@ -183,7 +189,7 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters()
+    public virtual Vector<T> GetParameters()
     {
         var encoderParams = _encoder.GetParameters();
         var projectorParams = _projector?.GetParameters();
@@ -226,7 +232,7 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
     }
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
+    public virtual void SetParameters(Vector<T> parameters)
     {
         if (parameters is null)
         {
@@ -572,34 +578,5 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
         }
 
         return new Tensor<T>(result, [n, n]);
-    }
-
-    // === ModelBase abstract implementations ===
-
-    /// <summary>
-    /// Trains the SSL method. For self-supervised learning, expectedOutput is ignored
-    /// since learning is unsupervised (the model creates its own supervision).
-    /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        TrainStep(input);
-    }
-
-    /// <inheritdoc/>
-    public override ILossFunction<T> DefaultLossFunction =>
-        new MeanSquaredErrorLoss<T>();
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-    {
-        return (SSLMethodBase<T>)MemberwiseClone();
-    }
-
-    /// <inheritdoc/>
-    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
-    {
-        var clone = DeepCopy();
-        clone.SetParameters(parameters);
-        return clone;
     }
 }

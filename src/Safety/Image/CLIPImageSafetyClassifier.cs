@@ -50,6 +50,7 @@ namespace AiDotNet.Safety.Image;
     Authors = "Samuele Poppi, Tobia Carletti, Marco Galatolo, et al.")]
 internal class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly T _nsfwThreshold;
     private readonly T _violenceThreshold;

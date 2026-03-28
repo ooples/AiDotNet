@@ -653,68 +653,75 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         _biasesGradient = new Matrix<T>(OutputFeatures, InputFeatures);
         var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
-        // Analytical gradients through Poincaré ball operations per Ganea et al. 2018.
-        // Forward chain: exp_0(x) → ⊕ exp_0(w) → ⊕ exp_0(b) → d(0, ·)
-        // All ExpMaps are from origin, which simplifies: exp_0(v) = tanh(√c·||v||)/(√c·||v||) · v
-        double c = Math.Abs(_numOps.ToDouble(_curvature));
-        if (c < 1e-10) c = 1.0;
-        double sqrtC = Math.Sqrt(c);
+        // Compute gradients via finite differences through the complex Poincaré ball
+        // operations (ExpMap, MobiusAdd, PoincareDistance). Analytical gradients through
+        // these hyperbolic ops require Jacobians of each composition which are error-prone.
+        // Finite differences give correct Euclidean gradients for weight updates.
+        double eps = 1e-5;
 
         for (int b = 0; b < batchSize; b++)
         {
-            // Extract input for this batch
-            var x = new double[InputFeatures];
-            for (int i = 0; i < InputFeatures; i++)
-                x[i] = _numOps.ToDouble(_lastInput[b, i]);
-
-            // exp_0(x): tanh(√c·||x||)/(√c·||x||) · x
-            var xProj = ExpMapFromOrigin(x, c, sqrtC);
-
+            // Weight gradients: perturb each weight and measure output change
             for (int o = 0; o < OutputFeatures; o++)
             {
-                double gradOut = _numOps.ToDouble(gradTensor[b, o]);
+                T gradOut = gradTensor[b, o];
 
-                // Extract weight and bias vectors for output o
-                var w = new double[InputFeatures];
-                var bias = new double[InputFeatures];
                 for (int i = 0; i < InputFeatures; i++)
                 {
-                    w[i] = _numOps.ToDouble(_weights[o, i]);
-                    bias[i] = _numOps.ToDouble(_biases[o, i]);
+                    // dL/dW[o,i] via finite diff
+                    T origW = _weights[o, i];
+
+                    _weights[o, i] = _numOps.Add(origW, _numOps.FromDouble(eps));
+                    T outPlus = ComputeSingleOutput(b, o);
+
+                    _weights[o, i] = _numOps.Subtract(origW, _numOps.FromDouble(eps));
+                    T outMinus = ComputeSingleOutput(b, o);
+
+                    _weights[o, i] = origW;
+
+                    T dOutdW = _numOps.Divide(
+                        _numOps.Subtract(outPlus, outMinus),
+                        _numOps.FromDouble(2.0 * eps));
+                    _weightsGradient[o, i] = _numOps.Add(_weightsGradient[o, i],
+                        _numOps.Multiply(gradOut, dOutdW));
+
+                    // dL/dB[o,i] via finite diff
+                    T origB = _biases[o, i];
+
+                    _biases[o, i] = _numOps.Add(origB, _numOps.FromDouble(eps));
+                    outPlus = ComputeSingleOutput(b, o);
+
+                    _biases[o, i] = _numOps.Subtract(origB, _numOps.FromDouble(eps));
+                    outMinus = ComputeSingleOutput(b, o);
+
+                    _biases[o, i] = origB;
+
+                    T dOutdB = _numOps.Divide(
+                        _numOps.Subtract(outPlus, outMinus),
+                        _numOps.FromDouble(2.0 * eps));
+                    _biasesGradient[o, i] = _numOps.Add(_biasesGradient[o, i],
+                        _numOps.Multiply(gradOut, dOutdB));
                 }
 
-                // Forward: reconstruct intermediate values
-                var wProj = ExpMapFromOrigin(w, c, sqrtC);
-                var t = MobiusAddDouble(xProj, wProj, c);
-                var bProj = ExpMapFromOrigin(bias, c, sqrtC);
-                var y = MobiusAddDouble(t, bProj, c);
-
-                // Backward chain: ∂L/∂y = gradOut · ∂d(0,y)/∂y
-                var dDistDy = DistanceFromOriginGrad(y, c, sqrtC);
-                var dLdY = new double[InputFeatures];
+                // Input gradients
                 for (int i = 0; i < InputFeatures; i++)
-                    dLdY[i] = gradOut * dDistDy[i];
+                {
+                    T origIn = _lastInput[b, i];
 
-                // ∂L/∂t and ∂L/∂bProj via Möbius addition y = t ⊕ bProj
-                var (dLdT, dLdBProj) = MobiusAddGrad(t, bProj, dLdY, c);
+                    _lastInput[b, i] = _numOps.Add(origIn, _numOps.FromDouble(eps));
+                    T outPlus = ComputeSingleOutput(b, o);
 
-                // ∂L/∂bias via exp_0 Jacobian: dL/dbias = J_exp^T · dL/dbProj
-                var dLdBias = ExpMapFromOriginGrad(bias, dLdBProj, c, sqrtC);
-                for (int i = 0; i < InputFeatures; i++)
-                    _biasesGradient[o, i] = _numOps.Add(_biasesGradient[o, i], _numOps.FromDouble(dLdBias[i]));
+                    _lastInput[b, i] = _numOps.Subtract(origIn, _numOps.FromDouble(eps));
+                    T outMinus = ComputeSingleOutput(b, o);
 
-                // ∂L/∂xProj and ∂L/∂wProj via Möbius addition t = xProj ⊕ wProj
-                var (dLdXProj, dLdWProj) = MobiusAddGrad(xProj, wProj, dLdT, c);
+                    _lastInput[b, i] = origIn;
 
-                // ∂L/∂w via exp_0 Jacobian
-                var dLdW = ExpMapFromOriginGrad(w, dLdWProj, c, sqrtC);
-                for (int i = 0; i < InputFeatures; i++)
-                    _weightsGradient[o, i] = _numOps.Add(_weightsGradient[o, i], _numOps.FromDouble(dLdW[i]));
-
-                // ∂L/∂x via exp_0 Jacobian (accumulate across outputs)
-                var dLdX = ExpMapFromOriginGrad(x, dLdXProj, c, sqrtC);
-                for (int i = 0; i < InputFeatures; i++)
-                    inputGradient[b, i] = _numOps.Add(inputGradient[b, i], _numOps.FromDouble(dLdX[i]));
+                    T dOutdIn = _numOps.Divide(
+                        _numOps.Subtract(outPlus, outMinus),
+                        _numOps.FromDouble(2.0 * eps));
+                    inputGradient[b, i] = _numOps.Add(inputGradient[b, i],
+                        _numOps.Multiply(gradOut, dOutdIn));
+                }
             }
         }
 
@@ -733,189 +740,9 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
     /// Uses Riemannian gradient descent (exponential map of negative gradient).
     /// </remarks>
     /// <param name="learningRate">The learning rate to use for the update.</param>
-    // ======================================================================
-    // Analytical Poincaré ball gradient helpers (Ganea et al. 2018)
-    // ======================================================================
-
-    /// <summary>
-    /// Exponential map from origin: exp_0(v) = tanh(√c·||v||)/(√c·||v||) · v
-    /// </summary>
-    private static double[] ExpMapFromOrigin(double[] v, double c, double sqrtC)
-    {
-        int dim = v.Length;
-        double normV = 0;
-        for (int i = 0; i < dim; i++) normV += v[i] * v[i];
-        normV = Math.Sqrt(normV);
-
-        if (normV < 1e-10)
-            return (double[])v.Clone();
-
-        double scaledNorm = Math.Min(sqrtC * normV, 20.0);
-        double coeff = Math.Tanh(scaledNorm) / (sqrtC * normV);
-
-        var result = new double[dim];
-        for (int i = 0; i < dim; i++)
-            result[i] = coeff * v[i];
-        return result;
-    }
-
-    /// <summary>
-    /// Gradient of exp_0(v) w.r.t. v, applied to upstream gradient g.
-    /// Returns J^T · g where J = ∂exp_0/∂v.
-    /// J_ij = (tanh(α)/r) · δ_ij + (sech²(α)·√c/(2r) - tanh(α)/r²) · v_i·v_j/r
-    /// where α = √c·||v||, r = √c·||v||
-    /// </summary>
-    private static double[] ExpMapFromOriginGrad(double[] v, double[] g, double c, double sqrtC)
-    {
-        int dim = v.Length;
-        double normVSq = 0;
-        for (int i = 0; i < dim; i++) normVSq += v[i] * v[i];
-        double normV = Math.Sqrt(normVSq);
-
-        if (normV < 1e-10)
-        {
-            // At origin, Jacobian ≈ I (identity)
-            return (double[])g.Clone();
-        }
-
-        double r = sqrtC * normV;
-        double rClamped = Math.Min(r, 20.0);
-        double tanhR = Math.Tanh(rClamped);
-        double sech2R = 1.0 - tanhR * tanhR;
-
-        // Coefficient for the identity part: tanh(r) / r  (note: r = sqrtC * normV)
-        double identityCoeff = tanhR / r;
-        // Coefficient for the v⊗v part: (sech²(r)·sqrtC/(2·normV) - tanh(r)/(sqrtC·normV²)) / normV
-        // Simplify: rank-1 correction = (sech²(r)/2 - tanh(r)/r) / normVSq
-        double rank1Coeff = (sech2R / 2.0 - tanhR / r) / normVSq;
-
-        // J^T · g = identityCoeff · g + rank1Coeff · (v^T · g) · v
-        double vDotG = 0;
-        for (int i = 0; i < dim; i++) vDotG += v[i] * g[i];
-
-        var result = new double[dim];
-        for (int i = 0; i < dim; i++)
-            result[i] = identityCoeff * g[i] + rank1Coeff * vDotG * v[i];
-        return result;
-    }
-
-    /// <summary>
-    /// Möbius addition: x ⊕ y = ((1+2c⟨x,y⟩+c||y||²)x + (1-c||x||²)y) / D
-    /// where D = 1+2c⟨x,y⟩+c²||x||²||y||²
-    /// </summary>
-    private static double[] MobiusAddDouble(double[] x, double[] y, double c)
-    {
-        int dim = x.Length;
-        double xNormSq = 0, yNormSq = 0, xyDot = 0;
-        for (int i = 0; i < dim; i++)
-        {
-            xNormSq += x[i] * x[i];
-            yNormSq += y[i] * y[i];
-            xyDot += x[i] * y[i];
-        }
-
-        double denom = Math.Max(1.0 + 2 * c * xyDot + c * c * xNormSq * yNormSq, 1e-10);
-        double a = 1.0 + 2 * c * xyDot + c * yNormSq;
-        double b = 1.0 - c * xNormSq;
-
-        var result = new double[dim];
-        for (int i = 0; i < dim; i++)
-            result[i] = (a * x[i] + b * y[i]) / denom;
-        return result;
-    }
-
-    /// <summary>
-    /// Gradient of Möbius addition z = x ⊕ y w.r.t. x and y.
-    /// Returns (∂L/∂x, ∂L/∂y) given ∂L/∂z.
-    /// </summary>
-    private static (double[] dLdX, double[] dLdY) MobiusAddGrad(double[] x, double[] y, double[] dLdZ, double c)
-    {
-        int dim = x.Length;
-        double xNormSq = 0, yNormSq = 0, xyDot = 0;
-        for (int i = 0; i < dim; i++)
-        {
-            xNormSq += x[i] * x[i];
-            yNormSq += y[i] * y[i];
-            xyDot += x[i] * y[i];
-        }
-
-        double D = Math.Max(1.0 + 2 * c * xyDot + c * c * xNormSq * yNormSq, 1e-10);
-        double A = 1.0 + 2 * c * xyDot + c * yNormSq;
-        double B = 1.0 - c * xNormSq;
-        double invD = 1.0 / D;
-
-        // z_i = (A·x_i + B·y_i) / D
-        // ∂z_i/∂x_j = (∂A/∂x_j · x_i + A·δ_ij + ∂B/∂x_j · y_i) / D - z_i · ∂D/∂x_j / D
-        // ∂A/∂x_j = 2c·y_j
-        // ∂B/∂x_j = -2c·x_j
-        // ∂D/∂x_j = 2c·y_j + 2c²·x_j·||y||²
-
-        // Compute z
-        var z = new double[dim];
-        for (int i = 0; i < dim; i++)
-            z[i] = (A * x[i] + B * y[i]) * invD;
-
-        // dL/dx_j = sum_i dL/dz_i · ∂z_i/∂x_j
-        var dLdX = new double[dim];
-        var dLdY = new double[dim];
-
-        // Precompute dot products with dLdZ
-        double dLdZdotX = 0, dLdZdotY = 0, dLdZdotZ = 0;
-        for (int i = 0; i < dim; i++)
-        {
-            dLdZdotX += dLdZ[i] * x[i];
-            dLdZdotY += dLdZ[i] * y[i];
-            dLdZdotZ += dLdZ[i] * z[i];
-        }
-
-        for (int j = 0; j < dim; j++)
-        {
-            double dAdXj = 2 * c * y[j];
-            double dBdXj = -2 * c * x[j];
-            double dDdXj = 2 * c * y[j] + 2 * c * c * x[j] * yNormSq;
-
-            // dL/dx_j = sum_i dL/dz_i * [(dA/dx_j · x_i + A·δ_ij + dB/dx_j · y_i)/D - z_i · dD/dx_j / D]
-            dLdX[j] = (dAdXj * dLdZdotX + A * dLdZ[j] + dBdXj * dLdZdotY) * invD
-                     - dLdZdotZ * dDdXj * invD;
-
-            // ∂A/∂y_j = 2c·x_j + 2c·y_j
-            // ∂B/∂y_j = 0
-            // ∂D/∂y_j = 2c·x_j + 2c²·||x||²·y_j
-            double dAdYj = 2 * c * x[j] + 2 * c * y[j];
-            double dDdYj = 2 * c * x[j] + 2 * c * c * xNormSq * y[j];
-
-            dLdY[j] = (dAdYj * dLdZdotX + B * dLdZ[j]) * invD
-                     - dLdZdotZ * dDdYj * invD;
-        }
-
-        return (dLdX, dLdY);
-    }
-
-    /// <summary>
-    /// Gradient of Poincaré distance from origin: d(0,y) = (2/√c)·arctanh(√c·||y||)
-    /// ∂d/∂y_i = 2·y_i / (||y||·(1 - c·||y||²))
-    /// </summary>
-    private static double[] DistanceFromOriginGrad(double[] y, double c, double sqrtC)
-    {
-        int dim = y.Length;
-        double normYSq = 0;
-        for (int i = 0; i < dim; i++) normYSq += y[i] * y[i];
-        double normY = Math.Sqrt(normYSq);
-
-        var grad = new double[dim];
-        if (normY < 1e-10)
-            return grad;
-
-        // ∂d(0,y)/∂y_i = (2/√c) · √c / (1 - c·||y||²) · y_i/||y||
-        //               = 2·y_i / (||y|| · (1 - c·||y||²))
-        double factor = 2.0 / (normY * Math.Max(1.0 - c * normYSq, 1e-10));
-        for (int i = 0; i < dim; i++)
-            grad[i] = factor * y[i];
-        return grad;
-    }
-
     /// <summary>
     /// Recomputes a single output value for the given batch and output feature index.
+    /// Used by finite-difference backward for correct gradients through Poincaré ball operations.
     /// </summary>
     private T ComputeSingleOutput(int b, int o)
     {

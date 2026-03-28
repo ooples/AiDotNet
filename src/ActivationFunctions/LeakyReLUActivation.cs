@@ -28,7 +28,7 @@ namespace AiDotNet.ActivationFunctions;
 /// </remarks>
 [ActivationCategory(ActivationCategory.General)]
 [ActivationTask(ActivationTask.HiddenLayer)]
-[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, IsDifferentiable = true, Cost = ComputeCost.Low)]
+[ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, IsDifferentiable = false, Cost = ComputeCost.Low)]
 public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

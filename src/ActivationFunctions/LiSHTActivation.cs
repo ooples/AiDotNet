@@ -89,14 +89,6 @@ public class LiSHTActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override T Derivative(T input)
     {
-        // Guard against overflow — same threshold as forward pass
-        double xVal = NumOps.ToDouble(input);
-        if (xVal > 20.0 || xVal < -20.0)
-        {
-            // tanh(x) ≈ sign(x), tanh²(x) ≈ 1, so f'(x) ≈ sign(x) + x*(1-1) = sign(x)
-            return NumOps.FromDouble(Math.Sign(xVal));
-        }
-
         // f'(x) = tanh(x) + x * (1 - tanh^2(x))
         T tanhInput = MathHelper.Tanh(input);
         T tanhSquared = NumOps.Multiply(tanhInput, tanhInput);

@@ -39,9 +39,9 @@ public abstract class DualInputLayerTestBase
     /// <summary>Whether Backward produces non-zero weight gradients. Default: true.</summary>
     protected virtual bool ExpectsNonZeroGradients => true;
 
-    /// <summary>Whether different primary inputs should produce different outputs.
-    /// False for layers where the primary input doesn't affect the output (e.g., uniform attention).</summary>
-    protected virtual bool ExpectsDifferentOutputForDifferentInputs => true;
+    /// <summary>Whether constant primary inputs should produce different outputs.
+    /// False for attention-based memory layers where constant keys produce uniform attention.</summary>
+    protected virtual bool ExpectsDifferentOutputForConstantInputs => true;
 
     // =========================================================================
     // Helpers
@@ -130,7 +130,7 @@ public abstract class DualInputLayerTestBase
     [Fact]
     public void Forward_DifferentPrimaryInputs_ShouldProduceDifferentOutputs()
     {
-        if (!ExpectsDifferentOutputForDifferentInputs) return;
+        if (!ExpectsDifferentOutputForConstantInputs) return;
 
         var layer = CreateLayer();
         layer.SetTrainingMode(false);

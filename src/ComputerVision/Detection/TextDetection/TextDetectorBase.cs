@@ -1,7 +1,5 @@
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
-using AiDotNet.LossFunctions;
-using AiDotNet.Models;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Detection.TextDetection;
@@ -209,9 +207,9 @@ public enum TextDetectionArchitecture
 /// Base class for text detection models.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+public abstract class TextDetectorBase<T>
 {
-    // NumOps inherited from ModelBase
+    protected readonly INumericOperations<T> NumOps;
     protected readonly TextDetectionOptions<T> Options;
     protected BackboneBase<T>? Backbone;
 
@@ -233,6 +231,7 @@ public abstract class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// </summary>
     protected TextDetectorBase(TextDetectionOptions<T> options)
     {
+        NumOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         Options = options;
     }
 
@@ -424,37 +423,4 @@ public abstract class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             dy * point.X - dx * point.Y + lineEnd.X * lineStart.Y - lineEnd.Y * lineStart.X
         ) / length;
     }
-
-    #region ModelBase Overrides
-
-    /// <summary>
-    /// Predicts by returning the preprocessed input (text detection is done via Detect method).
-    /// </summary>
-    public override Tensor<T> Predict(Tensor<T> input) => Preprocess(input);
-
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) { }
-
-    /// <inheritdoc />
-    public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
-
-    /// <inheritdoc />
-    public override Vector<T> GetParameters() => new Vector<T>(0);
-
-    /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters) { }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
-    {
-        var copy = DeepCopy();
-        copy.SetParameters(parameters);
-        return copy;
-    }
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
-        => (TextDetectorBase<T>)MemberwiseClone();
-
-    #endregion
 }

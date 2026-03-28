@@ -3,7 +3,6 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Safety;
-using AiDotNet.Safety.Text;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Multimodal;
@@ -44,8 +43,10 @@ namespace AiDotNet.Safety.Multimodal;
     "https://arxiv.org/abs/2103.00020",
     Year = 2021,
     Authors = "Alec Radford, Jong Wook Kim, Chris Hallacy, et al.")]
-public class TextImageAlignmentChecker<T> : TextSafetyModuleBase<T>
+public class TextImageAlignmentChecker<T> : ITextSafetyModule<T>
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
     private readonly double _mismatchThreshold;
 
     // Keywords for visual content categories
@@ -62,10 +63,10 @@ public class TextImageAlignmentChecker<T> : TextSafetyModuleBase<T>
     };
 
     /// <inheritdoc />
-    public override string ModuleName => "TextImageAlignmentChecker";
+    public string ModuleName => "TextImageAlignmentChecker";
 
     /// <inheritdoc />
-    public override bool IsReady => true;
+    public bool IsReady => true;
 
     /// <summary>
     /// Initializes a new text-image alignment checker.
@@ -77,7 +78,7 @@ public class TextImageAlignmentChecker<T> : TextSafetyModuleBase<T>
     }
 
     /// <inheritdoc />
-    public override IReadOnlyList<SafetyFinding> EvaluateText(string text)
+    public IReadOnlyList<SafetyFinding> EvaluateText(string text)
     {
         var findings = new List<SafetyFinding>();
         if (string.IsNullOrWhiteSpace(text)) return findings;
@@ -159,7 +160,7 @@ public class TextImageAlignmentChecker<T> : TextSafetyModuleBase<T>
     }
 
     /// <inheritdoc />
-    public override IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
+    public IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
         return Array.Empty<SafetyFinding>();
     }

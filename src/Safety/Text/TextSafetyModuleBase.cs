@@ -20,9 +20,18 @@ namespace AiDotNet.Safety.Text;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class TextSafetyModuleBase<T> : SafetyModuleBase<T>, ITextSafetyModule<T>
+public abstract class TextSafetyModuleBase<T> : ITextSafetyModule<T>
 {
-    // Engine, NumOps, ModuleName, IsReady inherited from SafetyModuleBase
+    /// <summary>
+    /// Hardware-accelerated engine for vector/tensor operations.
+    /// </summary>
+    protected static IEngine Engine => AiDotNetEngine.Current;
+
+    /// <inheritdoc />
+    public abstract string ModuleName { get; }
+
+    /// <inheritdoc />
+    public virtual bool IsReady => true;
 
     /// <inheritdoc />
     public abstract IReadOnlyList<SafetyFinding> EvaluateText(string text);
@@ -33,7 +42,7 @@ public abstract class TextSafetyModuleBase<T> : SafetyModuleBase<T>, ITextSafety
     /// to a string, then delegates to <see cref="EvaluateText(string)"/>.
     /// For modules that work directly on embeddings, override this method.
     /// </remarks>
-    public override IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
+    public virtual IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
         if (content is null)
         {
@@ -42,10 +51,11 @@ public abstract class TextSafetyModuleBase<T> : SafetyModuleBase<T>, ITextSafety
 
         // Convert numeric vector to string representation for text analysis.
         // Subclasses that work on embeddings directly should override this.
+        var numOps = MathHelper.GetNumericOperations<T>();
         var chars = new char[content.Length];
         for (int i = 0; i < content.Length; i++)
         {
-            int code = (int)Math.Round(NumOps.ToDouble(content[i]));
+            int code = (int)Math.Round(numOps.ToDouble(content[i]));
             chars[i] = code is >= 0 and <= 65535 ? (char)code : '?';
         }
 

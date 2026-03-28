@@ -80,8 +80,6 @@ public class SynapticIntelligence<T> : IContinualLearningStrategy<T>
     }
 
     /// <inheritdoc />
-    public bool AccumulatesAcrossTasks => true;
-
     public double Lambda
     {
         get => _lambda;

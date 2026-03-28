@@ -594,9 +594,7 @@ internal class MambaBlock<T> : LayerBase<T>
     private Tensor<T> DepthwiseConv1DBackward(
         Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
-        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
-        // Zero-initialize rented buffer — it may contain stale data from previous use
-        for (int i = 0; i < dInput.Length; i++) dInput[i] = NumOps.Zero;
+        var dInput = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
         _convBiasGradient = new Tensor<T>(new[] { _innerDimension });
         _convWeightsGradient = new Tensor<T>(new[] { _innerDimension, _convKernelSize });
 
