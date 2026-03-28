@@ -321,7 +321,10 @@ public static class DeserializationHelper
             double dropout = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double), typeof(double), activationFuncType });
+            var initStrategyType = typeof(IInitializationStrategy<>).MakeGenericType(typeof(T));
+            // Try 7-param constructor first (with IInitializationStrategy), then 6-param fallback
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double), typeof(double), activationFuncType, initStrategyType })
+                    ?? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double), typeof(double), activationFuncType });
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find GraphAttentionLayer constructor with expected signature.");
@@ -339,7 +342,9 @@ public static class DeserializationHelper
                 }
             }
 
-            instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation });
+            instance = ctor.GetParameters().Length == 7
+                ? ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation, null })
+                : ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation });
         }
         else if (genericDef == typeof(GraphConvolutionalLayer<>))
         {
