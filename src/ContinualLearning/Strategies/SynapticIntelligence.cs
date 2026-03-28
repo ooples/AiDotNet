@@ -537,12 +537,13 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
     }
 
     /// <summary>
-    /// Computes per-layer importance statistics.
+    /// Computes approximate per-chunk importance statistics.
+    /// Without actual layer boundary information, parameters are divided into
+    /// 10 equal-sized chunks as a coarse approximation.
     /// </summary>
     private void ComputeLayerStatistics(Vector<T> importance)
     {
-        // This is a simplified version - in practice, you'd need layer boundary info
-        // For now, compute statistics on chunks
+        _layerImportance.Clear();
         int chunkSize = Math.Max(1, importance.Length / 10);
         int layerIndex = 0;
 
@@ -604,14 +605,20 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
     }
 
     /// <summary>
-    /// Gets the consolidated importance values.
+    /// Gets a snapshot of the consolidated importance values.
+    /// Returns a copy to prevent mutation of internal state.
     /// </summary>
-    public Vector<T>? ConsolidatedImportance => _omega;
+    public Vector<T>? ConsolidatedImportance => _omega is not null
+        ? new Vector<T>(_omega.ToArray())
+        : null;
 
     /// <summary>
-    /// Gets the optimal parameters from the last completed task.
+    /// Gets a snapshot of the optimal parameters from the last completed task.
+    /// Returns a copy to prevent mutation of internal state.
     /// </summary>
-    public Vector<T>? OptimalParameters => _taskStartParameters;
+    public Vector<T>? OptimalParameters => _taskStartParameters is not null
+        ? new Vector<T>(_taskStartParameters.ToArray())
+        : null;
 
     /// <summary>
     /// Gets the regularization strength.

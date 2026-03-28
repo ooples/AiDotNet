@@ -1,4 +1,3 @@
-using System.Text.Json;
 using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.ContinualLearning.Interfaces;
@@ -461,9 +460,12 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
                 // Get parameter gradients
                 var paramGrads = gradModel.ComputeParameterGradients(input, gradOutput);
 
-                // Accumulate absolute gradients (vectorized)
+                // Accumulate absolute gradients in-place (mutation required — omega is caller's vector)
                 var absGrads = (Vector<T>)Engine.Abs(paramGrads);
-                omega = (Vector<T>)Engine.Add(omega, absGrads);
+                for (int i = 0; i < omega.Length && i < absGrads.Length; i++)
+                {
+                    omega[i] = NumOps.Add(omega[i], absGrads[i]);
+                }
             }
             else
             {
@@ -471,9 +473,9 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
                 ComputeFiniteDifferenceImportance(model, input, omega);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Skip samples that cause errors
+            System.Diagnostics.Trace.TraceWarning($"MAS importance: skipping sample due to error: {ex.Message}");
         }
     }
 
@@ -599,9 +601,9 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
                     ProcessSingleSampleImportance(model, input, omega);
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Skip samples that cause errors
+                System.Diagnostics.Trace.TraceWarning($"MAS importance: skipping sample due to error: {ex.Message}");
             }
         }
 
@@ -679,9 +681,9 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
                     ComputeFiniteDifferenceFisher(model, input, omega);
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Skip samples that cause errors
+                System.Diagnostics.Trace.TraceWarning($"MAS importance: skipping sample due to error: {ex.Message}");
             }
         }
 
@@ -806,9 +808,9 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
                     paramContributions[i] = NumOps.Add(paramContributions[i], weightedContrib);
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Skip samples that cause errors
+                System.Diagnostics.Trace.TraceWarning($"MAS importance: skipping sample due to error: {ex.Message}");
             }
         }
 
@@ -895,8 +897,9 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
         if (output is IEnumerable<T> enumerable)
             return new Vector<T>(enumerable.ToArray());
 
-        // Fallback: single element
-        return new Vector<T>(1);
+        throw new InvalidOperationException(
+            $"Cannot convert output of type {typeof(TOutput).Name} to Vector<{typeof(T).Name}>. " +
+            "Supported types: Vector<T>, T, T[], IEnumerable<T>.");
     }
 
     /// <summary>

@@ -508,9 +508,10 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
             if (hasValidGradients)
                 return gradients;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Fall through to SPSA
+            // Fall through to SPSA when autodiff graph construction fails
+            System.Diagnostics.Trace.TraceWarning($"VAE autodiff gradient failed, falling back to SPSA: {ex.Message}");
         }
 
         // Fallback: SPSA (6 forward passes total vs 2N for finite differences)

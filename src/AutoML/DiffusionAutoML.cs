@@ -607,11 +607,9 @@ namespace AiDotNet.AutoML
         {
             await Task.Run(() =>
             {
-                // Train the model for a fixed number of iterations
-                // In practice, this would be more sophisticated
-                int numIterations = 100;
+                const int defaultTrainingIterations = 100;
 
-                for (int i = 0; i < numIterations; i++)
+                for (int i = 0; i < defaultTrainingIterations; i++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     model.Train(inputs, targets);
@@ -782,6 +780,7 @@ namespace AiDotNet.AutoML
         private readonly DiffusionTrialConfig<T> _config;
         private readonly int? _seed;
         private Random _random;
+        private T _lastTrainingLoss;
 
 
         public override int ParameterCount => _noisePredictor.ParameterCount + _vae.ParameterCount;
@@ -879,10 +878,13 @@ namespace AiDotNet.AutoML
             // Predict noise
             var predictedNoise = _noisePredictor.PredictNoise(noisyLatent, t, condition);
 
-            // Compute loss and update (simplified - actual training would use optimizer)
+            // Compute loss and store for monitoring
             var loss = ComputeMSELoss(predictedNoise, noise);
+            _lastTrainingLoss = loss;
 
-            // Gradient computation would happen here in a full implementation
+            // Update parameters via SPSA gradient estimation and apply
+            var gradients = ComputeGradients(input, expectedOutput);
+            ApplyGradients(gradients, NumOps.FromDouble(1e-4));
         }
 
         public override Vector<T> GetParameters()
@@ -1107,10 +1109,6 @@ namespace AiDotNet.AutoML
             var gradients = new T[parameters.Length];
             T epsilon = NumOps.FromDouble(1e-5);
             T twoEps = NumOps.FromDouble(2e-5);
-
-            // Compute loss at current parameters
-            var prediction = Predict(input);
-            T baseLoss = loss.ComputeLoss(prediction, target);
 
             // SPSA gradient estimation: 2 forward passes regardless of parameter count.
             // Per-parameter finite differences don't work for diffusion models because

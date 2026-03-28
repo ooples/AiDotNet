@@ -211,13 +211,20 @@ public class DiffusionResBlock<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // For now, return gradient through the skip connection path
-        // Full backward through both paths needs chain rule through each sublayer
-        if (_skipConv is not null)
-        {
-            return _skipConv.Backward(outputGradient);
-        }
-        return outputGradient;
+        // Residual add: gradient flows equally to both branches
+        // Main branch: Conv2 ← SiLU ← Norm2 ← Conv1 ← SiLU ← Norm1
+        var mainGrad = _conv2.Backward(outputGradient);
+        mainGrad = _norm2.Backward(mainGrad);
+        mainGrad = _conv1.Backward(mainGrad);
+        mainGrad = _norm1.Backward(mainGrad);
+
+        // Skip branch
+        var skipGrad = _skipConv is not null
+            ? _skipConv.Backward(outputGradient)
+            : outputGradient;
+
+        // Sum gradients from both paths
+        return Engine.TensorAdd(mainGrad, skipGrad);
     }
 
     private Tensor<T> ApplySiLU(Tensor<T> x)

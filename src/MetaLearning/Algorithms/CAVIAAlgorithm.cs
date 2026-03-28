@@ -518,7 +518,7 @@ internal static class CAVIAContextHelper<T>
             CAVIAContextInjectionMode.Concatenation => ConcatenateContext<TInput>(input, context),
             CAVIAContextInjectionMode.Addition => AddContext<TInput>(input, context, numOps),
             CAVIAContextInjectionMode.Multiplication => MultiplyContext<TInput>(input, context, numOps),
-            _ => ConcatenateContext<TInput>(input, context)
+            _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, $"Unknown CAVIAContextInjectionMode: {mode}")
         };
     }
 
@@ -785,7 +785,7 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// - Transfer (reuse context from a similar seen task)
     /// </para>
     /// </remarks>
-    public Vector<T> AdaptedContext => _adaptedContext;
+    public Vector<T> AdaptedContext => new Vector<T>(_adaptedContext.ToArray());
 
     /// <summary>
     /// Makes predictions by augmenting input with the adapted context and running through the body model.

@@ -610,12 +610,25 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
         // Create new parameters with merged weights
         Vector<T> mergedParams = new Vector<T>(baseParams.Length);
 
-        // Merge weights
-        // DenseLayer uses [inputSize, outputSize] convention
+        // Merge weights — loraWeights from MergeWeights() is [inputSize, outputSize].
+        // DenseLayer stores weights as [inputSize, outputSize] (input-major).
+        // FullyConnectedLayer stores weights as [outputSize, inputSize] (output-major).
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
         for (int i = 0; i < weightCount; i++)
         {
-            int row = i / outputSize;
-            int col = i % outputSize;
+            int row, col;
+            if (isOutputMajor)
+            {
+                int outputIdx = i / inputSize;
+                int inputIdx = i % inputSize;
+                row = inputIdx;
+                col = outputIdx;
+            }
+            else
+            {
+                row = i / outputSize;
+                col = i % outputSize;
+            }
             mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
         }
 

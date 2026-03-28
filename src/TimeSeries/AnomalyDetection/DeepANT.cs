@@ -606,7 +606,7 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public override int ParameterCount => _kernels.Length + _biases.Length;
     public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
+    public override bool SupportsJitCompilation => false;
 
     public ConvLayerTensor(int outputChannels, int kernelSize, int seed = 42)
         : base(new[] { kernelSize }, new[] { outputChannels })
@@ -734,7 +734,7 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
     {
-        return Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _outputChannels }), "conv_output");
+        throw new NotSupportedException("ConvLayerTensor JIT compilation is not yet implemented.");
     }
 
     public override void Serialize(BinaryWriter writer)
@@ -755,17 +755,25 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     {
         _outputChannels = reader.ReadInt32();
         _kernelSize = reader.ReadInt32();
+
         int kernelsRank = reader.ReadInt32();
         int[] kernelsShape = new int[kernelsRank];
         for (int i = 0; i < kernelsRank; i++) kernelsShape[i] = reader.ReadInt32();
         int kernelsLength = reader.ReadInt32();
         _kernels = new Tensor<T>(kernelsShape);
+        if (kernelsLength != _kernels.Length)
+            throw new InvalidOperationException(
+                $"Serialized kernel length ({kernelsLength}) does not match tensor shape ({_kernels.Length}).");
         for (int i = 0; i < kernelsLength; i++) _kernels[i] = NumOps.FromDouble(reader.ReadDouble());
+
         int biasesRank = reader.ReadInt32();
         int[] biasesShape = new int[biasesRank];
         for (int i = 0; i < biasesRank; i++) biasesShape[i] = reader.ReadInt32();
         int biasesLength = reader.ReadInt32();
         _biases = new Tensor<T>(biasesShape);
+        if (biasesLength != _biases.Length)
+            throw new InvalidOperationException(
+                $"Serialized bias length ({biasesLength}) does not match tensor shape ({_biases.Length}).");
         for (int i = 0; i < biasesLength; i++) _biases[i] = NumOps.FromDouble(reader.ReadDouble());
     }
 }

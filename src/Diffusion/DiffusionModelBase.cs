@@ -686,9 +686,10 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
                 return gradients;
             }
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // Fall through to SPSA if autodiff graph construction fails
+            System.Diagnostics.Trace.TraceWarning($"Autodiff gradient failed, falling back to SPSA: {ex.Message}");
         }
 
         // Fallback: SPSA (Simultaneous Perturbation Stochastic Approximation).
