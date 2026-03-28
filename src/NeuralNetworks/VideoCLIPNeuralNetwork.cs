@@ -1995,6 +1995,15 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
         _textEncoderLayers.Clear();
         _projectionLayers.Clear();
 
+        int expectedLayers = 1 + _numFrameEncoderLayers + _numTemporalLayers + 1 + 1 + _numTextLayers + 1 + 1;
+        if (Layers.Count < expectedLayers)
+        {
+            throw new InvalidOperationException(
+                $"Deserialized {Layers.Count} layers but VideoCLIP requires {expectedLayers} " +
+                $"(1 patch + {_numFrameEncoderLayers} frame + {_numTemporalLayers} temporal + " +
+                $"1 proj + 1 embed + {_numTextLayers} text + 1 proj + 1 caption).");
+        }
+
         int idx = 0;
         _patchEmbedding = Layers[idx++];
 
