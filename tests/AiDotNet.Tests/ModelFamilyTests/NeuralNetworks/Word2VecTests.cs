@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// </summary>
 public class Word2VecTests : NeuralNetworkModelTestBase
 {
-    // Input: word index encoded as one-hot or embedding lookup [768]
+    // Input: dense embedding vector matching the model's inputSize [768]
     protected override int[] InputShape => [768];
     // Output: vocabulary probability distribution [10000]
     protected override int[] OutputShape => [10000];

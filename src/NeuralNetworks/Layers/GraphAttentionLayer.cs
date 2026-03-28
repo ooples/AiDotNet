@@ -837,20 +837,14 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         var adjacencyMatrix = _adjacencyMatrix;
         bool adj2D = adjacencyMatrix.Shape.Length == 2;
 
-        // Expand _lastOutput and outputGradient to 3D [batch, nodes, features] before activation
-        // derivative, since ApplyActivation cached the pre-activation input in 3D internal format.
-        var activOutput = _lastOutput;
-        var outGrad = outputGradient;
-        if (activOutput.Rank == 2)
-        {
-            activOutput = activOutput.Reshape([1, activOutput.Shape[0], activOutput.Shape[1]]);
-            outGrad = outGrad.Reshape([1, outGrad.Shape[0], outGrad.Shape[1]]);
-        }
-        else if (activOutput.Rank == 1)
-        {
-            activOutput = activOutput.Reshape([1, 1, activOutput.Shape[0]]);
-            outGrad = outGrad.Reshape([1, 1, outGrad.Shape[0]]);
-        }
+        // ApplyActivation cached the pre-activation input in the 3D internal format
+        // [batch, nodes, features]. Derive the canonical 3D shape from _lastInput and
+        // reshape both _lastOutput and outputGradient to match before computing the derivative.
+        int batchDim = _lastInput.Shape[0];
+        int nodesDim = _lastInput.Shape[1];
+        var target3D = new[] { batchDim, nodesDim, _outputFeatures };
+        var activOutput = _lastOutput.Rank == 3 ? _lastOutput : _lastOutput.Reshape(target3D);
+        var outGrad = outputGradient.Rank == 3 ? outputGradient : outputGradient.Reshape(target3D);
         var rawActivationGradient = ApplyActivationDerivativeFromOutput(activOutput, outGrad);
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
