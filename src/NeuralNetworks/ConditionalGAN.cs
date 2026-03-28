@@ -226,6 +226,86 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     }
 
     /// <summary>
+    /// Runs Predict on a network, handling batched [B, N] input by processing per-sample.
+    /// FeedForwardNeuralNetwork expects 1D [N] input, so batch tensors are sliced and re-stacked.
+    /// </summary>
+    private static Tensor<T> PredictBatched(NeuralNetworkBase<T> network, Tensor<T> batchedInput)
+    {
+        if (batchedInput.Rank <= 1)
+            return network.Predict(batchedInput);
+
+        int batchSize = batchedInput.Shape[0];
+        var results = new List<Tensor<T>>(batchSize);
+        for (int b = 0; b < batchSize; b++)
+        {
+            results.Add(network.Predict(batchedInput.GetSlice(b)));
+        }
+
+        return Tensor<T>.Stack([.. results]);
+    }
+
+    /// <summary>
+    /// Runs Backpropagate on a network, handling batched [B, M] gradients by processing per-sample.
+    /// </summary>
+    private static Tensor<T> BackpropagateBatched(NeuralNetworkBase<T> network, Tensor<T> batchedGradient)
+    {
+        if (batchedGradient.Rank <= 1)
+            return network.Backpropagate(batchedGradient);
+
+        int batchSize = batchedGradient.Shape[0];
+        var results = new List<Tensor<T>>(batchSize);
+        for (int b = 0; b < batchSize; b++)
+        {
+            results.Add(network.Backpropagate(batchedGradient.GetSlice(b)));
+        }
+
+        return Tensor<T>.Stack([.. results]);
+    }
+
+    /// <summary>
+    /// Predicts output by treating the input as noise and adding default conditions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The standard Predict interface accepts noise-only input (latentDim features).
+    /// Conditions are generated internally (class 0 by default). To control the class,
+    /// use <see cref="GenerateConditional"/> instead.
+    /// </para>
+    /// </remarks>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        Generator.SetTrainingMode(false);
+
+        bool wasSingleSample = input.Rank == 1;
+        Tensor<T> noise = input;
+
+        // Ensure noise is 2D [batch, features] for concatenation
+        if (wasSingleSample)
+        {
+            noise = new Tensor<T>(new int[] { 1, input.Length });
+            for (int i = 0; i < input.Length; i++)
+                noise[0, i] = input[i];
+        }
+
+        int batchSize = noise.Shape[0];
+        var conditions = CreateOneHotCondition(batchSize, 0);
+
+        var generatorInput = ConcatenateTensors(noise, conditions);
+        var output = PredictBatched(Generator, generatorInput);
+
+        // Preserve input rank: 1D input -> 1D output
+        if (wasSingleSample && output.Rank > 1)
+        {
+            var flat = new Tensor<T>(new int[] { output.Length });
+            for (int i = 0; i < output.Length; i++)
+                flat[i] = output.GetFlatIndexValue(i);
+            return flat;
+        }
+
+        return output;
+    }
+
+    /// <summary>
     /// Performs one training step for the conditional GAN.
     /// </summary>
     /// <param name="realImages">A tensor containing real images.</param>
@@ -263,7 +343,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         Tensor<T> generatorInput = ConcatenateTensors(noise, conditions);
 
         // Generate fake images conditioned on the labels
-        Tensor<T> fakeImages = Generator.Predict(generatorInput);
+        Tensor<T> fakeImages = PredictBatched(Generator, generatorInput);
 
         // Create labels
         Tensor<T> realLabels = CreateLabelTensor(batchSize, NumOps.One);
@@ -285,7 +365,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
 
         // Generate new fake images
         Tensor<T> newGeneratorInput = ConcatenateTensors(noise, conditions);
-        Tensor<T> newFakeImages = Generator.Predict(newGeneratorInput);
+        Tensor<T> newFakeImages = PredictBatched(Generator, newGeneratorInput);
 
         // For generator training, we want discriminator to think fake images are real
         Tensor<T> allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
@@ -313,8 +393,8 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     {
         Discriminator.SetTrainingMode(true);
 
-        // Forward pass
-        var predictions = Discriminator.Predict(images);
+        // Forward pass (handles batch -> per-sample for 1D networks)
+        var predictions = PredictBatched(Discriminator, images);
 
         // Calculate loss
         var loss = CalculateBinaryLoss(predictions, labels);
@@ -322,8 +402,8 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         // Calculate gradients
         var outputGradients = CalculateBinaryGradients(predictions, labels);
 
-        // Backpropagate
-        Discriminator.Backpropagate(outputGradients);
+        // Backpropagate (handles batch -> per-sample for 1D networks)
+        BackpropagateBatched(Discriminator, outputGradients);
 
         // Update parameters using base class method
         UpdateDiscriminatorWithOptimizer();
@@ -339,8 +419,8 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         Generator.SetTrainingMode(true);
         Discriminator.SetTrainingMode(true);
 
-        // Get discriminator output
-        var discriminatorOutput = Discriminator.Predict(fakeImagesWithConditions);
+        // Get discriminator output (handles batch -> per-sample for 1D networks)
+        var discriminatorOutput = PredictBatched(Discriminator, fakeImagesWithConditions);
 
         // Calculate loss
         var loss = CalculateBinaryLoss(discriminatorOutput, targetLabels);
@@ -349,7 +429,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         var outputGradients = CalculateBinaryGradients(discriminatorOutput, targetLabels);
 
         // Backpropagate through discriminator to get input gradients
-        var discriminatorInputGradients = Discriminator.Backpropagate(outputGradients);
+        var discriminatorInputGradients = BackpropagateBatched(Discriminator, outputGradients);
 
         // Extract gradients for the image part (not the condition part)
         // Handle both spatial (4D) and flattened (2D) gradient formats
@@ -431,8 +511,8 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
             }
         }
 
-        // Backpropagate through generator
-        Generator.Backpropagate(generatorGradients);
+        // Backpropagate through generator (handles batch -> per-sample for 1D networks)
+        BackpropagateBatched(Generator, generatorGradients);
 
         // Update generator using base class method
         UpdateGeneratorWithOptimizer();
@@ -742,7 +822,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     {
         Generator.SetTrainingMode(false);
         var input = ConcatenateTensors(noise, conditions);
-        return Generator.Predict(input);
+        return PredictBatched(Generator, input);
     }
 
     /// <summary>

@@ -406,8 +406,13 @@ public class NEAT<T> : NeuralNetworkBase<T>
                 genome.Fitness = fitnessFunction(genome);
             }
 
-            // Sort population by fitness
-            _population.Sort((a, b) => NumOps.GreaterThan(b.Fitness, a.Fitness) ? 1 : -1);
+            // Sort population by fitness (descending)
+            _population.Sort((a, b) =>
+            {
+                if (NumOps.GreaterThan(b.Fitness, a.Fitness)) return 1;
+                if (NumOps.GreaterThan(a.Fitness, b.Fitness)) return -1;
+                return 0;
+            });
 
             // Create new population
             var newPopulation = new List<Genome<T>>();
@@ -1206,6 +1211,68 @@ public class NEAT<T> : NeuralNetworkBase<T>
             },
             ModelData = this.Serialize()
         };
+    }
+
+    /// <summary>
+    /// Gets the parameters (connection weights) of the best genome.
+    /// </summary>
+    public override Vector<T> GetParameters()
+    {
+        var bestGenome = GetBestGenome();
+        if (bestGenome.Connections.Count == 0)
+            return new Vector<T>(0);
+
+        var parameters = new Vector<T>(bestGenome.Connections.Count);
+        for (int i = 0; i < bestGenome.Connections.Count; i++)
+        {
+            parameters[i] = bestGenome.Connections[i].Weight;
+        }
+
+        return parameters;
+    }
+
+    /// <summary>
+    /// Gets named activations from the best genome's network when processing input.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var bestGenome = GetBestGenome();
+        var inputVector = input.ToVector();
+        var activations = ActivateGenome(bestGenome, inputVector);
+
+        var result = new Dictionary<string, Tensor<T>>();
+
+        var inputActivation = new Tensor<T>(new int[] { Architecture.InputSize });
+        for (int i = 0; i < Architecture.InputSize; i++)
+        {
+            inputActivation[i] = activations.ContainsKey(i) ? activations[i] : NumOps.Zero;
+        }
+        result["InputNodes"] = inputActivation;
+
+        var outputActivation = new Tensor<T>(new int[] { Architecture.OutputSize });
+        for (int i = 0; i < Architecture.OutputSize; i++)
+        {
+            int nodeId = Architecture.InputSize + i;
+            outputActivation[i] = activations.ContainsKey(nodeId) ? activations[nodeId] : NumOps.Zero;
+        }
+        result["OutputNodes"] = outputActivation;
+
+        var hiddenNodes = activations.Keys
+            .Where(k => k >= Architecture.InputSize + Architecture.OutputSize)
+            .OrderBy(k => k)
+            .ToList();
+
+        if (hiddenNodes.Count > 0)
+        {
+            var hiddenActivation = new Tensor<T>(new int[] { hiddenNodes.Count });
+            for (int i = 0; i < hiddenNodes.Count; i++)
+            {
+                hiddenActivation[i] = activations[hiddenNodes[i]];
+            }
+            result["HiddenNodes"] = hiddenActivation;
+        }
+
+        return result;
     }
 
     /// <summary>

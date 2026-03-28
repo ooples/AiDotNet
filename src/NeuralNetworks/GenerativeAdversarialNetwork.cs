@@ -1699,6 +1699,52 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// This approach allows for efficient updating of the entire GAN structure.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Gets the total parameter count for both generator and discriminator.
+    /// </summary>
+    public override int ParameterCount
+    {
+        get
+        {
+            return Generator.GetParameterCount() + Discriminator.GetParameterCount();
+        }
+    }
+
+    /// <summary>
+    /// Gets the combined parameters from both the generator and discriminator networks.
+    /// </summary>
+    public override Vector<T> GetParameters()
+    {
+        var genParams = Generator.GetParameters();
+        var discParams = Discriminator.GetParameters();
+        int totalLength = genParams.Length + discParams.Length;
+
+        var combined = new Vector<T>(totalLength);
+        for (int i = 0; i < genParams.Length; i++)
+            combined[i] = genParams[i];
+        for (int i = 0; i < discParams.Length; i++)
+            combined[genParams.Length + i] = discParams[i];
+
+        return combined;
+    }
+
+    /// <summary>
+    /// Gets named layer activations from the generator network.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+
+        var current = input;
+        for (int i = 0; i < Generator.Layers.Count; i++)
+        {
+            current = Generator.Layers[i].Forward(current);
+            activations[$"Generator_Layer_{i}_{Generator.Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
+    }
+
     public override void UpdateParameters(Vector<T> parameters)
     {
         // Determine the split point between Generator and Discriminator parameters

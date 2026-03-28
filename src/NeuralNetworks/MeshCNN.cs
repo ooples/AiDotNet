@@ -317,7 +317,22 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
 
         foreach (var layer in Layers)
         {
-            output = layer.Forward(output);
+            // GlobalPoolingLayer expects 3D+ input to reduce spatial dims, but MeshCNN
+            // data is [edges, channels] (2D). Unsqueeze to [1, edges, channels] so the
+            // 3D reduction path pools over edges, then squeeze back to [channels].
+            if (layer is GlobalPoolingLayer<T> && output.Rank == 2)
+            {
+                output = output.Reshape(1, output.Shape[0], output.Shape[1]);
+                output = layer.Forward(output);
+                if (output.Rank > 1 && output.Shape[0] == 1)
+                {
+                    output = output.Reshape(output.Shape[^1]);
+                }
+            }
+            else
+            {
+                output = layer.Forward(output);
+            }
 
             if (layer is MeshPoolLayer<T> poolLayer && poolLayer.UpdatedAdjacency != null)
             {
@@ -382,7 +397,19 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        return Forward(input);
+        // Disable training mode on all layers (disables dropout)
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(false);
+        IsTrainingMode = false;
+
+        var output = Forward(input);
+
+        // Re-enable training mode
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(true);
+        IsTrainingMode = true;
+
+        return output;
     }
 
     /// <summary>
