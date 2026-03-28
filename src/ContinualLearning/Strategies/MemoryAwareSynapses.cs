@@ -461,12 +461,9 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
                 // Get parameter gradients
                 var paramGrads = gradModel.ComputeParameterGradients(input, gradOutput);
 
-                // Accumulate absolute gradients
-                for (int i = 0; i < Math.Min(omega.Length, paramGrads.Length); i++)
-                {
-                    var absGrad = NumOps.Abs(paramGrads[i]);
-                    omega[i] = NumOps.Add(omega[i], absGrad);
-                }
+                // Accumulate absolute gradients (vectorized)
+                var absGrads = (Vector<T>)Engine.Abs(paramGrads);
+                omega = (Vector<T>)Engine.Add(omega, absGrads);
             }
             else
             {
@@ -591,12 +588,9 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
                         // Compute gradient with respect to random projection
                         var paramGrads = gradModel.ComputeParameterGradients(input, randomDir);
 
-                        // Accumulate absolute gradients
-                        for (int i = 0; i < Math.Min(omega.Length, paramGrads.Length); i++)
-                        {
-                            var absGrad = NumOps.Abs(paramGrads[i]);
-                            omega[i] = NumOps.Add(omega[i], absGrad);
-                        }
+                        // Accumulate absolute gradients (vectorized)
+                        var absGrads = (Vector<T>)Engine.Abs(paramGrads);
+                        omega = (Vector<T>)Engine.Add(omega, absGrads);
                     }
                 }
                 else
@@ -675,12 +669,9 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
                     var gradOutput = ComputeOutputNormGradient(outputVec);
                     var paramGrads = gradModel.ComputeParameterGradients(input, gradOutput);
 
-                    // Square the gradients for Fisher diagonal approximation
-                    for (int i = 0; i < Math.Min(omega.Length, paramGrads.Length); i++)
-                    {
-                        var gradSquared = NumOps.Multiply(paramGrads[i], paramGrads[i]);
-                        omega[i] = NumOps.Add(omega[i], gradSquared);
-                    }
+                    // Square the gradients for Fisher diagonal approximation (vectorized)
+                    var gradSquared = (Vector<T>)Engine.Multiply(paramGrads, paramGrads);
+                    omega = (Vector<T>)Engine.Add(omega, gradSquared);
                 }
                 else
                 {
