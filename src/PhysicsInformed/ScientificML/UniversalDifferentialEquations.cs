@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Attributes;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.PhysicsInformed.Options;
 
@@ -229,14 +230,11 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 learnedPart[i] = output[0, i];
             }
 
-            // Combine: total derivative = known + learned
-            T[] totalDerivative = new T[_stateDim];
-            for (int i = 0; i < _stateDim; i++)
-            {
-                totalDerivative[i] = NumOps.Add(knownPart[i], learnedPart[i]);
-            }
-
-            return totalDerivative;
+            // Vectorized: total derivative = known + learned
+            var knownVec = new Vector<T>(knownPart);
+            var learnedVec = new Vector<T>(learnedPart);
+            var totalDerivative = (Vector<T>)Engine.Add(knownVec, learnedVec);
+            return totalDerivative.ToArray();
         }
 
         /// <summary>
@@ -298,58 +296,42 @@ namespace AiDotNet.PhysicsInformed.ScientificML
 
         private T[] StepEuler(T[] state, T time, T dt)
         {
+            // Vectorized Euler: nextState = state + dt * derivative
             T[] derivative = ComputeDerivative(state, time);
-            T[] nextState = new T[_stateDim];
-
-            for (int i = 0; i < _stateDim; i++)
-            {
-                nextState[i] = NumOps.Add(state[i], NumOps.Multiply(dt, derivative[i]));
-            }
-
-            return nextState;
+            var stateVec = new Vector<T>(state);
+            var derivVec = new Vector<T>(derivative);
+            var nextState = (Vector<T>)Engine.Add(stateVec, Engine.Multiply(derivVec, dt));
+            return nextState.ToArray();
         }
 
         private T[] StepRungeKutta4(T[] state, T time, T dt)
         {
+            // Vectorized RK4: all intermediate states computed via Engine ops
             T half = NumOps.Divide(dt, NumOps.FromDouble(2.0));
             T sixth = NumOps.Divide(dt, NumOps.FromDouble(6.0));
+            T two = NumOps.FromDouble(2.0);
+            var stateVec = new Vector<T>(state);
 
-            T[] k1 = ComputeDerivative(state, time);
+            var k1 = new Vector<T>(ComputeDerivative(state, time));
 
-            T[] state2 = new T[_stateDim];
-            for (int i = 0; i < _stateDim; i++)
-            {
-                state2[i] = NumOps.Add(state[i], NumOps.Multiply(half, k1[i]));
-            }
+            // state2 = state + half * k1
+            var state2 = (Vector<T>)Engine.Add(stateVec, Engine.Multiply(k1, half));
+            var k2 = new Vector<T>(ComputeDerivative(state2.ToArray(), NumOps.Add(time, half)));
 
-            T[] k2 = ComputeDerivative(state2, NumOps.Add(time, half));
+            // state3 = state + half * k2
+            var state3 = (Vector<T>)Engine.Add(stateVec, Engine.Multiply(k2, half));
+            var k3 = new Vector<T>(ComputeDerivative(state3.ToArray(), NumOps.Add(time, half)));
 
-            T[] state3 = new T[_stateDim];
-            for (int i = 0; i < _stateDim; i++)
-            {
-                state3[i] = NumOps.Add(state[i], NumOps.Multiply(half, k2[i]));
-            }
+            // state4 = state + dt * k3
+            var state4 = (Vector<T>)Engine.Add(stateVec, Engine.Multiply(k3, dt));
+            var k4 = new Vector<T>(ComputeDerivative(state4.ToArray(), NumOps.Add(time, dt)));
 
-            T[] k3 = ComputeDerivative(state3, NumOps.Add(time, half));
-
-            T[] state4 = new T[_stateDim];
-            for (int i = 0; i < _stateDim; i++)
-            {
-                state4[i] = NumOps.Add(state[i], NumOps.Multiply(dt, k3[i]));
-            }
-
-            T[] k4 = ComputeDerivative(state4, NumOps.Add(time, dt));
-
-            T[] nextState = new T[_stateDim];
-            for (int i = 0; i < _stateDim; i++)
-            {
-                T sum = NumOps.Add(k1[i], NumOps.Multiply(NumOps.FromDouble(2.0), k2[i]));
-                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.FromDouble(2.0), k3[i]));
-                sum = NumOps.Add(sum, k4[i]);
-                nextState[i] = NumOps.Add(state[i], NumOps.Multiply(sixth, sum));
-            }
-
-            return nextState;
+            // nextState = state + (dt/6) * (k1 + 2*k2 + 2*k3 + k4)
+            var sum = (Vector<T>)Engine.Add(k1, Engine.Multiply(k2, two));
+            sum = (Vector<T>)Engine.Add(sum, Engine.Multiply(k3, two));
+            sum = (Vector<T>)Engine.Add(sum, k4);
+            var nextState = (Vector<T>)Engine.Add(stateVec, Engine.Multiply(sum, sixth));
+            return nextState.ToArray();
         }
 
         /// <summary>
