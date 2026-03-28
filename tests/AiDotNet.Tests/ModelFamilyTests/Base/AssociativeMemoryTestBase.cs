@@ -252,14 +252,20 @@ public abstract class AssociativeMemoryTestBase
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
         network.Train(input, target);
-        Assert.NotNull(network.GetModelMetadata());
+        var metadata = network.GetModelMetadata();
+        Assert.NotNull(metadata);
+        Assert.True(metadata.Complexity > 0,
+            "Metadata.Complexity (parameter count) should be positive after training.");
     }
 
     [Fact]
-    public void Architecture_ShouldBeNonNull()
+    public void Architecture_ShouldHaveValidDimensions()
     {
         var network = CreateNetwork();
-        Assert.NotNull(network.GetArchitecture());
+        var arch = network.GetArchitecture();
+        Assert.NotNull(arch);
+        Assert.True(arch.InputSize > 0 || arch.InputHeight > 0,
+            "Architecture should have positive input dimensions.");
     }
 
     [Fact]
@@ -825,11 +831,16 @@ public abstract class AssociativeMemoryTestBase
     // HELPERS
     // =================================================================
 
-    private double ComputeMSE(Tensor<double> output, Tensor<double> target)
+    private static double ComputeMSE(Tensor<double> output, Tensor<double> target)
     {
-        double mse = 0;
-        int len = Math.Min(output.Length, target.Length);
+        if (output.Length != target.Length)
+        {
+            throw new ArgumentException(
+                $"MSE length mismatch: output has {output.Length} elements, target has {target.Length}.");
+        }
+        int len = output.Length;
         if (len == 0) return double.NaN;
+        double mse = 0;
         for (int i = 0; i < len; i++)
         {
             double diff = output[i] - target[i];

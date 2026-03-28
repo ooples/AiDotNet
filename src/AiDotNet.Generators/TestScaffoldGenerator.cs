@@ -913,8 +913,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     bool restOptional = true;
                     for (int pi = 1; pi < ctor.Parameters.Length; pi++)
                     {
-                        if (!ctor.Parameters[pi].HasExplicitDefaultValue &&
-                            !ctor.Parameters[pi].Type.ToDisplayString().EndsWith("?", System.StringComparison.Ordinal))
+                        // Only explicit default values make a parameter optional.
+                        // Nullable type annotations (string?) do NOT imply optionality.
+                        if (!ctor.Parameters[pi].HasExplicitDefaultValue)
                         {
                             restOptional = false;
                             break;
@@ -1439,12 +1440,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
 
             factoryBody = $"        => {constructorExpr};";
-
-            if (needsArchitectureUsing)
-            {
-                // Flag will be used below for extra usings
-                model.HasArchitectureOnlyConstructor = true;
-            }
         }
         else
         {
