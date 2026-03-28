@@ -1569,6 +1569,22 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
             {
                 visionGradient = layer.Backward(visionGradient);
             }
+
+            // Apply parameter updates via optimizer (PyTorch pattern: loss.backward() then optimizer.step())
+            var paramGrads = GetParameterGradients();
+            var currentParams = GetParameters();
+            if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gradOptimizer)
+            {
+                var updatedParams = gradOptimizer.UpdateParameters(currentParams, paramGrads);
+                UpdateParameters(updatedParams);
+            }
+            else
+            {
+                // Fallback: simple SGD with default learning rate
+                var lr = NumOps.FromDouble(1e-4);
+                var scaledGrads = Engine.Multiply(paramGrads, lr);
+                UpdateParameters((Vector<T>)Engine.Subtract(currentParams, scaledGrads));
+            }
         }
         finally
         {

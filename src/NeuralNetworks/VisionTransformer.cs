@@ -1,7 +1,9 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -50,6 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 public class VisionTransformer<T> : NeuralNetworkBase<T>
 {
     private readonly VisionTransformerOptions _options;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -443,13 +446,22 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     {
         SetTrainingMode(true);
 
+        // Forward pass
         var prediction = ForwardWithMemory(input);
 
+        // Compute loss
         LastLoss = LossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
+        // Backward pass
         var lossGradient = LossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-
         Backpropagate(Tensor<T>.FromVector(lossGradient));
+
+        // Optimizer step: apply accumulated gradients to update parameters
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        var paramGrads = GetParameterGradients();
+        var currentParams = GetParameters();
+        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
+        UpdateParameters(updatedParams);
     }
 
     /// <summary>

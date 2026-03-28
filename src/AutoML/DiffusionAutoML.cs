@@ -808,6 +808,7 @@ namespace AiDotNet.AutoML
             _random = seed.HasValue
                 ? RandomHelper.CreateSeededRandom(seed.Value)
                 : RandomHelper.CreateSecureRandom();
+            _lastTrainingLoss = NumOps.Zero;
         }
 
         public override Tensor<T> Predict(Tensor<T> input)
