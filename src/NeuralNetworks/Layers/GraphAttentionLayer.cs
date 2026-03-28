@@ -836,23 +836,18 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Capture non-null adjacency matrix for use in the method
         var adjacencyMatrix = _adjacencyMatrix;
         bool adj2D = adjacencyMatrix.Shape.Length == 2;
+
+        // ApplyActivation cached the pre-activation input in the 3D internal format
+        // [batch, nodes, features]. Derive the canonical 3D shape from _lastInput and
+        // reshape both _lastOutput and outputGradient to match before computing the derivative.
+        int batchDim = _lastInput.Shape[0];
+        int nodesDim = _lastInput.Shape[1];
+        var target3D = new[] { batchDim, nodesDim, _outputFeatures };
+        var activOutput = _lastOutput.Rank == 3 ? _lastOutput : _lastOutput.Reshape(target3D);
+        var outGrad = outputGradient.Rank == 3 ? outputGradient : outputGradient.Reshape(target3D);
+        var rawActivationGradient = ApplyActivationDerivativeFromOutput(activOutput, outGrad);
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
-
-        // Reshape outputGradient to match internal 3D representation [batch, numNodes, outputFeatures]
-        // if input was originally 2D [numNodes, features] → internally processed as [1, numNodes, features]
-        var gradForActivation = outputGradient;
-        if (outputGradient.Rank != _lastInput.Rank)
-        {
-            gradForActivation = outputGradient.Reshape([batchSize, numNodes, _outputFeatures]);
-        }
-
-        // Also reshape _lastOutput to 3D if needed for activation derivative matching
-        var outputForActivation = _lastOutput.Rank == 3
-            ? _lastOutput
-            : _lastOutput.Reshape([batchSize, numNodes, _outputFeatures]);
-
-        var rawActivationGradient = ApplyActivationDerivativeFromOutput(outputForActivation, gradForActivation);
         T numHeadsT = NumOps.FromDouble(_numHeads);
 
         // Reshape activation gradient to match _lastInput shape [batch, numNodes, outputFeatures]
