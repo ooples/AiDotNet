@@ -1,4 +1,4 @@
-using AiDotNet.Extensions;
+﻿using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -214,11 +214,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> lohaDelta = ComputeLoHaDelta(input);
 
         // Sum the outputs: base + loha_delta
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            result[i] = NumOps.Add(baseOutput[i], lohaDelta[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(baseOutput, lohaDelta);
 
         return result;
     }
@@ -357,11 +353,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> lohaInputGrad = ComputeLoHaGradients(outputGradient);
 
         // Sum input gradients
-        Tensor<T> inputGrad = new Tensor<T>(lohaInputGrad.Shape.ToArray());
-        for (int i = 0; i < lohaInputGrad.Length; i++)
-        {
-            inputGrad[i] = NumOps.Add(lohaInputGrad[i], baseInputGrad[i]);
-        }
+        Tensor<T> inputGrad = Engine.TensorAdd(lohaInputGrad, baseInputGrad);
 
         // Update parameter gradients vector
         UpdateParameterGradientsFromMatrices();

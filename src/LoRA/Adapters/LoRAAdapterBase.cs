@@ -264,12 +264,8 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         // Note: Input gradients are always computed; base parameter updates are skipped in UpdateParameters if frozen
         Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
 
-        // Sum input gradients
-        Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape.ToArray());
-        for (int i = 0; i < loraInputGrad.Length; i++)
-        {
-            inputGrad[i] = NumOps.Add(loraInputGrad[i], baseInputGrad[i]);
-        }
+        // Sum input gradients (vectorized)
+        Tensor<T> inputGrad = Engine.TensorAdd(loraInputGrad, baseInputGrad);
 
         // Update parameter gradients vector
         UpdateParameterGradientsFromLayers();

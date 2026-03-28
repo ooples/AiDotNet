@@ -1,4 +1,4 @@
-using AiDotNet.DecompositionMethods.MatrixDecomposition;
+﻿using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.Interfaces;
 
@@ -459,11 +459,7 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         loraOutput = ScaleTensor(loraOutput, scaling);
 
         // Sum the outputs: output = base + lora_adaptation
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(baseOutput, loraOutput);
 
         return result;
     }
@@ -529,11 +525,7 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> loraInputGrad = MatrixVectorMultiply((_frozenVt ?? throw new InvalidOperationException("_frozenVt has not been initialized.")).Transpose(), gradX1);
 
         // Sum input gradients from base and LoRA paths
-        Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape.ToArray());
-        for (int i = 0; i < loraInputGrad.Length; i++)
-        {
-            inputGrad[i] = NumOps.Add(loraInputGrad[i], baseInputGrad[i]);
-        }
+        Tensor<T> inputGrad = Engine.TensorAdd(loraInputGrad, baseInputGrad);
 
         // Update parameter gradients vector
         UpdateParameterGradientsFromR();
