@@ -836,7 +836,16 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Capture non-null adjacency matrix for use in the method
         var adjacencyMatrix = _adjacencyMatrix;
         bool adj2D = adjacencyMatrix.Shape.Length == 2;
-        var rawActivationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
+
+        // ApplyActivation cached the pre-activation input in the 3D internal format
+        // [batch, nodes, features]. Derive the canonical 3D shape from _lastInput and
+        // reshape both _lastOutput and outputGradient to match before computing the derivative.
+        int batchDim = _lastInput.Shape[0];
+        int nodesDim = _lastInput.Shape[1];
+        var target3D = new[] { batchDim, nodesDim, _outputFeatures };
+        var activOutput = _lastOutput.Rank == 3 ? _lastOutput : _lastOutput.Reshape(target3D);
+        var outGrad = outputGradient.Rank == 3 ? outputGradient : outputGradient.Reshape(target3D);
+        var rawActivationGradient = ApplyActivationDerivativeFromOutput(activOutput, outGrad);
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
         T numHeadsT = NumOps.FromDouble(_numHeads);

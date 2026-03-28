@@ -6,6 +6,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
 public class EfficientNetNetworkTests : NeuralNetworkModelTestBase
 {
+    protected override int[] InputShape => [1, 3, 32, 32];
+    protected override int[] OutputShape => [1000];
+
     protected override INeuralNetworkModel<double> CreateNetwork()
         => new EfficientNetNetwork<double>();
 }
