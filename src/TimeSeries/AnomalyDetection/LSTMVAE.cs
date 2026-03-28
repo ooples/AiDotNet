@@ -581,10 +581,10 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public void Backward(Tensor<T> dMean, Tensor<T> dLogVar, Tensor<T> hidden, Vector<T> input)
     {
-        // Gradients for mean projection: dMeanWeights = dMean * hidden^T, dMeanBias = dMean
+        // Gradients for mean projection: dMeanBias += dMean (vectorized), dMeanWeights = outer product
+        _meanBiasGrad = Engine.TensorAdd(_meanBiasGrad, dMean);
         for (int i = 0; i < _latentDim; i++)
         {
-            _meanBiasGrad[i] = NumOps.Add(_meanBiasGrad[i], dMean[i]);
             for (int j = 0; j < _hiddenSize; j++)
             {
                 int idx = i * _hiddenSize + j;
@@ -593,10 +593,10 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             }
         }
 
-        // Gradients for logVar projection
+        // Gradients for logVar projection: dLogVarBias += dLogVar (vectorized)
+        _logVarBiasGrad = Engine.TensorAdd(_logVarBiasGrad, dLogVar);
         for (int i = 0; i < _latentDim; i++)
         {
-            _logVarBiasGrad[i] = NumOps.Add(_logVarBiasGrad[i], dLogVar[i]);
             for (int j = 0; j < _hiddenSize; j++)
             {
                 int idx = i * _hiddenSize + j;
@@ -631,10 +631,12 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             dHidden[i] = NumOps.Multiply(dHidden[i], tanhDeriv);
         }
 
-        // Gradients for encoder weights: dWeights = dHidden * input^T, dBias = dHidden
+        // Vectorized encoder bias grad, weight grad still scalar (outer product)
+        var dHiddenTensor = new Tensor<T>(new[] { _hiddenSize });
+        for (int i = 0; i < _hiddenSize; i++) dHiddenTensor[i] = dHidden[i];
+        _biasGrad = Engine.TensorAdd(_biasGrad, dHiddenTensor);
         for (int i = 0; i < _hiddenSize; i++)
         {
-            _biasGrad[i] = NumOps.Add(_biasGrad[i], dHidden[i]);
             for (int j = 0; j < Math.Min(input.Length, _inputSize); j++)
             {
                 int idx = i * _inputSize + j;
@@ -646,12 +648,12 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public void ResetGradients()
     {
-        for (int i = 0; i < _weightsGrad.Length; i++) _weightsGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _biasGrad.Length; i++) _biasGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _meanWeightsGrad.Length; i++) _meanWeightsGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _meanBiasGrad.Length; i++) _meanBiasGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _logVarWeightsGrad.Length; i++) _logVarWeightsGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _logVarBiasGrad.Length; i++) _logVarBiasGrad[i] = NumOps.Zero;
+        _weightsGrad = new Tensor<T>(_weightsGrad.Shape.ToArray());
+        _biasGrad = new Tensor<T>(_biasGrad.Shape.ToArray());
+        _meanWeightsGrad = new Tensor<T>(_meanWeightsGrad.Shape.ToArray());
+        _meanBiasGrad = new Tensor<T>(_meanBiasGrad.Shape.ToArray());
+        _logVarWeightsGrad = new Tensor<T>(_logVarWeightsGrad.Shape.ToArray());
+        _logVarBiasGrad = new Tensor<T>(_logVarBiasGrad.Shape.ToArray());
     }
 
     public void ApplyGradients(T learningRate, int batchSize)
@@ -668,12 +670,12 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     private void ApplyGradientToTensor(Tensor<T> tensor, Tensor<T> grad, T learningRate, T batchSize)
     {
+        // Vectorized SGD: tensor -= (lr / batchSize) * grad
+        T scaledLR = NumOps.Divide(learningRate, batchSize);
+        var scaledGrad = Engine.TensorMultiplyScalar<T>(grad, scaledLR);
+        var updated = Engine.TensorSubtract(tensor, scaledGrad);
         for (int i = 0; i < tensor.Length; i++)
-        {
-            T avgGrad = NumOps.Divide(grad[i], batchSize);
-            T update = NumOps.Multiply(learningRate, avgGrad);
-            tensor[i] = NumOps.Subtract(tensor[i], update);
-        }
+            tensor[i] = updated[i];
     }
 
     public override void Serialize(BinaryWriter writer)
@@ -875,9 +877,12 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         // Gradients for output projection: dOutputWeights = dOutput * hidden^T, dOutputBias = dOutput
         int dOutLen = dOutput.Length;
         int effectiveOutputSize = Math.Min(_outputSize, dOutLen);
+        // Vectorized output bias grad
+        var dOutTensor = new Tensor<T>(new[] { effectiveOutputSize });
+        for (int i = 0; i < effectiveOutputSize; i++) dOutTensor[i] = dOutput[i];
+        _outputBiasGrad = Engine.TensorAdd(_outputBiasGrad, dOutTensor);
         for (int i = 0; i < effectiveOutputSize; i++)
         {
-            _outputBiasGrad[i] = NumOps.Add(_outputBiasGrad[i], dOutput[i]);
             for (int j = 0; j < _hiddenSize; j++)
             {
                 int idx = i * _hiddenSize + j;
@@ -907,10 +912,12 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             dHidden[i] = NumOps.Multiply(dHidden[i], tanhDeriv);
         }
 
-        // Gradients for decoder weights: dWeights = dHidden * latent^T, dBias = dHidden
+        // Vectorized decoder bias grad, weight grad still scalar (outer product)
+        var dHiddenTensor2 = new Tensor<T>(new[] { _hiddenSize });
+        for (int i = 0; i < _hiddenSize; i++) dHiddenTensor2[i] = dHidden[i];
+        _biasGrad = Engine.TensorAdd(_biasGrad, dHiddenTensor2);
         for (int i = 0; i < _hiddenSize; i++)
         {
-            _biasGrad[i] = NumOps.Add(_biasGrad[i], dHidden[i]);
             for (int j = 0; j < Math.Min(latent.Length, _latentDim); j++)
             {
                 int idx = i * _latentDim + j;
@@ -937,10 +944,10 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public void ResetGradients()
     {
-        for (int i = 0; i < _weightsGrad.Length; i++) _weightsGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _biasGrad.Length; i++) _biasGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _outputWeightsGrad.Length; i++) _outputWeightsGrad[i] = NumOps.Zero;
-        for (int i = 0; i < _outputBiasGrad.Length; i++) _outputBiasGrad[i] = NumOps.Zero;
+        _weightsGrad = new Tensor<T>(_weightsGrad.Shape.ToArray());
+        _biasGrad = new Tensor<T>(_biasGrad.Shape.ToArray());
+        _outputWeightsGrad = new Tensor<T>(_outputWeightsGrad.Shape.ToArray());
+        _outputBiasGrad = new Tensor<T>(_outputBiasGrad.Shape.ToArray());
     }
 
     public void ApplyGradients(T learningRate, int batchSize)
@@ -955,12 +962,12 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     private void ApplyGradientToTensor(Tensor<T> tensor, Tensor<T> grad, T learningRate, T batchSize)
     {
+        // Vectorized SGD: tensor -= (lr / batchSize) * grad
+        T scaledLR = NumOps.Divide(learningRate, batchSize);
+        var scaledGrad = Engine.TensorMultiplyScalar<T>(grad, scaledLR);
+        var updated = Engine.TensorSubtract(tensor, scaledGrad);
         for (int i = 0; i < tensor.Length; i++)
-        {
-            T avgGrad = NumOps.Divide(grad[i], batchSize);
-            T update = NumOps.Multiply(learningRate, avgGrad);
-            tensor[i] = NumOps.Subtract(tensor[i], update);
-        }
+            tensor[i] = updated[i];
     }
 
     public override void Serialize(BinaryWriter writer)
