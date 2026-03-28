@@ -30,6 +30,8 @@ namespace AiDotNet.NeuralNetworks;
 /// - Speech recognition
 /// - Any task where the order and context of data matters
 /// </para>
+/// <para><b>Reference:</b> Cho et al., "Learning Phrase Representations using RNN Encoder-Decoder
+/// for Statistical Machine Translation" (EMNLP 2014). <see href="https://arxiv.org/abs/1406.1078"/></para>
 /// </remarks>
 /// <example>
 /// <code>
@@ -435,6 +437,10 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new GRUNeuralNetwork<T>(this.Architecture);
+        return new GRUNeuralNetwork<T>(
+            Architecture,
+            LossFunction,
+            _options,
+            NumOps.ToDouble(_learningRate));
     }
 }

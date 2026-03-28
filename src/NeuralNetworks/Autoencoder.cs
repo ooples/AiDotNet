@@ -286,8 +286,9 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultAutoEncoderLayers(Architecture));
         }
 
-        // Set EncodedSize based on the middle layer
-        EncodedSize = Layers[Layers.Count / 2].GetOutputShape()[0];
+        // EncodedSize = latent dimension = input width of the first decoder layer.
+        // Decode() starts at Layers[Count/2], so its input shape is the latent handoff.
+        EncodedSize = Layers[Layers.Count / 2].GetInputShape()[0];
     }
 
     /// <summary>
@@ -841,11 +842,14 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                     new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = effectiveLR });
                 var paramGrads = GetParameterGradients();
                 var currentParams = GetParameters();
-                if (paramGrads.Length > 0 && currentParams.Length == paramGrads.Length)
-                {
-                    var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
-                    UpdateParameters(updatedParams);
-                }
+                if (paramGrads.Length == 0)
+                    continue; // Skip layers with no trainable parameters
+                if (currentParams.Length != paramGrads.Length)
+                    throw new InvalidOperationException(
+                        $"Parameter count ({currentParams.Length}) and gradient count ({paramGrads.Length}) diverge. " +
+                        "Check that all layers implement GetParameterGradients() consistently.");
+                var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
+                UpdateParameters(updatedParams);
             }
 
             // Calculate average loss for the epoch
@@ -856,6 +860,11 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 
             // Progress is available via LastLoss property for callers to monitor
         }
+
+        // Restore inference mode so subsequent Predict() calls behave correctly
+        SetTrainingMode(false);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(false);
     }
 
     /// <summary>
@@ -1000,6 +1009,11 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         {
             AdditionalInfo = new Dictionary<string, object>
             {
+                { "ModelType", nameof(Autoencoder<T>) },
+                { "ParameterCount", ParameterCount },
+                { "InputShape", Layers[0].GetInputShape() },
+                { "OutputShape", Layers[^1].GetOutputShape() },
+                { "Architecture", $"Autoencoder ({Layers.Count} layers, latent={EncodedSize})" },
                 { "InputDimension", Layers[0].GetInputShape()[0] },
                 { "EncodedSize", EncodedSize },
                 { "LayerCount", Layers.Count },
@@ -1092,12 +1106,17 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new Autoencoder<T>(
+        var clone = new Autoencoder<T>(
             Architecture,
             _learningRate,
             _epochs,
             _batchSize,
             _lossFunction
         );
+        // Carry sparse-training configuration into the new instance
+        clone.UseAuxiliaryLoss = UseAuxiliaryLoss;
+        clone.AuxiliaryLossWeight = AuxiliaryLossWeight;
+        clone._sparsityParameter = _sparsityParameter;
+        return clone;
     }
 }
