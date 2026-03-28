@@ -1725,27 +1725,44 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         var parameters = GetParameters();
         var gradients = new Vector<T>(parameters.Length);
 
-        T epsilon = NumOps.FromDouble(1e-8);
+        // SPSA gradient approximation: estimates ALL N gradients with just 2 forward passes
+        // per sample (vs 2N for per-parameter finite differences).
+        // Reference: Spall, J.C., IEEE TAC, 1992.
+        T epsilon = NumOps.FromDouble(1e-3);
+        T twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
+        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
+        T negOne = NumOps.FromDouble(-1.0);
+        T posOne = NumOps.FromDouble(1.0);
+        int numSamples = 3;
 
-        for (int i = 0; i < parameters.Length; i++)
+        for (int s = 0; s < numSamples; s++)
         {
-            var paramsPlus = parameters.Clone();
-            paramsPlus[i] = NumOps.Add(paramsPlus[i], epsilon);
+            var delta = new Vector<T>(parameters.Length);
+            for (int i = 0; i < parameters.Length; i++)
+                delta[i] = rng.NextDouble() < 0.5 ? negOne : posOne;
 
-            var modelPlus = (TimeSeriesModelBase<T>)WithParameters(paramsPlus);
-            var predPlus = modelPlus.Predict(input);
-            var lossPlus = loss.CalculateLoss(predPlus, target);
+            var perturbedPlus = new Vector<T>(parameters.Length);
+            var perturbedMinus = new Vector<T>(parameters.Length);
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                T eDelta = NumOps.Multiply(epsilon, delta[i]);
+                perturbedPlus[i] = NumOps.Add(parameters[i], eDelta);
+                perturbedMinus[i] = NumOps.Subtract(parameters[i], eDelta);
+            }
 
-            var paramsMinus = parameters.Clone();
-            paramsMinus[i] = NumOps.Subtract(paramsMinus[i], epsilon);
+            var modelPlus = (TimeSeriesModelBase<T>)WithParameters(perturbedPlus);
+            var lossPlus = loss.CalculateLoss(modelPlus.Predict(input), target);
 
-            var modelMinus = (TimeSeriesModelBase<T>)WithParameters(paramsMinus);
-            var predMinus = modelMinus.Predict(input);
-            var lossMinus = loss.CalculateLoss(predMinus, target);
+            var modelMinus = (TimeSeriesModelBase<T>)WithParameters(perturbedMinus);
+            var lossMinus = loss.CalculateLoss(modelMinus.Predict(input), target);
 
-            var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
-            gradients[i] = NumOps.Divide(NumOps.Subtract(lossPlus, lossMinus), twoEpsilon);
+            T lossDiff = NumOps.Subtract(lossPlus, lossMinus);
+            for (int i = 0; i < parameters.Length; i++)
+                gradients[i] = NumOps.Add(gradients[i],
+                    NumOps.Divide(lossDiff, NumOps.Multiply(twoEpsilon, delta[i])));
         }
+
+        gradients = Engine.Multiply(gradients, NumOps.FromDouble(1.0 / numSamples));
 
         return gradients;
     }

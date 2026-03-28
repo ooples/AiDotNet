@@ -99,10 +99,9 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
                 nameof(gradients));
         }
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            parameters[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
+        // Vectorized SGD: params = params - lr * gradients
+        var scaledGradients = Engine.Multiply(gradients, learningRate);
+        parameters = Engine.Subtract(parameters, scaledGradients);
 
         SetParameters(parameters);
     }

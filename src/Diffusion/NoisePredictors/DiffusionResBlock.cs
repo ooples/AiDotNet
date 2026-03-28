@@ -222,9 +222,9 @@ public class DiffusionResBlock<T> : LayerBase<T>
 
     private Tensor<T> ApplySiLU(Tensor<T> x)
     {
-        // Use the activation function's Tensor overload which delegates through
-        // the GPU/CPU accelerated path in the base class
-        return _silu.Activate(x);
+        // Use Engine.Swish for vectorized SiLU: x * sigmoid(x)
+        // This avoids the element-by-element scalar loop in ActivationFunctionBase.Activate(Tensor)
+        return Engine.Swish(x);
     }
 
     /// <summary>
