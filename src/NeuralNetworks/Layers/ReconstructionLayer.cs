@@ -405,7 +405,9 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// <para>
     /// This method serializes the state of the reconstruction layer to a binary writer. It writes the
     /// vector activation flag and then serializes each of the three fully connected layers in sequence.
-    /// This is useful for saving the layer's state to disk or sending it over a network.
+    /// Hidden dimensions are implicitly captured by the FC layers' own serialization (each stores its
+    /// input/output sizes). GetMetadata() separately exports Hidden1Dimension and Hidden2Dimension
+    /// for the deserialization constructor registered in DeserializationHelper.
     /// </para>
     /// <para><b>For Beginners:</b> This method saves the layer's state so it can be loaded later.
     /// 
