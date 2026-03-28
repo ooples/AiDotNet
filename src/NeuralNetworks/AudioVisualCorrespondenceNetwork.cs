@@ -180,7 +180,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         AudioVisualCorrespondenceOptions? options = null)
-        : base(architecture, lossFunction ?? new ContrastiveLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         _options = options ?? new AudioVisualCorrespondenceOptions();
         Options = _options;
@@ -192,7 +192,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         _hiddenDim = embeddingDimension * 4;
 
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new ContrastiveLoss<T>();
+        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _sceneLabels = new List<string>();
 

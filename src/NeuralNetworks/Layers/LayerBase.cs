@@ -2034,21 +2034,29 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// <param name="input">The input tensor.</param>
     /// <param name="outputGradient">The output gradient tensor.</param>
     /// <returns>The input gradient tensor after applying the activation derivative.</returns>
-    /// <exception cref="ArgumentException">Thrown when the input and output gradient tensors have different ranks.</exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the input and output gradient tensors have different ranks AND different element counts.
+    /// When ranks differ but element counts match (e.g., a layer reshapes 1D to 2D internally),
+    /// the output gradient is automatically reshaped to match the input rank.
+    /// </exception>
     /// <remarks>
     /// <para>
     /// This method applies the derivative of the layer's activation function to a tensor during the
     /// backward pass. It multiplies the derivative of the activation function at each point in the input tensor
-    /// by the corresponding output gradient.
+    /// by the corresponding output gradient. If the input and output gradient have different ranks but the same
+    /// total element count, the gradient is reshaped to match the input — this handles layers that reshape
+    /// internally (e.g., DenseLayer and RecurrentLayer promoting 1D input to 2D).
     /// </para>
     /// <para><b>For Beginners:</b> This calculates how small changes in values affect the output.
-    /// 
+    ///
     /// During backpropagation:
     /// - This method handles tensors (multi-dimensional arrays of values)
     /// - It applies the correct derivative calculation based on the activation type
+    /// - If the gradient shape doesn't match the input shape but has the same number of elements,
+    ///   it automatically reshapes the gradient (this happens when layers change dimensionality internally)
     /// - For vector activations, it uses the specialized derivative method
     /// - For scalar activations, it applies the derivative to each value independently
-    /// 
+    ///
     /// This is a key part of the math that allows neural networks to learn through backpropagation.
     /// </para>
     /// </remarks>

@@ -1098,6 +1098,7 @@ public class RWKV7Block<T> : LayerBase<T>
                 dest[new[] { bi, t, d }] = slice[new[] { bi, d }];
     }
 
+
     /// <summary>
     /// LayerNorm backward: returns gradient w.r.t. input.
     /// Forward: output = gamma * (x - mean) / std + beta

@@ -450,7 +450,12 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _originalInputShape = input.Shape.ToArray();
 
         Tensor<T> input3D;
-        if (_inputWas2D)
+        if (rank == 1)
+        {
+            // 1D [features] → [1, 1, features] (single batch, single token)
+            input3D = input.Reshape(1, 1, input.Shape[0]);
+        }
+        else if (_inputWas2D)
         {
             input3D = input.Reshape(1, input.Shape[0], input.Shape[1]);
         }
@@ -483,7 +488,12 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var output = _norm2.Forward(residual2);
 
         // Restore original tensor shape
-        if (_inputWas2D)
+        if (_originalInputShape != null && _originalInputShape.Length == 1)
+        {
+            // 1D input → 1D output
+            output = output.Reshape(output.Shape[2]);
+        }
+        else if (_inputWas2D)
         {
             output = output.Reshape(output.Shape[1], output.Shape[2]);
         }

@@ -163,147 +163,204 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          - name: AiDotNet.Tests - Unit - 01 Core
+          # =====================================================================
+          # UNIT TESTS — manually written tests in tests/AiDotNet.Tests/UnitTests/
+          # =====================================================================
+          - name: Unit - 01 Activation/Attention/Autodiff
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.ActivationFunctions|FullyQualifiedName~UnitTests.Attention|FullyQualifiedName~UnitTests.Autodiff)'
+          - name: Unit - 02 AutoML/Data/Diagnostics
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.AutoML|FullyQualifiedName~UnitTests.Data|FullyQualifiedName~UnitTests.Diagnostics)'
+          - name: Unit - 03 Diffusion/Encoding
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.Diffusion|FullyQualifiedName~UnitTests.Encoding)'
+          - name: Unit - 04 Feature/Fit/Fitness/Genetics
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.FeatureSelectors|FullyQualifiedName~UnitTests.FitDetectors|FullyQualifiedName~UnitTests.FitnessCalculators|FullyQualifiedName~UnitTests.Genetics)'
+          - name: Unit - 05 Helpers/Inference/Interpretability
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.Helpers|FullyQualifiedName~UnitTests.Inference|FullyQualifiedName~UnitTests.Interpretability)'
+          - name: Unit - 06 JIT/KD/Schedulers/LA
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.JitCompiler|FullyQualifiedName~UnitTests.KnowledgeDistillation|FullyQualifiedName~UnitTests.LearningRateSchedulers|FullyQualifiedName~UnitTests.LinearAlgebra)'
+          - name: Unit - 07 Logging/Loss/Meta/Mixed/Compression
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.Logging|FullyQualifiedName~UnitTests.LossFunctions|FullyQualifiedName~UnitTests.MetaLearning|FullyQualifiedName~UnitTests.MixedPrecision|FullyQualifiedName~UnitTests.ModelCompression)'
+          # NeuralNetworks split to avoid timeouts
+          - name: Unit - 08a NN-Classic (ResNet/VGG/DenseNet)
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~ResNetNetworkTests|FullyQualifiedName~VGGNetworkTests|FullyQualifiedName~DenseNetTests)'
+          - name: Unit - 08b NN-Efficient (MobileNet/EfficientNet)
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~MobileNetTests|FullyQualifiedName~EfficientNetTests)'
+          - name: Unit - 08c NN-VLM (Blip/Blip2/Clip)
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~BlipNeuralNetworkTests|FullyQualifiedName~Blip2NeuralNetworkTests|FullyQualifiedName~ClipNeuralNetworkTests)'
+          - name: Unit - 08d NN-Adapters/Other
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
+          - name: Unit - 08e NN-Remaining (catch-all)
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: >-
-              Category!=GPU&Category!=Integration&Category!=Stress&
+              Category!=GPU&Category!=Stress&
+              FullyQualifiedName~ModelFamilyTests.NeuralNetworks&
+              FullyQualifiedName!~ResNetNetworkTests&
+              FullyQualifiedName!~VGGNetworkTests&
+              FullyQualifiedName!~DenseNetTests&
+              FullyQualifiedName!~MobileNetTests&
+              FullyQualifiedName!~EfficientNetTests&
+              FullyQualifiedName!~BlipNeuralNetworkTests&
+              FullyQualifiedName!~Blip2NeuralNetworkTests&
+              FullyQualifiedName!~ClipNeuralNetworkTests&
+              FullyQualifiedName!~LoRAAdapterTests&
+              FullyQualifiedName!~LoRALayerTests&
+              FullyQualifiedName!~VBLoRAAdapterTests&
+              FullyQualifiedName!~AdvancedAlgebraNetworkTests&
+              FullyQualifiedName!~MixtureOfExpertsNeuralNetworkTests
+          - name: Unit - 09 Optimizers/RAG
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.Optimizers|FullyQualifiedName~UnitTests.RAG)'
+          - name: Unit - 10 Regularization/RL/RAG2
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.Regularization|FullyQualifiedName~UnitTests.ReinforcementLearning|FullyQualifiedName~UnitTests.RetrievalAugmentedGeneration)'
+          - name: Unit - 11 Serving/TimeSeries/Token/Transfer
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.Serving|FullyQualifiedName~UnitTests.TimeSeries|FullyQualifiedName~UnitTests.Tokenization|FullyQualifiedName~UnitTests.TransferLearning)'
+          - name: Unit - 12 ProgramSynthesis/Reasoning
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~UnitTests.ProgramSynthesis|FullyQualifiedName~UnitTests.Reasoning)'
+          - name: Unit - 13 Remaining (ActiveLearning/Agents/CL/Physics/etc.)
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              Category!=GPU&Category!=Stress&
               FullyQualifiedName~AiDotNet.Tests.UnitTests&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.ActivationFunctions&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Attention&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Autodiff&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.AutoML&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Data&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Diagnostics&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Diffusion&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Encoding&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.FeatureSelectors&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.FitDetectors&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.FitnessCalculators&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Genetics&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Helpers&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Inference&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Interpretability&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.JitCompiler&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.KnowledgeDistillation&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.LearningRateSchedulers&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.LinearAlgebra&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Logging&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.LossFunctions&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.MetaLearning&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.MixedPrecision&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.ModelCompression&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.NestedLearning&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.NeuralNetworks&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Optimizers&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.RAG&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Regularization&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.ReinforcementLearning&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.RetrievalAugmentedGeneration&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Serving&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.TimeSeries&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.Tokenization&
-              FullyQualifiedName!~AiDotNet.Tests.UnitTests.TransferLearning
-          - name: AiDotNet.Tests - Unit - 02 Activation/Attention
+              FullyQualifiedName!~UnitTests.ActivationFunctions&
+              FullyQualifiedName!~UnitTests.Attention&
+              FullyQualifiedName!~UnitTests.Autodiff&
+              FullyQualifiedName!~UnitTests.AutoML&
+              FullyQualifiedName!~UnitTests.Data&
+              FullyQualifiedName!~UnitTests.Diagnostics&
+              FullyQualifiedName!~UnitTests.Diffusion&
+              FullyQualifiedName!~UnitTests.Encoding&
+              FullyQualifiedName!~UnitTests.FeatureSelectors&
+              FullyQualifiedName!~UnitTests.FitDetectors&
+              FullyQualifiedName!~UnitTests.FitnessCalculators&
+              FullyQualifiedName!~UnitTests.Genetics&
+              FullyQualifiedName!~UnitTests.Helpers&
+              FullyQualifiedName!~UnitTests.Inference&
+              FullyQualifiedName!~UnitTests.Interpretability&
+              FullyQualifiedName!~UnitTests.JitCompiler&
+              FullyQualifiedName!~UnitTests.KnowledgeDistillation&
+              FullyQualifiedName!~UnitTests.LearningRateSchedulers&
+              FullyQualifiedName!~UnitTests.LinearAlgebra&
+              FullyQualifiedName!~UnitTests.Logging&
+              FullyQualifiedName!~UnitTests.LossFunctions&
+              FullyQualifiedName!~UnitTests.MetaLearning&
+              FullyQualifiedName!~UnitTests.MixedPrecision&
+              FullyQualifiedName!~UnitTests.ModelCompression&
+              FullyQualifiedName!~UnitTests.NeuralNetworks&
+              FullyQualifiedName!~UnitTests.Optimizers&
+              FullyQualifiedName!~UnitTests.RAG&
+              FullyQualifiedName!~UnitTests.Regularization&
+              FullyQualifiedName!~UnitTests.ReinforcementLearning&
+              FullyQualifiedName!~UnitTests.RetrievalAugmentedGeneration&
+              FullyQualifiedName!~UnitTests.Serving&
+              FullyQualifiedName!~UnitTests.TimeSeries&
+              FullyQualifiedName!~UnitTests.Tokenization&
+              FullyQualifiedName!~UnitTests.TransferLearning&
+              FullyQualifiedName!~UnitTests.ProgramSynthesis&
+              FullyQualifiedName!~UnitTests.Reasoning
+          # =====================================================================
+          # OTHER NON-UNIT TESTS (InferenceOpt, PromptEng, Recovery, Playground)
+          # =====================================================================
+          - name: Other - InferenceOptimization
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.ActivationFunctions|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Attention'
-          - name: AiDotNet.Tests - Unit - 03 Autodiff/AutoML/Data
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.InferenceOptimization'
+          - name: Other - PromptEngineering
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Autodiff|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.AutoML|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Data'
-          - name: AiDotNet.Tests - Unit - 04 Diagnostics/Diffusion/Encoding
+            filter: 'Category!=GPU&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.PromptEngineering'
+          - name: Other - Recovery/Concurrency
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Diagnostics|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Encoding'
-          - name: AiDotNet.Tests - Unit - 05 Feature/Fit/Fitness
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.FeatureSelectors|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.FitDetectors|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.FitnessCalculators'
-          - name: AiDotNet.Tests - Unit - 06 Genetics/Helpers/Inference
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Genetics|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Helpers|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Inference'
-          - name: AiDotNet.Tests - Unit - 07 Interpretability/JIT/KD
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Interpretability|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.JitCompiler|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.KnowledgeDistillation'
-          - name: AiDotNet.Tests - Unit - 08 Schedulers/LA/Logging/Loss
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.LearningRateSchedulers|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.LinearAlgebra|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Logging|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.LossFunctions'
-          - name: AiDotNet.Tests - Unit - 09 Meta/Mixed/Compression
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.MetaLearning|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.MixedPrecision|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.ModelCompression'
-          # NeuralNetworks split into 3 shards to avoid timeouts (was taking 45+ min)
-          - name: AiDotNet.Tests - Unit - 10a1 NN-Classic
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~ResNetNetworkTests|FullyQualifiedName~VGGNetworkTests|FullyQualifiedName~DenseNetTests)'
-          - name: AiDotNet.Tests - Unit - 10a2 NN-Efficient
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~MobileNetTests|FullyQualifiedName~EfficientNetTests)'
-          # VLM tests split individually due to 45+ min timeout when combined
-          - name: AiDotNet.Tests - Unit - 10a3a1 NN-Blip
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~BlipNeuralNetworkTests'
-          - name: AiDotNet.Tests - Unit - 10a3a2 NN-Blip2
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~Blip2NeuralNetworkTests'
-          - name: AiDotNet.Tests - Unit - 10a3a3 NN-Clip
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~ClipNeuralNetworkTests'
-          - name: AiDotNet.Tests - Unit - 10a3b NN-Adapters
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
-          - name: AiDotNet.Tests - Unit - 10b Optimizers
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Optimizers'
-          - name: AiDotNet.Tests - Unit - 10c RAG
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.RAG'
-          - name: AiDotNet.Tests - Unit - 11 Regularization/RL/RAG2
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Regularization|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.ReinforcementLearning|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.RetrievalAugmentedGeneration'
-          - name: AiDotNet.Tests - Unit - 12 Serving/TimeSeries/Token/Transfer
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Serving|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.TimeSeries|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Tokenization|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.TransferLearning'
-          - name: AiDotNet.Tests - Unit - 13 ProgramSynthesis/Reasoning
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.ProgramSynthesis|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.UnitTests.Reasoning'
-          - name: AiDotNet.Tests - Other - 13 InferenceOptimization
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.InferenceOptimization
-          - name: AiDotNet.Tests - Other - 14 PromptEngineering
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.PromptEngineering
-          - name: AiDotNet.Tests - Other - 15 Recovery/Concurrency
-            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-            framework: net10.0
-            filter: 'Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.Recovery|Category!=GPU&Category!=Integration&Category!=Stress&FullyQualifiedName~AiDotNet.Tests.Concurrency'
-          # Playground compilation tests - verify all 160 code examples compile
-          - name: AiDotNet.Tests - Playground
+            filter: 'Category!=GPU&Category!=Stress&(FullyQualifiedName~AiDotNet.Tests.Recovery|FullyQualifiedName~AiDotNet.Tests.Concurrency)'
+          - name: Other - Playground
             project: tests/AiDotNet.Tests/AiDotNetTests.csproj
             framework: net10.0
             filter: Category=Playground
-          # Note: AiDotNet.Tensors.Tests removed - project moved to AiDotNet.Tensors repo
+          # =====================================================================
+          # MODEL FAMILY TESTS — invariant math tests for all model families
+          # =====================================================================
+          - name: ModelFamily - Classification
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'FullyQualifiedName~ModelFamilyTests.Classification'
+          - name: ModelFamily - Clustering/GP
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: '(FullyQualifiedName~ModelFamilyTests.Clustering|FullyQualifiedName~ModelFamilyTests.GaussianProcess)'
+          - name: ModelFamily - Regression
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'FullyQualifiedName~ModelFamilyTests.Regression'
+          - name: ModelFamily - NeuralNetworks
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'FullyQualifiedName~ModelFamilyTests.NeuralNetworks'
+          - name: ModelFamily - TimeSeries/Activation/Loss
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: '(FullyQualifiedName~ModelFamilyTests.TimeSeries|FullyQualifiedName~ModelFamilyTests.ActivationFunctions|FullyQualifiedName~ModelFamilyTests.LossFunctions)'
+          # Diffusion split into 3 shards (~80 files each) due to large count (244 files)
+          - name: ModelFamily - Diffusion A-I
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Diffusion&
+              (FullyQualifiedName~Tests.A|FullyQualifiedName~Tests.B|FullyQualifiedName~Tests.C|FullyQualifiedName~Tests.D|FullyQualifiedName~Tests.E|FullyQualifiedName~Tests.F|FullyQualifiedName~Tests.G|FullyQualifiedName~Tests.H|FullyQualifiedName~Tests.I)
+          - name: ModelFamily - Diffusion J-R
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Diffusion&
+              (FullyQualifiedName~Tests.J|FullyQualifiedName~Tests.K|FullyQualifiedName~Tests.L|FullyQualifiedName~Tests.M|FullyQualifiedName~Tests.N|FullyQualifiedName~Tests.O|FullyQualifiedName~Tests.P|FullyQualifiedName~Tests.Q|FullyQualifiedName~Tests.R)
+          - name: ModelFamily - Diffusion S-Z
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: >-
+              FullyQualifiedName~ModelFamilyTests.Diffusion&
+              (FullyQualifiedName~Tests.S|FullyQualifiedName~Tests.T|FullyQualifiedName~Tests.U|FullyQualifiedName~Tests.V|FullyQualifiedName~Tests.W|FullyQualifiedName~Tests.X|FullyQualifiedName~Tests.Y|FullyQualifiedName~Tests.Z)
+          # Auto-generated layer tests from TestScaffoldGenerator (~1670 methods)
+          - name: ModelFamily - Generated Layers
+            project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+            framework: net10.0
+            filter: 'FullyQualifiedName~ModelFamilyTests.Generated'
+          # =====================================================================
+          # SERVING TESTS
+          # =====================================================================
           - name: AiDotNet.Serving.Tests
             project: tests/AiDotNet.Serving.Tests/AiDotNet.Serving.Tests.csproj
             framework: net10.0
-            filter: Category!=GPU&Category!=Integration&Category!=Stress
+            filter: 'Category!=GPU&Category!=Stress'
 
     steps:
       - name: Checkout code

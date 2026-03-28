@@ -367,7 +367,8 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
         var safeSums = Engine.TensorMax(columnSums, NumOps.FromDouble(1e-10));
 
         // Normalize: CellStates = CellStates / safeSums (broadcast division)
-        CellStates = Engine.TensorDivide(CellStates, safeSums);
+        // safeSums shape [numColumns, 1] broadcasts across [numColumns, cellsPerColumn]
+        CellStates = Engine.TensorBroadcastDivide(CellStates, safeSums);
     }
 
     /// <summary>

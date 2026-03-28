@@ -552,8 +552,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     continue;
 
                 // Use constructor call if the model has a zero-arg constructor and is type-compatible.
+                // For models with architecture-only constructors, emit a default architecture.
                 // Otherwise, emit a throw so the test compiles but fails at runtime with a clear message.
-                bool canConstruct = model.HasParameterlessConstructor &&
+                bool canConstruct = (model.HasParameterlessConstructor || model.HasArchitectureOnlyConstructor) &&
                                     IsCompatibleWithFamily(model, family.Value);
 
                 EmitGeneratedTestClass(context, model, family.Value, testClassName, canConstruct);
@@ -870,6 +871,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Detect a public constructor callable with zero arguments:
         // either parameterless, or all parameters have default values.
         bool hasParameterlessCtor = false;
+        bool hasArchitectureOnlyCtor = false;
         foreach (var ctor in modelClass.InstanceConstructors)
         {
             if (ctor.DeclaredAccessibility != Accessibility.Public)
@@ -896,6 +898,35 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 hasParameterlessCtor = true;
                 break;
             }
+
+            // Check if only the first parameter is required and is NeuralNetworkArchitecture<T>.
+            // The rest must all have default values. This allows generating a default architecture.
+            if (ctor.Parameters.Length >= 1 && !hasArchitectureOnlyCtor)
+            {
+                var firstParam = ctor.Parameters[0];
+                string firstParamTypeName = firstParam.Type.ToDisplayString();
+                bool isArchitectureParam = firstParamTypeName.StartsWith(
+                    "AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<", System.StringComparison.Ordinal);
+
+                if (isArchitectureParam && !firstParam.HasExplicitDefaultValue)
+                {
+                    bool restOptional = true;
+                    for (int pi = 1; pi < ctor.Parameters.Length; pi++)
+                    {
+                        // Only explicit default values make a parameter optional.
+                        // Nullable type annotations (string?) do NOT imply optionality.
+                        if (!ctor.Parameters[pi].HasExplicitDefaultValue)
+                        {
+                            restOptional = false;
+                            break;
+                        }
+                    }
+                    if (restOptional)
+                    {
+                        hasArchitectureOnlyCtor = true;
+                    }
+                }
+            }
         }
 
         var className = modelClass.Name;
@@ -914,6 +945,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             UsesMatrixInput = usesMatrixInput,
             UsesVectorOutput = usesVectorOutput,
             HasParameterlessConstructor = hasParameterlessCtor,
+            HasArchitectureOnlyConstructor = hasArchitectureOnlyCtor,
             ExtendsAudioNeuralNetworkBase = extendsAudioNN,
             ExtendsDocumentNeuralNetworkBase = extendsDocumentNN,
             ExtendsVisionLanguageModelBase = extendsVisionLanguage,
@@ -1338,23 +1370,75 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (canConstruct)
         {
             string constructorExpr;
-            if (model.TypeParameterCount == 0)
+            bool needsArchitectureUsing = false;
+
+            if (model.HasParameterlessConstructor)
             {
-                constructorExpr = $"new {typeName}()";
-            }
-            else if (model.TypeParameterCount == 1)
-            {
-                constructorExpr = $"new {typeName}<double>()";
+                // Zero-arg constructor: simple instantiation
+                if (model.TypeParameterCount == 0)
+                {
+                    constructorExpr = $"new {typeName}()";
+                }
+                else if (model.TypeParameterCount == 1)
+                {
+                    constructorExpr = $"new {typeName}<double>()";
+                }
+                else
+                {
+                    // Multi-type-parameter models: resolve type args from IFullModel type parameters
+                    if (model.TypeParameterCount == 2)
+                    {
+                        // Arity-2: Model<T, TData> — single data type for both input/output
+                        string dataType = model.UsesTensorInput ? "Tensor<double>" :
+                                          model.UsesMatrixInput ? "Matrix<double>" : "Vector<double>";
+                        constructorExpr = $"new {typeName}<double, {dataType}>()";
+                    }
+                    else
+                    {
+                        // Arity-3: Model<T, TInput, TOutput>
+                        string inputType = model.UsesTensorInput ? "Tensor<double>" :
+                                           model.UsesMatrixInput ? "Matrix<double>" : "Vector<double>";
+                        string outputType = model.UsesVectorOutput ? "Vector<double>" :
+                                            model.UsesTensorInput ? "Tensor<double>" :
+                                            model.UsesMatrixInput ? "Matrix<double>" : "Vector<double>";
+                        constructorExpr = $"new {typeName}<double, {inputType}, {outputType}>()";
+                    }
+                }
             }
             else
             {
-                // Multi-type-parameter models (e.g., Model<T, TInput, TOutput>)
-                // Resolve TInput/TOutput from the detected IFullModel type arguments
-                string inputType = model.UsesTensorInput ? "Tensor<double>" : "Matrix<double>";
-                string outputType = model.UsesVectorOutput ? "Vector<double>" :
-                                    model.UsesTensorInput ? "Tensor<double>" : "Vector<double>";
-                constructorExpr = $"new {typeName}<double, {inputType}, {outputType}>()";
+                // Architecture-only constructor: provide a default NeuralNetworkArchitecture
+                needsArchitectureUsing = true;
+                string archExpr = "new NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 16, outputSize: 4)";
+
+                if (model.TypeParameterCount == 0)
+                {
+                    constructorExpr = $"new {typeName}({archExpr})";
+                }
+                else if (model.TypeParameterCount == 1)
+                {
+                    constructorExpr = $"new {typeName}<double>({archExpr})";
+                }
+                else if (model.TypeParameterCount == 2)
+                {
+                    string dataType = model.UsesTensorInput ? "Tensor<double>" :
+                                      model.UsesMatrixInput ? "Matrix<double>" : "Vector<double>";
+                    constructorExpr = $"new {typeName}<double, {dataType}>({archExpr})";
+                }
+                else
+                {
+                    string inputType = model.UsesTensorInput ? "Tensor<double>" :
+                                       model.UsesMatrixInput ? "Matrix<double>" : "Vector<double>";
+                    string outputType = model.UsesVectorOutput ? "Vector<double>" :
+                                        model.UsesTensorInput ? "Tensor<double>" :
+                                        model.UsesMatrixInput ? "Matrix<double>" : "Vector<double>";
+                    constructorExpr = $"new {typeName}<double, {inputType}, {outputType}>({archExpr})";
+                }
             }
+
             factoryBody = $"        => {constructorExpr};";
         }
         else
@@ -1378,10 +1462,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         sb.AppendLine("// <auto-generated/>");
         sb.AppendLine("// If this model needs constructor arguments, create a manual test class to replace this.");
         sb.AppendLine("using AiDotNet.Interfaces;");
-        if (needsTensorUsing)
+        if (needsTensorUsing || model.HasArchitectureOnlyConstructor)
             sb.AppendLine("using AiDotNet.Tensors;");
         if (needsMatrixUsingForModel)
             sb.AppendLine("using AiDotNet.Tensors.LinearAlgebra;");
+        if (model.HasArchitectureOnlyConstructor)
+        {
+            sb.AppendLine("using AiDotNet.Enums;");
+            sb.AppendLine("using AiDotNet.NeuralNetworks;");
+        }
         sb.AppendLine("using AiDotNet.Tests.ModelFamilyTests.Base;");
         sb.AppendLine();
         sb.AppendLine("namespace AiDotNet.Tests.ModelFamilyTests.Generated;");
@@ -2943,6 +3032,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         /// <summary>Whether the model has an accessible parameterless constructor.</summary>
         public bool HasParameterlessConstructor { get; set; }
+
+        /// <summary>
+        /// Whether the model has a public constructor where the only required parameter
+        /// is NeuralNetworkArchitecture&lt;T&gt; and all remaining parameters are optional.
+        /// When true, the generator can emit a default architecture to construct the model.
+        /// </summary>
+        public bool HasArchitectureOnlyConstructor { get; set; }
 
         // Base class chain detection (for mid-level hierarchy resolution)
         public bool ExtendsAudioNeuralNetworkBase { get; set; }
