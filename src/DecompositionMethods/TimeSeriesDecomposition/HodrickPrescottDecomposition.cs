@@ -153,8 +153,10 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
             P = P_pred - K.OuterProduct((H * P_pred).GetRow(0));
 
             trend[i] = x[0];
-            cycle[i] = NumOps.Subtract(TimeSeries[i], trend[i]);
         }
+
+        // Vectorized: cycle = TimeSeries - trend
+        cycle = (Vector<T>)Engine.Subtract(TimeSeries, trend);
 
         AddComponent(DecompositionComponentType.Trend, trend);
         AddComponent(DecompositionComponentType.Cycle, cycle);
@@ -179,23 +181,18 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         // Perform wavelet decomposition
         Vector<T> coeffs = DiscreteWaveletTransform(TimeSeries, levels);
 
-        // Threshold detail coefficients
-        for (int i = 0; i < n; i++)
+        // Soft threshold detail coefficients (second half of vector)
+        int halfN = n / 2;
+        for (int i = halfN; i < n; i++)
         {
-            if (i >= n / 2)  // Detail coefficients
-            {
-                coeffs[i] = NumOps.Multiply(coeffs[i], NumOps.FromDouble(0.1));  // Soft thresholding
-            }
+            coeffs[i] = NumOps.Multiply(coeffs[i], NumOps.FromDouble(0.1));
         }
 
         // Perform inverse wavelet transform
         trend = InverseDiscreteWaveletTransform(coeffs, levels);
 
-        // Calculate cycle
-        for (int i = 0; i < n; i++)
-        {
-            cycle[i] = NumOps.Subtract(TimeSeries[i], trend[i]);
-        }
+        // Vectorized: cycle = TimeSeries - trend
+        cycle = (Vector<T>)Engine.Subtract(TimeSeries, trend);
 
         AddComponent(DecompositionComponentType.Trend, trend);
         AddComponent(DecompositionComponentType.Cycle, cycle);
@@ -325,13 +322,13 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
         // Inverse FFT to get trend, then truncate to original length
         Vector<T> paddedTrend = fft.Inverse(frequencyDomain);
 
+        // Copy padded trend to final trend
         Vector<T> trend = new Vector<T>(n);
-        Vector<T> cycle = new Vector<T>(n);
         for (int i = 0; i < n; i++)
-        {
             trend[i] = paddedTrend[i];
-            cycle[i] = NumOps.Subtract(TimeSeries[i], trend[i]);
-        }
+
+        // Vectorized: cycle = TimeSeries - trend
+        Vector<T> cycle = (Vector<T>)Engine.Subtract(TimeSeries, trend);
 
         AddComponent(DecompositionComponentType.Trend, trend);
         AddComponent(DecompositionComponentType.Cycle, cycle);
@@ -371,8 +368,10 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
             c = NumOps.Multiply(rho, NumOps.Subtract(TimeSeries[i], mu));
 
             trend[i] = mu;
-            cycle[i] = NumOps.Subtract(TimeSeries[i], mu);
         }
+
+        // Vectorized: cycle = TimeSeries - trend
+        cycle = (Vector<T>)Engine.Subtract(TimeSeries, trend);
 
         AddComponent(DecompositionComponentType.Trend, trend);
         AddComponent(DecompositionComponentType.Cycle, cycle);
@@ -446,10 +445,8 @@ public class HodrickPrescottDecomposition<T> : TimeSeriesDecompositionBase<T>
             trend[n - 1] = TimeSeries[n - 1];
         }
 
-        for (int i = 0; i < n; i++)
-        {
-            cycle[i] = NumOps.Subtract(TimeSeries[i], trend[i]);
-        }
+        // Vectorized: cycle = TimeSeries - trend
+        cycle = (Vector<T>)Engine.Subtract(TimeSeries, trend);
 
         AddComponent(DecompositionComponentType.Trend, trend);
         AddComponent(DecompositionComponentType.Cycle, cycle);
