@@ -625,6 +625,7 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
         writer.Write(_options.MinSamplesSplit);
         writer.Write(_options.SignificanceLevel);
         writer.Write(_options.Seed ?? -1);
+        writer.Write(_options.MinSamplesLeaf);
 
         // Serialize the tree structure
         SerializeNode(writer, _root);
@@ -674,6 +675,7 @@ public class ConditionalInferenceTreeRegression<T> : AsyncDecisionTreeRegression
         _options.SignificanceLevel = reader.ReadDouble();
         int seed = reader.ReadInt32();
         _options.Seed = seed == -1 ? null : seed;
+        _options.MinSamplesLeaf = reader.ReadInt32();
 
         // Deserialize the tree structure
         _root = DeserializeNode(reader);
