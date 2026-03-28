@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class HopeNetworkTests : NeuralNetworkModelTestBase
+public class HopeNetworkTests : AssociativeMemoryTestBase
 {
     protected override int[] InputShape => [256];
     protected override int[] OutputShape => [256];

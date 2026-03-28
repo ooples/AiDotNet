@@ -4,7 +4,7 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-public class HopfieldNetworkTests : NeuralNetworkModelTestBase
+public class HopfieldNetworkTests : AssociativeMemoryTestBase
 {
     // Hopfield: associative memory, input=output=networkSize=128
     protected override int[] InputShape => [128];
