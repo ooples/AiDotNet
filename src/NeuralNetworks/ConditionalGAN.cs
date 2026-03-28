@@ -97,7 +97,8 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         // is handled at runtime in GenerateConditional() and TrainStep(), not by
         // modifying the architecture dimensions. This avoids conflicts between
         // inputSize and dimension parameters for ThreeDimensional input types.
-        _ = numConditionClasses; // Used at runtime for condition handling
+        // numConditionClasses is part of the factory contract but only used at runtime
+        // in GenerateConditional()/TrainStep() for condition concatenation, not here.
         return generatorArchitecture;
     }
 

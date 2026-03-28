@@ -317,35 +317,13 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
 
         foreach (var layer in Layers)
         {
-            // GlobalPoolingLayer expects 3D+ input to reduce spatial dims, but MeshCNN
-            // data is [edges, channels] (2D). Compute global pooling over edge dimension
-            // directly to produce [channels] output, bypassing the layer's 2D no-op path.
+            // GlobalPoolingLayer expects 3D+ input. MeshCNN data is [edges, channels] (2D).
+            // Reshape to [1, edges, channels] so GlobalPoolingLayer processes it normally
+            // and caches the input for backward pass gradient computation.
             if (layer is GlobalPoolingLayer<T> && output.Rank == 2)
             {
-                int numEdges = output.Shape[0];
-                int channels = output.Shape[1];
-
-                if (numEdges == 0)
-                    throw new ArgumentException("Cannot pool over empty edge dimension (0 edges).");
-
-                var pooled = new Tensor<T>(new int[] { channels });
-
-                // Initialize with first edge's values
-                for (int c = 0; c < channels; c++)
-                    pooled[c] = output[0, c];
-
-                // Global max pooling over edge dimension (axis 0)
-                for (int e = 1; e < numEdges; e++)
-                {
-                    for (int c = 0; c < channels; c++)
-                    {
-                        T val = output[e, c];
-                        if (NumOps.GreaterThan(val, pooled[c]))
-                            pooled[c] = val;
-                    }
-                }
-
-                output = pooled;
+                output = output.Reshape([1, output.Shape[0], output.Shape[1]]);
+                output = layer.Forward(output);
             }
             else
             {
