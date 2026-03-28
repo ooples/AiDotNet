@@ -557,16 +557,9 @@ namespace AiDotNet.PhysicsInformed
         /// </summary>
         public T[] ComputeDerivative(T[] predictions, T[] targets)
         {
-            // For simplicity, return MSE derivative for data loss component
-            T[] derivative = new T[predictions.Length];
-            T scale = NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(predictions.Length));
-
-            for (int i = 0; i < predictions.Length; i++)
-            {
-                derivative[i] = NumOps.Multiply(scale, NumOps.Subtract(predictions[i], targets[i]));
-            }
-
-            return derivative;
+            // Delegate to vectorized overload
+            var result = CalculateDerivative(new Vector<T>(predictions), new Vector<T>(targets));
+            return result.ToArray();
         }
 
         /// <inheritdoc/>
@@ -589,15 +582,9 @@ namespace AiDotNet.PhysicsInformed
         {
             ValidateVectorLengths(predicted, actual);
 
-            var derivative = new Vector<T>(predicted.Length);
+            // Vectorized MSE derivative: 2/N * (predicted - actual)
             T scale = NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(predicted.Length));
-
-            for (int i = 0; i < predicted.Length; i++)
-            {
-                derivative[i] = NumOps.Multiply(scale, NumOps.Subtract(predicted[i], actual[i]));
-            }
-
-            return derivative;
+            return (Vector<T>)Engine.Multiply(Engine.Subtract(predicted, actual), scale);
         }
     }
 
