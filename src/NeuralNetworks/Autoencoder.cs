@@ -835,8 +835,10 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 
                 // Update parameters using Adam with conservative learning rate
                 // to prevent oscillation at convergence (Kingma & Ba 2015)
+                // Use _learningRate but cap at 0.0005 to prevent oscillation at convergence
+                double effectiveLR = Math.Min(NumOps.ToDouble(_learningRate), 0.0005);
                 _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-                    new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.0005 });
+                    new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = effectiveLR });
                 var paramGrads = GetParameterGradients();
                 var currentParams = GetParameters();
                 if (paramGrads.Length > 0 && currentParams.Length == paramGrads.Length)

@@ -2550,22 +2550,23 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(inputSize, inputSize);
 
         // Use SiLU (Swish) activation instead of tanh to prevent saturation.
-        // tanh maps all large inputs to ±1, collapsing different-magnitude inputs
-        // to the same hidden state. SiLU(x) = x * sigmoid(x) preserves magnitude
-        // while still being bounded for negative inputs (Ramachandran et al. 2017).
+        // SiLU prevents tanh saturation that collapses different-magnitude inputs
+        // to the same hidden state. SiLU(x) = x * sigmoid(x) preserves magnitude.
+        // The RecurrentLayer caches pre-activation values for correct derivative
+        // computation: dL/dz = dL/dh * SiLU'(z), not SiLU'(SiLU(z)).
         yield return new RecurrentLayer<T>(
             inputSize: inputSize,
             hiddenSize: hiddenSize,
-            activationFunction: new TanhActivation<T>()
+            activationFunction: new SiLUActivation<T>()
         );
 
-        // Additional RNN layers (Elman 1990 — standard tanh activation)
+        // Additional RNN layers with SiLU
         for (int i = 1; i < recurrentLayerCount; i++)
         {
             yield return new RecurrentLayer<T>(
                 inputSize: hiddenSize,
                 hiddenSize: hiddenSize,
-                activationFunction: new TanhActivation<T>()
+                activationFunction: new SiLUActivation<T>()
             );
         }
 

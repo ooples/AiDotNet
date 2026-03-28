@@ -260,9 +260,12 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         SetTrainingMode(true);
 
-        // Propagate training mode to all layers for proper state caching
+        // Reset recurrent state and propagate training mode.
+        // GRU layers keep hidden state across calls — without reset,
+        // independent Train() calls start from stale activations.
         foreach (var layer in Layers)
         {
+            layer.ResetState();
             layer.SetTrainingMode(true);
         }
 
@@ -382,6 +385,8 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
+        // GRU has no network-specific state beyond base class (layers + parameters).
+        // Optimizer state is reconstructed on deserialization with default LR.
     }
 
     /// <summary>

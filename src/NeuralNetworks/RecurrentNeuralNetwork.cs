@@ -324,16 +324,21 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
         // Compute loss gradient
         var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
 
+        // Reshape gradient to match output tensor shape for proper BPTT
+        var gradTensor = Tensor<T>.FromVector(lossGrad);
+        if (gradTensor.Rank < output.Rank)
+            gradTensor = gradTensor.Reshape(output.Shape.ToArray());
+
         // Clip loss gradient before backprop (Pascanu et al. 2013 — essential for RNNs)
-        var clippedLossGrad = ClipGradient(Tensor<T>.FromVector(lossGrad));
+        var clippedLossGrad = ClipGradient(gradTensor);
 
         // Backpropagate error through time
         BackpropagateError(clippedLossGrad);
 
-        // Update parameters using Adam with lower learning rate for RNNs
-        // Per Pascanu et al. 2013: RNNs need careful learning rate + gradient clipping
+        // Use _learningRate but cap for Adam stability (default SGD LR of 0.01 is too high for Adam)
+        double effectiveLR = Math.Min(NumOps.ToDouble(_learningRate), 0.001);
         _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.001 });
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = effectiveLR });
         var paramGrads = GetParameterGradients();
         var currentParams = GetParameters();
         var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
@@ -393,18 +398,6 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
     /// you make small adjustments to each part (the parameters) to improve the overall performance.
     /// </para>
     /// </remarks>
-    private void UpdateNetworkParameters()
-    {
-        foreach (var layer in Layers)
-        {
-            if (layer.GetParameterGradients() != null)
-            {
-                Vector<T> updates = layer.GetParameterGradients().Multiply(_learningRate);
-                layer.UpdateParameters(updates);
-            }
-        }
-    }
-
     /// <summary>
     /// Gets metadata about the Recurrent Neural Network model.
     /// </summary>
