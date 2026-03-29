@@ -609,7 +609,7 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
     /// Returns a copy to prevent mutation of internal state.
     /// </summary>
     public Vector<T>? ConsolidatedImportance => _omega is not null
-        ? new Vector<T>(_omega.ToArray())
+        ? Vector<T>.Wrap(_omega.ToArray())
         : null;
 
     /// <summary>
@@ -617,7 +617,7 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
     /// Returns a copy to prevent mutation of internal state.
     /// </summary>
     public Vector<T>? OptimalParameters => _taskStartParameters is not null
-        ? new Vector<T>(_taskStartParameters.ToArray())
+        ? Vector<T>.Wrap(_taskStartParameters.ToArray())
         : null;
 
     /// <summary>

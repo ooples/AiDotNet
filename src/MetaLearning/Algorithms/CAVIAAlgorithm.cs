@@ -785,7 +785,7 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// - Transfer (reuse context from a similar seen task)
     /// </para>
     /// </remarks>
-    public Vector<T> AdaptedContext => new Vector<T>(_adaptedContext.ToArray());
+    public Vector<T> AdaptedContext => Vector<T>.Wrap(_adaptedContext.ToArray());
 
     /// <summary>
     /// Makes predictions by augmenting input with the adapted context and running through the body model.

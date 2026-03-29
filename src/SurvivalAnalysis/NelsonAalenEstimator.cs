@@ -259,7 +259,7 @@ public class NelsonAalenEstimator<T> : SurvivalModelBase<T>
         if (_cumulativeHazard is null)
             return new Vector<T>(0);
 
-        return new Vector<T>(_cumulativeHazard.ToArray());
+        return Vector<T>.Wrap(_cumulativeHazard.ToArray());
     }
 
     /// <inheritdoc />
