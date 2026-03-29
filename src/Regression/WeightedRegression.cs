@@ -180,10 +180,15 @@ public class WeightedRegression<T> : RegressionBase<T>
         var xTWx = expandedX.Transpose().Multiply(weightMatrix).Multiply(expandedX);
         var regularizedXTWx = xTWx.Add(Regularization.Regularize(xTWx));
 
-        // Add small ridge for numerical stability (prevents singularity with collinear features)
+        // Add scale-aware ridge for numerical stability (prevents singularity with collinear features)
+        double diagMean = 0;
+        for (int i = 0; i < regularizedXTWx.Rows; i++)
+            diagMean += Math.Abs(NumOps.ToDouble(regularizedXTWx[i, i]));
+        diagMean = regularizedXTWx.Rows > 0 ? diagMean / regularizedXTWx.Rows : 1.0;
+        var stabilityRidge = NumOps.FromDouble(Math.Max(1e-10, diagMean * 1e-6));
         for (int i = 0; i < regularizedXTWx.Rows; i++)
         {
-            regularizedXTWx[i, i] = NumOps.Add(regularizedXTWx[i, i], NumOps.FromDouble(1e-10));
+            regularizedXTWx[i, i] = NumOps.Add(regularizedXTWx[i, i], stabilityRidge);
         }
 
         var xTWy = expandedX.Transpose().Multiply(weightMatrix).Multiply(y);

@@ -489,9 +489,13 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
         for (int i = 0; i < xTx.Rows; i++)
             diagMean += Math.Abs(NumOps.ToDouble(xTx[i, i]));
         diagMean /= xTx.Rows;
-        T lambda = NumOps.FromDouble(Math.Max(1e-6, diagMean * 1e-6));
+        T stabilityLambda = NumOps.FromDouble(Math.Max(1e-6, diagMean * 1e-6));
         Matrix<T> identity = Matrix<T>.CreateIdentity(xTx.Rows);
-        Matrix<T> xTxRegularized = xTx.Add(identity.Multiply(lambda));
+        Matrix<T> xTxRegularized = xTx.Add(identity.Multiply(stabilityLambda));
+        if (Regularization != null)
+        {
+            xTxRegularized = xTxRegularized.Add(Regularization.Regularize(xTx));
+        }
 
         Matrix<T> xTxInverse = xTxRegularized.Inverse();
         Matrix<T> xTxInverseXT = xTxInverse.Multiply(xTranspose);

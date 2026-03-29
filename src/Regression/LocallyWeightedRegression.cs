@@ -292,11 +292,10 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         for (int i = 0; i < xTx.Rows; i++)
             diagMean += Math.Abs(NumOps.ToDouble(xTx[i, i]));
         diagMean = xTx.Rows > 0 ? diagMean / xTx.Rows : 1.0;
-        var userStrength = Regularization?.GetOptions().Strength ?? 0.0;
-        var effectiveStrength = NumOps.FromDouble(Math.Max(diagMean * 1e-6, Math.Max(1e-6, userStrength)));
+        var stabilityStrength = NumOps.FromDouble(Math.Max(diagMean * 1e-6, 1e-6));
         for (int i = 0; i < xTx.Rows; i++)
         {
-            xTx[i, i] = NumOps.Add(xTx[i, i], effectiveStrength);
+            xTx[i, i] = NumOps.Add(xTx[i, i], stabilityStrength);
         }
 
         var xTy = weightedX.Transpose().Multiply(weightedY);
