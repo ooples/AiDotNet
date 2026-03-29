@@ -253,8 +253,18 @@ public class PoissonRegression<T> : RegressionBase<T>
     /// </remarks>
     private static Vector<T> ComputeWorkingResponse(Matrix<T> x, Vector<T> y, Vector<T> mu, Vector<T> coefficients)
     {
+        var ops = MathHelper.GetNumericOperations<T>();
         Vector<T> eta = x.Multiply(coefficients);
-        return eta.Add(y.Subtract(mu).PointwiseDivide(mu));
+        // Guard against near-zero mu to prevent division by zero (NaN poisoning)
+        var safeRatio = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+        {
+            double muVal = ops.ToDouble(mu[i]);
+            double yVal = ops.ToDouble(y[i]);
+            double safeMu = Math.Max(muVal, 1e-10);
+            safeRatio[i] = ops.FromDouble((yVal - safeMu) / safeMu);
+        }
+        return eta.Add(safeRatio);
     }
 
     /// <summary>

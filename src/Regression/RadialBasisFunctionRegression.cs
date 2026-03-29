@@ -484,8 +484,12 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
         Matrix<T> xTx = xTranspose.Multiply(x);
 
         // Add ridge regularization: (X^T X + λI)^-1 X^T y
-        // Using a small lambda value (1e-8) for numerical stability
-        T lambda = NumOps.FromDouble(1e-8);
+        // Scale lambda relative to the diagonal magnitude to ensure numerical stability
+        double diagMean = 0;
+        for (int i = 0; i < xTx.Rows; i++)
+            diagMean += Math.Abs(NumOps.ToDouble(xTx[i, i]));
+        diagMean /= xTx.Rows;
+        T lambda = NumOps.FromDouble(Math.Max(1e-6, diagMean * 1e-6));
         Matrix<T> identity = Matrix<T>.CreateIdentity(xTx.Rows);
         Matrix<T> xTxRegularized = xTx.Add(identity.Multiply(lambda));
 
