@@ -984,6 +984,16 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         return Vector<T>.Concatenate(wGrad, bGrad);
     }
 
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["CapsuleChannels"] = _capsuleChannels.ToString();
+        metadata["CapsuleDimension"] = _capsuleDimension.ToString();
+        metadata["KernelSize"] = _kernelSize.ToString();
+        metadata["Stride"] = _stride.ToString();
+        return metadata;
+    }
+
     public override void ClearGradients()
     {
         base.ClearGradients();
