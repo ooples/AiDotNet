@@ -111,26 +111,22 @@ public static class TapeLayerBridge<T>
         bool applyActivationOnLast = false,
         double leakyAlpha = 0.2)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-
         // Ensure input is 2D for matrix operations: [1, features]
         bool was1D = input.Shape.Length == 1;
         var input2D = was1D ? input.Reshape([1, input.Length]) : input;
 
-        using var tape = new GradientTape<T>();
+        // Use the new tensor-based GradientTape API with DifferentiableOps
+        using var tape = new GradientTape<T>(persistent: true);
+        tape.Watch(input2D);
 
-        var inputNode = TensorOperations<T>.Variable(input2D, "disc_input", requiresGradient: true);
-        tape.Watch(inputNode);
+        // Forward through layers using DifferentiableOps (records to tape)
+        var output = ForwardWithDifferentiableOps(input2D, layers, activation, applyActivationOnLast, leakyAlpha);
 
-        // Forward through layers using TensorOperations
-        var outputNode = ForwardWithTape(inputNode, layers, activation, applyActivationOnLast, leakyAlpha);
+        // Compute gradient: dOutput/dInput via reverse-mode AD
+        var gradients = tape.Gradient(output, createGraph: true);
 
-        // Compute gradient: dOutput/dInput
-        var gradients = tape.Gradient(outputNode, new[] { inputNode });
-
-        if (gradients.TryGetValue(inputNode, out var inputGrad))
+        if (gradients.TryGetValue(input2D, out var inputGrad))
         {
-            // Reshape back to original shape if needed
             return was1D ? inputGrad.Reshape([inputGrad.Length]) : inputGrad;
         }
 
@@ -185,11 +181,10 @@ public static class TapeLayerBridge<T>
     }
 
     /// <summary>
-    /// Forwards a computation node through a sequence of layers using TensorOperations,
-    /// recording all operations on the active GradientTape.
+    /// Forwards a tensor through layers using DifferentiableOps (records to active tape).
     /// </summary>
-    private static ComputationNode<T> ForwardWithTape(
-        ComputationNode<T> input,
+    private static Tensor<T> ForwardWithDifferentiableOps(
+        Tensor<T> input,
         IReadOnlyList<ILayer<T>> layers,
         HiddenActivation activation,
         bool applyActivationOnLast,
@@ -197,39 +192,64 @@ public static class TapeLayerBridge<T>
     {
         var current = input;
 
-        // Identify dense layers (skip dropout)
-        var denseLayers = new List<ILayer<T>>();
+        // Filter out dropout layers (gradient penalty uses eval mode)
+        var activeLayers = new List<ILayer<T>>();
         foreach (var layer in layers)
         {
             if (layer is not DropoutLayer<T>)
-            {
-                denseLayers.Add(layer);
-            }
+                activeLayers.Add(layer);
         }
 
-        for (int i = 0; i < denseLayers.Count; i++)
+        for (int i = 0; i < activeLayers.Count; i++)
         {
-            bool isLast = (i == denseLayers.Count - 1);
-            var layer = denseLayers[i];
+            bool isLast = (i == activeLayers.Count - 1);
+            var layer = activeLayers[i];
 
             if (layer is FullyConnectedLayer<T>)
             {
-                current = ForwardFCWithTape(current, layer);
-            }
-            else if (layer is BatchNormalizationLayer<T>)
-            {
-                current = ForwardBNWithTape(current, layer);
+                // Extract weights/biases and use DifferentiableOps for tape recording
+                var weights = layer.GetWeights();
+                if (weights == null)
+                    throw new InvalidOperationException(
+                        "FullyConnectedLayer has null weights. Ensure initialization before gradient computation.");
+
+                var weightsT = DifferentiableOps<T>.Transpose(weights);
+                current = DifferentiableOps<T>.MatMul(current, weightsT);
+
+                var biases = layer.GetBiases();
+                if (biases != null)
+                {
+                    var biasReshaped = biases.Reshape([1, biases.Length]);
+                    current = DifferentiableOps<T>.Add(current, biasReshaped);
+                }
             }
             else
             {
-                // Unsupported layer type — use opaque forward as fallback
-                current = ForwardOpaqueWithTape(current, layer);
+                // Opaque forward: use layer.Forward + record as single op for backward
+                var layerInput = current;
+                var output = layer.Forward(current);
+                var tape = GradientTape<T>.Current;
+                if (tape is not null)
+                {
+                    tape.RecordOp($"opaque_{layer.GetType().Name}", [layerInput], output,
+                        grad => [layer.Backward(grad)]);
+                }
+                current = output;
             }
 
-            // Apply activation on hidden layers (and optionally on last)
+            // Apply activation
             if (!isLast || applyActivationOnLast)
             {
-                current = ApplyTapeActivation(current, activation, leakyAlpha);
+                current = activation switch
+                {
+                    HiddenActivation.ReLU => DifferentiableOps<T>.ReLU(current),
+                    HiddenActivation.Sigmoid => DifferentiableOps<T>.Sigmoid(current),
+                    HiddenActivation.Tanh => DifferentiableOps<T>.Tanh(current),
+                    HiddenActivation.SiLU => DifferentiableOps<T>.Swish(current),
+                    HiddenActivation.GELU => DifferentiableOps<T>.GELU(current),
+                    HiddenActivation.LeakyReLU => ApplyLeakyReLU(current, leakyAlpha),
+                    _ => current,
+                };
             }
         }
 
@@ -237,139 +257,24 @@ public static class TapeLayerBridge<T>
     }
 
     /// <summary>
-    /// Forwards through a FullyConnectedLayer using TensorOperations for proper tape recording.
+    /// LeakyReLU via DifferentiableOps: max(alpha*x, x).
     /// </summary>
-    /// <remarks>
-    /// Extracts weights and biases from the layer and performs:
-    /// output = input * W^T + bias
-    /// where W is the weight matrix [outputSize, inputSize].
-    /// </remarks>
-    private static ComputationNode<T> ForwardFCWithTape(
-        ComputationNode<T> input,
-        ILayer<T> layer)
+    private static Tensor<T> ApplyLeakyReLU(Tensor<T> x, double alpha)
     {
-        var weights = layer.GetWeights();
-        var biases = layer.GetBiases();
-
-        if (weights == null)
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var result = new Tensor<T>(x.Shape.ToArray());
+        var mask = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
         {
-            throw new InvalidOperationException(
-                "FullyConnectedLayer has null weights. Ensure the layer is initialized before computing gradients.");
+            double val = numOps.ToDouble(x[i]);
+            result[i] = val >= 0 ? x[i] : numOps.FromDouble(val * alpha);
+            mask[i] = numOps.FromDouble(val >= 0 ? 1.0 : alpha);
         }
 
-        // Weights are [outputSize, inputSize], need transpose for matmul
-        var weightsNode = TensorOperations<T>.Constant(weights, "fc_weights");
-        var weightsTNode = TensorOperations<T>.Transpose(weightsNode);
+        GradientTape<T>.Current?.RecordOp("LeakyReLU", [x], result,
+            grad => [DifferentiableOps<T>.Multiply(grad, mask)]);
 
-        // Linear transform: input [batch, inputSize] * W^T [inputSize, outputSize] = [batch, outputSize]
-        var linear = TensorOperations<T>.MatrixMultiply(input, weightsTNode);
-
-        // Add bias if present
-        if (biases != null)
-        {
-            // Reshape bias to [1, outputSize] for broadcasting
-            var biasReshaped = biases.Reshape([1, biases.Length]);
-            var biasNode = TensorOperations<T>.Constant(biasReshaped, "fc_biases");
-            linear = TensorOperations<T>.Add(linear, biasNode);
-        }
-
-        return linear;
-    }
-
-    /// <summary>
-    /// Forwards through a BatchNormalizationLayer using running statistics as an affine transform.
-    /// </summary>
-    /// <remarks>
-    /// In eval mode, BatchNorm is: output = gamma * (input - mean) / sqrt(var + eps) + beta.
-    /// This is equivalent to: output = scale * input + offset, where:
-    /// - scale = gamma / sqrt(var + eps)
-    /// - offset = beta - gamma * mean / sqrt(var + eps)
-    /// </remarks>
-    private static ComputationNode<T> ForwardBNWithTape(
-        ComputationNode<T> input,
-        ILayer<T> layer)
-    {
-        // BN in eval mode is a simple affine transform using running statistics.
-        // Since we can't easily extract running mean/var from the interface,
-        // fall back to opaque forward.
-        return ForwardOpaqueWithTape(input, layer);
-    }
-
-    /// <summary>
-    /// Forwards through a layer using its Forward() method as an opaque operation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This is a fallback for layer types that can't be expressed as TensorOperations.
-    /// The forward pass is computed directly, and the backward function uses the layer's
-    /// Backward() method. This still provides correct gradients but doesn't support
-    /// higher-order differentiation through this layer.
-    /// </para>
-    /// </remarks>
-    private static ComputationNode<T> ForwardOpaqueWithTape(
-        ComputationNode<T> input,
-        ILayer<T> layer)
-    {
-        // Compute forward pass directly
-        var output = layer.Forward(input.Value);
-
-        // Create a computation node with a backward function that uses the layer's Backward()
-        var resultNode = new ComputationNode<T>(
-            value: output,
-            requiresGradient: true,
-            parents: new List<ComputationNode<T>> { input },
-            backwardFunction: gradient =>
-            {
-                // Use the layer's built-in backward pass
-                var inputGrad = layer.Backward(gradient);
-
-                // Accumulate gradient at the input node
-                if (input.Gradient == null)
-                {
-                    input.Gradient = inputGrad;
-                }
-                else
-                {
-                    var numOps = MathHelper.GetNumericOperations<T>();
-                    var accumulated = new Tensor<T>(input.Gradient.Shape.ToArray());
-                    for (int i = 0; i < accumulated.Length && i < input.Gradient.Length && i < inputGrad.Length; i++)
-                    {
-                        accumulated[i] = numOps.Add(input.Gradient[i], inputGrad[i]);
-                    }
-                    input.Gradient = accumulated;
-                }
-            },
-            name: $"opaque_{layer.GetType().Name}");
-
-        // Record on active tape
-        var tape = GradientTape<T>.Current;
-        if (tape != null)
-        {
-            tape.RecordOperation(resultNode);
-        }
-
-        return resultNode;
-    }
-
-    /// <summary>
-    /// Applies the specified activation function using TensorOperations.
-    /// </summary>
-    private static ComputationNode<T> ApplyTapeActivation(
-        ComputationNode<T> node,
-        HiddenActivation activation,
-        double leakyAlpha)
-    {
-        return activation switch
-        {
-            HiddenActivation.LeakyReLU => TensorOperations<T>.LeakyReLU(node, leakyAlpha),
-            HiddenActivation.ReLU => TensorOperations<T>.ReLU(node),
-            HiddenActivation.Sigmoid => TensorOperations<T>.Sigmoid(node),
-            HiddenActivation.Tanh => TensorOperations<T>.Tanh(node),
-            HiddenActivation.SiLU => TensorOperations<T>.Swish(node),
-            HiddenActivation.GELU => TensorOperations<T>.GELU(node),
-            HiddenActivation.None => node,
-            _ => node,
-        };
+        return result;
     }
 
     /// <summary>
@@ -436,7 +341,7 @@ public static class TapeLayerBridge<T>
             }
 
             // Apply hidden activation
-            current = ApplyTapeActivation(current, hiddenAct, 0.2);
+            current = ApplyComputationNodeActivation(current, hiddenAct, 0.2);
         }
 
         // Output layer with optional residual concat
@@ -450,8 +355,29 @@ public static class TapeLayerBridge<T>
         current = outputLayer.ExportComputationGraph(outInputs);
 
         // Apply output activation
-        current = ApplyTapeActivation(current, outputAct, 0.2);
+        current = ApplyComputationNodeActivation(current, outputAct, 0.2);
 
         return current;
+    }
+
+    /// <summary>
+    /// Applies activation using ComputationNode API (legacy, for ExportMLPGeneratorGraph).
+    /// </summary>
+    private static ComputationNode<T> ApplyComputationNodeActivation(
+        ComputationNode<T> node,
+        HiddenActivation activation,
+        double leakyAlpha)
+    {
+        return activation switch
+        {
+            HiddenActivation.LeakyReLU => TensorOperations<T>.LeakyReLU(node, leakyAlpha),
+            HiddenActivation.ReLU => TensorOperations<T>.ReLU(node),
+            HiddenActivation.Sigmoid => TensorOperations<T>.Sigmoid(node),
+            HiddenActivation.Tanh => TensorOperations<T>.Tanh(node),
+            HiddenActivation.SiLU => TensorOperations<T>.Swish(node),
+            HiddenActivation.GELU => TensorOperations<T>.GELU(node),
+            HiddenActivation.None => node,
+            _ => node,
+        };
     }
 }
