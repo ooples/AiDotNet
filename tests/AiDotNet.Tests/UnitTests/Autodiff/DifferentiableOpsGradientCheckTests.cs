@@ -231,6 +231,124 @@ public class DifferentiableOpsGradientCheckTests
             name: "MSE(pred, target)");
     }
 
+    // ─── Conv ops ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void Conv2D_GradientCheck()
+    {
+        // Input [N=1, C=1, H=4, W=4], Kernel [C_out=1, C_in=1, kH=3, kW=3]
+        var input = new Tensor<double>([1, 1, 4, 4]);
+        var kernel = new Tensor<double>([1, 1, 3, 3]);
+        var rng = new Random(42);
+        for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
+        for (int i = 0; i < kernel.Length; i++) kernel[i] = rng.NextDouble() * 0.5;
+
+        GradientCheck(
+            inputs: [input, kernel],
+            forward: xs => DifferentiableOps<double>.Conv2D(
+                xs[0], xs[1], [1, 1], [0, 0], [1, 1]),
+            name: "Conv2D");
+    }
+
+    // ─── Normalization ops ───────────────────────────────────────────
+
+    [Fact]
+    public void LayerNorm_GradientCheck()
+    {
+        // Use non-trivial gamma to ensure gradients are non-zero
+        var input = new Tensor<double>([2, 4], new Vector<double>([1, 2, 3, 4, 5, 6, 7, 8]));
+        var gamma = new Tensor<double>([4], new Vector<double>([1.5, 0.8, 1.2, 0.9]));
+        var beta = new Tensor<double>([4], new Vector<double>([0.1, -0.1, 0.2, 0.0]));
+        var weights = new Tensor<double>([2, 4], new Vector<double>([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]));
+
+        GradientCheck(
+            inputs: [input, gamma, beta],
+            forward: xs =>
+            {
+                var normed = DifferentiableOps<double>.LayerNorm(xs[0], xs[1], xs[2]);
+                return DifferentiableOps<double>.Multiply(normed, weights);
+            },
+            name: "LayerNorm (weighted)");
+    }
+
+    [Fact]
+    public void BatchNorm_GradientCheck()
+    {
+        var input = new Tensor<double>([3, 4]);
+        var rng = new Random(42);
+        for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble() * 2 - 1;
+        var gamma = new Tensor<double>([4], new Vector<double>([1.5, 0.8, 1.2, 0.9]));
+        var beta = new Tensor<double>([4], new Vector<double>([0.1, -0.1, 0.2, 0.0]));
+        var weights = new Tensor<double>([3, 4]);
+        for (int i = 0; i < weights.Length; i++) weights[i] = 0.1 * (i + 1);
+
+        GradientCheck(
+            inputs: [input, gamma, beta],
+            forward: xs =>
+            {
+                var normed = DifferentiableOps<double>.BatchNorm(xs[0], xs[1], xs[2]);
+                return DifferentiableOps<double>.Multiply(normed, weights);
+            },
+            name: "BatchNorm (weighted)");
+    }
+
+    [Fact]
+    public void Softmax_GradientCheck()
+    {
+        // Use a weighted sum (not plain sum) because sum(softmax) = 1 (constant → zero gradient)
+        var x = Tensor(1.0, 2.0, 3.0, 0.5);
+        var weights = Tensor(0.1, 0.4, 0.3, 0.2);
+        GradientCheck(
+            inputs: [x],
+            forward: xs =>
+            {
+                var s = DifferentiableOps<double>.Softmax(xs[0]);
+                return DifferentiableOps<double>.Multiply(s, weights);
+            },
+            name: "Softmax (weighted)");
+    }
+
+    // ─── End-to-end: Conv + BatchNorm + ReLU chain ───────────────────
+
+    [Fact]
+    public void Chain_ConvReLU_GradientCheck()
+    {
+        // Simpler chain without BatchNorm (which has batch=1 edge case)
+        var input = new Tensor<double>([1, 1, 4, 4]);
+        var kernel = new Tensor<double>([1, 1, 3, 3]);
+        var rng = new Random(42);
+        for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
+        for (int i = 0; i < kernel.Length; i++) kernel[i] = rng.NextDouble() * 0.5;
+
+        GradientCheck(
+            inputs: [input, kernel],
+            forward: xs =>
+            {
+                var conv = DifferentiableOps<double>.Conv2D(xs[0], xs[1], [1, 1], [0, 0], [1, 1]);
+                return DifferentiableOps<double>.ReLU(conv);
+            },
+            name: "Conv→ReLU");
+    }
+
+    [Fact]
+    public void Chain_LayerNormTanh_GradientCheck()
+    {
+        var input = new Tensor<double>([2, 4]);
+        var rng = new Random(42);
+        for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble() * 2 - 1;
+        var gamma = new Tensor<double>([4], new Vector<double>([1.2, 0.9, 1.1, 0.8]));
+        var beta = new Tensor<double>([4], new Vector<double>([0.1, 0.0, -0.1, 0.05]));
+
+        GradientCheck(
+            inputs: [input, gamma, beta],
+            forward: xs =>
+            {
+                var normed = DifferentiableOps<double>.LayerNorm(xs[0], xs[1], xs[2]);
+                return DifferentiableOps<double>.Tanh(normed);
+            },
+            name: "LayerNorm→Tanh");
+    }
+
     // ─── Test infrastructure ─────────────────────────────────────────
 
     private static Tensor<double> Tensor(params double[] values) =>

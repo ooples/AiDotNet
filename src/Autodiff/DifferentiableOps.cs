@@ -327,4 +327,268 @@ public static class DifferentiableOps<T>
             grad => [grad.Reshape(originalShape)]);
         return result;
     }
+
+    // ─── Conv ops ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 2D convolution: output = Conv2D(input, kernel, stride, padding, dilation).
+    /// Backward uses Engine.Conv2DBackwardInput and Conv2DBackwardKernel.
+    /// </summary>
+    /// <param name="input">Input tensor [C_in, H, W] or [N, C_in, H, W].</param>
+    /// <param name="kernel">Kernel tensor [C_out, C_in, kH, kW].</param>
+    /// <param name="stride">Stride array [sH, sW].</param>
+    /// <param name="padding">Padding array [pH, pW].</param>
+    /// <param name="dilation">Dilation array [dH, dW].</param>
+    public static Tensor<T> Conv2D(
+        Tensor<T> input, Tensor<T> kernel,
+        int[] stride, int[] padding, int[] dilation)
+    {
+        var result = Engine.Conv2D(input, kernel, stride, padding, dilation);
+
+        GradientTape<T>.Current?.RecordOp("Conv2D", [input, kernel], result,
+            grad =>
+            {
+                var inputGrad = Engine.Conv2DBackwardInput(
+                    grad, kernel, input.Shape.ToArray(), stride, padding, dilation);
+                var kernelGrad = Engine.Conv2DBackwardKernel(
+                    grad, input, kernel.Shape.ToArray(), stride, padding, dilation);
+                return [inputGrad, kernelGrad];
+            });
+        return result;
+    }
+
+    // ─── Normalization ops ───────────────────────────────────────────
+
+    /// <summary>
+    /// Layer normalization over the last dimension.
+    /// Per Ba et al. (2016) "Layer Normalization".
+    /// </summary>
+    /// <param name="input">Input tensor of any shape. Normalization is over the last dim.</param>
+    /// <param name="gamma">Scale parameter [lastDim].</param>
+    /// <param name="beta">Shift parameter [lastDim].</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    public static Tensor<T> LayerNorm(
+        Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon = 1e-5)
+    {
+        int lastDim = input.Shape[^1];
+        int outerSize = input.Length / lastDim;
+        var result = new Tensor<T>(input.Shape.ToArray());
+
+        // Forward: for each "row" (outer index), normalize over lastDim
+        var means = new double[outerSize];
+        var vars = new double[outerSize];
+
+        for (int o = 0; o < outerSize; o++)
+        {
+            double sum = 0;
+            for (int d = 0; d < lastDim; d++)
+                sum += NumOps.ToDouble(input[o * lastDim + d]);
+            means[o] = sum / lastDim;
+
+            double varSum = 0;
+            for (int d = 0; d < lastDim; d++)
+            {
+                double diff = NumOps.ToDouble(input[o * lastDim + d]) - means[o];
+                varSum += diff * diff;
+            }
+            vars[o] = varSum / lastDim;
+
+            double invStd = 1.0 / Math.Sqrt(vars[o] + epsilon);
+            for (int d = 0; d < lastDim; d++)
+            {
+                double normalized = (NumOps.ToDouble(input[o * lastDim + d]) - means[o]) * invStd;
+                double scaled = normalized * NumOps.ToDouble(gamma[d]) + NumOps.ToDouble(beta[d]);
+                result[o * lastDim + d] = NumOps.FromDouble(scaled);
+            }
+        }
+
+        GradientTape<T>.Current?.RecordOp("LayerNorm", [input, gamma, beta], result,
+            grad =>
+            {
+                // Per Ba et al. 2016, LayerNorm backward:
+                // dx = (1/σ) * (dout*γ - mean(dout*γ) - x_hat*mean(dout*γ*x_hat))
+                var inputGrad = new Tensor<T>(input.Shape.ToArray());
+                var gammaGrad = new Tensor<T>(gamma.Shape.ToArray());
+                var betaGrad = new Tensor<T>(beta.Shape.ToArray());
+
+                for (int o = 0; o < outerSize; o++)
+                {
+                    double invStd = 1.0 / Math.Sqrt(vars[o] + epsilon);
+
+                    // Compute x_hat and dout*gamma for this row
+                    double sumDoutGamma = 0;
+                    double sumDoutGammaXhat = 0;
+                    for (int d = 0; d < lastDim; d++)
+                    {
+                        double xHat = (NumOps.ToDouble(input[o * lastDim + d]) - means[o]) * invStd;
+                        double doutGamma = NumOps.ToDouble(grad[o * lastDim + d]) * NumOps.ToDouble(gamma[d]);
+                        sumDoutGamma += doutGamma;
+                        sumDoutGammaXhat += doutGamma * xHat;
+                    }
+
+                    for (int d = 0; d < lastDim; d++)
+                    {
+                        double xHat = (NumOps.ToDouble(input[o * lastDim + d]) - means[o]) * invStd;
+                        double doutGamma = NumOps.ToDouble(grad[o * lastDim + d]) * NumOps.ToDouble(gamma[d]);
+
+                        // dx = invStd * (dout*gamma - mean(dout*gamma) - xhat*mean(dout*gamma*xhat))
+                        double dx = invStd * (doutGamma - sumDoutGamma / lastDim - xHat * sumDoutGammaXhat / lastDim);
+                        inputGrad[o * lastDim + d] = NumOps.FromDouble(dx);
+
+                        // dgamma += dout * x_hat, dbeta += dout
+                        gammaGrad[d] = NumOps.Add(gammaGrad[d],
+                            NumOps.FromDouble(NumOps.ToDouble(grad[o * lastDim + d]) * xHat));
+                        betaGrad[d] = NumOps.Add(betaGrad[d], grad[o * lastDim + d]);
+                    }
+                }
+
+                return [inputGrad, gammaGrad, betaGrad];
+            });
+        return result;
+    }
+
+    /// <summary>
+    /// Batch normalization over the batch dimension (dim 0).
+    /// Per Ioffe &amp; Szegedy (2015) "Batch Normalization".
+    /// </summary>
+    /// <param name="input">Input tensor [N, D] or [N, C, H, W].</param>
+    /// <param name="gamma">Scale parameter [D] or [C].</param>
+    /// <param name="beta">Shift parameter [D] or [C].</param>
+    /// <param name="epsilon">Small constant for numerical stability.</param>
+    public static Tensor<T> BatchNorm(
+        Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon = 1e-5)
+    {
+        // Treat as [N, features] where features = total / N
+        int n = input.Shape[0];
+        int features = input.Length / n;
+        var result = new Tensor<T>(input.Shape.ToArray());
+
+        var means = new double[features];
+        var vars = new double[features];
+
+        // Compute per-feature mean and variance over batch
+        for (int f = 0; f < features; f++)
+        {
+            double sum = 0;
+            for (int b = 0; b < n; b++)
+                sum += NumOps.ToDouble(input[b * features + f]);
+            means[f] = sum / n;
+
+            double varSum = 0;
+            for (int b = 0; b < n; b++)
+            {
+                double diff = NumOps.ToDouble(input[b * features + f]) - means[f];
+                varSum += diff * diff;
+            }
+            vars[f] = varSum / n;
+        }
+
+        // Normalize
+        for (int b = 0; b < n; b++)
+        {
+            for (int f = 0; f < features; f++)
+            {
+                double invStd = 1.0 / Math.Sqrt(vars[f] + epsilon);
+                double xHat = (NumOps.ToDouble(input[b * features + f]) - means[f]) * invStd;
+                int gammaIdx = f % gamma.Length; // Handle broadcasting
+                double scaled = xHat * NumOps.ToDouble(gamma[gammaIdx]) + NumOps.ToDouble(beta[gammaIdx]);
+                result[b * features + f] = NumOps.FromDouble(scaled);
+            }
+        }
+
+        GradientTape<T>.Current?.RecordOp("BatchNorm", [input, gamma, beta], result,
+            grad =>
+            {
+                // Per Ioffe & Szegedy 2015, BatchNorm backward:
+                var inputGrad = new Tensor<T>(input.Shape.ToArray());
+                var gammaGrad = new Tensor<T>(gamma.Shape.ToArray());
+                var betaGrad = new Tensor<T>(beta.Shape.ToArray());
+
+                for (int f = 0; f < features; f++)
+                {
+                    double invStd = 1.0 / Math.Sqrt(vars[f] + epsilon);
+                    int gIdx = f % gamma.Length;
+
+                    double sumDoutGamma = 0;
+                    double sumDoutGammaXhat = 0;
+                    for (int b = 0; b < n; b++)
+                    {
+                        double xHat = (NumOps.ToDouble(input[b * features + f]) - means[f]) * invStd;
+                        double dg = NumOps.ToDouble(grad[b * features + f]) * NumOps.ToDouble(gamma[gIdx]);
+                        sumDoutGamma += dg;
+                        sumDoutGammaXhat += dg * xHat;
+                    }
+
+                    for (int b = 0; b < n; b++)
+                    {
+                        double xHat = (NumOps.ToDouble(input[b * features + f]) - means[f]) * invStd;
+                        double dg = NumOps.ToDouble(grad[b * features + f]) * NumOps.ToDouble(gamma[gIdx]);
+                        double dx = invStd * (dg - sumDoutGamma / n - xHat * sumDoutGammaXhat / n);
+                        inputGrad[b * features + f] = NumOps.FromDouble(dx);
+
+                        gammaGrad[gIdx] = NumOps.Add(gammaGrad[gIdx],
+                            NumOps.FromDouble(NumOps.ToDouble(grad[b * features + f]) * xHat));
+                        betaGrad[gIdx] = NumOps.Add(betaGrad[gIdx], grad[b * features + f]);
+                    }
+                }
+
+                return [inputGrad, gammaGrad, betaGrad];
+            });
+        return result;
+    }
+
+    // ─── Softmax ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Softmax over the last dimension.
+    /// Backward: Jacobian-vector product using softmax output.
+    /// </summary>
+    public static Tensor<T> Softmax(Tensor<T> x)
+    {
+        int lastDim = x.Shape[^1];
+        int outerSize = x.Length / lastDim;
+        var result = new Tensor<T>(x.Shape.ToArray());
+
+        for (int o = 0; o < outerSize; o++)
+        {
+            // Numerically stable softmax: subtract max
+            double maxVal = double.MinValue;
+            for (int d = 0; d < lastDim; d++)
+                maxVal = Math.Max(maxVal, NumOps.ToDouble(x[o * lastDim + d]));
+
+            double expSum = 0;
+            for (int d = 0; d < lastDim; d++)
+            {
+                double expVal = Math.Exp(NumOps.ToDouble(x[o * lastDim + d]) - maxVal);
+                result[o * lastDim + d] = NumOps.FromDouble(expVal);
+                expSum += expVal;
+            }
+            for (int d = 0; d < lastDim; d++)
+                result[o * lastDim + d] = NumOps.FromDouble(
+                    NumOps.ToDouble(result[o * lastDim + d]) / expSum);
+        }
+
+        GradientTape<T>.Current?.RecordOp("Softmax", [x], result,
+            grad =>
+            {
+                // Softmax backward: dx_i = s_i * (dout_i - sum(dout * s))
+                var inputGrad = new Tensor<T>(x.Shape.ToArray());
+                for (int o = 0; o < outerSize; o++)
+                {
+                    double dotGradSoftmax = 0;
+                    for (int d = 0; d < lastDim; d++)
+                        dotGradSoftmax += NumOps.ToDouble(grad[o * lastDim + d]) *
+                                          NumOps.ToDouble(result[o * lastDim + d]);
+
+                    for (int d = 0; d < lastDim; d++)
+                    {
+                        double si = NumOps.ToDouble(result[o * lastDim + d]);
+                        double dx = si * (NumOps.ToDouble(grad[o * lastDim + d]) - dotGradSoftmax);
+                        inputGrad[o * lastDim + d] = NumOps.FromDouble(dx);
+                    }
+                }
+                return [inputGrad];
+            });
+        return result;
+    }
 }
