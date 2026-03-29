@@ -1301,56 +1301,6 @@ public static class DifferentiableOps<T>
     }
 
     /// <summary>
-    /// Numerically stable log-softmax: log(softmax(x)) = x - log(sum(exp(x))).
-    /// Uses log-sum-exp trick to avoid overflow.
-    /// </summary>
-    public static Tensor<T> LogSoftmax(Tensor<T> x)
-    {
-        int lastDim = x.Shape[^1];
-        int outerSize = x.Length / lastDim;
-        var result = new Tensor<T>(x.Shape.ToArray());
-
-        for (int o = 0; o < outerSize; o++)
-        {
-            // Log-sum-exp trick: log(sum(exp(x_i))) = max + log(sum(exp(x_i - max)))
-            double maxVal = double.MinValue;
-            for (int d = 0; d < lastDim; d++)
-                maxVal = Math.Max(maxVal, NumOps.ToDouble(x[o * lastDim + d]));
-
-            double logSumExp = 0;
-            for (int d = 0; d < lastDim; d++)
-                logSumExp += Math.Exp(NumOps.ToDouble(x[o * lastDim + d]) - maxVal);
-            logSumExp = maxVal + Math.Log(logSumExp);
-
-            for (int d = 0; d < lastDim; d++)
-                result[o * lastDim + d] = NumOps.FromDouble(NumOps.ToDouble(x[o * lastDim + d]) - logSumExp);
-        }
-
-        GradientTape<T>.Current?.RecordOp("LogSoftmax", [x], result,
-            grad =>
-            {
-                // d(logSoftmax)/dx = I - softmax(x)
-                // dx_i = grad_i - softmax_i * sum(grad)
-                var inputGrad = new Tensor<T>(x.Shape.ToArray());
-                for (int o = 0; o < outerSize; o++)
-                {
-                    double sumGrad = 0;
-                    for (int d = 0; d < lastDim; d++)
-                        sumGrad += NumOps.ToDouble(grad[o * lastDim + d]);
-
-                    for (int d = 0; d < lastDim; d++)
-                    {
-                        double softmax_d = Math.Exp(NumOps.ToDouble(result[o * lastDim + d]));
-                        inputGrad[o * lastDim + d] = NumOps.FromDouble(
-                            NumOps.ToDouble(grad[o * lastDim + d]) - softmax_d * sumGrad);
-                    }
-                }
-                return [inputGrad];
-            });
-        return result;
-    }
-
-    /// <summary>
     /// Fused cross-entropy loss: -sum(targets * log_softmax(logits)) / batch_size.
     /// Numerically stable — uses log-sum-exp internally.
     /// </summary>
@@ -1405,6 +1355,39 @@ public static class DifferentiableOps<T>
                 return [logitGrad];
             });
         return result;
+    }
+
+    // ─── Attention ops ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Scaled dot-product attention: softmax(Q @ K^T / sqrt(d_k)) @ V.
+    /// Equivalent to PyTorch's F.scaled_dot_product_attention.
+    /// </summary>
+    /// <param name="query">Query tensor [batch, seq_q, d_k].</param>
+    /// <param name="key">Key tensor [batch, seq_kv, d_k].</param>
+    /// <param name="value">Value tensor [batch, seq_kv, d_v].</param>
+    /// <param name="mask">Optional attention mask (additive, -inf for masked positions).</param>
+    /// <returns>Attention output [batch, seq_q, d_v].</returns>
+    public static Tensor<T> ScaledDotProductAttention(
+        Tensor<T> query, Tensor<T> key, Tensor<T> value, Tensor<T>? mask = null)
+    {
+        int dk = query.Shape[^1];
+        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(dk));
+
+        // scores = Q @ K^T / sqrt(d_k)
+        var keyT = Transpose(key);
+        var scores = MatMul(query, keyT);
+        scores = MultiplyScalar(scores, scale);
+
+        // Apply mask if provided
+        if (mask is not null)
+            scores = Add(scores, mask);
+
+        // Attention weights = softmax(scores)
+        var attnWeights = Softmax(scores);
+
+        // Output = attn_weights @ V
+        return MatMul(attnWeights, value);
     }
 
     // ─── Additional ops (PyTorch parity) ────────────────────────────
