@@ -316,9 +316,20 @@ public class AddLayer<T> : LayerBase<T>
     /// try to add just one tensor.
     /// </para>
     /// </remarks>
+    /// <inheritdoc/>
+    public override IReadOnlyList<LayerPort> InputPorts =>
+        [new LayerPort("input_a", GetInputShape()), new LayerPort("input_b", GetInputShape())];
+
+    /// <inheritdoc/>
+    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    {
+        var tensors = inputs.Values.ToArray();
+        return Forward(tensors);
+    }
+
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        throw new NotSupportedException("AddLayer requires multiple inputs. Use Forward(params Tensor<T>[] inputs) instead.");
+        throw new NotSupportedException("AddLayer requires multiple inputs. Use Forward(params Tensor<T>[] inputs) or Forward(IReadOnlyDictionary) instead.");
     }
 
     /// <summary>

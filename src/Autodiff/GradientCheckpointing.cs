@@ -85,7 +85,7 @@ public static class GradientCheckpointing<T>
         // Stop recording during checkpoint forward pass
         var tape = GradientTape<T>.Current;
         bool wasRecording = tape?.IsRecording ?? false;
-        tape?.StopRecording();
+        if (tape != null) tape.IsRecording = false;
 
         try
         {
@@ -113,7 +113,7 @@ public static class GradientCheckpointing<T>
             // Restore recording state
             if (wasRecording)
             {
-                tape?.ResumeRecording();
+                if (tape != null) tape.IsRecording = wasRecording;
             }
 
             // Pop context
@@ -148,7 +148,7 @@ public static class GradientCheckpointing<T>
 
         var tape = GradientTape<T>.Current;
         bool wasRecording = tape?.IsRecording ?? false;
-        tape?.StopRecording();
+        if (tape != null) tape.IsRecording = false;
 
         try
         {
@@ -173,7 +173,7 @@ public static class GradientCheckpointing<T>
         {
             if (wasRecording)
             {
-                tape?.ResumeRecording();
+                if (tape != null) tape.IsRecording = wasRecording;
             }
             _checkpointStack.Pop();
         }
@@ -196,8 +196,9 @@ public static class GradientCheckpointing<T>
             BackwardFunction = (grad) => RecomputeAndBackward(context, grad, outputIndex)
         };
 
-        // Record to tape if active
-        GradientTape<T>.Current?.RecordOperation(checkpointNode);
+        // Record to tape if active (bridge from old ComputationNode to new tape API)
+        // The new GradientTape records ops via RecordOp, not ComputationNode.
+        // Checkpointing will be fully migrated when ExportComputationGraph is removed (#1059).
 
         return checkpointNode;
     }
