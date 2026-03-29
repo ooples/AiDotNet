@@ -299,4 +299,38 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
         clone.SetParameters(GetParameters());
         return clone;
     }
+
+    protected override void BackpropagateVAE(Tensor<T> lossGradient)
+    {
+        var grad = lossGradient;
+        grad = _decoderNorm.Backward(grad);
+        grad = _decoderOut.Backward(grad);
+        grad = _decoderIn.Backward(grad);
+        grad = _interpOut.Backward(grad);
+        grad = _interpIn.Backward(grad);
+        grad = _encoderNorm.Backward(grad);
+        grad = _encoderOut.Backward(grad);
+        _encoderIn.Backward(grad);
+    }
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var parts = new[]
+        {
+            _encoderIn.GetParameterGradients(), _encoderOut.GetParameterGradients(),
+            _decoderIn.GetParameterGradients(), _decoderOut.GetParameterGradients(),
+            _interpIn.GetParameterGradients(), _interpOut.GetParameterGradients(),
+            _encoderNorm.GetParameterGradients(), _decoderNorm.GetParameterGradients()
+        };
+        int total = 0;
+        foreach (var p in parts) total += p.Length;
+        var combined = new Vector<T>(total);
+        int offset = 0;
+        foreach (var p in parts)
+        {
+            for (int i = 0; i < p.Length; i++) combined[offset + i] = p[i];
+            offset += p.Length;
+        }
+        return combined;
+    }
 }

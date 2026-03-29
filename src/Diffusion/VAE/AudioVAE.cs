@@ -768,4 +768,28 @@ public class AudioVAE<T> : VAEModelBase<T>
     }
 
     #endregion
+
+    protected override void BackpropagateVAE(Tensor<T> lossGradient)
+    {
+        var grad = lossGradient;
+        if (_latentToDecoder != null) grad = _latentToDecoder.Backward(grad);
+        if (_logVarProjection != null) _logVarProjection.Backward(grad);
+        if (_muProjection != null) _muProjection.Backward(grad);
+    }
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var allGrads = new List<T>();
+        AddGrads(allGrads, _muProjection);
+        AddGrads(allGrads, _logVarProjection);
+        AddGrads(allGrads, _latentToDecoder);
+        return new Vector<T>(allGrads.ToArray());
+    }
+
+    private static void AddGrads(List<T> list, ILayer<T>? layer)
+    {
+        if (layer == null) return;
+        var g = layer.GetParameterGradients();
+        for (int i = 0; i < g.Length; i++) list.Add(g[i]);
+    }
 }

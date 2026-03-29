@@ -262,4 +262,29 @@ public class LiteVAEModel<T> : VAEModelBase<T>
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    protected override void BackpropagateVAE(Tensor<T> lossGradient)
+    {
+        var grad = lossGradient;
+        for (int i = _decoderLayers.Count - 1; i >= 0; i--)
+            grad = _decoderLayers[i].Backward(grad);
+        for (int i = _encoderLayers.Count - 1; i >= 0; i--)
+            grad = _encoderLayers[i].Backward(grad);
+    }
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var gradients = new List<T>();
+        foreach (var layer in _encoderLayers)
+        {
+            var g = layer.GetParameterGradients();
+            for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
+        }
+        foreach (var layer in _decoderLayers)
+        {
+            var g = layer.GetParameterGradients();
+            for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
+        }
+        return new Vector<T>(gradients.ToArray());
+    }
 }

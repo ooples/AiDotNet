@@ -580,4 +580,22 @@ public class AutoencoderKL<T> : VAEModelBase<T>
         numGroups: 16,
         latentScaleFactor: 0.18215,
         inputSpatialSize: 256);
+
+    protected override void BackpropagateVAE(Tensor<T> lossGradient)
+    {
+        var grad = _decoder.Backward(lossGradient);
+        _encoder.Backward(grad);
+    }
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var encoderGrads = _encoder.GetParameterGradients();
+        var decoderGrads = _decoder.GetParameterGradients();
+        var combined = new T[encoderGrads.Length + decoderGrads.Length];
+        for (int i = 0; i < encoderGrads.Length; i++)
+            combined[i] = encoderGrads[i];
+        for (int i = 0; i < decoderGrads.Length; i++)
+            combined[encoderGrads.Length + i] = decoderGrads[i];
+        return new Vector<T>(combined);
+    }
 }
