@@ -118,7 +118,7 @@ public static class DifferentiableOps<T>
                 grad =>
                 [
                     ReduceBroadcastGrad(grad, aShape),
-                    ReduceBroadcastGrad(Engine.TensorNegate(grad), bShape)
+                    ReduceBroadcastGrad(Negate(grad), bShape)
                 ]);
         }
         return result;
@@ -136,8 +136,8 @@ public static class DifferentiableOps<T>
             tape.RecordOp("Multiply", [a, b], result,
                 grad =>
                 [
-                    ReduceBroadcastGrad(Engine.TensorMultiply(grad, b), aShape),
-                    ReduceBroadcastGrad(Engine.TensorMultiply(grad, a), bShape)
+                    ReduceBroadcastGrad(Multiply(grad, b), aShape),
+                    ReduceBroadcastGrad(Multiply(grad, a), bShape)
                 ]);
         }
         return result;
@@ -155,15 +155,14 @@ public static class DifferentiableOps<T>
             tape.RecordOp("Divide", [a, b], result,
                 grad =>
                 {
-                    var gradA = Engine.TensorDivide(grad, b);
-                    var bSquared = Engine.TensorMultiply(b, b);
+                    var gradA = Divide(grad, b);
+                    var bSquared = Multiply(b, b);
                     var eps = NumOps.FromDouble(1e-12);
                     var safeBSquared = new Tensor<T>(bSquared.Shape.ToArray());
                     for (int i = 0; i < bSquared.Length; i++)
                         safeBSquared[i] = NumOps.GreaterThan(
                             NumOps.Abs(bSquared[i]), eps) ? bSquared[i] : eps;
-                    var gradB = Engine.TensorNegate(Engine.TensorDivide(
-                        Engine.TensorMultiply(grad, a), safeBSquared));
+                    var gradB = Negate(Divide(Multiply(grad, a), safeBSquared));
                     return [ReduceBroadcastGrad(gradA, aShape), ReduceBroadcastGrad(gradB, bShape)];
                 });
         }
@@ -175,7 +174,7 @@ public static class DifferentiableOps<T>
     {
         var result = Engine.TensorNegate(a);
         GradientTape<T>.Current?.RecordOp("Negate", [a], result,
-            grad => [Engine.TensorNegate(grad)]);
+            grad => [Negate(grad)]);
         return result;
     }
 
@@ -186,7 +185,7 @@ public static class DifferentiableOps<T>
     {
         var result = Engine.TensorMultiplyScalar(a, scalar);
         GradientTape<T>.Current?.RecordOp("MultiplyScalar", [a], result,
-            grad => [Engine.TensorMultiplyScalar(grad, scalar)]);
+            grad => [MultiplyScalar(grad, scalar)]);
         return result;
     }
 
@@ -204,7 +203,7 @@ public static class DifferentiableOps<T>
     {
         var result = Engine.TensorDivideScalar(a, scalar);
         GradientTape<T>.Current?.RecordOp("DivideScalar", [a], result,
-            grad => [Engine.TensorDivideScalar(grad, scalar)]);
+            grad => [DivideScalar(grad, scalar)]);
         return result;
     }
 
@@ -217,10 +216,10 @@ public static class DifferentiableOps<T>
         GradientTape<T>.Current?.RecordOp("MatMul", [a, b], result,
             grad =>
             {
-                var bT = Engine.TensorTranspose(b);
-                var gradA = Engine.TensorMatMul(grad, bT);
-                var aT = Engine.TensorTranspose(a);
-                var gradB = Engine.TensorMatMul(aT, grad);
+                var bT = Transpose(b);
+                var gradA = MatMul(grad, bT);
+                var aT = Transpose(a);
+                var gradB = MatMul(aT, grad);
                 return [gradA, gradB];
             });
         return result;
@@ -231,7 +230,7 @@ public static class DifferentiableOps<T>
     {
         var result = Engine.TensorTranspose(a);
         GradientTape<T>.Current?.RecordOp("Transpose", [a], result,
-            grad => [Engine.TensorTranspose(grad)]);
+            grad => [Transpose(grad)]);
         return result;
     }
 
@@ -312,7 +311,7 @@ public static class DifferentiableOps<T>
             grad =>
             {
                 // d(exp(x))/dx = exp(x) = result
-                return [Engine.TensorMultiply(grad, result)];
+                return [Multiply(grad, result)];
             });
         return result;
     }
@@ -376,7 +375,7 @@ public static class DifferentiableOps<T>
                 signs[i] = NumOps.FromDouble(NumOps.ToDouble(x[i]) >= 0 ? 1.0 : -1.0);
 
             tape.RecordOp("Abs", [x], result,
-                grad => [Engine.TensorMultiply(grad, signs)]);
+                grad => [Multiply(grad, signs)]);
         }
         return result;
     }
@@ -402,7 +401,7 @@ public static class DifferentiableOps<T>
         {
             var capturedMask = mask;
             tape.RecordOp("Clamp", [x], result,
-                grad => [Engine.TensorMultiply(grad, capturedMask ?? grad)]);
+                grad => [Multiply(grad, capturedMask ?? grad)]);
         }
         return result;
     }
@@ -512,7 +511,7 @@ public static class DifferentiableOps<T>
                         double geluPrime = 0.5 * (1.0 + tanhC) + 0.5 * xi * sech2C * cPrime;
                         derivative[i] = NumOps.FromDouble(geluPrime);
                     }
-                    return [Engine.TensorMultiply(grad, derivative)];
+                    return [Multiply(grad, derivative)];
                 });
         }
         return result;
@@ -539,7 +538,7 @@ public static class DifferentiableOps<T>
                         double s = NumOps.ToDouble(sig[i]);
                         derivative[i] = NumOps.FromDouble(s * (1.0 + xi * (1.0 - s)));
                     }
-                    return [Engine.TensorMultiply(grad, derivative)];
+                    return [Multiply(grad, derivative)];
                 });
         }
         return result;

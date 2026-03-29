@@ -256,7 +256,22 @@ public sealed class GradientTape<T> : IDisposable
     /// Dictionary mapping each watched tensor that contributed to the loss
     /// to its gradient tensor. Tensors that did not contribute are omitted.
     /// </returns>
-    public Dictionary<Tensor<T>, Tensor<T>> Gradient(Tensor<T> loss)
+    /// <summary>
+    /// Computes gradients of <paramref name="loss"/> w.r.t. all watched tensors
+    /// via reverse-mode automatic differentiation.
+    /// </summary>
+    /// <param name="loss">The scalar loss tensor to differentiate.</param>
+    /// <param name="createGraph">
+    /// If true, the backward pass operations are recorded to the active tape,
+    /// enabling higher-order gradient computation (gradient of gradient).
+    /// Required for WGAN-GP gradient penalties, MAML meta-learning, and Hessian computation.
+    /// Like PyTorch's <c>retain_graph=True, create_graph=True</c>.
+    /// </param>
+    /// <returns>
+    /// Dictionary mapping each watched tensor that contributed to the loss
+    /// to its gradient tensor. Tensors that did not contribute are omitted.
+    /// </returns>
+    public Dictionary<Tensor<T>, Tensor<T>> Gradient(Tensor<T> loss, bool createGraph = false)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(GradientTape<T>));
 
@@ -265,22 +280,23 @@ public sealed class GradientTape<T> : IDisposable
                 "Non-persistent GradientTape can only compute gradients once. " +
                 "Set persistent: true in the constructor to reuse.");
 
-        // Stop recording during backward to avoid recording gradient ops
+        // When createGraph=false, stop recording during backward to avoid
+        // recording gradient ops (standard behavior).
+        // When createGraph=true, KEEP recording so gradient ops are on the tape
+        // for higher-order differentiation (like PyTorch create_graph=True).
         bool wasRecording = IsRecording;
-        IsRecording = false;
+        if (!createGraph)
+        {
+            IsRecording = false;
+        }
 
         try
         {
             var result = ReverseAccumulate(loss);
 
-            // Mark as used AFTER successful gradient computation (#5 fix).
-            // If backward throws, the tape remains usable for retry.
             _used = true;
 
-            // Release closure references for non-persistent tapes (#10 fix).
-            // The backward closures capture forward tensors — release them immediately
-            // instead of waiting for Dispose().
-            if (!Persistent)
+            if (!Persistent && !createGraph)
             {
                 lock (_opsLock) { _ops.Clear(); }
             }
@@ -289,7 +305,7 @@ public sealed class GradientTape<T> : IDisposable
         }
         finally
         {
-            if (wasRecording && Persistent) IsRecording = true;
+            if (!createGraph && wasRecording && Persistent) IsRecording = true;
         }
     }
 
