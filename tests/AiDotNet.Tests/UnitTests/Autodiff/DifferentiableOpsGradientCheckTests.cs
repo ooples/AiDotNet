@@ -275,6 +275,36 @@ public class DifferentiableOpsGradientCheckTests
         GradientCheck(inputs: [x], forward: xs => DifferentiableOps<double>.Clamp(xs[0], 0.0, 2.0), name: "Clamp");
     }
 
+    // ─── Concatenate/Split ops ─────────────────────────────────────────
+
+    [Fact]
+    public void Concatenate_GradientCheck()
+    {
+        var a = Tensor(1.0, 2.0);
+        var b = Tensor(3.0, 4.0, 5.0);
+        GradientCheck(
+            inputs: [a, b],
+            forward: xs => DifferentiableOps<double>.Concatenate([xs[0], xs[1]], axis: 0),
+            name: "Concatenate");
+    }
+
+    [Fact]
+    public void Split_GradientCheck()
+    {
+        var x = Tensor(1.0, 2.0, 3.0, 4.0, 5.0);
+        GradientCheck(
+            inputs: [x],
+            forward: xs =>
+            {
+                var parts = DifferentiableOps<double>.Split(xs[0], [2, 3], axis: 0);
+                // Sum both parts to create a scalar loss that depends on all elements
+                return DifferentiableOps<double>.Add(
+                    DifferentiableOps<double>.Sum(parts[0]),
+                    DifferentiableOps<double>.Sum(parts[1]));
+            },
+            name: "Split");
+    }
+
     // ─── Conv ops ─────────────────────────────────────────────────────
 
     [Fact]

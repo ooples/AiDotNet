@@ -437,24 +437,28 @@ internal static class DifferentiableOps<T>
         return result;
     }
 
-    /// <summary>Elementwise ReLU: max(0, x).</summary>
+    /// <summary>Elementwise ReLU: max(0, x). Uses byte mask (1 byte vs 4-8 bytes per element).</summary>
     public static Tensor<T> ReLU(Tensor<T> x)
     {
         var result = new Tensor<T>(x.Shape.ToArray());
-        // Capture the mask at forward time so backward is safe even if x is mutated
-        var mask = new Tensor<T>(x.Shape.ToArray());
+        // Byte mask: 1 byte per element instead of sizeof(T) per element
+        var mask = new byte[x.Length];
         for (int i = 0; i < x.Length; i++)
         {
             double val = NumOps.ToDouble(x[i]);
             result[i] = val > 0 ? x[i] : NumOps.Zero;
-            mask[i] = val > 0 ? NumOps.One : NumOps.Zero;
+            mask[i] = val > 0 ? (byte)1 : (byte)0;
         }
 
+        var shape = x.Shape.ToArray();
         GradientTape<T>.Current?.RecordOp("ReLU", [x], result,
             grad =>
             {
-                // ReLU'(x) = 1 if x > 0, else 0 (mask captured at forward time)
-                return [Engine.TensorMultiply(grad, mask)];
+                // ReLU'(x) = 1 if x > 0, else 0 — single loop with byte mask
+                var dx = new Tensor<T>(shape);
+                for (int i = 0; i < grad.Length; i++)
+                    dx[i] = mask[i] == 1 ? grad[i] : NumOps.Zero;
+                return [dx];
             });
         return result;
     }
@@ -537,6 +541,156 @@ internal static class DifferentiableOps<T>
         GradientTape<T>.Current?.RecordOp("Reshape", [a], result,
             grad => [grad.Reshape(originalShape)]);
         return result;
+    }
+
+    /// <summary>
+    /// Concatenates tensors along the specified axis.
+    /// Backward splits the gradient back into per-input chunks.
+    /// Essential for U-Net skip connections and multi-head attention.
+    /// </summary>
+    public static Tensor<T> Concatenate(Tensor<T>[] tensors, int axis = 0)
+    {
+        if (tensors.Length == 0)
+            throw new ArgumentException("At least one tensor required.", nameof(tensors));
+        if (tensors.Length == 1)
+            return tensors[0];
+
+        // Compute output shape
+        var firstShape = tensors[0].Shape.ToArray();
+        int rank = firstShape.Length;
+        if (axis < 0) axis += rank;
+        var outShape = (int[])firstShape.Clone();
+        var splitSizes = new int[tensors.Length];
+        splitSizes[0] = firstShape[axis];
+        for (int t = 1; t < tensors.Length; t++)
+        {
+            splitSizes[t] = tensors[t].Shape[axis];
+            outShape[axis] += splitSizes[t];
+        }
+
+        // Forward: concatenate along axis
+        var result = new Tensor<T>(outShape);
+        int offset = 0;
+        int outerSize = 1, innerSize = 1;
+        for (int d = 0; d < axis; d++) outerSize *= outShape[d];
+        for (int d = axis + 1; d < rank; d++) innerSize *= outShape[d];
+
+        for (int t = 0; t < tensors.Length; t++)
+        {
+            int dimSize = splitSizes[t];
+            for (int o = 0; o < outerSize; o++)
+            {
+                for (int d = 0; d < dimSize; d++)
+                {
+                    for (int inner = 0; inner < innerSize; inner++)
+                    {
+                        int srcIdx = (o * dimSize + d) * innerSize + inner;
+                        int dstIdx = (o * outShape[axis] + offset + d) * innerSize + inner;
+                        result[dstIdx] = tensors[t][srcIdx];
+                    }
+                }
+            }
+            offset += dimSize;
+        }
+
+        var capturedShapes = tensors.Select(t => t.Shape.ToArray()).ToArray();
+        GradientTape<T>.Current?.RecordOp("Concatenate", tensors, result,
+            grad =>
+            {
+                // Backward: split gradient along the concat axis
+                var grads = new Tensor<T>[capturedShapes.Length];
+                int off = 0;
+                for (int t = 0; t < capturedShapes.Length; t++)
+                {
+                    int dimSize = capturedShapes[t][axis];
+                    grads[t] = new Tensor<T>(capturedShapes[t]);
+                    for (int o = 0; o < outerSize; o++)
+                    {
+                        for (int d = 0; d < dimSize; d++)
+                        {
+                            for (int inner = 0; inner < innerSize; inner++)
+                            {
+                                int srcIdx = (o * outShape[axis] + off + d) * innerSize + inner;
+                                int dstIdx = (o * dimSize + d) * innerSize + inner;
+                                grads[t][dstIdx] = grad[srcIdx];
+                            }
+                        }
+                    }
+                    off += dimSize;
+                }
+                return grads;
+            });
+        return result;
+    }
+
+    /// <summary>
+    /// Splits a tensor into chunks along the specified axis.
+    /// Backward concatenates the gradient chunks back together.
+    /// </summary>
+    public static Tensor<T>[] Split(Tensor<T> x, int[] splitSizes, int axis = 0)
+    {
+        var shape = x.Shape.ToArray();
+        int rank = shape.Length;
+        if (axis < 0) axis += rank;
+
+        int outerSize = 1, innerSize = 1;
+        for (int d = 0; d < axis; d++) outerSize *= shape[d];
+        for (int d = axis + 1; d < rank; d++) innerSize *= shape[d];
+
+        var results = new Tensor<T>[splitSizes.Length];
+        int offset = 0;
+        for (int t = 0; t < splitSizes.Length; t++)
+        {
+            int dimSize = splitSizes[t];
+            var chunkShape = (int[])shape.Clone();
+            chunkShape[axis] = dimSize;
+            results[t] = new Tensor<T>(chunkShape);
+            for (int o = 0; o < outerSize; o++)
+            {
+                for (int d = 0; d < dimSize; d++)
+                {
+                    for (int inner = 0; inner < innerSize; inner++)
+                    {
+                        int srcIdx = (o * shape[axis] + offset + d) * innerSize + inner;
+                        int dstIdx = (o * dimSize + d) * innerSize + inner;
+                        results[t][dstIdx] = x[srcIdx];
+                    }
+                }
+            }
+            offset += dimSize;
+        }
+
+        // Record one op per output chunk, with backward concatenating gradients
+        var capturedAxis = axis;
+        var capturedShape = shape;
+        for (int t = 0; t < results.Length; t++)
+        {
+            int chunkIdx = t;
+            GradientTape<T>.Current?.RecordOp($"Split[{t}]", [x], results[t],
+                grad =>
+                {
+                    // Backward: place this chunk's gradient at the right position in the full gradient
+                    var fullGrad = new Tensor<T>(capturedShape);
+                    int off = 0;
+                    for (int k = 0; k < chunkIdx; k++) off += splitSizes[k];
+                    int ds = splitSizes[chunkIdx];
+                    for (int o = 0; o < outerSize; o++)
+                    {
+                        for (int d = 0; d < ds; d++)
+                        {
+                            for (int inner = 0; inner < innerSize; inner++)
+                            {
+                                int dstIdx = (o * capturedShape[capturedAxis] + off + d) * innerSize + inner;
+                                int srcIdx = (o * ds + d) * innerSize + inner;
+                                fullGrad[dstIdx] = grad[srcIdx];
+                            }
+                        }
+                    }
+                    return [fullGrad];
+                });
+        }
+
+        return results;
     }
 
     // ─── Conv ops ────────────────────────────────────────────────────

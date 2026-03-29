@@ -901,15 +901,17 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// Default: single port named "input" with the layer's input shape.
     /// Override for multi-input layers (e.g., DiffusionResBlock, CrossAttention).
     /// </summary>
+    private IReadOnlyList<LayerPort>? _cachedInputPorts;
     public virtual IReadOnlyList<LayerPort> InputPorts =>
-        [new LayerPort("input", GetInputShape())];
+        _cachedInputPorts ??= [new LayerPort("input", GetInputShape())];
 
     /// <summary>
     /// Declares the named output ports this layer produces.
     /// Default: single port named "output" with the layer's output shape.
     /// </summary>
+    private IReadOnlyList<LayerPort>? _cachedOutputPorts;
     public virtual IReadOnlyList<LayerPort> OutputPorts =>
-        [new LayerPort("output", GetOutputShape())];
+        _cachedOutputPorts ??= [new LayerPort("output", GetOutputShape())];
 
     /// <summary>
     /// Multi-input forward pass. Receives inputs by name, enabling layers that
