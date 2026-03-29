@@ -151,12 +151,5 @@ public class CausalTemporalAttention<T> : LayerBase<T>
         _causalAttention.ResetState();
     }
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
 
-    /// <inheritdoc />
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        return _causalAttention.ExportComputationGraph(inputNodes);
-    }
 }

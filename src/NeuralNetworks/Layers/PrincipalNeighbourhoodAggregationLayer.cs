@@ -1581,38 +1581,5 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         _biasGradient = null;
     }
 
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => true;
 
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Export learnable parameters as constants
-        var preWeightsNode = Autodiff.TensorOperations<T>.Constant(_preTransformWeights, "pre_weights");
-        var selfWeightsNode = Autodiff.TensorOperations<T>.Constant(_selfWeights, "self_weights");
-        var biasNode = Autodiff.TensorOperations<T>.Constant(_bias, "bias");
-
-        // Build computation graph for self-loop path (most direct gradient flow)
-        var selfContribution = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, selfWeightsNode);
-        var output = Autodiff.TensorOperations<T>.Add(selfContribution, biasNode);
-
-        // Apply activation if supported
-        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
-        {
-            return ScalarActivation.ApplyToGraph(output);
-        }
-
-        return output;
-    }
 }

@@ -341,51 +341,6 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         _conv3x3.ResetState();
     }
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // Check all required sub-layers support JIT
-            return _bn1.SupportsJitCompilation &&
-                   _conv1x1.SupportsJitCompilation &&
-                   _bn2.SupportsJitCompilation &&
-                   _conv3x3.SupportsJitCompilation;
-        }
-    }
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the DenseBlockLayer.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph representing the DenseBlockLayer:
-    /// Input -> BN1 -> ReLU -> Conv1x1 -> BN2 -> ReLU -> Conv3x3 -> Output
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes));
-        }
-
-        if (InputShape is null || InputShape.Length == 0)
-        {
-            throw new InvalidOperationException("Layer input shape not configured.");
-        }
-
-        // Create symbolic input node with batch dimension
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return BuildComputationGraph(inputNode, "");
-    }
 
     /// <inheritdoc />
     public ComputationNode<T> BuildComputationGraph(

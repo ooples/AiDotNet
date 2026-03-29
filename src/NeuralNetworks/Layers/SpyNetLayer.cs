@@ -1317,20 +1317,6 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         base.Dispose(disposing);
     }
 
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // SpyNet supports JIT if all basic modules support JIT
-            foreach (var module in _basicModules)
-            {
-                if (!module.SupportsJitCompilation)
-                    return false;
-            }
-            return _basicModules.Count > 0;
-        }
-    }
 
     #endregion
 
@@ -1344,14 +1330,6 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// </summary>
     public new int[] GetOutputShape() => [2, _inputHeight, _inputWidth];
 
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null || inputNodes.Count == 0)
-            throw new ArgumentException("Input nodes cannot be null or empty.", nameof(inputNodes));
-
-        return BuildComputationGraph(inputNodes[0], "");
-    }
 
     /// <inheritdoc/>
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)

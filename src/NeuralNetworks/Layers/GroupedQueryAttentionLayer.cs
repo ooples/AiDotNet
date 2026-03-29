@@ -680,21 +680,6 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
         _outputBiasGradient = null;
     }
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

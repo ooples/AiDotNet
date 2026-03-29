@@ -121,8 +121,6 @@ public class MinGRULayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Gets the model dimension (input/output width).
@@ -587,29 +585,6 @@ public class MinGRULayer<T> : LayerBase<T>
 
     #endregion
 
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Export a simplified single-step computation graph for JIT/export purposes.
-        // The full recurrence is unrolled externally; this represents one step's output projection.
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _expandedDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "h_t");
-        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
-        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(outWeightsNode);
-        inputNodes.Add(outBiasNode);
-
-        var outT = TensorOperations<T>.Transpose(outWeightsNode);
-        var finalOutput = TensorOperations<T>.MatrixMultiply(xNode, outT);
-        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
-
-        return outputWithBias;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

@@ -383,16 +383,6 @@ public class UpBlock<T> : LayerBase<T>
         }
     }
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "UpBlock JIT compilation is not yet implemented. " +
-            "Use the layer in interpreted mode.");
-    }
 
     /// <summary>
     /// Saves the block's state to a binary writer.

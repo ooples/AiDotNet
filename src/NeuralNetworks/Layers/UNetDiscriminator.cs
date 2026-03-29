@@ -125,27 +125,6 @@ public class UNetDiscriminator<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// </summary>
     protected override bool SupportsGpuExecution => false;
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            if (!_convFirst.SupportsJitCompilation) return false;
-            if (!_convLast.SupportsJitCompilation) return false;
-
-            foreach (var block in _encoderBlocks)
-            {
-                if (!block.SupportsJitCompilation) return false;
-            }
-
-            foreach (var block in _decoderBlocks)
-            {
-                if (!block.SupportsJitCompilation) return false;
-            }
-
-            return true;
-        }
-    }
 
     #endregion
 
@@ -447,21 +426,6 @@ public class UNetDiscriminator<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     #region JIT Compilation
 
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape is null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return BuildComputationGraph(inputNode, "");
-    }
 
     /// <inheritdoc />
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
@@ -558,8 +522,6 @@ internal class UNetConvBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     public override bool SupportsTraining => true;
 
-    public override bool SupportsJitCompilation =>
-        _conv1.SupportsJitCompilation && _conv2.SupportsJitCompilation;
 
     public override Tensor<T> Forward(Tensor<T> input)
     {
@@ -647,13 +609,6 @@ internal class UNetConvBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         _conv2.ResetState();
     }
 
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-        return BuildComputationGraph(inputNode, "");
-    }
 
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
     {
@@ -736,8 +691,6 @@ internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     public override bool SupportsTraining => true;
 
-    public override bool SupportsJitCompilation =>
-        _upsample.SupportsJitCompilation && _conv1.SupportsJitCompilation && _conv2.SupportsJitCompilation;
 
     public override Tensor<T> Forward(Tensor<T> input)
     {
@@ -930,13 +883,6 @@ internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         _conv2.ResetState();
     }
 
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-        return BuildComputationGraph(inputNode, null, "");
-    }
 
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
     {

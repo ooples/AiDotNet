@@ -831,56 +831,5 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         // In a full implementation, this would use stored gradients
     }
 
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation =>
-        _norm1 != null && _norm1.SupportsJitCompilation &&
-        _norm2 != null && _norm2.SupportsJitCompilation &&
-        _qkvProj != null && _qkvProj.SupportsJitCompilation &&
-        _outProj != null && _outProj.SupportsJitCompilation &&
-        _mlpFc1 != null && _mlpFc1.SupportsJitCompilation &&
-        _mlpFc2 != null && _mlpFc2.SupportsJitCompilation;
 
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Create symbolic input node: [batch, seqLen, dim]
-        var symbolicInput = new Tensor<T>([1, _windowSize * _windowSize, _dim]);
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "swin_block_input");
-        inputNodes.Add(inputNode);
-
-        // Export norm1 graph
-        var norm1Nodes = new List<ComputationNode<T>> { inputNode };
-        var normed1 = _norm1.ExportComputationGraph(norm1Nodes);
-
-        // Export QKV projection
-        var qkvNodes = new List<ComputationNode<T>> { normed1 };
-        var qkvOut = _qkvProj.ExportComputationGraph(qkvNodes);
-
-        // Window attention is complex - for JIT we represent it as a composite operation
-        // In practice, this would be optimized as a fused attention kernel
-        var outProjNodes = new List<ComputationNode<T>> { qkvOut };
-        var attnOut = _outProj.ExportComputationGraph(outProjNodes);
-
-        // First residual: input + attn
-        var residual1 = TensorOperations<T>.Add(inputNode, attnOut);
-
-        // Export norm2 graph
-        var norm2Nodes = new List<ComputationNode<T>> { residual1 };
-        var normed2 = _norm2.ExportComputationGraph(norm2Nodes);
-
-        // Export MLP: fc1 -> gelu -> fc2
-        var fc1Nodes = new List<ComputationNode<T>> { normed2 };
-        var mlpHidden = _mlpFc1.ExportComputationGraph(fc1Nodes);
-
-        var fc2Nodes = new List<ComputationNode<T>> { mlpHidden };
-        var mlpOut = _mlpFc2.ExportComputationGraph(fc2Nodes);
-
-        // Second residual: residual1 + mlp
-        var output = TensorOperations<T>.Add(residual1, mlpOut);
-
-        return output;
-    }
 }

@@ -39,10 +39,6 @@ public class SequenceLastLayer<T> : LayerBase<T>
     /// </value>
     public override bool SupportsTraining => false;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Indicates whether this layer supports GPU execution.
@@ -317,23 +313,4 @@ public class SequenceLastLayer<T> : LayerBase<T>
         _lastSequenceLength = 0;
     }
 
-    /// <summary>
-    /// Exports the computation graph for this layer.
-    /// </summary>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // For sequence last, we're essentially doing a slice operation
-        // For simplicity, return the input node as this is a pass-through in terms of graph structure
-        return inputNode;
-    }
 }

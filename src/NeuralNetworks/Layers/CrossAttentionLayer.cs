@@ -1090,46 +1090,7 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         _gpuAttnWeights = null;
     }
 
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation =>
-        _queryWeights != null && _keyWeights != null &&
-        _valueWeights != null && _outputWeights != null;
 
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Create symbolic input nodes for query and context
-        var queryInput = new Tensor<T>(new int[] { 1, InputShape[0], _queryDim });
-        var queryNode = Autodiff.TensorOperations<T>.Variable(queryInput, "query");
-        inputNodes.Add(queryNode);
-
-        var contextInput = new Tensor<T>(new int[] { 1, 77, _contextDim }); // Standard text encoder output length
-        var contextNode = Autodiff.TensorOperations<T>.Variable(contextInput, "context");
-        inputNodes.Add(contextNode);
-
-        // Create weight nodes
-        var wqNode = Autodiff.TensorOperations<T>.Constant(_queryWeights, "Wq");
-        var wkNode = Autodiff.TensorOperations<T>.Constant(_keyWeights, "Wk");
-        var wvNode = Autodiff.TensorOperations<T>.Constant(_valueWeights, "Wv");
-        var woNode = Autodiff.TensorOperations<T>.Constant(_outputWeights, "Wo");
-
-        // Apply cross-attention using multi-head attention with separate query/key sources
-        var output = Autodiff.TensorOperations<T>.MultiHeadAttention(
-            query: queryNode,
-            key: contextNode,
-            value: contextNode,
-            numHeads: _headCount,
-            wQ: wqNode,
-            wK: wkNode,
-            wV: wvNode,
-            wO: woNode);
-
-        return output;
-    }
 }
-
 
 

@@ -564,52 +564,5 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
         _gpuInputShape = null;
     }
 
-    /// <summary>
-    /// Gets whether this layer supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation => true;
 
-    /// <summary>
-    /// Exports the layer as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List of input nodes (expects one node containing timesteps).</param>
-    /// <returns>A computation node representing the time embedding output.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph for the time embedding:
-    /// 1. Sinusoidal embedding of timesteps
-    /// 2. First linear layer (matrix multiply + bias)
-    /// 3. SiLU/Swish activation
-    /// 4. Second linear layer (matrix multiply + bias)
-    /// </para>
-    /// </remarks>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null || inputNodes.Count < 1)
-            throw new ArgumentException("TimeEmbeddingLayer requires exactly one input node (timesteps).", nameof(inputNodes));
-
-        var timesteps = inputNodes[0];
-
-        // Step 1: Compute sinusoidal time embedding
-        var sinEmbed = Autodiff.TensorOperations<T>.SinusoidalTimeEmbedding(timesteps, _embeddingDim);
-
-        // Step 2: First linear layer - MatMul(sinEmbed, weights1) + bias1
-        var weights1Node = Autodiff.TensorOperations<T>.Variable(_linear1Weights, "time_linear1_weights", requiresGradient: true);
-        var bias1Node = Autodiff.TensorOperations<T>.Variable(_linear1Bias, "time_linear1_bias", requiresGradient: true);
-
-        var linear1Out = Autodiff.TensorOperations<T>.MatrixMultiply(sinEmbed, weights1Node);
-        var linear1WithBias = Autodiff.TensorOperations<T>.Add(linear1Out, bias1Node);
-
-        // Step 3: SiLU/Swish activation
-        var hidden = Autodiff.TensorOperations<T>.Swish(linear1WithBias);
-
-        // Step 4: Second linear layer - MatMul(hidden, weights2) + bias2
-        var weights2Node = Autodiff.TensorOperations<T>.Variable(_linear2Weights, "time_linear2_weights", requiresGradient: true);
-        var bias2Node = Autodiff.TensorOperations<T>.Variable(_linear2Bias, "time_linear2_bias", requiresGradient: true);
-
-        var linear2Out = Autodiff.TensorOperations<T>.MatrixMultiply(hidden, weights2Node);
-        var output = Autodiff.TensorOperations<T>.Add(linear2Out, bias2Node);
-
-        return output;
-    }
 }

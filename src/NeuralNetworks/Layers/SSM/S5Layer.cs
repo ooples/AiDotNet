@@ -132,8 +132,6 @@ public class S5Layer<T> : LayerBase<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Gets the model dimension (H), the width of input and output at each sequence position.
@@ -1091,42 +1089,6 @@ public class S5Layer<T> : LayerBase<T>
 
     #endregion
 
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
-
-        var hPrevRealPlaceholder = new Tensor<T>(new int[] { 1, _stateDimension });
-        var hPrevRealNode = TensorOperations<T>.Variable(hPrevRealPlaceholder, "h_prev_real");
-
-        var hPrevImagPlaceholder = new Tensor<T>(new int[] { 1, _stateDimension });
-        var hPrevImagNode = TensorOperations<T>.Variable(hPrevImagPlaceholder, "h_prev_imag");
-
-        var dParamNode = TensorOperations<T>.Variable(_dParam, "D");
-        var outProjWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
-        var outProjBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(hPrevRealNode);
-        inputNodes.Add(hPrevImagNode);
-        inputNodes.Add(dParamNode);
-        inputNodes.Add(outProjWeightsNode);
-        inputNodes.Add(outProjBiasNode);
-
-        // Skip connection output: y = D * x
-        var skipOutput = TensorOperations<T>.ElementwiseMultiply(xNode, dParamNode);
-
-        // Output projection
-        var outProjWeightsT = TensorOperations<T>.Transpose(outProjWeightsNode);
-        var finalOutput = TensorOperations<T>.MatrixMultiply(skipOutput, outProjWeightsT);
-        var outputWithBias = TensorOperations<T>.Add(finalOutput, outProjBiasNode);
-
-        return outputWithBias;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

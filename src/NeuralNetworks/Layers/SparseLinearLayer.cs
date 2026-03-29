@@ -103,16 +103,6 @@ public class SparseLinearLayer<T> : LayerBase<T>
     /// </summary>
     public override bool SupportsTraining => true;
 
-    /// <summary>
-    /// Gets whether this layer supports JIT compilation.
-    /// </summary>
-    /// <remarks>
-    /// JIT compilation is supported by converting sparse weights to dense format at export time.
-    /// This enables JIT compilation while preserving correct functionality, though the sparse
-    /// memory benefits are not retained in the compiled graph.
-    /// Returns true only if the activation function also supports JIT compilation.
-    /// </remarks>
-    public override bool SupportsJitCompilation => CanActivationBeJitted();
 
     /// <summary>
     /// Initializes a new instance of the SparseLinearLayer.
@@ -532,71 +522,6 @@ public class SparseLinearLayer<T> : LayerBase<T>
         _biasesGradient = null;
     }
 
-    /// <summary>
-    /// Exports the layer's forward pass as a JIT-compilable computation graph.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the linear transformation.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method converts sparse weights to dense format at export time to enable JIT compilation.
-    /// The resulting computation graph performs a standard dense matrix multiplication:
-    /// output = input * W^T + bias
-    /// </para>
-    /// <para>
-    /// While this approach loses the memory benefits of sparse storage during inference,
-    /// it ensures correct functionality and enables JIT optimization of the compiled graph.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape is null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input node with batch dimension [batchSize, inputFeatures]
-        var symbolicInput = new Tensor<T>(new int[] { 1, InputFeatures });
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Convert sparse weights to dense tensor [outputFeatures, inputFeatures]
-        var denseWeights = new Tensor<T>(new int[] { OutputFeatures, InputFeatures });
-        for (int nz = 0; nz < _weights.NonZeroCount; nz++)
-        {
-            int row = _weights.RowIndices[nz];
-            int col = _weights.ColumnIndices[nz];
-            denseWeights[row, col] = _weights.Values[nz];
-        }
-        var weightsNode = TensorOperations<T>.Constant(denseWeights, "weights");
-
-        // Create bias tensor [outputFeatures]
-        var biasTensor = new Tensor<T>(new int[] { OutputFeatures });
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            biasTensor[o] = _biases[o];
-        }
-        var biasNode = TensorOperations<T>.Constant(biasTensor, "bias");
-
-        // Transpose weights for matrix multiplication: W^T [inputFeatures, outputFeatures]
-        var weightsTransposed = TensorOperations<T>.Transpose(weightsNode);
-
-        // Perform matrix multiplication: input [batch, inputFeatures] @ W^T [inputFeatures, outputFeatures]
-        // Result: [batch, outputFeatures]
-        var matmulResult = TensorOperations<T>.MatrixMultiply(inputNode, weightsTransposed);
-
-        // Add bias (broadcast along batch dimension)
-        var outputNode = TensorOperations<T>.Add(matmulResult, biasNode);
-
-        // Apply activation function if needed
-        if (ScalarActivation is not null && ScalarActivation is not IdentityActivation<T>)
-        {
-            outputNode = ApplyActivationToComputationNode(outputNode);
-        }
-
-        return outputNode;
-    }
 
     /// <summary>
     /// Applies the activation function to a computation node.

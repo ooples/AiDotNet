@@ -96,11 +96,6 @@ public class Upsample3DLayer<T> : LayerBase<T>
     /// </remarks>
     protected override bool SupportsGpuExecution => true;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value><c>true</c> if the input shape is configured.</value>
-    public override bool SupportsJitCompilation => InputShape != null && InputShape.Length > 0;
 
     /// <summary>
     /// Gets the total number of trainable parameters in the layer.
@@ -634,25 +629,6 @@ public class Upsample3DLayer<T> : LayerBase<T>
 
     #region Computation Graph
 
-    /// <summary>
-    /// Exports the layer's computation as a graph node for JIT compilation or autodiff.
-    /// </summary>
-    /// <param name="inputNodes">List to append input nodes to.</param>
-    /// <returns>A computation node representing the upsampling operation.</returns>
-    /// <exception cref="NotSupportedException">Thrown because Upsample3D autodiff is not yet implemented.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method is not yet implemented. The TensorOperations.Upsample3D method needs to be added
-    /// to support JIT compilation and automatic differentiation for 3D upsampling operations.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        // TODO: Implement TensorOperations.Upsample3D for autodiff support
-        throw new NotSupportedException(
-            "Upsample3DLayer.ExportComputationGraph is not yet implemented. " +
-            "TensorOperations.Upsample3D needs to be added for JIT compilation and autodiff support.");
-    }
 
     #endregion
 }
