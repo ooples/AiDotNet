@@ -844,7 +844,11 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// All layers are required to implement this method, even if they set SupportsJitCompilation = false.
     /// </para>
     /// </remarks>
-    public abstract ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes);
+    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name}: Use GradientTape<T> for automatic differentiation.");
+    }
 
     /// <summary>
     /// Gets whether this layer supports JIT compilation.
@@ -866,7 +870,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// When false, the layer will use the standard Forward() method instead.
     /// </para>
     /// </remarks>
-    public abstract bool SupportsJitCompilation { get; }
+    public virtual bool SupportsJitCompilation => false;
     /// <summary>
     /// Performs the forward pass of the layer.
     /// </summary>
