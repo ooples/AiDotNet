@@ -25,7 +25,7 @@ namespace AiDotNet.Autodiff;
 /// </para>
 /// <para><b>Reference:</b> Baydin et al. "Automatic Differentiation in Machine Learning: a Survey" (2018)</para>
 /// </remarks>
-public static class DifferentiableOps<T>
+internal static class DifferentiableOps<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static IEngine Engine => AiDotNetEngine.Current;
@@ -166,6 +166,11 @@ public static class DifferentiableOps<T>
     /// <summary>Mean of all elements to a scalar.</summary>
     public static Tensor<T> Mean(Tensor<T> a)
     {
+        if (a.Length == 0)
+        {
+            throw new ArgumentException("Cannot compute mean of a zero-length tensor.", nameof(a));
+        }
+
         var result = new Tensor<T>([1]);
         T sum = NumOps.Zero;
         for (int i = 0; i < a.Length; i++)
@@ -230,19 +235,19 @@ public static class DifferentiableOps<T>
     public static Tensor<T> ReLU(Tensor<T> x)
     {
         var result = new Tensor<T>(x.Shape.ToArray());
+        // Capture the mask at forward time so backward is safe even if x is mutated
+        var mask = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
         {
             double val = NumOps.ToDouble(x[i]);
             result[i] = val > 0 ? x[i] : NumOps.Zero;
+            mask[i] = val > 0 ? NumOps.One : NumOps.Zero;
         }
 
         GradientTape<T>.Current?.RecordOp("ReLU", [x], result,
             grad =>
             {
-                // ReLU'(x) = 1 if x > 0, else 0
-                var mask = new Tensor<T>(x.Shape.ToArray());
-                for (int i = 0; i < x.Length; i++)
-                    mask[i] = NumOps.ToDouble(x[i]) > 0 ? NumOps.One : NumOps.Zero;
+                // ReLU'(x) = 1 if x > 0, else 0 (mask captured at forward time)
                 return [Engine.TensorMultiply(grad, mask)];
             });
         return result;
@@ -458,9 +463,22 @@ public static class DifferentiableOps<T>
     public static Tensor<T> BatchNorm(
         Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon = 1e-5)
     {
+        if (input.Shape.Length != 2)
+        {
+            throw new NotSupportedException(
+                "BatchNorm currently supports only [N, D] inputs. " +
+                "[N, C, H, W] support requires channel-wise normalization.");
+        }
+
         // Treat as [N, features] where features = total / N
         int n = input.Shape[0];
         int features = input.Length / n;
+
+        if (gamma.Length != features || beta.Length != features)
+        {
+            throw new ArgumentException(
+                $"gamma ({gamma.Length}) and beta ({beta.Length}) must match the feature dimension ({features}).");
+        }
         var result = new Tensor<T>(input.Shape.ToArray());
 
         var means = new double[features];

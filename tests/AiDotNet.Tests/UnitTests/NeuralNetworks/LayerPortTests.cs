@@ -44,6 +44,10 @@ public class LayerPortTests
         });
 
         Assert.Equal(singleResult.Length, multiResult.Length);
+        for (int i = 0; i < singleResult.Length; i++)
+        {
+            Assert.Equal(singleResult[i], multiResult[i]);
+        }
     }
 
     [Fact]
@@ -101,7 +105,7 @@ public class LayerPortTests
         var port = new LayerPort("query", [8, 64], Required: true);
 
         Assert.Equal("query", port.Name);
-        Assert.Equal(2, port.Shape.Length);
+        Assert.Equal(2, port.Shape.Count);
         Assert.Equal(8, port.Shape[0]);
         Assert.Equal(64, port.Shape[1]);
         Assert.True(port.Required);

@@ -952,10 +952,19 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// <summary>
     /// Multi-output backward pass. Returns gradients per named input port.
     /// Default delegates to single-input <see cref="Backward(Tensor{T})"/>.
+    /// Layers with multiple input ports must override this method.
     /// </summary>
     public virtual IReadOnlyDictionary<string, Tensor<T>> BackwardMulti(
         IReadOnlyDictionary<string, Tensor<T>> outputGradients)
     {
+        if (InputPorts.Count > 1)
+        {
+            throw new NotSupportedException(
+                $"{GetType().Name} has {InputPorts.Count} input ports but does not override " +
+                $"BackwardMulti. Override it to return gradients for: " +
+                $"{string.Join(", ", InputPorts.Select(p => p.Name))}.");
+        }
+
         var grad = outputGradients.TryGetValue("output", out var g) ? g : outputGradients.Values.First();
         var inputGrad = Backward(grad);
         return new Dictionary<string, Tensor<T>> { ["input"] = inputGrad };

@@ -14,7 +14,7 @@ namespace AiDotNet.Tests.UnitTests.Autodiff;
 public class DifferentiableOpsGradientCheckTests
 {
     private const double Epsilon = 1e-5;
-    private const double RelTolerance = 1e-4;
+    private const double RelTolerance = 1e-5;
     private static readonly INumericOperations<double> NumOps = MathHelper.GetNumericOperations<double>();
 
     // ─── Elementwise ops ─────────────────────────────────────────────

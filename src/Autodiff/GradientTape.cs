@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -43,18 +44,19 @@ public sealed class GradientTape<T> : IDisposable
 
     // ─── Thread/async-safe active tape ───────────────────────────────
 
-    private static readonly AsyncLocal<Stack<GradientTape<T>>?> _tapeStack = new();
+    private static readonly AsyncLocal<ImmutableStack<GradientTape<T>>?> _tapeStack = new();
 
     /// <summary>
     /// Gets the currently active tape, or null if none is active.
-    /// Propagates correctly across async/await boundaries.
+    /// Propagates correctly across async/await boundaries using an immutable stack
+    /// so that child async flows get copy-on-write isolation.
     /// </summary>
     public static GradientTape<T>? Current
     {
         get
         {
             var stack = _tapeStack.Value;
-            return stack is { Count: > 0 } ? stack.Peek() : null;
+            return stack is not null && !stack.IsEmpty ? stack.Peek() : null;
         }
     }
 
@@ -84,8 +86,8 @@ public sealed class GradientTape<T> : IDisposable
     public GradientTape(bool persistent = false)
     {
         Persistent = persistent;
-        _tapeStack.Value ??= new Stack<GradientTape<T>>();
-        _tapeStack.Value.Push(this);
+        var stack = _tapeStack.Value ?? ImmutableStack<GradientTape<T>>.Empty;
+        _tapeStack.Value = stack.Push(this);
     }
 
     /// <inheritdoc/>
@@ -97,8 +99,8 @@ public sealed class GradientTape<T> : IDisposable
         IsRecording = false;
 
         var stack = _tapeStack.Value;
-        if (stack is { Count: > 0 } && ReferenceEquals(stack.Peek(), this))
-            stack.Pop();
+        if (stack is not null && !stack.IsEmpty && ReferenceEquals(stack.Peek(), this))
+            _tapeStack.Value = stack.Pop();
 
         if (!Persistent)
         {
@@ -175,6 +177,13 @@ public sealed class GradientTape<T> : IDisposable
         IEnumerable<ComputationNode<T>>? sources = null,
         bool createGraph = false)
     {
+        if (createGraph)
+        {
+            throw new NotSupportedException(
+                "createGraph is not supported for ComputationNode-based Gradient. " +
+                "Use the Tensor<T> Gradient overload with the new tape API instead.");
+        }
+
         // Use the ComputationNode's own backward (old path)
         target.Backward();
 
@@ -219,6 +228,19 @@ public sealed class GradientTape<T> : IDisposable
         Func<Tensor<T>, Tensor<T>[]> backward)
     {
         if (!IsRecording) return;
+
+        // Reject ops whose output aliases an input — the reverse pass keys
+        // gradients by tensor identity, so aliasing would corrupt accumulation.
+        foreach (var input in inputs)
+        {
+            if (ReferenceEquals(input, output))
+            {
+                throw new ArgumentException(
+                    $"RecordOp '{opName}': output tensor must not be the same instance as an input. " +
+                    "Clone the output or allocate a new tensor to avoid gradient aliasing.");
+            }
+        }
+
         _ops.Add(new TapeEntry(opName, inputs, output, backward));
     }
 
@@ -256,10 +278,20 @@ public sealed class GradientTape<T> : IDisposable
     }
 
     /// <summary>
-    /// Resets the tape for reuse (persistent tapes only).
+    /// Resets the tape for reuse. Only valid for persistent tapes.
+    /// Clears all recorded operations and watched tensors, allowing
+    /// fresh recording without creating a new tape instance.
     /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown if the tape is not persistent.</exception>
     public void Reset()
     {
+        if (!Persistent)
+        {
+            throw new InvalidOperationException(
+                "Reset() is only valid for persistent tapes. " +
+                "Non-persistent tapes should be disposed and recreated.");
+        }
+
         _ops.Clear();
         _watched.Clear();
         _used = false;
@@ -368,7 +400,7 @@ public sealed class GradientTape<T> : IDisposable
 /// </code>
 /// </para>
 /// </remarks>
-public sealed class NoGradScope<T> : IDisposable
+internal sealed class NoGradScope<T> : IDisposable
 {
     private readonly GradientTape<T>? _tape;
     private readonly bool _wasRecording;

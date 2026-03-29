@@ -103,6 +103,10 @@ public static class GradientCheckpointing<T>
             context.Output = output;
             context.OutputValue = output.Value?.Clone();
 
+            // Restore recording state BEFORE creating checkpoint node,
+            // so the synthetic RecordOp is captured on the tape
+            if (tape != null) tape.IsRecording = wasRecording;
+
             // Create a wrapper node that will trigger recomputation during backward
             var checkpointNode = CreateCheckpointNode(context, output);
 
@@ -110,12 +114,6 @@ public static class GradientCheckpointing<T>
         }
         finally
         {
-            // Restore recording state
-            if (wasRecording)
-            {
-                if (tape != null) tape.IsRecording = wasRecording;
-            }
-
             // Pop context
             _checkpointStack.Pop();
         }
@@ -164,6 +162,10 @@ public static class GradientCheckpointing<T>
 
             context.MultiOutputs = outputs.ToList();
 
+            // Restore recording state BEFORE creating checkpoint nodes,
+            // so the synthetic RecordOps are captured on the tape
+            if (tape != null) tape.IsRecording = wasRecording;
+
             var checkpointNodes = outputs.Select((output, index) =>
                 CreateCheckpointNode(context, output, index)).ToList();
 
@@ -171,10 +173,6 @@ public static class GradientCheckpointing<T>
         }
         finally
         {
-            if (wasRecording)
-            {
-                if (tape != null) tape.IsRecording = wasRecording;
-            }
             _checkpointStack.Pop();
         }
     }
@@ -196,9 +194,28 @@ public static class GradientCheckpointing<T>
             BackwardFunction = (grad) => RecomputeAndBackward(context, grad, outputIndex)
         };
 
-        // Record to tape if active (bridge from old ComputationNode to new tape API)
-        // The new GradientTape records ops via RecordOp, not ComputationNode.
-        // Checkpointing will be fully migrated when ExportComputationGraph is removed (#1059).
+        // Register a synthetic "checkpoint" op on the active tape so that
+        // GradientTape.Gradient() can trace through the checkpoint boundary.
+        var tape = GradientTape<T>.Current;
+        if (tape != null && tape.IsRecording && output.Value != null)
+        {
+            var inputTensors = context.Inputs
+                .Where(i => i.Value != null)
+                .Select(i => i.Value)
+                .ToArray();
+
+            tape.RecordOp(
+                "checkpoint",
+                inputTensors,
+                checkpointNode.Value,
+                grad =>
+                {
+                    RecomputeAndBackward(context, grad, outputIndex);
+                    return context.Inputs
+                        .Select(i => i.Gradient ?? new Tensor<T>(i.Value.Shape.ToArray()))
+                        .ToArray();
+                });
+        }
 
         return checkpointNode;
     }

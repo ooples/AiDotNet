@@ -1,5 +1,4 @@
 using AiDotNet.Autodiff;
-using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -7,8 +6,6 @@ namespace AiDotNet.Tests.UnitTests.Autodiff;
 
 public class GradientTapeTests
 {
-    private static readonly INumericOperations<double> NumOps = MathHelper.GetNumericOperations<double>();
-
     [Fact]
     public void Tape_RecordOp_And_Gradient_SimpleAdd()
     {
@@ -132,10 +129,12 @@ public class GradientTapeTests
         using var tape = new GradientTape<double>();
         tape.Watch(x);
 
-        tape.RecordOp("id", [x], x, grad => [grad]);
-        tape.Gradient(x);
+        // Use a distinct output tensor (not aliased with input)
+        var y = new Tensor<double>([1], new Vector<double>([1.0]));
+        tape.RecordOp("id", [x], y, grad => [grad]);
+        tape.Gradient(y);
 
-        Assert.Throws<InvalidOperationException>(() => tape.Gradient(x));
+        Assert.Throws<InvalidOperationException>(() => tape.Gradient(y));
     }
 
     [Fact]
@@ -145,16 +144,18 @@ public class GradientTapeTests
         using var tape = new GradientTape<double>(persistent: true);
         tape.Watch(x);
 
-        tape.RecordOp("id", [x], x, grad => [grad]);
+        // Use a distinct output tensor (not aliased with input)
+        var y = new Tensor<double>([1], new Vector<double>([1.0]));
+        tape.RecordOp("id", [x], y, grad => [grad]);
 
-        var g1 = tape.Gradient(x);
-        var g2 = tape.Gradient(x);
+        var g1 = tape.Gradient(y);
+        var g2 = tape.Gradient(y);
 
         Assert.Equal(g1[x][0], g2[x][0]);
     }
 
     [Fact]
-    public void NoGradScope_PausesRecording()
+    public void NoGradScope_PausesRecording_OpsNotRecorded()
     {
         var x = new Tensor<double>([1], new Vector<double>([2.0]));
         using var tape = new GradientTape<double>();
@@ -162,13 +163,29 @@ public class GradientTapeTests
 
         Assert.True(tape.IsRecording);
 
+        // Record an op outside the scope - this should be tracked
+        var y = new Tensor<double>([1], new Vector<double>([3.0]));
+        tape.RecordOp("double", [x], y, grad =>
+        {
+            var g = new Tensor<double>(grad.Shape.ToArray());
+            for (int i = 0; i < grad.Length; i++) g[i] = grad[i] * 2.0;
+            return [g];
+        });
+
         using (var _ = new NoGradScope<double>())
         {
             Assert.False(tape.IsRecording);
-            // Ops here would not be recorded
+            // This op should NOT be recorded
+            var ignored = new Tensor<double>([1], new Vector<double>([99.0]));
+            tape.RecordOp("should_be_ignored", [y], ignored, grad => [grad]);
         }
 
         Assert.True(tape.IsRecording);
+
+        // Gradient should only reflect the "double" op, not the ignored one
+        var grads = tape.Gradient(y);
+        Assert.True(grads.ContainsKey(x));
+        Assert.Equal(2.0, grads[x][0]);
     }
 
     [Fact]

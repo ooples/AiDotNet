@@ -13,4 +13,17 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// Just as a TV has separate ports for HDMI, USB, and power, a neural network layer
 /// can have separate ports for different types of input data.</para>
 /// </remarks>
-public sealed record LayerPort(string Name, int[] Shape, bool Required = true);
+public sealed record LayerPort
+{
+    public string Name { get; }
+    public IReadOnlyList<int> Shape { get; }
+    public bool Required { get; }
+
+    public LayerPort(string Name, int[] Shape, bool Required = true)
+    {
+        this.Name = Name;
+        // Defensive copy to prevent callers from mutating the layer's shape
+        this.Shape = (int[])Shape.Clone();
+        this.Required = Required;
+    }
+}

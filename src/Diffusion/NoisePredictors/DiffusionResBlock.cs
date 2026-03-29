@@ -157,9 +157,17 @@ public class DiffusionResBlock<T> : LayerBase<T>
 
     /// <summary>
     /// Forward pass implementing the DDPM residual block.
+    /// When time embedding is configured, use the dictionary overload or Forward(input, timeEmbed) instead.
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        if (_timeEmbedDim > 0)
+        {
+            throw new InvalidOperationException(
+                "DiffusionResBlock requires 'time_embed' input when timeEmbedDim > 0. " +
+                "Use Forward(input, timeEmbed) or the dictionary overload instead.");
+        }
+
         _originalInputShape = input.Shape.ToArray();
         _lastInput = input;
 

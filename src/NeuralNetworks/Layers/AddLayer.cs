@@ -323,8 +323,16 @@ public class AddLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
-        var tensors = inputs.Values.ToArray();
-        return Forward(tensors);
+        // Bind inputs by name to match the declared InputPorts contract
+        if (!inputs.TryGetValue("input_a", out var inputA))
+        {
+            throw new ArgumentException("Missing required input 'input_a'.", nameof(inputs));
+        }
+        if (!inputs.TryGetValue("input_b", out var inputB))
+        {
+            throw new ArgumentException("Missing required input 'input_b'.", nameof(inputs));
+        }
+        return Forward(inputA, inputB);
     }
 
     public override Tensor<T> Forward(Tensor<T> input)
