@@ -221,26 +221,48 @@ public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         int width = input.Shape[3];
         int outChannels = weights.Shape[0];
 
-        var output = new Tensor<T>(new[] { batch, outChannels, height, width });
-
+        // 1x1 conv = matmul: reshape [B,C_in,H,W] -> [B*H*W, C_in] @ W^T -> [B*H*W, C_out]
+        // Transpose input from NCHW to NHWC: [B, C_in, H, W] -> permute to get [B*H*W, C_in]
+        int spatialSize = height * width;
+        var inputFlat = new Tensor<T>(new[] { batch * spatialSize, inChannels });
         for (int b = 0; b < batch; b++)
         {
-            for (int oc = 0; oc < outChannels; oc++)
+            for (int h = 0; h < height; h++)
             {
-                for (int h = 0; h < height; h++)
+                for (int w = 0; w < width; w++)
                 {
-                    for (int w = 0; w < width; w++)
+                    int spatialIdx = b * spatialSize + h * width + w;
+                    for (int ic = 0; ic < inChannels; ic++)
                     {
-                        T sum = NumOps.Zero;
-                        for (int ic = 0; ic < inChannels; ic++)
-                        {
-                            sum = NumOps.Add(sum, NumOps.Multiply(input[b, ic, h, w], weights[oc, ic]));
-                        }
-                        if (bias is not null)
-                        {
-                            sum = NumOps.Add(sum, bias[oc]);
-                        }
-                        output[b, oc, h, w] = sum;
+                        inputFlat[spatialIdx, ic] = input[b, ic, h, w];
+                    }
+                }
+            }
+        }
+
+        // MatMul: [B*H*W, C_in] @ [C_out, C_in]^T = [B*H*W, C_out]
+        var weightsT = weights.Transpose(new[] { 1, 0 });
+        var outputFlat = Engine.TensorMatMul(inputFlat, weightsT);
+
+        // Add bias if present
+        if (bias is not null)
+        {
+            var biasBroadcast = bias.Reshape(1, outChannels);
+            outputFlat = Engine.TensorBroadcastAdd(outputFlat, biasBroadcast);
+        }
+
+        // Reshape back to NCHW: [B*H*W, C_out] -> [B, C_out, H, W]
+        var output = new Tensor<T>(new[] { batch, outChannels, height, width });
+        for (int b = 0; b < batch; b++)
+        {
+            for (int h = 0; h < height; h++)
+            {
+                for (int w = 0; w < width; w++)
+                {
+                    int spatialIdx = b * spatialSize + h * width + w;
+                    for (int oc = 0; oc < outChannels; oc++)
+                    {
+                        output[b, oc, h, w] = outputFlat[spatialIdx, oc];
                     }
                 }
             }
