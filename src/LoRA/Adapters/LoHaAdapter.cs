@@ -274,42 +274,15 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        // Now apply ΔW to input: output = input × ΔW
-        Matrix<T> deltaMatrix = new Matrix<T>(batchSize, outputSize);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int o = 0; o < outputSize; o++)
-            {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < inputSize; i++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(inputMatrix[b, i], deltaWeights[i, o]));
-                }
-                deltaMatrix[b, o] = sum;
-            }
-        }
-
+        // Apply ΔW to input: output = input × ΔW — vectorized Engine.TensorMatMul
+        var inputTensor = Tensor<T>.FromMatrix(inputMatrix);
+        var deltaTensor = Tensor<T>.FromMatrix(deltaWeights);
+        var deltaResultTensor = Engine.TensorMatMul(inputTensor, deltaTensor);
         // Apply scaling
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int o = 0; o < outputSize; o++)
-            {
-                deltaMatrix[b, o] = NumOps.Multiply(deltaMatrix[b, o], _scaling);
-            }
-        }
+        deltaResultTensor = Engine.TensorMultiplyScalar(deltaResultTensor, _scaling);
 
-        // Convert back to tensor
-        Vector<T> deltaData = new Vector<T>(batchSize * outputSize);
-        int idx = 0;
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int o = 0; o < outputSize; o++)
-            {
-                deltaData[idx++] = deltaMatrix[b, o];
-            }
-        }
-
-        return new Tensor<T>(new[] { batchSize, outputSize }, deltaData);
+        // Return result as tensor [batchSize, outputSize]
+        return deltaResultTensor.Reshape(batchSize, outputSize);
     }
 
 
