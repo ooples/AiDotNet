@@ -1018,9 +1018,9 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Use Vector<T>.Concatenate for efficient parameter collection
-        var flatTrans = new Vector<T>(_transitionMatrix.ToArray());
-        var flatStart = new Vector<T>(_startScores.ToArray());
-        var flatEnd = new Vector<T>(_endScores.ToArray());
+        var flatTrans = Vector<T>.FromMemory(_transitionMatrix.Data);
+        var flatStart = Vector<T>.FromMemory(_startScores.Data);
+        var flatEnd = Vector<T>.FromMemory(_endScores.Data);
 
         return Vector<T>.Concatenate(Vector<T>.Concatenate(flatTrans, flatStart), flatEnd);
     }
@@ -1055,13 +1055,13 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         var flatTrans = _transitionMatrixGradient != null
-            ? new Vector<T>(_transitionMatrixGradient.ToArray())
+            ? (_transitionMatrixGradient is not null ? Vector<T>.FromMemory(_transitionMatrixGradient.Data) : new Vector<T>(0))
             : new Vector<T>(_numClasses * _numClasses);
         var flatStart = _startScoresGradient != null
-            ? new Vector<T>(_startScoresGradient.ToArray())
+            ? (_startScoresGradient is not null ? Vector<T>.FromMemory(_startScoresGradient.Data) : new Vector<T>(0))
             : new Vector<T>(_numClasses);
         var flatEnd = _endScoresGradient != null
-            ? new Vector<T>(_endScoresGradient.ToArray())
+            ? (_endScoresGradient is not null ? Vector<T>.FromMemory(_endScoresGradient.Data) : new Vector<T>(0))
             : new Vector<T>(_numClasses);
 
         return Vector<T>.Concatenate(Vector<T>.Concatenate(flatTrans, flatStart), flatEnd);
@@ -1125,5 +1125,55 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         _endScoresGradient = null;
     }
 
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        // ConditionalRandomFieldLayer JIT uses the forward algorithm for differentiable inference:
+        // This computes the log partition function which can be used for CRF training.
+        // For inference at runtime, Viterbi decoding is still used, but training can use autodiff.
+
+        var input = inputNodes[0];
+
+        // Input is emissions [seqLen, numClasses]
+        // Convert transition matrix to computation node
+        var transitionsTensor = new Tensor<T>([_numClasses, _numClasses]);
+        for (int i = 0; i < _numClasses; i++)
+            for (int j = 0; j < _numClasses; j++)
+                transitionsTensor[i, j] = _transitionMatrix[i, j];
+
+        var transitionsNode = TensorOperations<T>.Variable(transitionsTensor, "crf_transitions", requiresGradient: true);
+
+        // Use CRF forward algorithm for log partition computation
+        var logPartition = TensorOperations<T>.CRFForward(input, transitionsNode);
+
+        // Apply activation
+        var output = ApplyActivationToGraph(logPartition);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c>. CRF uses the forward algorithm for differentiable training.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// JIT compilation for CRF uses the forward algorithm to compute the log partition
+    /// function, which is differentiable with respect to emissions and transitions.
+    /// This enables gradient-based optimization of CRF parameters. For inference,
+    /// Viterbi decoding is used at runtime, but the JIT-compiled graph supports training.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
 
 }

@@ -385,10 +385,7 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
             // Update context: psi = psi - alpha * grad
             T lr = NumOps.FromDouble(_caviaOptions.InnerLearningRate);
-            for (int i = 0; i < context.Length; i++)
-            {
-                context[i] = NumOps.Subtract(context[i], NumOps.Multiply(lr, contextGradients[i]));
-            }
+            context = Engine.Subtract(context, Engine.Multiply(contextGradients, lr));
         }
 
         return context;
@@ -521,7 +518,7 @@ internal static class CAVIAContextHelper<T>
             CAVIAContextInjectionMode.Concatenation => ConcatenateContext<TInput>(input, context),
             CAVIAContextInjectionMode.Addition => AddContext<TInput>(input, context, numOps),
             CAVIAContextInjectionMode.Multiplication => MultiplyContext<TInput>(input, context, numOps),
-            _ => ConcatenateContext<TInput>(input, context)
+            _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, $"Unknown CAVIAContextInjectionMode: {mode}")
         };
     }
 
@@ -788,7 +785,7 @@ public class CAVIAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// - Transfer (reuse context from a similar seen task)
     /// </para>
     /// </remarks>
-    public Vector<T> AdaptedContext => _adaptedContext;
+    public Vector<T> AdaptedContext => Vector<T>.Wrap(_adaptedContext.ToArray());
 
     /// <summary>
     /// Makes predictions by augmenting input with the adapted context and running through the body model.

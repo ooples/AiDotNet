@@ -1236,6 +1236,7 @@ public interface INTMController<T>
 public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly NTMOptions<T, TInput, TOutput> _options;
     private readonly int _inputSize;
@@ -1358,26 +1359,14 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
         // gates = W_input * x + W_hidden * h + b
         var gates = new Tensor<T>(new int[] { 4 * _hiddenSize });
 
-        // Input contribution
-        for (int g = 0; g < 4 * _hiddenSize; g++)
-        {
-            T sum = _biases[g];
-
-            // W_input * x
-            int validInputSize = Math.Min(inputLength, _weightsInput.Shape[1]);
-            for (int j = 0; j < validInputSize; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(_weightsInput[new[] { g, j }], fullInput[j]));
-            }
-
-            // W_hidden * h
-            for (int j = 0; j < _hiddenSize; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(_weightsHidden[new[] { g, j }], _hiddenState[j]));
-            }
-
-            gates[g] = sum;
-        }
+        // gates = W_input @ fullInput + W_hidden @ hiddenState + bias — vectorized
+        int gateSize = 4 * _hiddenSize;
+        int validInputSize = Math.Min(inputLength, _weightsInput.Shape[1]);
+        var inputCol = fullInput.Reshape(validInputSize, 1);
+        var inputContrib = Engine.TensorMatMul(_weightsInput, inputCol).Reshape(gateSize);
+        var hiddenCol = _hiddenState.Reshape(_hiddenSize, 1);
+        var hiddenContrib = Engine.TensorMatMul(_weightsHidden, hiddenCol).Reshape(gateSize);
+        gates = Engine.TensorAdd(Engine.TensorAdd(inputContrib, hiddenContrib), _biases);
 
         // Apply activations: i, f gates use sigmoid; c uses tanh; o uses sigmoid
         var inputGate = new Tensor<T>(new int[] { _hiddenSize });
@@ -1462,57 +1451,34 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
     /// <inheritdoc/>
     public Tensor<T> GenerateWriteKey(Tensor<T> output)
     {
-        var key = new Tensor<T>(new int[] { _memoryWidth });
-
-        for (int i = 0; i < _memoryWidth; i++)
-        {
-            T sum = _writeKeyBiases[i];
-            for (int j = 0; j < _hiddenSize; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(_writeKeyWeights[new[] { i, j }], _hiddenState[j]));
-            }
-            key[i] = sum;
-        }
-
+        // key = W_writeKey @ hiddenState + bias — vectorized
+        var hCol = _hiddenState.Reshape(_hiddenSize, 1);
+        var key = Engine.TensorAdd(
+            Engine.TensorMatMul(_writeKeyWeights, hCol).Reshape(_memoryWidth),
+            _writeKeyBiases);
         return key;
     }
 
     /// <inheritdoc/>
     public Tensor<T> GenerateEraseVector(Tensor<T> output)
     {
-        var erase = new Tensor<T>(new int[] { _memoryWidth });
-
-        for (int i = 0; i < _memoryWidth; i++)
-        {
-            T sum = _eraseBiases[i];
-            for (int j = 0; j < _hiddenSize; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(_eraseWeights[new[] { i, j }], _hiddenState[j]));
-            }
-            // Apply sigmoid to constrain to [0, 1]
-            erase[i] = Sigmoid(sum);
-        }
-
-        return erase;
+        // erase = sigmoid(W_erase @ hiddenState + bias) — vectorized
+        var hCol = _hiddenState.Reshape(_hiddenSize, 1);
+        var pre = Engine.TensorAdd(
+            Engine.TensorMatMul(_eraseWeights, hCol).Reshape(_memoryWidth),
+            _eraseBiases);
+        return Engine.Sigmoid(pre);
     }
 
     /// <inheritdoc/>
     public Tensor<T> GenerateAddVector(Tensor<T> output)
     {
-        var add = new Tensor<T>(new int[] { _memoryWidth });
-
-        for (int i = 0; i < _memoryWidth; i++)
-        {
-            T sum = _addBiases[i];
-            for (int j = 0; j < _hiddenSize; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(_addWeights[new[] { i, j }], _hiddenState[j]));
-            }
-            // Apply tanh for bounded output
-            add[i] = Tanh(sum);
-        }
-
-        return add;
+        // add = tanh(W_add @ hiddenState + bias) — vectorized
+        var hCol = _hiddenState.Reshape(_hiddenSize, 1);
+        var pre = Engine.TensorAdd(
+            Engine.TensorMatMul(_addWeights, hCol).Reshape(_memoryWidth),
+            _addBiases);
+        return Engine.Tanh(pre);
     }
 
     /// <inheritdoc/>
@@ -1538,17 +1504,11 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
             }
         }
 
-        // Linear projection to output
-        var result = new Tensor<T>(new int[] { _outputSize });
-        for (int i = 0; i < _outputSize; i++)
-        {
-            T sum = _outputBiases[i];
-            for (int j = 0; j < totalInputSize; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(_outputWeights[new[] { i, j }], combinedInput[j]));
-            }
-            result[i] = sum;
-        }
+        // Linear projection: output = W_output @ combinedInput + bias — vectorized
+        var combCol = combinedInput.Reshape(totalInputSize, 1);
+        var result = Engine.TensorAdd(
+            Engine.TensorMatMul(_outputWeights, combCol).Reshape(_outputSize),
+            _outputBiases);
 
         return result;
     }
@@ -1674,6 +1634,7 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
 public class MLPNTMController<T, TInput, TOutput> : INTMController<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly NTMOptions<T, TInput, TOutput> _options;
     private readonly int _inputSize;
@@ -1944,17 +1905,11 @@ public class MLPNTMController<T, TInput, TOutput> : INTMController<T>
             }
         }
 
-        // Linear projection to output
-        var result = new Tensor<T>(new int[] { _outputSize });
-        for (int i = 0; i < _outputSize; i++)
-        {
-            T sum = _outputBiases[i];
-            for (int j = 0; j < totalInputSize; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(_outputWeights[new[] { i, j }], combinedInput[j]));
-            }
-            result[i] = sum;
-        }
+        // Linear projection: output = W_output @ combinedInput + bias — vectorized
+        var combCol = combinedInput.Reshape(totalInputSize, 1);
+        var result = Engine.TensorAdd(
+            Engine.TensorMatMul(_outputWeights, combCol).Reshape(_outputSize),
+            _outputBiases);
 
         return result;
     }

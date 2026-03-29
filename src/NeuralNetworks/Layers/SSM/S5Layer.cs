@@ -132,6 +132,8 @@ public class S5Layer<T> : LayerBase<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Gets the model dimension (H), the width of input and output at each sequence position.
@@ -1042,18 +1044,18 @@ public class S5Layer<T> : LayerBase<T>
     {
         if (_aRealGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_aRealGradient!.ToArray()),
-            new Vector<T>(_aImagGradient!.ToArray()),
-            new Vector<T>(_bRealGradient!.ToArray()),
-            new Vector<T>(_bImagGradient!.ToArray()),
-            new Vector<T>(_cRealGradient!.ToArray()),
-            new Vector<T>(_cImagGradient!.ToArray()),
-            new Vector<T>(_dParamGradient!.ToArray()),
-            _logDeltaGradient != null ? new Vector<T>(_logDeltaGradient.ToArray()) : new Vector<T>(_logDelta.Length),
-            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
-            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
+            (_aRealGradient is not null ? Vector<T>.FromMemory(_aRealGradient.Data) : new Vector<T>(0)),
+            (_aImagGradient is not null ? Vector<T>.FromMemory(_aImagGradient.Data) : new Vector<T>(0)),
+            (_bRealGradient is not null ? Vector<T>.FromMemory(_bRealGradient.Data) : new Vector<T>(0)),
+            (_bImagGradient is not null ? Vector<T>.FromMemory(_bImagGradient.Data) : new Vector<T>(0)),
+            (_cRealGradient is not null ? Vector<T>.FromMemory(_cRealGradient.Data) : new Vector<T>(0)),
+            (_cImagGradient is not null ? Vector<T>.FromMemory(_cImagGradient.Data) : new Vector<T>(0)),
+            (_dParamGradient is not null ? Vector<T>.FromMemory(_dParamGradient.Data) : new Vector<T>(0)),
+            _logDeltaGradient is not null ? (_logDeltaGradient is not null ? Vector<T>.FromMemory(_logDeltaGradient.Data) : new Vector<T>(0)) : new Vector<T>(_logDelta.Length),
+            (_inputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_inputProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_inputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_inputProjectionBiasGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()
@@ -1089,6 +1091,42 @@ public class S5Layer<T> : LayerBase<T>
 
     #endregion
 
+    /// <inheritdoc />
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
+        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
+
+        var hPrevRealPlaceholder = new Tensor<T>(new int[] { 1, _stateDimension });
+        var hPrevRealNode = TensorOperations<T>.Variable(hPrevRealPlaceholder, "h_prev_real");
+
+        var hPrevImagPlaceholder = new Tensor<T>(new int[] { 1, _stateDimension });
+        var hPrevImagNode = TensorOperations<T>.Variable(hPrevImagPlaceholder, "h_prev_imag");
+
+        var dParamNode = TensorOperations<T>.Variable(_dParam, "D");
+        var outProjWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
+        var outProjBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
+
+        inputNodes.Add(xNode);
+        inputNodes.Add(hPrevRealNode);
+        inputNodes.Add(hPrevImagNode);
+        inputNodes.Add(dParamNode);
+        inputNodes.Add(outProjWeightsNode);
+        inputNodes.Add(outProjBiasNode);
+
+        // Skip connection output: y = D * x
+        var skipOutput = TensorOperations<T>.ElementwiseMultiply(xNode, dParamNode);
+
+        // Output projection
+        var outProjWeightsT = TensorOperations<T>.Transpose(outProjWeightsNode);
+        var finalOutput = TensorOperations<T>.MatrixMultiply(skipOutput, outProjWeightsT);
+        var outputWithBias = TensorOperations<T>.Add(finalOutput, outProjBiasNode);
+
+        return outputWithBias;
+    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

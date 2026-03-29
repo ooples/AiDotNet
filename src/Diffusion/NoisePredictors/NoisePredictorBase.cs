@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -113,9 +114,18 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
         return PredictNoise(noisySample, timestep, conditioning);
     }
 
+    /// <summary>
+    /// Cache for timestep embeddings to avoid recomputing sinusoidal embeddings
+    /// for the same timestep during the denoising loop.
+    /// </summary>
+    private readonly Dictionary<int, Tensor<T>> _timestepEmbeddingCache = new();
+
     /// <inheritdoc />
     public virtual Tensor<T> GetTimestepEmbedding(int timestep)
     {
+        if (_timestepEmbeddingCache.TryGetValue(timestep, out var cached))
+            return cached;
+
         // Sinusoidal timestep embedding (like in Transformers)
         var halfDim = TimeEmbeddingDim / 2;
         var embedding = new Tensor<T>(new[] { TimeEmbeddingDim });
@@ -132,6 +142,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
             embSpan[i + halfDim] = NumOps.FromDouble(Math.Cos(angle));
         }
 
+        _timestepEmbeddingCache[timestep] = embedding;
         return embedding;
     }
 
@@ -402,41 +413,49 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
             throw new ArgumentNullException(nameof(target));
 
         var effectiveLossFunction = lossFunction ?? LossFunction;
+
+        // Automatic differentiation via GradientTape — same approach as PyTorch autograd.
+        // 1. Build computation graph through ExportComputationGraph (records all ops)
+        // 2. Compute loss as a graph node
+        // 3. Backpropagate through the graph to get exact gradients in O(1) backward passes
+        using var tape = new GradientTape<T>();
+
+        // Create input variable node
+        var inputNode = TensorOperations<T>.Variable(input, "input", requiresGradient: false);
+
+        // Build the forward computation graph through the noise predictor's layers
+        var outputNode = ExportComputationGraph([inputNode]);
+        tape.Watch(outputNode);
+
+        // Compute MSE loss as a graph node: loss = mean((output - target)^2)
+        var targetNode = TensorOperations<T>.Variable(target, "target", requiresGradient: false);
+        var diffNode = TensorOperations<T>.Subtract(outputNode, targetNode);
+        var squaredNode = TensorOperations<T>.ElementwiseMultiply(diffNode, diffNode);
+        var lossNode = TensorOperations<T>.Mean(squaredNode);
+
+        // Backward pass: compute gradients for all watched nodes
+        var gradientMap = tape.Gradient(lossNode);
+
+        // Extract parameter gradients from the computation graph
+        // Each layer's parameter nodes accumulated gradients during backprop
         var parameters = GetParameters();
         var gradients = new Vector<T>(parameters.Length);
 
-        // Numerical gradient computation using finite differences
-        var epsilon = NumOps.FromDouble(1e-5);
-        var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
-
-        for (int i = 0; i < parameters.Length; i++)
+        // Collect gradients from all parameter nodes in the graph
+        int offset = 0;
+        foreach (var node in gradientMap)
         {
-            // Compute f(x + epsilon)
-            var paramsPlus = new Vector<T>(parameters.Length);
-            for (int j = 0; j < parameters.Length; j++)
+            if (node.Key.RequiresGradient && node.Value is not null)
             {
-                paramsPlus[j] = j == i ? NumOps.Add(parameters[j], epsilon) : parameters[j];
+                var grad = node.Value;
+                int copyLen = Math.Min(grad.Length, parameters.Length - offset);
+                for (int i = 0; i < copyLen; i++)
+                {
+                    gradients[offset + i] = grad[i];
+                }
+                offset += copyLen;
             }
-            SetParameters(paramsPlus);
-            var outputPlus = Predict(input);
-            var lossPlus = effectiveLossFunction.CalculateLoss(outputPlus.ToVector(), target.ToVector());
-
-            // Compute f(x - epsilon)
-            var paramsMinus = new Vector<T>(parameters.Length);
-            for (int j = 0; j < parameters.Length; j++)
-            {
-                paramsMinus[j] = j == i ? NumOps.Subtract(parameters[j], epsilon) : parameters[j];
-            }
-            SetParameters(paramsMinus);
-            var outputMinus = Predict(input);
-            var lossMinus = effectiveLossFunction.CalculateLoss(outputMinus.ToVector(), target.ToVector());
-
-            // Gradient = (f(x+eps) - f(x-eps)) / (2*eps)
-            gradients[i] = NumOps.Divide(NumOps.Subtract(lossPlus, lossMinus), twoEpsilon);
         }
-
-        // Restore original parameters
-        SetParameters(parameters);
 
         return gradients;
     }
@@ -446,13 +465,11 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
     {
         var parameters = GetParameters();
 
-        for (int i = 0; i < parameters.Length && i < gradients.Length; i++)
-        {
-            var update = NumOps.Multiply(gradients[i], learningRate);
-            parameters[i] = NumOps.Subtract(parameters[i], update);
-        }
+        // Vectorized SGD: params = params - lr * gradients
+        var scaledGradients = Engine.Multiply(gradients, learningRate);
+        var updated = Engine.Subtract(parameters, scaledGradients);
 
-        SetParameters(parameters);
+        SetParameters(updated);
     }
 
     #endregion

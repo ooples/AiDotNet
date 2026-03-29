@@ -7,6 +7,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.PINNs;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.PhysicsInformed.PINNs;
@@ -100,7 +101,7 @@ public class PinnTrainingTests
 
     private sealed class LinearResidualPde : IPDESpecification<double>, IPDEResidualGradient<double>
     {
-        public double ComputeResidual(double[] inputs, double[] outputs, PDEDerivatives<double> derivatives)
+        public double ComputeResidual(Vector<double> inputs, Vector<double> outputs, PDEDerivatives<double> derivatives)
         {
             return outputs[0] - inputs[0];
         }
@@ -110,8 +111,8 @@ public class PinnTrainingTests
         public string Name => "LinearResidualTest";
 
         public PDEResidualGradient<double> ComputeResidualGradient(
-            double[] inputs,
-            double[] outputs,
+            Vector<double> inputs,
+            Vector<double> outputs,
             PDEDerivatives<double> derivatives)
         {
             var gradient = new PDEResidualGradient<double>(OutputDimension, InputDimension);

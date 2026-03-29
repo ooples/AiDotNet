@@ -966,13 +966,13 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
     public override Vector<T> GetParameters()
     {
         // Use ToArray() for production-grade parameter extraction
-        var embeddingParams = new Vector<T>(_embeddingTensor.ToArray());
+        var embeddingParams = Vector<T>.FromMemory(_embeddingTensor.Data);
         if (_projectionWeights == null)
         {
             return embeddingParams;
         }
 
-        var projectionParams = new Vector<T>(_projectionWeights.ToArray());
+        var projectionParams = Vector<T>.FromMemory(_projectionWeights.Data);
         return Vector<T>.Concatenate(embeddingParams, projectionParams);
     }
 
@@ -1216,7 +1216,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
         {
             // Return zeros for embedding params + actual projection gradients
             var embZeros = new Vector<T>(embeddingParamCount);
-            var projGrad = new Vector<T>(_projectionWeightsGradient.ToArray());
+            var projGrad = (_projectionWeightsGradient is not null ? Vector<T>.FromMemory(_projectionWeightsGradient.Data) : new Vector<T>(0));
             return Vector<T>.Concatenate(embZeros, projGrad);
         }
 
@@ -1225,10 +1225,10 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
             return new Vector<T>(ParameterCount);
 
         // Discrete embedding mode: return embedding gradients (+ projection if present)
-        var embGrad = new Vector<T>(_embeddingGradient.ToArray());
+        var embGrad = (_embeddingGradient is not null ? Vector<T>.FromMemory(_embeddingGradient.Data) : new Vector<T>(0));
         if (_projectionWeightsGradient == null || _projectionWeights == null)
             return embGrad;
-        return Vector<T>.Concatenate(embGrad, new Vector<T>(_projectionWeightsGradient.ToArray()));
+        return Vector<T>.Concatenate(embGrad, (_projectionWeightsGradient is not null ? Vector<T>.FromMemory(_projectionWeightsGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()
@@ -1254,5 +1254,50 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
         _lastIndicesForGpu = null;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// Always <c>true</c> because embedding lookup can be JIT compiled.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
 
+    /// <summary>
+    /// Exports the embedding layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the embedded vectors.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph for the embedding lookup operation.
+    /// The graph uses the embedding matrix as a constant and performs an EmbeddingLookup operation
+    /// based on the input indices.
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates an optimized version of the embedding lookup.
+    ///
+    /// The computation graph:
+    /// - Takes input indices (token IDs)
+    /// - Looks up corresponding rows in the embedding matrix
+    /// - Returns the embedding vectors for each token
+    ///
+    /// This is JIT compiled for faster inference.
+    /// </para>
+    /// </remarks>
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        // Create placeholder for input indices
+        // Input shape for embeddings: [batchSize, sequenceLength] or [batchSize, 1]
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, 1 });
+        var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, "input_indices");
+        inputNodes.Add(inputNode);
+
+        // Create constant node for embedding tensor [vocab_size, embedding_dim]
+        var embeddingNode = Autodiff.TensorOperations<T>.Constant(_embeddingTensor, "embeddings");
+
+        // Use EmbeddingLookup operation which supports gradients
+        return Autodiff.TensorOperations<T>.EmbeddingLookup(embeddingNode, inputNode);
+    }
 }

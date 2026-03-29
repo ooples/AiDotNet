@@ -423,8 +423,8 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         if (_depthwiseKernelsGradient == null || _pointwiseKernelsGradient == null || _biasesGradient == null)
             return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(new Vector<T>(_depthwiseKernelsGradient.ToArray()), new Vector<T>(_pointwiseKernelsGradient.ToArray())),
-            new Vector<T>(_biasesGradient.ToArray()));
+            Vector<T>.Concatenate((_depthwiseKernelsGradient is not null ? Vector<T>.FromMemory(_depthwiseKernelsGradient.Data) : new Vector<T>(0)), (_pointwiseKernelsGradient is not null ? Vector<T>.FromMemory(_pointwiseKernelsGradient.Data) : new Vector<T>(0))),
+            (_biasesGradient is not null ? Vector<T>.FromMemory(_biasesGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()
@@ -1490,8 +1490,8 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(_depthwiseKernels.ToVector(), _pointwiseKernels.ToVector()),
-            _biases.ToVector());
+            Vector<T>.Concatenate(Vector<T>.FromMemory(_depthwiseKernels.Data), Vector<T>.FromMemory(_pointwiseKernels.Data)),
+            Vector<T>.FromMemory(_biases.Data));
     }
 
     /// <summary>
@@ -1582,6 +1582,94 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         _biasesGradient = null;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> when kernels are initialized and activation function supports JIT.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Depthwise separable convolutional layers support JIT compilation using DepthwiseConv2D and Conv2D
+    /// operations from TensorOperations. The layer performs depthwise convolution followed by
+    /// pointwise (1x1) convolution.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation =>
+        _depthwiseKernels != null && _pointwiseKernels != null && _biases != null &&
+        CanActivationBeJitted();
+
+    /// <summary>
+    /// Exports the depthwise separable convolutional layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the depthwise separable convolution output.</returns>
+    /// <remarks>
+    /// <para>
+    /// The depthwise separable convolution computation graph implements:
+    /// 1. Depthwise convolution: Applies separate filters to each input channel
+    /// 2. Pointwise convolution: 1x1 convolution to combine channels and add bias
+    /// 3. Activation function
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates an optimized version of the depthwise separable convolution.
+    /// It dramatically reduces computational cost compared to standard convolution.
+    /// </para>
+    /// </remarks>
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_depthwiseKernels == null || _pointwiseKernels == null || _biases == null)
+            throw new InvalidOperationException("Kernels and biases not initialized.");
+
+        if (InputShape == null || InputShape.Length < 3)
+            throw new InvalidOperationException("Layer input shape not configured. Expected [height, width, channels].");
+
+        // Validate activation can be JIT compiled
+        if (!CanActivationBeJitted())
+        {
+            var activationType = (ScalarActivation?.GetType() ?? VectorActivation?.GetType())?.Name ?? "Unknown";
+            throw new NotSupportedException(
+                $"Activation function '{activationType}' is not supported for JIT compilation. " +
+                "Supported activations: ReLU, Sigmoid, Tanh, Softmax, Identity");
+        }
+
+        // Create symbolic input node in NHWC format [batch, height, width, channels]
+        var symbolicInput = new Tensor<T>(new int[] { 1, InputShape[0], InputShape[1], InputShape[2] });
+        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "dw_separable_input");
+        inputNodes.Add(inputNode);
+
+        // Depthwise kernels are already in [inputDepth, 1, kernelSize, kernelSize] format
+        var depthwiseKernelNode = Autodiff.TensorOperations<T>.Constant(_depthwiseKernels, "depthwise_kernel");
+
+        // Pointwise kernels are already in [outputDepth, inputDepth, 1, 1] format
+        var pointwiseKernelNode = Autodiff.TensorOperations<T>.Constant(_pointwiseKernels, "pointwise_kernel");
+
+        // Bias is already a Tensor<T>
+        var biasNode = Autodiff.TensorOperations<T>.Constant(_biases, "bias");
+
+        // Step 1: Depthwise convolution (no bias)
+        var depthwiseOutput = Autodiff.TensorOperations<T>.DepthwiseConv2D(
+            inputNode,
+            depthwiseKernelNode,
+            bias: null,
+            stride: new int[] { _stride, _stride },
+            padding: new int[] { _padding, _padding });
+
+        // Step 2: Pointwise convolution (1x1 conv with bias)
+        var pointwiseOutput = Autodiff.TensorOperations<T>.Conv2D(
+            depthwiseOutput,
+            pointwiseKernelNode,
+            biasNode,
+            stride: new int[] { 1, 1 },
+            padding: new int[] { 0, 0 });
+
+        // Step 3: Apply activation function using base class helper
+        var output = ApplyActivationToGraph(pointwiseOutput);
+
+        return output;
+    }
 
     #region GPU Training Methods
 

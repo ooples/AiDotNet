@@ -65,11 +65,8 @@ public abstract class MetaLearningModelBase<T, TInput, TOutput> : ModelWrapperBa
                 nameof(gradients));
         }
 
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            parameters[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(learningRate, gradients[i]));
-        }
-
+        // Vectorized SGD: params = params - lr * gradients
+        parameters = Engine.Subtract(parameters, Engine.Multiply(gradients, learningRate));
         SetParameters(parameters);
     }
 

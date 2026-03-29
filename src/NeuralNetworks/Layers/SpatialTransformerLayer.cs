@@ -1320,10 +1320,10 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Vector<T> GetParameters()
     {
         // Use Vector<T>.Concatenate for efficient parameter collection
-        var flatW1 = new Vector<T>(_localizationWeights1.ToArray());
-        var flatB1 = new Vector<T>(_localizationBias1.ToArray());
-        var flatW2 = new Vector<T>(_localizationWeights2.ToArray());
-        var flatB2 = new Vector<T>(_localizationBias2.ToArray());
+        var flatW1 = Vector<T>.FromMemory(_localizationWeights1.Data);
+        var flatB1 = Vector<T>.FromMemory(_localizationBias1.Data);
+        var flatW2 = Vector<T>.FromMemory(_localizationWeights2.Data);
+        var flatB2 = Vector<T>.FromMemory(_localizationBias2.Data);
 
         return Vector<T>.Concatenate(
             Vector<T>.Concatenate(flatW1, flatB1),
@@ -1360,16 +1360,16 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Vector<T> GetParameterGradients()
     {
         var gW1 = _localizationWeights1Gradient != null
-            ? new Vector<T>(_localizationWeights1Gradient.ToArray())
+            ? (_localizationWeights1Gradient is not null ? Vector<T>.FromMemory(_localizationWeights1Gradient.Data) : new Vector<T>(0))
             : new Vector<T>(_localizationWeights1.Length);
         var gB1 = _localizationBias1Gradient != null
-            ? new Vector<T>(_localizationBias1Gradient.ToArray())
+            ? (_localizationBias1Gradient is not null ? Vector<T>.FromMemory(_localizationBias1Gradient.Data) : new Vector<T>(0))
             : new Vector<T>(_localizationBias1.Length);
         var gW2 = _localizationWeights2Gradient != null
-            ? new Vector<T>(_localizationWeights2Gradient.ToArray())
+            ? (_localizationWeights2Gradient is not null ? Vector<T>.FromMemory(_localizationWeights2Gradient.Data) : new Vector<T>(0))
             : new Vector<T>(_localizationWeights2.Length);
         var gB2 = _localizationBias2Gradient != null
-            ? new Vector<T>(_localizationBias2Gradient.ToArray())
+            ? (_localizationBias2Gradient is not null ? Vector<T>.FromMemory(_localizationBias2Gradient.Data) : new Vector<T>(0))
             : new Vector<T>(_localizationBias2.Length);
 
         return Vector<T>.Concatenate(
@@ -1687,5 +1687,66 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     #endregion
 
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_localizationWeights1 == null || _localizationBias1 == null ||
+            _localizationWeights2 == null || _localizationBias2 == null)
+            throw new InvalidOperationException("Layer not initialized. Call Initialize() first.");
+
+        // Create input node
+        var symbolicInput = new Tensor<T>(InputShape);
+        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Localization network: 2-layer fully connected network
+        // Layer 1: Flatten input and apply first fully connected layer
+        int batchSize = InputShape[0];
+        var flattenedShape = new int[] { batchSize, _inputHeight * _inputWidth };
+        var flattenedInput = Autodiff.TensorOperations<T>.Reshape(inputNode, flattenedShape);
+
+        // Use tensors directly (already Tensor<T>)
+        var weights1Node = Autodiff.TensorOperations<T>.Constant(_localizationWeights1, "localization_weights1");
+        var bias1Node = Autodiff.TensorOperations<T>.Constant(_localizationBias1, "localization_bias1");
+
+        // First layer: MatMul + Add + Activation
+        var localization1 = Autodiff.TensorOperations<T>.MatrixMultiply(flattenedInput, weights1Node);
+        localization1 = Autodiff.TensorOperations<T>.Add(localization1, bias1Node);
+
+        // Apply activation function
+        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
+            localization1 = ScalarActivation.ApplyToGraph(localization1);
+        else if (VectorActivation != null && VectorActivation.SupportsJitCompilation)
+            localization1 = VectorActivation.ApplyToGraph(localization1);
+        else
+            localization1 = Autodiff.TensorOperations<T>.Tanh(localization1);
+
+        // Layer 2: Second fully connected layer to get transformation parameters
+        var weights2Node = Autodiff.TensorOperations<T>.Constant(_localizationWeights2, "localization_weights2");
+        var bias2Node = Autodiff.TensorOperations<T>.Constant(_localizationBias2, "localization_bias2");
+
+        var transformationParams = Autodiff.TensorOperations<T>.MatrixMultiply(localization1, weights2Node);
+        transformationParams = Autodiff.TensorOperations<T>.Add(transformationParams, bias2Node);
+
+        // Reshape transformation parameters to [batch, 2, 3] for affine transformation matrix
+        var thetaShape = new int[] { batchSize, 2, 3 };
+        var thetaNode = Autodiff.TensorOperations<T>.Reshape(transformationParams, thetaShape);
+
+        // Generate sampling grid using AffineGrid
+        var gridNode = Autodiff.TensorOperations<T>.AffineGrid(thetaNode, _outputHeight, _outputWidth);
+
+        // Sample from input using GridSample
+        var outputNode = Autodiff.TensorOperations<T>.GridSample(inputNode, gridNode);
+
+        return outputNode;
+    }
+
+    public override bool SupportsJitCompilation => _localizationWeights1 != null && _localizationBias1 != null &&
+                                                     _localizationWeights2 != null && _localizationBias2 != null;
 
 }

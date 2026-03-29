@@ -543,13 +543,13 @@ internal class GatedLinearAttentionLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_gateWeightsGradient!.ToArray()),
-            new Vector<T>(_gateBiasGradient!.ToArray()),
-            new Vector<T>(_outputWeightsGradient?.ToArray() ?? new T[_outputWeights.Length]),
-            new Vector<T>(_outputBiasGradient?.ToArray() ?? new T[_outputBias.Length]));
+            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
+            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
+            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
+            (_gateWeightsGradient is not null ? Vector<T>.FromMemory(_gateWeightsGradient.Data) : new Vector<T>(0)),
+            (_gateBiasGradient is not null ? Vector<T>.FromMemory(_gateBiasGradient.Data) : new Vector<T>(0)),
+            _outputWeightsGradient is not null ? (_outputWeightsGradient is not null ? Vector<T>.FromMemory(_outputWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputWeights.Length),
+            _outputBiasGradient is not null ? (_outputBiasGradient is not null ? Vector<T>.FromMemory(_outputBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputBias.Length));
     }
 
     public override void ClearGradients()
@@ -581,6 +581,34 @@ internal class GatedLinearAttentionLayer<T> : LayerBase<T>
 
     #endregion
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc />
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
+        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
+        var qWeightsNode = TensorOperations<T>.Variable(_queryWeights, "W_q");
+        var outWeightsNode = TensorOperations<T>.Variable(_outputWeights, "W_out");
+        var outBiasNode = TensorOperations<T>.Variable(_outputBias, "b_out");
+
+        inputNodes.Add(xNode);
+        inputNodes.Add(qWeightsNode);
+        inputNodes.Add(outWeightsNode);
+        inputNodes.Add(outBiasNode);
+
+        var qWeightsT = TensorOperations<T>.Transpose(qWeightsNode);
+        var query = TensorOperations<T>.MatrixMultiply(xNode, qWeightsT);
+        var outWeightsT = TensorOperations<T>.Transpose(outWeightsNode);
+        var finalOutput = TensorOperations<T>.MatrixMultiply(query, outWeightsT);
+        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
+
+        return outputWithBias;
+    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

@@ -103,9 +103,9 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
 
     public int NumGroups => _numGroups;
     public int NumChannels => _numChannels;
-    public Vector<T> GetGamma() => _gamma.ToVector();
+    public Vector<T> GetGamma() => Vector<T>.FromMemory(_gamma.Data);
     public Tensor<T> GetGammaTensor() => _gamma;
-    public Vector<T> GetBeta() => _beta.ToVector();
+    public Vector<T> GetBeta() => Vector<T>.FromMemory(_beta.Data);
     public Tensor<T> GetBetaTensor() => _beta;
     public T GetEpsilon() => _epsilon;
 
@@ -433,7 +433,7 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameters()
     {
-        return Vector<T>.Concatenate(_gamma.ToVector(), _beta.ToVector());
+        return Vector<T>.Concatenate(Vector<T>.FromMemory(_gamma.Data), Vector<T>.FromMemory(_beta.Data));
     }
 
     public override void SetParameters(Vector<T> parameters)
@@ -457,7 +457,7 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_gammaGradient == null || _betaGradient == null) return new Vector<T>(ParameterCount);
-        return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
+        return Vector<T>.Concatenate((_gammaGradient is not null ? Vector<T>.FromMemory(_gammaGradient.Data) : new Vector<T>(0)), (_betaGradient is not null ? Vector<T>.FromMemory(_betaGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
@@ -472,6 +472,50 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         _addedBatchDimension = false;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Exports the computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the GroupNormalization operation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph representing the GroupNormalization layer.
+    /// The graph divides channels into groups and normalizes within each group,
+    /// then applies learned scale (gamma) and shift (beta) parameters per channel.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes is null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape is null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create symbolic input node with batch dimension
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Create gamma and beta parameter nodes
+        var gammaNode = TensorOperations<T>.Constant(_gamma, "gamma");
+        var betaNode = TensorOperations<T>.Constant(_beta, "beta");
+
+        // Apply GroupNorm operation
+        var outputNode = TensorOperations<T>.GroupNorm(
+            inputNode,
+            _numGroups,
+            gammaNode,
+            betaNode,
+            NumOps.ToDouble(_epsilon));
+
+        return outputNode;
+    }
 
     /// <summary>
     /// GPU-resident backward pass for group normalization layer.

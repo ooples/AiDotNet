@@ -135,6 +135,8 @@ public class MinLSTMLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Gets the model dimension (input/output width).
@@ -638,16 +640,16 @@ public class MinLSTMLayer<T> : LayerBase<T>
     {
         if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
-            new Vector<T>(_forgetGateWeightsGradient!.ToArray()),
-            new Vector<T>(_forgetGateBiasGradient!.ToArray()),
-            new Vector<T>(_inputGateWeightsGradient!.ToArray()),
-            new Vector<T>(_inputGateBiasGradient!.ToArray()),
-            new Vector<T>(_cellCandidateWeightsGradient!.ToArray()),
-            new Vector<T>(_cellCandidateBiasGradient!.ToArray()),
-            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
+            (_inputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_inputProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_inputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_inputProjectionBiasGradient.Data) : new Vector<T>(0)),
+            (_forgetGateWeightsGradient is not null ? Vector<T>.FromMemory(_forgetGateWeightsGradient.Data) : new Vector<T>(0)),
+            (_forgetGateBiasGradient is not null ? Vector<T>.FromMemory(_forgetGateBiasGradient.Data) : new Vector<T>(0)),
+            (_inputGateWeightsGradient is not null ? Vector<T>.FromMemory(_inputGateWeightsGradient.Data) : new Vector<T>(0)),
+            (_inputGateBiasGradient is not null ? Vector<T>.FromMemory(_inputGateBiasGradient.Data) : new Vector<T>(0)),
+            (_cellCandidateWeightsGradient is not null ? Vector<T>.FromMemory(_cellCandidateWeightsGradient.Data) : new Vector<T>(0)),
+            (_cellCandidateBiasGradient is not null ? Vector<T>.FromMemory(_cellCandidateBiasGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()
@@ -690,6 +692,32 @@ public class MinLSTMLayer<T> : LayerBase<T>
 
     #endregion
 
+    /// <inheritdoc />
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
+        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
+        var inProjWeightsNode = TensorOperations<T>.Variable(_inputProjectionWeights, "W_inproj");
+        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
+        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
+
+        inputNodes.Add(xNode);
+        inputNodes.Add(inProjWeightsNode);
+        inputNodes.Add(outWeightsNode);
+        inputNodes.Add(outBiasNode);
+
+        // Simplified computation graph: input projection -> output projection
+        var inProjT = TensorOperations<T>.Transpose(inProjWeightsNode);
+        var projected = TensorOperations<T>.MatrixMultiply(xNode, inProjT);
+        var outProjT = TensorOperations<T>.Transpose(outWeightsNode);
+        var finalOutput = TensorOperations<T>.MatrixMultiply(projected, outProjT);
+        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
+
+        return outputWithBias;
+    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

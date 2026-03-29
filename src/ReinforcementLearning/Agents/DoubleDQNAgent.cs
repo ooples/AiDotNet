@@ -236,12 +236,8 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             var parameterGradients = _qNetwork.GetParameterGradients();
             var parameters = _qNetwork.GetParameters();
 
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                var update = NumOps.Multiply(LearningRate, parameterGradients[i]);
-                parameters[i] = NumOps.Subtract(parameters[i], update);
-            }
-
+            // Vectorized SGD
+            parameters = (Vector<T>)Engine.Subtract(parameters, Engine.Multiply(parameterGradients, LearningRate));
             _qNetwork.UpdateParameters(parameters);
         }
 

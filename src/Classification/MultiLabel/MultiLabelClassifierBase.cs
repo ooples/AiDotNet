@@ -182,12 +182,8 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         var parameters = GetParameters();
-        for (int i = 0; i < parameters.Length && i < gradients.Length; i++)
-        {
-            parameters[i] = NumOps.Subtract(parameters[i],
-                NumOps.Multiply(learningRate, gradients[i]));
-        }
-        SetParameters(parameters);
+        var updated = (Vector<T>)Engine.Subtract(parameters, Engine.Multiply(gradients, learningRate));
+        SetParameters(updated);
     }
 
     /// <inheritdoc />

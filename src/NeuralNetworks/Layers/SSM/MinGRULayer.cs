@@ -121,6 +121,8 @@ public class MinGRULayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Gets the model dimension (input/output width).
@@ -542,14 +544,14 @@ public class MinGRULayer<T> : LayerBase<T>
     {
         if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
-            new Vector<T>(_gateWeightsGradient!.ToArray()),
-            new Vector<T>(_gateBiasGradient!.ToArray()),
-            new Vector<T>(_candidateWeightsGradient!.ToArray()),
-            new Vector<T>(_candidateBiasGradient!.ToArray()),
-            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
+            (_inputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_inputProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_inputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_inputProjectionBiasGradient.Data) : new Vector<T>(0)),
+            (_gateWeightsGradient is not null ? Vector<T>.FromMemory(_gateWeightsGradient.Data) : new Vector<T>(0)),
+            (_gateBiasGradient is not null ? Vector<T>.FromMemory(_gateBiasGradient.Data) : new Vector<T>(0)),
+            (_candidateWeightsGradient is not null ? Vector<T>.FromMemory(_candidateWeightsGradient.Data) : new Vector<T>(0)),
+            (_candidateBiasGradient is not null ? Vector<T>.FromMemory(_candidateBiasGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()
@@ -585,6 +587,29 @@ public class MinGRULayer<T> : LayerBase<T>
 
     #endregion
 
+    /// <inheritdoc />
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        // Export a simplified single-step computation graph for JIT/export purposes.
+        // The full recurrence is unrolled externally; this represents one step's output projection.
+        var xPlaceholder = new Tensor<T>(new int[] { 1, _expandedDimension });
+        var xNode = TensorOperations<T>.Variable(xPlaceholder, "h_t");
+        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
+        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
+
+        inputNodes.Add(xNode);
+        inputNodes.Add(outWeightsNode);
+        inputNodes.Add(outBiasNode);
+
+        var outT = TensorOperations<T>.Transpose(outWeightsNode);
+        var finalOutput = TensorOperations<T>.MatrixMultiply(xNode, outT);
+        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
+
+        return outputWithBias;
+    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

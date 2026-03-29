@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -289,11 +289,7 @@ public class QALoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Sum the outputs
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(baseOutput, loraOutput);
 
         return result;
     }
@@ -349,11 +345,7 @@ public class QALoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
 
         // Sum input gradients
-        Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape.ToArray());
-        for (int i = 0; i < loraInputGrad.Length; i++)
-        {
-            inputGrad[i] = NumOps.Add(loraInputGrad[i], baseInputGrad[i]);
-        }
+        Tensor<T> inputGrad = Engine.TensorAdd(loraInputGrad, baseInputGrad);
 
         // Update parameter gradients vector
         UpdateParameterGradientsFromLayers();

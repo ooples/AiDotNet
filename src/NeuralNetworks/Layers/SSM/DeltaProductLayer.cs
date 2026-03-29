@@ -115,6 +115,8 @@ public class DeltaProductLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Gets the model dimension.
@@ -796,14 +798,14 @@ public class DeltaProductLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_betaWeightsGradient!.ToArray()),
-            new Vector<T>(_betaBiasGradient!.ToArray()),
-            new Vector<T>(_householderWeightsGradient!.ToArray()),
-            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
-            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
+            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
+            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
+            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
+            (_betaWeightsGradient is not null ? Vector<T>.FromMemory(_betaWeightsGradient.Data) : new Vector<T>(0)),
+            (_betaBiasGradient is not null ? Vector<T>.FromMemory(_betaBiasGradient.Data) : new Vector<T>(0)),
+            (_householderWeightsGradient is not null ? Vector<T>.FromMemory(_householderWeightsGradient.Data) : new Vector<T>(0)),
+            _outputProjectionWeightsGradient is not null ? (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionWeights.Length),
+            _outputProjectionBiasGradient is not null ? (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionBias.Length));
     }
 
     public override void ClearGradients()
@@ -838,6 +840,27 @@ public class DeltaProductLayer<T> : LayerBase<T>
 
     #endregion
 
+    /// <inheritdoc />
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
+        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
+        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
+        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
+
+        inputNodes.Add(xNode);
+        inputNodes.Add(outWeightsNode);
+        inputNodes.Add(outBiasNode);
+
+        var outT = TensorOperations<T>.Transpose(outWeightsNode);
+        var finalOutput = TensorOperations<T>.MatrixMultiply(xNode, outT);
+        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
+
+        return outputWithBias;
+    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

@@ -1142,32 +1142,19 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     private Tensor<T> FeedForward(Tensor<T> input)
     {
         int ffnDim = _embeddingDim * 4;
-        var hidden = new Tensor<T>(new[] { ffnDim });
 
-        // First linear + GELU
-        for (int i = 0; i < ffnDim; i++)
-        {
-            T sum = _ffn1Bias[i];
-            for (int j = 0; j < _embeddingDim && j < input.Length; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(_ffn1[i * _embeddingDim + j], input[j]));
-            }
-            hidden[i] = GELU(sum);
-        }
+        // First linear: hidden = W1 @ input + b1, then GELU — vectorized matmul
+        var w1Mat = _ffn1.Reshape(ffnDim, _embeddingDim);
+        var hidden = Engine.TensorAdd(
+            MatVecMul(w1Mat, input),
+            _ffn1Bias.Reshape(ffnDim));
+        hidden = Engine.GELU(hidden);
 
-        // Second linear
-        var output = new Tensor<T>(new[] { _embeddingDim });
-        for (int i = 0; i < _embeddingDim; i++)
-        {
-            T sum = _ffn2Bias[i];
-            for (int j = 0; j < ffnDim && j < hidden.Length; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(_ffn2[i * ffnDim + j], hidden[j]));
-            }
-            output[i] = sum;
-        }
-
-        return output;
+        // Second linear: output = W2 @ hidden + b2 — vectorized matmul
+        var w2Mat = _ffn2.Reshape(_embeddingDim, ffnDim);
+        return Engine.TensorAdd(
+            MatVecMul(w2Mat, hidden),
+            _ffn2Bias.Reshape(_embeddingDim));
     }
 
     private T GELU(T x)
@@ -1184,19 +1171,11 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
 
     private Tensor<T> MatVecMul(Tensor<T> matrix, Tensor<T> vec)
     {
+        // matrix @ vec — vectorized Engine.TensorMatMul
         int rows = matrix.Shape[0];
         int cols = matrix.Shape[1];
-        var result = new Tensor<T>(new[] { rows });
-        for (int i = 0; i < rows; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < Math.Min(cols, vec.Length); j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(matrix[i * cols + j], vec[j]));
-            }
-            result[i] = sum;
-        }
-        return result;
+        var vecCol = vec.Reshape(Math.Min(cols, vec.Length), 1);
+        return Engine.TensorMatMul(matrix, vecCol).Reshape(rows);
     }
 
     public List<Tensor<T>> Backward(List<Tensor<T>> dOutput)
@@ -1904,37 +1883,19 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     private Tensor<T> FeedForward(Tensor<T> input)
     {
         int ffnDim = _embeddingDim * 4;
-        var hidden = new Tensor<T>(new[] { ffnDim });
 
-        for (int i = 0; i < ffnDim; i++)
-        {
-            T sum = _ffn1Bias[i];
-            for (int j = 0; j < _embeddingDim && j < input.Length; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(_ffn1[i * _embeddingDim + j], input[j]));
-            }
-            hidden[i] = GELU(sum);
-        }
+        // First linear + GELU — vectorized matmul
+        var w1Mat = _ffn1.Reshape(ffnDim, _embeddingDim);
+        var hidden = Engine.TensorAdd(
+            MatVecMul(w1Mat, input),
+            _ffn1Bias.Reshape(ffnDim));
+        hidden = Engine.GELU(hidden);
 
-        var output = new Tensor<T>(new[] { _embeddingDim });
-        for (int i = 0; i < _embeddingDim; i++)
-        {
-            T sum = _ffn2Bias[i];
-            for (int j = 0; j < ffnDim && j < hidden.Length; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(_ffn2[i * ffnDim + j], hidden[j]));
-            }
-            output[i] = sum;
-        }
-
-        return output;
-    }
-
-    private T GELU(T x)
-    {
-        double xd = NumOps.ToDouble(x);
-        double result = 0.5 * xd * (1 + Math.Tanh(Math.Sqrt(2 / Math.PI) * (xd + 0.044715 * Math.Pow(xd, 3))));
-        return NumOps.FromDouble(result);
+        // Second linear — vectorized matmul
+        var w2Mat = _ffn2.Reshape(_embeddingDim, ffnDim);
+        return Engine.TensorAdd(
+            MatVecMul(w2Mat, hidden),
+            _ffn2Bias.Reshape(_embeddingDim));
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -1949,19 +1910,11 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
 
     private Tensor<T> MatVecMul(Tensor<T> matrix, Tensor<T> vec)
     {
+        // matrix @ vec — vectorized Engine.TensorMatMul
         int rows = matrix.Shape[0];
         int cols = matrix.Shape[1];
-        var result = new Tensor<T>(new[] { rows });
-        for (int i = 0; i < rows; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < Math.Min(cols, vec.Length); j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(matrix[i * cols + j], vec[j]));
-            }
-            result[i] = sum;
-        }
-        return result;
+        var vecCol = vec.Reshape(Math.Min(cols, vec.Length), 1);
+        return Engine.TensorMatMul(matrix, vecCol).Reshape(rows);
     }
 
     public (List<Tensor<T>> dInput, List<Tensor<T>> dEncoderOutput) Backward(List<Tensor<T>> dOutput, List<Tensor<T>> encoderOutput)

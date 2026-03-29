@@ -405,16 +405,7 @@ public class VAEEncoder<T> : LayerBase<T>
 
     private Tensor<T> ApplySiLU(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
-        var inputSpan = input.AsSpan();
-        var outputSpan = output.AsWritableSpan();
-
-        for (int i = 0; i < inputSpan.Length; i++)
-        {
-            outputSpan[i] = _silu.Activate(inputSpan[i]);
-        }
-
-        return output;
+        return Engine.Swish(input);
     }
 
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
@@ -638,6 +629,14 @@ public class VAEEncoder<T> : LayerBase<T>
         _quantConv.ResetState();
     }
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc />
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException("VAEEncoder JIT compilation is not yet implemented.");
+    }
 
     /// <summary>
     /// Saves the encoder's state to a binary writer.

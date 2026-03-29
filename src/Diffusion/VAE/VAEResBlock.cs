@@ -249,16 +249,7 @@ public class VAEResBlock<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ApplySiLU(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
-        var inputSpan = input.AsSpan();
-        var outputSpan = output.AsWritableSpan();
-
-        for (int i = 0; i < inputSpan.Length; i++)
-        {
-            outputSpan[i] = _silu.Activate(inputSpan[i]);
-        }
-
-        return output;
+        return Engine.Swish(input);
     }
 
     /// <summary>
@@ -414,6 +405,16 @@ public class VAEResBlock<T> : LayerBase<T>
         _skipConv?.ResetState();
     }
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc />
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "VAEResBlock JIT compilation is not yet implemented. " +
+            "Use the layer in interpreted mode by setting SupportsJitCompilation = false.");
+    }
 
     /// <summary>
     /// Saves the block's state to a binary writer.

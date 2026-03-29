@@ -847,7 +847,8 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
     {
         throw new NotSupportedException(
-            $"{GetType().Name}: Use GradientTape<T> for automatic differentiation.");
+            $"{GetType().Name} does not implement ExportComputationGraph. " +
+            "Use GradientTape-based autodiff instead.");
     }
 
     /// <summary>
@@ -871,30 +872,6 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </para>
     /// </remarks>
     public virtual bool SupportsJitCompilation => false;
-    /// <summary>
-    /// Performs the forward pass of the layer.
-    /// </summary>
-    /// <param name="input">The input tensor to process.</param>
-    /// <returns>The output tensor after processing.</returns>
-    /// <remarks>
-    /// <para>
-    /// This abstract method must be implemented by derived classes to define the forward pass of the layer.
-    /// The forward pass transforms the input tensor according to the layer's operation and activation function.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method processes your data through the layer.
-    /// 
-    /// The forward pass:
-    /// - Takes input data from the previous layer or the network input
-    /// - Applies the layer's specific transformation (like convolution or matrix multiplication)
-    /// - Applies any activation function
-    /// - Passes the result to the next layer
-    /// 
-    /// This is where the actual data processing happens during both training and prediction.
-    /// </para>
-    /// </remarks>
-    public abstract Tensor<T> Forward(Tensor<T> input);
-
-    // ─── Named port infrastructure (#1058) ───────────────────────────
 
     /// <summary>
     /// Declares the named input ports this layer accepts.
@@ -919,13 +896,6 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </summary>
     /// <param name="inputs">Named input tensors matching <see cref="InputPorts"/>.</param>
     /// <returns>Output tensor.</returns>
-    /// <remarks>
-    /// <para>Default implementation delegates to single-input <see cref="Forward(Tensor{T})"/>
-    /// using the "input" port or the first available tensor. Override for multi-input layers.</para>
-    /// <para><b>For Beginners:</b> Most layers only need one input, so this just calls
-    /// the regular Forward. Layers like DiffusionResBlock override this to accept
-    /// both the image data AND time step information.</para>
-    /// </remarks>
     public virtual Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs.TryGetValue("input", out var input))
@@ -934,7 +904,6 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         if (inputs.Count == 1)
             return Forward(inputs.Values.First());
 
-        // Validate required ports
         var missing = InputPorts
             .Where(p => p.Required && !inputs.ContainsKey(p.Name))
             .Select(p => p.Name)
@@ -954,7 +923,6 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// <summary>
     /// Multi-output backward pass. Returns gradients per named input port.
     /// Default delegates to single-input <see cref="Backward(Tensor{T})"/>.
-    /// Layers with multiple input ports must override this method.
     /// </summary>
     public virtual IReadOnlyDictionary<string, Tensor<T>> BackwardMulti(
         IReadOnlyDictionary<string, Tensor<T>> outputGradients)
@@ -971,6 +939,44 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         var inputGrad = Backward(grad);
         return new Dictionary<string, Tensor<T>> { ["input"] = inputGrad };
     }
+
+    /// <summary>
+    /// GPU multi-input forward pass. Default delegates to single-input ForwardGpu.
+    /// </summary>
+    public virtual IGpuTensor<T> ForwardGpu(IReadOnlyDictionary<string, IGpuTensor<T>> inputs)
+    {
+        if (inputs.TryGetValue("input", out var input))
+            return ForwardGpu(input);
+
+        if (inputs.Count == 1)
+            return ForwardGpu(inputs.Values.First());
+
+        throw new NotSupportedException(
+            $"{GetType().Name} does not override ForwardGpu(IReadOnlyDictionary).");
+    }
+
+    /// <summary>
+    /// Performs the forward pass of the layer.
+    /// </summary>
+    /// <param name="input">The input tensor to process.</param>
+    /// <returns>The output tensor after processing.</returns>
+    /// <remarks>
+    /// <para>
+    /// This abstract method must be implemented by derived classes to define the forward pass of the layer.
+    /// The forward pass transforms the input tensor according to the layer's operation and activation function.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method processes your data through the layer.
+    /// 
+    /// The forward pass:
+    /// - Takes input data from the previous layer or the network input
+    /// - Applies the layer's specific transformation (like convolution or matrix multiplication)
+    /// - Applies any activation function
+    /// - Passes the result to the next layer
+    /// 
+    /// This is where the actual data processing happens during both training and prediction.
+    /// </para>
+    /// </remarks>
+    public abstract Tensor<T> Forward(Tensor<T> input);
 
     #region Mixed Precision Support
 
@@ -1516,32 +1522,6 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     {
         throw new NotSupportedException(
             $"GPU backward pass is not supported by {GetType().Name}. Use Backward() instead or check CanTrainOnGpu first.");
-    }
-
-    // ─── Named-port GPU overloads (#1058 Step 4) ─────────────────────
-
-    /// <summary>
-    /// GPU forward pass with named inputs. Default delegates to <see cref="ForwardGpu(IGpuTensor{T}[])"/>
-    /// using the "input" port or all values in order.
-    /// </summary>
-    public virtual IGpuTensor<T> ForwardGpu(IReadOnlyDictionary<string, IGpuTensor<T>> inputs)
-    {
-        if (inputs.TryGetValue("input", out var input))
-            return ForwardGpu(input);
-
-        return ForwardGpu(inputs.Values.ToArray());
-    }
-
-    /// <summary>
-    /// GPU backward pass with named gradient outputs. Default delegates to single-input
-    /// <see cref="BackwardGpu(IGpuTensor{T})"/>.
-    /// </summary>
-    public virtual IReadOnlyDictionary<string, IGpuTensor<T>> BackwardGpuMulti(
-        IReadOnlyDictionary<string, IGpuTensor<T>> outputGradients)
-    {
-        var grad = outputGradients.TryGetValue("output", out var g) ? g : outputGradients.Values.First();
-        var inputGrad = BackwardGpu(grad);
-        return new Dictionary<string, IGpuTensor<T>> { ["input"] = inputGrad };
     }
 
     /// <summary>
@@ -2203,16 +2183,19 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
             var flatOutputGrad = outputGradient.Reshape(new[] { batchElements, vectorLength });
             var flatInputGrad = new Tensor<T>(new[] { batchElements, vectorLength });
 
+            // Batched matrix-vector multiply: inputGrad[i] = derivative[i] @ gradient[i]
             for (int i = 0; i < batchElements; i++)
             {
+                // Extract [vectorLength, vectorLength] slice and [vectorLength, 1] column
+                var derivSlice = flatDerivative.Slice(0, i, i + 1).Reshape(vectorLength, vectorLength);
+                var gradCol = flatOutputGrad.Slice(0, i, i + 1).Reshape(vectorLength, 1);
+                var result = Engine.TensorMatMul(derivSlice, gradCol).Reshape(vectorLength);
+
+                // Copy result into output
+                int offset = i * vectorLength;
                 for (int j = 0; j < vectorLength; j++)
                 {
-                    T sum = NumOps.Zero;
-                    for (int k = 0; k < vectorLength; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(flatDerivative[i, j, k], flatOutputGrad[i, k]));
-                    }
-                    flatInputGrad[i, j] = sum;
+                    flatInputGrad[offset + j] = result[j];
                 }
             }
 

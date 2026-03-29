@@ -55,6 +55,8 @@ public class DiffusionResBlock<T> : LayerBase<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc />
     public override int ParameterCount =>
@@ -136,36 +138,10 @@ public class DiffusionResBlock<T> : LayerBase<T>
     }
 
     /// <summary>
-    // ─── Named ports (#1058) ────────────────────────────────────────
-
-    /// <inheritdoc/>
-    public override IReadOnlyList<LayerPort> InputPorts =>
-        _timeEmbedDim > 0
-            ? [new LayerPort("input", GetInputShape()), new LayerPort("time_embed", [_timeEmbedDim])]
-            : [new LayerPort("input", GetInputShape())];
-
-    /// <inheritdoc/>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
-    {
-        var input = inputs["input"];
-        if (inputs.TryGetValue("time_embed", out var timeEmbed))
-            return Forward(input, timeEmbed);
-        return Forward(input);
-    }
-
-    /// <summary>
     /// Forward pass implementing the DDPM residual block.
-    /// When time embedding is configured, use the dictionary overload or Forward(input, timeEmbed) instead.
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        if (_timeEmbedDim > 0)
-        {
-            throw new InvalidOperationException(
-                "DiffusionResBlock requires 'time_embed' input when timeEmbedDim > 0. " +
-                "Use Forward(input, timeEmbed) or the dictionary overload instead.");
-        }
-
         _originalInputShape = input.Shape.ToArray();
         _lastInput = input;
 
@@ -235,20 +211,27 @@ public class DiffusionResBlock<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // For now, return gradient through the skip connection path
-        // Full backward through both paths needs chain rule through each sublayer
-        if (_skipConv is not null)
-        {
-            return _skipConv.Backward(outputGradient);
-        }
-        return outputGradient;
+        // Residual add: gradient flows equally to both branches
+        // Main branch: Conv2 ← SiLU ← Norm2 ← Conv1 ← SiLU ← Norm1
+        var mainGrad = _conv2.Backward(outputGradient);
+        mainGrad = _norm2.Backward(mainGrad);
+        mainGrad = _conv1.Backward(mainGrad);
+        mainGrad = _norm1.Backward(mainGrad);
+
+        // Skip branch
+        var skipGrad = _skipConv is not null
+            ? _skipConv.Backward(outputGradient)
+            : outputGradient;
+
+        // Sum gradients from both paths
+        return Engine.TensorAdd(mainGrad, skipGrad);
     }
 
     private Tensor<T> ApplySiLU(Tensor<T> x)
     {
-        // Use the activation function's Tensor overload which delegates through
-        // the GPU/CPU accelerated path in the base class
-        return _silu.Activate(x);
+        // Use Engine.Swish for vectorized SiLU: x * sigmoid(x)
+        // This avoids the element-by-element scalar loop in ActivationFunctionBase.Activate(Tensor)
+        return Engine.Swish(x);
     }
 
     /// <summary>
@@ -336,4 +319,29 @@ public class DiffusionResBlock<T> : LayerBase<T>
         _skipConv?.ResetState();
     }
 
+    /// <inheritdoc />
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        // Export the FULL DiffusionResBlock computation chain per DDPM paper:
+        // GroupNorm1 → SiLU → Conv1 → GroupNorm2 → SiLU → Conv2 → (+skip)
+        var x = inputNodes[0];
+
+        // First block: GroupNorm → SiLU → Conv
+        var norm1Out = _norm1.ExportComputationGraph([x]);
+        var silu1Out = Autodiff.TensorOperations<T>.Swish(norm1Out); // SiLU = Swish
+        var conv1Out = _conv1.ExportComputationGraph([silu1Out]);
+
+        // Second block: GroupNorm → SiLU → Conv
+        var norm2Out = _norm2.ExportComputationGraph([conv1Out]);
+        var silu2Out = Autodiff.TensorOperations<T>.Swish(norm2Out);
+        var conv2Out = _conv2.ExportComputationGraph([silu2Out]);
+
+        // Skip connection
+        var skip = _skipConv is not null
+            ? _skipConv.ExportComputationGraph([x])
+            : x;
+
+        // Residual add
+        return Autodiff.TensorOperations<T>.Add(conv2Out, skip);
+    }
 }

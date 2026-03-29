@@ -112,6 +112,8 @@ public class MultiLatentAttentionLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Gets the model dimension.
@@ -608,15 +610,15 @@ public class MultiLatentAttentionLayer<T> : LayerBase<T>
     {
         if (_compressWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_compressWeightsGradient!.ToArray()),
-            new Vector<T>(_compressBiasGradient!.ToArray()),
-            new Vector<T>(_keyUpWeightsGradient!.ToArray()),
-            new Vector<T>(_valueUpWeightsGradient!.ToArray()),
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
-            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
-            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
-            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
+            (_compressWeightsGradient is not null ? Vector<T>.FromMemory(_compressWeightsGradient.Data) : new Vector<T>(0)),
+            (_compressBiasGradient is not null ? Vector<T>.FromMemory(_compressBiasGradient.Data) : new Vector<T>(0)),
+            (_keyUpWeightsGradient is not null ? Vector<T>.FromMemory(_keyUpWeightsGradient.Data) : new Vector<T>(0)),
+            (_valueUpWeightsGradient is not null ? Vector<T>.FromMemory(_valueUpWeightsGradient.Data) : new Vector<T>(0)),
+            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
+            _outputGateWeightsGradient is not null ? (_outputGateWeightsGradient is not null ? Vector<T>.FromMemory(_outputGateWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateWeights.Length),
+            _outputGateBiasGradient is not null ? (_outputGateBiasGradient is not null ? Vector<T>.FromMemory(_outputGateBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateBias.Length),
+            _outputProjectionWeightsGradient is not null ? (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionWeights.Length),
+            _outputProjectionBiasGradient is not null ? (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionBias.Length));
     }
 
     public override void ClearGradients()
@@ -653,6 +655,27 @@ public class MultiLatentAttentionLayer<T> : LayerBase<T>
 
     #endregion
 
+    /// <inheritdoc />
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
+        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
+        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
+        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
+
+        inputNodes.Add(xNode);
+        inputNodes.Add(outWeightsNode);
+        inputNodes.Add(outBiasNode);
+
+        var outT = TensorOperations<T>.Transpose(outWeightsNode);
+        var finalOutput = TensorOperations<T>.MatrixMultiply(xNode, outT);
+        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
+
+        return outputWithBias;
+    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

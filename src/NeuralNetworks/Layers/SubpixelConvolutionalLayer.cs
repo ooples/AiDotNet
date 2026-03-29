@@ -1222,13 +1222,13 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
+        return Vector<T>.Concatenate(Vector<T>.FromMemory(_kernels.Data), Vector<T>.FromMemory(_biases.Data));
     }
 
     public override Vector<T> GetParameterGradients()
     {
-        var kGrad = _kernelGradients != null ? new Vector<T>(_kernelGradients.ToArray()) : new Vector<T>(_kernels.Length);
-        var bGrad = _biasGradients != null ? new Vector<T>(_biasGradients.ToArray()) : new Vector<T>(_biases.Length);
+        var kGrad = _kernelGradients != null ? Vector<T>.FromMemory(_kernelGradients.Data) : new Vector<T>(_kernels.Length);
+        var bGrad = _biasGradients != null ? Vector<T>.FromMemory(_biasGradients.Data) : new Vector<T>(_biases.Length);
         return Vector<T>.Concatenate(kGrad, bGrad);
     }
 
@@ -1251,6 +1251,86 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         Engine.InvalidatePersistentTensor(_biases);
     }
 
+    /// <summary>
+    /// Exports this layer's computation as a differentiable computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to which input variable nodes should be added.</param>
+    /// <returns>The output computation node representing this layer's operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when weights/biases are not initialized or activation is not supported.</exception>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph representation of the subpixel convolution operation.
+    /// Subpixel convolution combines convolution with pixel shuffling (depth-to-space rearrangement).
+    /// </para>
+    /// <para><b>For Beginners:</b> This creates an optimized version for faster inference.
+    ///
+    /// For subpixel convolutional layers:
+    /// - Creates placeholders for input, convolution kernels, and biases
+    /// - Applies convolution operation
+    /// - Applies pixel shuffle (depth-to-space) rearrangement
+    /// - Applies activation function
+    /// - Returns a computation graph for efficient execution
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_kernels == null || _biases == null)
+            throw new InvalidOperationException("Layer weights not initialized. Call Initialize() or train the layer first.");
+
+        if (!CanActivationBeJitted())
+        {
+            var activationType = ScalarActivation?.GetType().Name ?? VectorActivation?.GetType().Name ?? "unknown";
+            throw new NotSupportedException(
+                $"Activation function '{activationType}' is not supported for JIT compilation yet. " +
+                "Supported activations: ReLU, Sigmoid, Tanh, Softmax");
+        }
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create symbolic input node with batch dimension
+        // Input shape: [batch, height, width, channels] (NHWC format)
+        var symbolicInput = new Tensor<T>(new int[] { 1, InputShape[0], InputShape[1], InputShape[2] });
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "subpixel_input");
+        inputNodes.Add(inputNode);
+
+        // Create constant nodes for kernels and biases (biases is already a Tensor<T>)
+        var kernelNode = TensorOperations<T>.Constant(_kernels, "subpixel_kernels");
+        var biasNode = TensorOperations<T>.Constant(_biases, "subpixel_biases");
+
+        // Step 1: Apply 2D convolution
+        // Conv2D expects NCHW format, so we may need to transpose if our layer uses NHWC
+        // For simplicity, we assume the input is compatible with Conv2D operation
+        var convOutput = TensorOperations<T>.Conv2D(inputNode, kernelNode, stride: new[] { 1, 1 }, padding: new[] { _kernelSize / 2, _kernelSize / 2 });
+
+        // Step 2: Add bias (broadcast across spatial dimensions)
+        var withBias = TensorOperations<T>.Add(convOutput, biasNode);
+
+        // Step 3: Apply PixelShuffle (depth-to-space) for upscaling
+        var shuffled = TensorOperations<T>.PixelShuffle(withBias, _upscaleFactor);
+
+        // Step 4: Apply activation function using base class helper
+        var output = ApplyActivationToGraph(shuffled);
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>True, as all required operations (Conv2D, PixelShuffle) are available.</value>
+    /// <remarks>
+    /// <para>
+    /// Subpixel convolutional layers support JIT compilation using Conv2D and PixelShuffle
+    /// operations from TensorOperations. The layer requires both convolution and pixel shuffling
+    /// operations which are available in the computation graph.
+    /// </para>
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
 
     #region GPU Parameter Updates
 

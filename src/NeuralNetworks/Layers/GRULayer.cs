@@ -1253,10 +1253,11 @@ public class GRULayer<T> : LayerBase<T>
                 dh = dh.Reshape(_lastZ.Shape.ToArray());
             }
 
-            // Vectorized: compute (1 - _lastZ) using Tensor operations
+            // Vectorized: compute (1 - _lastZ) using pre-allocated ones tensor
             var ones1 = new Tensor<T>(_lastZ.Shape.ToArray());
             ones1.Fill(NumOps.One);
             var oneMinusLastZ = ones1.Subtract(_lastZ);
+            // Note: ones1 reused below for tanh derivative and r gate
 
             var dh_candidate = dh.ElementwiseMultiply(oneMinusLastZ);
             // dh/dz = h_prev - h_candidate. For single timestep, h_prev = 0
@@ -1279,9 +1280,7 @@ public class GRULayer<T> : LayerBase<T>
             // h̃ = tanh(W·x + U·(r ⊙ h_{t-1})), so gradient flows through h_{t-1}
             var dr_times_h = dh_candidate_pre.Multiply(_Uh);
             var dr = dr_times_h.ElementwiseMultiply(h_prev_for_dz);
-            var onesR = new Tensor<T>(_lastR.Shape.ToArray());
-            onesR.Fill(NumOps.One);
-            var dr_pre = dr.ElementwiseMultiply(_lastR).ElementwiseMultiply(onesR.Subtract(_lastR));
+            var dr_pre = dr.ElementwiseMultiply(_lastR).ElementwiseMultiply(ones1.Subtract(_lastR));
 
             // Input gradient: dx = dz_pre @ Wz + dr_pre @ Wr + dh_candidate_pre @ Wh
             var dx = dz_pre.Multiply(_Wz)
@@ -1345,6 +1344,11 @@ public class GRULayer<T> : LayerBase<T>
             // Initialize hidden state gradient for the next timestep
             var dhNext = new Tensor<T>([batchSize, _hiddenSize]);
 
+            // Pre-allocate reusable tensors to avoid per-timestep allocations
+            var onesGate = new Tensor<T>([batchSize, _hiddenSize]);
+            onesGate.Fill(NumOps.One);
+            var zerosHidden = new Tensor<T>([batchSize, _hiddenSize]);
+
             // Recompute hidden states and activations for each time step (needed for backward pass)
             List<Tensor<T>> timeStepHidden = new List<Tensor<T>>(sequenceLength);
             List<Tensor<T>> timeStepZ = new List<Tensor<T>>(sequenceLength);
@@ -1360,10 +1364,8 @@ public class GRULayer<T> : LayerBase<T>
                 var r = ComputeGate(xt, currentH, _Wr, _Ur, _br, true);
                 var h_candidate = ComputeGate(xt, r.ElementwiseMultiply(currentH), _Wh, _Uh, _bh, false);
 
-                // Vectorized: compute (1 - z) using Tensor operations
-                var ones2 = new Tensor<T>(z.Shape.ToArray());
-                ones2.Fill(NumOps.One);
-                var oneMinusZ2 = ones2.Subtract(z);
+                // Vectorized: compute (1 - z) using pre-allocated ones tensor
+                var oneMinusZ2 = onesGate.Subtract(z);
 
                 var newH = z.ElementwiseMultiply(currentH).Add(
                     oneMinusZ2.ElementwiseMultiply(h_candidate)
@@ -1391,14 +1393,11 @@ public class GRULayer<T> : LayerBase<T>
                 var r = timeStepR[t];
                 var h_candidate = timeStepHCandidate[t];
 
-                // Get previous hidden state (or zeros for t=0)
-                var h_prev = t > 0 ? timeStepHidden[t - 1] : new Tensor<T>([batchSize, _hiddenSize]);
+                // Get previous hidden state (or pre-allocated zeros for t=0)
+                var h_prev = t > 0 ? timeStepHidden[t - 1] : zerosHidden;
 
-                // Calculate gradients for this timestep
-                // Vectorized: compute (1 - z) using Tensor operations
-                var ones3 = new Tensor<T>(z.Shape.ToArray());
-                ones3.Fill(NumOps.One);
-                var oneMinusZ3 = ones3.Subtract(z);
+                // Calculate gradients — reuse pre-allocated ones tensor
+                var oneMinusZ3 = onesGate.Subtract(z);
 
                 // dh flows through two paths: z * h_prev and (1-z) * h_candidate
                 var dz = dh.ElementwiseMultiply(h_prev.Subtract(h_candidate));
@@ -1406,7 +1405,7 @@ public class GRULayer<T> : LayerBase<T>
 
                 // h_candidate = tanh(Wh @ x + Uh @ (r * h_prev) + bh)
                 // d(tanh_pre) = dh_candidate * tanh'(h_candidate) = dh_candidate * (1 - h_candidate^2)
-                var tanhDeriv = ones3.Subtract(h_candidate.ElementwiseMultiply(h_candidate));
+                var tanhDeriv = onesGate.Subtract(h_candidate.ElementwiseMultiply(h_candidate));
                 var dh_candidate_pre = dh_candidate.ElementwiseMultiply(tanhDeriv);
 
                 // dz flows through sigmoid: dz_pre = dz * sigmoid'(z) = dz * z * (1-z)
@@ -1417,9 +1416,7 @@ public class GRULayer<T> : LayerBase<T>
                 var dr_times_h = dh_candidate_pre.Multiply(_Uh);
                 var dr = dr_times_h.ElementwiseMultiply(h_prev);
                 // dr flows through sigmoid: dr_pre = dr * sigmoid'(r) = dr * r * (1-r)
-                var onesR = new Tensor<T>(r.Shape.ToArray());
-                onesR.Fill(NumOps.One);
-                var dr_pre = dr.ElementwiseMultiply(r).ElementwiseMultiply(onesR.Subtract(r));
+                var dr_pre = dr.ElementwiseMultiply(r).ElementwiseMultiply(onesGate.Subtract(r));
 
                 // Input gradient: dxt = dz_pre @ Wz + dr_pre @ Wr + dh_candidate_pre @ Wh
                 var dxt = dz_pre.Multiply(_Wz)
@@ -1704,15 +1701,15 @@ public class GRULayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            new Vector<T>(_Wz.ToArray()),
-            new Vector<T>(_Wr.ToArray()),
-            new Vector<T>(_Wh.ToArray()),
-            new Vector<T>(_Uz.ToArray()),
-            new Vector<T>(_Ur.ToArray()),
-            new Vector<T>(_Uh.ToArray()),
-            new Vector<T>(_bz.ToArray()),
-            new Vector<T>(_br.ToArray()),
-            new Vector<T>(_bh.ToArray())
+            Vector<T>.FromMemory(_Wz.Data),
+            Vector<T>.FromMemory(_Wr.Data),
+            Vector<T>.FromMemory(_Wh.Data),
+            Vector<T>.FromMemory(_Uz.Data),
+            Vector<T>.FromMemory(_Ur.Data),
+            Vector<T>.FromMemory(_Uh.Data),
+            Vector<T>.FromMemory(_bz.Data),
+            Vector<T>.FromMemory(_br.Data),
+            Vector<T>.FromMemory(_bh.Data)
         );
     }
 
@@ -1747,15 +1744,15 @@ public class GRULayer<T> : LayerBase<T>
         }
 
         return Vector<T>.Concatenate(
-            new Vector<T>(_dWz.ToArray()),
-            new Vector<T>(_dWr.ToArray()),
-            new Vector<T>(_dWh.ToArray()),
-            new Vector<T>(_dUz.ToArray()),
-            new Vector<T>(_dUr.ToArray()),
-            new Vector<T>(_dUh.ToArray()),
-            new Vector<T>(_dbz.ToArray()),
-            new Vector<T>(_dbr.ToArray()),
-            new Vector<T>(_dbh.ToArray())
+            Vector<T>.FromMemory(_dWz.Data),
+            Vector<T>.FromMemory(_dWr.Data),
+            Vector<T>.FromMemory(_dWh.Data),
+            Vector<T>.FromMemory(_dUz.Data),
+            Vector<T>.FromMemory(_dUr.Data),
+            Vector<T>.FromMemory(_dUh.Data),
+            Vector<T>.FromMemory(_dbz.Data),
+            Vector<T>.FromMemory(_dbr.Data),
+            Vector<T>.FromMemory(_dbh.Data)
         );
     }
 
@@ -1801,6 +1798,104 @@ public class GRULayer<T> : LayerBase<T>
         _allHiddenStates = null;
     }
 
+    /// <summary>
+    /// Exports the GRU layer's single time-step computation as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the hidden state at one time step.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method exports a single GRU cell computation for JIT compilation.
+    /// The graph computes: h_t = GRUCell(x_t, h_{t-1})
+    /// using the standard GRU equations with update gate, reset gate, and candidate hidden state.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        // Create placeholders for single time-step inputs
+        // x_t shape: [batchSize, inputSize]
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, _inputSize });
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "x_t");
+
+        // h_{t-1} shape: [batchSize, hiddenSize]
+        var prevHiddenPlaceholder = new Tensor<T>(new int[] { 1, _hiddenSize });
+        var prevHiddenNode = TensorOperations<T>.Variable(prevHiddenPlaceholder, "h_prev");
+
+        // Create weight and bias nodes (storage is already Tensor<T>)
+        var WzNode = TensorOperations<T>.Variable(_Wz, "W_z");
+        var WrNode = TensorOperations<T>.Variable(_Wr, "W_r");
+        var WhNode = TensorOperations<T>.Variable(_Wh, "W_h");
+        var UzNode = TensorOperations<T>.Variable(_Uz, "U_z");
+        var UrNode = TensorOperations<T>.Variable(_Ur, "U_r");
+        var UhNode = TensorOperations<T>.Variable(_Uh, "U_h");
+        var bzNode = TensorOperations<T>.Variable(_bz, "b_z");
+        var brNode = TensorOperations<T>.Variable(_br, "b_r");
+        var bhNode = TensorOperations<T>.Variable(_bh, "b_h");
+
+        // Add inputs to the list
+        inputNodes.Add(inputNode);
+        inputNodes.Add(prevHiddenNode);
+        inputNodes.Add(WzNode);
+        inputNodes.Add(WrNode);
+        inputNodes.Add(WhNode);
+        inputNodes.Add(UzNode);
+        inputNodes.Add(UrNode);
+        inputNodes.Add(UhNode);
+        inputNodes.Add(bzNode);
+        inputNodes.Add(brNode);
+        inputNodes.Add(bhNode);
+
+        // Build GRU computation graph (single time step)
+        // Update gate: z_t = sigmoid(W_z @ x_t + U_z @ h_{t-1} + b_z)
+        var WzT = TensorOperations<T>.Transpose(WzNode);
+        var UzT = TensorOperations<T>.Transpose(UzNode);
+        var z_input = TensorOperations<T>.MatrixMultiply(inputNode, WzT);
+        var z_hidden = TensorOperations<T>.MatrixMultiply(prevHiddenNode, UzT);
+        var z_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(z_input, z_hidden), bzNode);
+        var z_t = TensorOperations<T>.Sigmoid(z_preact);
+
+        // Reset gate: r_t = sigmoid(W_r @ x_t + U_r @ h_{t-1} + b_r)
+        var WrT = TensorOperations<T>.Transpose(WrNode);
+        var UrT = TensorOperations<T>.Transpose(UrNode);
+        var r_input = TensorOperations<T>.MatrixMultiply(inputNode, WrT);
+        var r_hidden = TensorOperations<T>.MatrixMultiply(prevHiddenNode, UrT);
+        var r_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(r_input, r_hidden), brNode);
+        var r_t = TensorOperations<T>.Sigmoid(r_preact);
+
+        // Candidate hidden state: h_candidate = tanh(W_h @ x_t + U_h @ (r_t ⊙ h_{t-1}) + b_h)
+        var WhT = TensorOperations<T>.Transpose(WhNode);
+        var UhT = TensorOperations<T>.Transpose(UhNode);
+        var h_input = TensorOperations<T>.MatrixMultiply(inputNode, WhT);
+        var r_gated = TensorOperations<T>.ElementwiseMultiply(r_t, prevHiddenNode);
+        var h_hidden = TensorOperations<T>.MatrixMultiply(r_gated, UhT);
+        var h_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(h_input, h_hidden), bhNode);
+        var h_candidate = TensorOperations<T>.Tanh(h_preact);
+
+        // Final hidden state: h_t = z_t ⊙ h_{t-1} + (1 - z_t) ⊙ h_candidate
+        var z_gated = TensorOperations<T>.ElementwiseMultiply(z_t, prevHiddenNode);
+
+        // Compute (1 - z_t)
+        var onesTensor = new Tensor<T>(new int[] { 1, _hiddenSize });
+        onesTensor.Fill(NumOps.One);
+        var onesNode = TensorOperations<T>.Constant(onesTensor);
+        var one_minus_z = TensorOperations<T>.Subtract(onesNode, z_t);
+
+        var candidate_gated = TensorOperations<T>.ElementwiseMultiply(one_minus_z, h_candidate);
+        var h_t = TensorOperations<T>.Add(z_gated, candidate_gated);
+
+        return h_t;
+    }
+
+    /// <summary>
+    /// Gets whether this layer currently supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// True for GRU layers, as single time-step JIT compilation is supported.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies the derivative of the appropriate activation function to the input tensor.

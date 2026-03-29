@@ -1090,22 +1090,22 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
-        var gMsgWeights1 = _messageWeights1Gradient != null ? new Vector<T>(_messageWeights1Gradient.ToArray()) : new Vector<T>(_messageWeights1.Length);
-        var gMsgWeights2 = _messageWeights2Gradient != null ? new Vector<T>(_messageWeights2Gradient.ToArray()) : new Vector<T>(_messageWeights2.Length);
-        var gMsgBias1 = _messageBias1Gradient != null ? new Vector<T>(_messageBias1Gradient.ToArray()) : new Vector<T>(_messageBias1.Length);
-        var gMsgBias2 = _messageBias2Gradient != null ? new Vector<T>(_messageBias2Gradient.ToArray()) : new Vector<T>(_messageBias2.Length);
-        var gUpdateWeights = _updateWeightsGradient != null ? new Vector<T>(_updateWeightsGradient.ToArray()) : new Vector<T>(_updateWeights.Length);
-        var gUpdateMsgWeights = _updateMessageWeightsGradient != null ? new Vector<T>(_updateMessageWeightsGradient.ToArray()) : new Vector<T>(_updateMessageWeights.Length);
-        var gUpdateBias = _updateBiasGradient != null ? new Vector<T>(_updateBiasGradient.ToArray()) : new Vector<T>(_updateBias.Length);
-        var gResetWeights = _resetWeightsGradient != null ? new Vector<T>(_resetWeightsGradient.ToArray()) : new Vector<T>(_resetWeights.Length);
-        var gResetMsgWeights = _resetMessageWeightsGradient != null ? new Vector<T>(_resetMessageWeightsGradient.ToArray()) : new Vector<T>(_resetMessageWeights.Length);
-        var gResetBias = _resetBiasGradient != null ? new Vector<T>(_resetBiasGradient.ToArray()) : new Vector<T>(_resetBias.Length);
+        var gMsgWeights1 = _messageWeights1Gradient != null ? (_messageWeights1Gradient is not null ? Vector<T>.FromMemory(_messageWeights1Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_messageWeights1.Length);
+        var gMsgWeights2 = _messageWeights2Gradient != null ? (_messageWeights2Gradient is not null ? Vector<T>.FromMemory(_messageWeights2Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_messageWeights2.Length);
+        var gMsgBias1 = _messageBias1Gradient != null ? (_messageBias1Gradient is not null ? Vector<T>.FromMemory(_messageBias1Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_messageBias1.Length);
+        var gMsgBias2 = _messageBias2Gradient != null ? (_messageBias2Gradient is not null ? Vector<T>.FromMemory(_messageBias2Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_messageBias2.Length);
+        var gUpdateWeights = _updateWeightsGradient != null ? (_updateWeightsGradient is not null ? Vector<T>.FromMemory(_updateWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_updateWeights.Length);
+        var gUpdateMsgWeights = _updateMessageWeightsGradient != null ? (_updateMessageWeightsGradient is not null ? Vector<T>.FromMemory(_updateMessageWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_updateMessageWeights.Length);
+        var gUpdateBias = _updateBiasGradient != null ? (_updateBiasGradient is not null ? Vector<T>.FromMemory(_updateBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_updateBias.Length);
+        var gResetWeights = _resetWeightsGradient != null ? (_resetWeightsGradient is not null ? Vector<T>.FromMemory(_resetWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_resetWeights.Length);
+        var gResetMsgWeights = _resetMessageWeightsGradient != null ? (_resetMessageWeightsGradient is not null ? Vector<T>.FromMemory(_resetMessageWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_resetMessageWeights.Length);
+        var gResetBias = _resetBiasGradient != null ? (_resetBiasGradient is not null ? Vector<T>.FromMemory(_resetBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_resetBias.Length);
 
         var parts = new List<Vector<T>> { gMsgWeights1, gMsgWeights2, gMsgBias1, gMsgBias2, gUpdateWeights, gUpdateMsgWeights, gUpdateBias, gResetWeights, gResetMsgWeights, gResetBias };
 
         if (_edgeWeights != null)
         {
-            parts.Add(_edgeWeightsGradient != null ? new Vector<T>(_edgeWeightsGradient.ToArray()) : new Vector<T>(_edgeWeights.Length));
+            parts.Add(_edgeWeightsGradient != null ? (_edgeWeightsGradient is not null ? Vector<T>.FromMemory(_edgeWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_edgeWeights.Length));
         }
 
         return Vector<T>.Concatenate(parts.ToArray());
@@ -2055,5 +2055,93 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         return new GpuTensor<T>(backend, gradInputBuffer, gradInputShape, GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation =>
+        _messageWeights1 != null && _messageWeights2 != null &&
+        _messageBias1 != null && _messageBias2 != null &&
+        _updateWeights != null && _updateMessageWeights != null && _updateBias != null &&
+        _resetWeights != null && _resetMessageWeights != null && _resetBias != null &&
+        _adjacencyMatrix != null;
 
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (!SupportsJitCompilation)
+            throw new InvalidOperationException("Layer not properly initialized for JIT compilation.");
+
+        // Create symbolic input [batchSize, numNodes, inputFeatures]
+        var symbolicInput = new Tensor<T>([1, .. InputShape]);
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Convert weights to constant nodes
+        var adjNode = TensorOperations<T>.Constant(_adjacencyMatrix!, "adjacency");
+        var msgW1Node = TensorOperations<T>.Constant(_messageWeights1, "message_weights1");
+        var msgW2Node = TensorOperations<T>.Constant(_messageWeights2, "message_weights2");
+        var msgB1Node = TensorOperations<T>.Constant(_messageBias1, "message_bias1");
+        var msgB2Node = TensorOperations<T>.Constant(_messageBias2, "message_bias2");
+        var updateWNode = TensorOperations<T>.Constant(_updateWeights, "update_weights");
+        var updateMsgWNode = TensorOperations<T>.Constant(_updateMessageWeights, "update_msg_weights");
+        var updateBNode = TensorOperations<T>.Constant(_updateBias, "update_bias");
+        var resetWNode = TensorOperations<T>.Constant(_resetWeights, "reset_weights");
+        var resetMsgWNode = TensorOperations<T>.Constant(_resetMessageWeights, "reset_msg_weights");
+        var resetBNode = TensorOperations<T>.Constant(_resetBias, "reset_bias");
+
+        // Step 1: Message computation (simplified as feature transformation)
+        // For JIT, we approximate message passing as: messages = ReLU(ReLU(input @ W1 + b1) @ W2 + b2)
+        var msgHidden = TensorOperations<T>.Add(
+            TensorOperations<T>.MatrixMultiply(inputNode, msgW1Node),
+            msgB1Node);
+        msgHidden = TensorOperations<T>.ReLU(msgHidden);
+
+        var messages = TensorOperations<T>.Add(
+            TensorOperations<T>.MatrixMultiply(msgHidden, msgW2Node),
+            msgB2Node);
+        messages = TensorOperations<T>.ReLU(messages);
+
+        // Step 2: Aggregation using adjacency matrix (graph convolution style)
+        // aggregated = adjacency @ messages
+        var aggregated = TensorOperations<T>.GraphConv(messages, adjNode,
+            TensorOperations<T>.Constant(
+                Tensor<T>.CreateIdentity(_messageFeatures), "identity"));
+
+        // Step 3: GRU-style update
+        // Reset gate: r = sigmoid(h @ W_r + agg @ W_rm + b_r)
+        var resetGate = TensorOperations<T>.Add(
+            TensorOperations<T>.Add(
+                TensorOperations<T>.MatrixMultiply(inputNode, resetWNode),
+                TensorOperations<T>.MatrixMultiply(aggregated, resetMsgWNode)),
+            resetBNode);
+        resetGate = TensorOperations<T>.Sigmoid(resetGate);
+
+        // Update gate: z = sigmoid(h @ W_z + agg @ W_zm + b_z)
+        var updateGate = TensorOperations<T>.Add(
+            TensorOperations<T>.Add(
+                TensorOperations<T>.MatrixMultiply(inputNode, updateWNode),
+                TensorOperations<T>.MatrixMultiply(aggregated, updateMsgWNode)),
+            updateBNode);
+        updateGate = TensorOperations<T>.Sigmoid(updateGate);
+
+        // Candidate: h_tilde = tanh(reset * aggregated) - simplified
+        var gatedAggregated = TensorOperations<T>.ElementwiseMultiply(resetGate, aggregated);
+        var candidate = TensorOperations<T>.Tanh(gatedAggregated);
+
+        // Output: h' = (1 - z) * h + z * candidate
+        // Create ones tensor for (1 - z) computation
+        var onesConst = TensorOperations<T>.Constant(
+            Tensor<T>.CreateOnes(updateGate.Value.Shape.ToArray()), "ones");
+        var oneMinusZ = TensorOperations<T>.Subtract(onesConst, updateGate);
+
+        var output = TensorOperations<T>.Add(
+            TensorOperations<T>.ElementwiseMultiply(oneMinusZ, inputNode),
+            TensorOperations<T>.ElementwiseMultiply(updateGate, candidate));
+
+        return output;
+    }
 }

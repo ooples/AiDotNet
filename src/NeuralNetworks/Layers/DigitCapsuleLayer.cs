@@ -970,7 +970,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Use ToArray() for production-grade parameter extraction
-        return new Vector<T>(_weights.ToArray());
+        return Vector<T>.FromMemory(_weights.Data);
     }
 
     /// <summary>
@@ -1003,18 +1003,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     {
         if (_weightsGradient == null)
             return new Vector<T>(_weights.Length);
-        return new Vector<T>(_weightsGradient.ToArray());
-    }
-
-    internal override Dictionary<string, string> GetMetadata()
-    {
-        var metadata = base.GetMetadata();
-        metadata["InputCapsules"] = _inputCapsules.ToString();
-        metadata["InputCapsuleDimension"] = _inputCapsuleDimension.ToString();
-        metadata["NumClasses"] = _numClasses.ToString();
-        metadata["OutputCapsuleDimension"] = _outputCapsuleDimension.ToString();
-        metadata["RoutingIterations"] = _routingIterations.ToString();
-        return metadata;
+        return (_weightsGradient is not null ? Vector<T>.FromMemory(_weightsGradient.Data) : new Vector<T>(0));
     }
 
     public override void ClearGradients()
@@ -1065,5 +1054,76 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         _weightsGradient = null;
     }
 
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (inputNodes.Count == 0)
+            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        var input = inputNodes[0];
+
+        // Create weight tensor as constant node [inputCapsules, numClasses, inputCapsuleDimension, outputCapsuleDimension]
+        var weightsTensor = new Tensor<T>(
+            new[] { _inputCapsules, _numClasses, _inputCapsuleDimension, _outputCapsuleDimension },
+            Vector<T>.FromMemory(_weights.Data));
+        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "DigitCapsWeights");
+
+        // Transform input capsules to predictions for each class
+        // For each input capsule i and class j: predictions[i,j] = input[i] @ weights[i,j]
+        var predictions = TensorOperations<T>.MatrixMultiply(input, weightsNode);
+
+        // Initialize coupling coefficients to zero using Fill
+        var couplingsTensor = new Tensor<T>(new[] { _inputCapsules, _numClasses });
+        couplingsTensor.Fill(NumOps.Zero);
+        var couplings = TensorOperations<T>.Constant(couplingsTensor, "InitialCouplings");
+
+        ComputationNode<T> output = predictions;
+
+        // Unroll routing iterations
+        for (int iter = 0; iter < _routingIterations; iter++)
+        {
+            // Apply softmax to couplings along numClasses dimension
+            var routingWeights = TensorOperations<T>.Softmax(couplings, axis: 1);
+
+            // Weighted sum for each class: output[j] = sum_i(routingWeights[i,j] * predictions[i,j])
+            var weighted = TensorOperations<T>.ElementwiseMultiply(predictions, routingWeights);
+            var weightedSum = TensorOperations<T>.Sum(weighted, [0]); // Sum over inputCapsules
+
+            // Apply squash activation: v = ||s||^2 / (1 + ||s||^2) * s / ||s||
+            var squaredNorm = TensorOperations<T>.Sum(TensorOperations<T>.Square(weightedSum), [1]);
+            var oneTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.One }));
+            var oneNode = TensorOperations<T>.Constant(oneTensor, "One");
+            var normPlusOne = TensorOperations<T>.Add(squaredNorm, oneNode);
+            var scaleFactor = TensorOperations<T>.Divide(squaredNorm, normPlusOne);
+            var norm = TensorOperations<T>.Sqrt(squaredNorm);
+            var normalizedVec = TensorOperations<T>.Divide(weightedSum, norm);
+            output = TensorOperations<T>.ElementwiseMultiply(normalizedVec, scaleFactor);
+
+            // Update couplings if not last iteration
+            if (iter < _routingIterations - 1)
+            {
+                // Agreement: dot product between predictions and output for each input capsule/class pair
+                var agreement = TensorOperations<T>.Sum(
+                    TensorOperations<T>.ElementwiseMultiply(predictions, output), [2]);
+                couplings = TensorOperations<T>.Add(couplings, agreement);
+            }
+        }
+
+        return output;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// <c>true</c> because DigitCapsuleLayer uses dynamic routing with a fixed number of iterations
+    /// that can be unrolled into a static computation graph.
+    /// </value>
+    public override bool SupportsJitCompilation => true;
 
 }

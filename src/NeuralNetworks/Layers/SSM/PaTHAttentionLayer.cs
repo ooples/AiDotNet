@@ -118,6 +118,8 @@ public class PaTHAttentionLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
 
     /// <summary>Gets the sequence length.</summary>
     public int SequenceLength => _sequenceLength;
@@ -778,14 +780,14 @@ public class PaTHAttentionLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_householderVectorsGradient!.ToArray()),
-            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
-            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
-            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
-            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
+            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
+            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
+            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
+            (_householderVectorsGradient is not null ? Vector<T>.FromMemory(_householderVectorsGradient.Data) : new Vector<T>(0)),
+            _outputGateWeightsGradient is not null ? (_outputGateWeightsGradient is not null ? Vector<T>.FromMemory(_outputGateWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateWeights.Length),
+            _outputGateBiasGradient is not null ? (_outputGateBiasGradient is not null ? Vector<T>.FromMemory(_outputGateBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateBias.Length),
+            _outputProjectionWeightsGradient is not null ? (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionWeights.Length),
+            _outputProjectionBiasGradient is not null ? (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionBias.Length));
     }
 
     public override void ClearGradients()
@@ -822,6 +824,27 @@ public class PaTHAttentionLayer<T> : LayerBase<T>
 
     #endregion
 
+    /// <inheritdoc />
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
+        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
+        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
+        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
+
+        inputNodes.Add(xNode);
+        inputNodes.Add(outWeightsNode);
+        inputNodes.Add(outBiasNode);
+
+        var outT = TensorOperations<T>.Transpose(outWeightsNode);
+        var finalOutput = TensorOperations<T>.MatrixMultiply(xNode, outT);
+        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
+
+        return outputWithBias;
+    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

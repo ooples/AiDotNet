@@ -162,18 +162,6 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// <inheritdoc/>
-    public override IReadOnlyList<LayerPort> InputPorts =>
-        [new LayerPort("query", GetInputShape()), new LayerPort("context", GetInputShape())];
-
-    /// <inheritdoc/>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
-    {
-        var query = inputs["query"];
-        var context = inputs.TryGetValue("context", out var ctx) ? ctx : query;
-        return ForwardCrossAttention(query, context);
-    }
-
     /// Forward pass for self-attention (not typically used for cross-attention).
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
@@ -1018,11 +1006,11 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeights.ToArray()),
-            new Vector<T>(_keyWeights.ToArray()),
-            new Vector<T>(_valueWeights.ToArray()),
-            new Vector<T>(_outputWeights.ToArray()),
-            new Vector<T>(_outputBias.ToArray()));
+            Vector<T>.FromMemory(_queryWeights.Data),
+            Vector<T>.FromMemory(_keyWeights.Data),
+            Vector<T>.FromMemory(_valueWeights.Data),
+            Vector<T>.FromMemory(_outputWeights.Data),
+            Vector<T>.FromMemory(_outputBias.Data));
     }
 
     /// <inheritdoc/>
@@ -1061,11 +1049,11 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         return Vector<T>.Concatenate(
-            _queryWeightsGradient != null ? new Vector<T>(_queryWeightsGradient.ToArray()) : new Vector<T>(_queryWeights.Length),
-            _keyWeightsGradient != null ? new Vector<T>(_keyWeightsGradient.ToArray()) : new Vector<T>(_keyWeights.Length),
-            _valueWeightsGradient != null ? new Vector<T>(_valueWeightsGradient.ToArray()) : new Vector<T>(_valueWeights.Length),
-            _outputWeightsGradient != null ? new Vector<T>(_outputWeightsGradient.ToArray()) : new Vector<T>(_outputWeights.Length),
-            _outputBiasGradient != null ? new Vector<T>(_outputBiasGradient.ToArray()) : new Vector<T>(_outputBias.Length)
+            _queryWeightsGradient != null ? (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_queryWeights.Length),
+            _keyWeightsGradient != null ? (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_keyWeights.Length),
+            _valueWeightsGradient != null ? (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_valueWeights.Length),
+            _outputWeightsGradient != null ? (_outputWeightsGradient is not null ? Vector<T>.FromMemory(_outputWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputWeights.Length),
+            _outputBiasGradient != null ? (_outputBiasGradient is not null ? Vector<T>.FromMemory(_outputBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputBias.Length)
         );
     }
 
@@ -1102,7 +1090,46 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         _gpuAttnWeights = null;
     }
 
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation =>
+        _queryWeights != null && _keyWeights != null &&
+        _valueWeights != null && _outputWeights != null;
 
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        // Create symbolic input nodes for query and context
+        var queryInput = new Tensor<T>(new int[] { 1, InputShape[0], _queryDim });
+        var queryNode = Autodiff.TensorOperations<T>.Variable(queryInput, "query");
+        inputNodes.Add(queryNode);
+
+        var contextInput = new Tensor<T>(new int[] { 1, 77, _contextDim }); // Standard text encoder output length
+        var contextNode = Autodiff.TensorOperations<T>.Variable(contextInput, "context");
+        inputNodes.Add(contextNode);
+
+        // Create weight nodes
+        var wqNode = Autodiff.TensorOperations<T>.Constant(_queryWeights, "Wq");
+        var wkNode = Autodiff.TensorOperations<T>.Constant(_keyWeights, "Wk");
+        var wvNode = Autodiff.TensorOperations<T>.Constant(_valueWeights, "Wv");
+        var woNode = Autodiff.TensorOperations<T>.Constant(_outputWeights, "Wo");
+
+        // Apply cross-attention using multi-head attention with separate query/key sources
+        var output = Autodiff.TensorOperations<T>.MultiHeadAttention(
+            query: queryNode,
+            key: contextNode,
+            value: contextNode,
+            numHeads: _headCount,
+            wQ: wqNode,
+            wK: wkNode,
+            wV: wvNode,
+            wO: woNode);
+
+        return output;
+    }
 }
+
 
 

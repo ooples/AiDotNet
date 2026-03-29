@@ -135,21 +135,14 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
             // Apply final layer norm
             hidden = LayerNorm(hidden, FinalLayerNormWeights, FinalLayerNormBias, HiddenSize);
 
-            // Project to embedding dimension and store in output
-            for (int s = 0; s < seqLen; s++)
-            {
-                for (int d = 0; d < EmbeddingDimension; d++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int h = 0; h < HiddenSize; h++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(
-                            hidden[s * HiddenSize + h],
-                            _textProjection[h * EmbeddingDimension + d]));
-                    }
-                    outputData[b * seqLen * EmbeddingDimension + s * EmbeddingDimension + d] = sum;
-                }
-            }
+            // Project to embedding dimension: [seqLen, HiddenSize] @ [HiddenSize, EmbDim] — vectorized
+            var hiddenTensor = Tensor<T>.FromVector(hidden).Reshape(seqLen, HiddenSize);
+            var projTensor = Tensor<T>.FromVector(_textProjection).Reshape(HiddenSize, EmbeddingDimension);
+            var projected = Engine.TensorMatMul<T>(hiddenTensor, projTensor);
+            var projVec = projected.Reshape(seqLen * EmbeddingDimension).ToVector();
+            int batchOffset = b * seqLen * EmbeddingDimension;
+            for (int idx = 0; idx < seqLen * EmbeddingDimension; idx++)
+                outputData[batchOffset + idx] = projVec[idx];
         }
 
         return new Tensor<T>(new[] { batchSize, seqLen, EmbeddingDimension }, outputData);
@@ -271,24 +264,17 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
     /// </summary>
     private Vector<T> LinearProject(Vector<T> input, Vector<T> weights, int weightOffset, int inDim, int outDim, int seqLen)
     {
-        var output = new Vector<T>(seqLen * outDim);
+        // Extract weight subvector and reshape to [inDim, outDim]
+        var wSize = inDim * outDim;
+        var wSlice = new Vector<T>(wSize);
+        for (int i = 0; i < wSize && weightOffset + i < weights.Length; i++)
+            wSlice[i] = weights[weightOffset + i];
 
-        for (int s = 0; s < seqLen; s++)
-        {
-            for (int o = 0; o < outDim; o++)
-            {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < inDim; i++)
-                {
-                    int wIdx = weightOffset + i * outDim + o;
-                    if (wIdx < weights.Length)
-                        sum = NumOps.Add(sum, NumOps.Multiply(input[s * inDim + i], weights[wIdx]));
-                }
-                output[s * outDim + o] = sum;
-            }
-        }
-
-        return output;
+        // [seqLen, inDim] @ [inDim, outDim] = [seqLen, outDim] — vectorized
+        var inputMat = Tensor<T>.FromVector(input).Reshape(seqLen, inDim);
+        var wMat = Tensor<T>.FromVector(wSlice).Reshape(inDim, outDim);
+        var result = Engine.TensorMatMul<T>(inputMat, wMat).Reshape(seqLen * outDim);
+        return result.ToVector();
     }
 
     private static Vector<T> CopyVector(Vector<T> source)

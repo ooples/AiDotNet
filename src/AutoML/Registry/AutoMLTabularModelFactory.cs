@@ -1,3 +1,6 @@
+using AiDotNet.Classification.Ensemble;
+using AiDotNet.Classification.Neighbors;
+using AiDotNet.Classification.Trees;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.Regression;
@@ -96,6 +99,22 @@ internal static class AutoMLTabularModelFactory<T>
         [typeof(NeuralNetworkRegression<>)] = p => CreateWithOptions(
             (NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>> o) => new NeuralNetworkRegression<T>(o),
             new NeuralNetworkRegressionOptions<T, Matrix<T>, Vector<T>>(), p),
+
+        // Classifiers
+        [typeof(RandomForestClassifier<>)] = p => CreateWithOptions(
+            (RandomForestClassifierOptions<T> o) => new RandomForestClassifier<T>(o), new RandomForestClassifierOptions<T>(), p),
+
+        [typeof(GradientBoostingClassifier<>)] = p => CreateWithOptions(
+            (GradientBoostingClassifierOptions<T> o) => new GradientBoostingClassifier<T>(o), new GradientBoostingClassifierOptions<T>(), p),
+
+        [typeof(DecisionTreeClassifier<>)] = p => CreateWithOptions(
+            (DecisionTreeClassifierOptions<T> o) => new DecisionTreeClassifier<T>(o), new DecisionTreeClassifierOptions<T>(), p),
+
+        [typeof(ExtraTreesClassifier<>)] = p => CreateWithOptions(
+            (ExtraTreesClassifierOptions<T> o) => new ExtraTreesClassifier<T>(o), new ExtraTreesClassifierOptions<T>(), p),
+
+        [typeof(KNeighborsClassifier<>)] = p => CreateWithOptions(
+            (KNeighborsOptions<T> o) => new KNeighborsClassifier<T>(o), new KNeighborsOptions<T>(), p),
     };
 
     public static IFullModel<T, Matrix<T>, Vector<T>> Create(Type modelType, IReadOnlyDictionary<string, object> parameters)

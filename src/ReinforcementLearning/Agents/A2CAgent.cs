@@ -399,30 +399,18 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         var params_ = _policyNetwork.GetParameters();
         var grads = _policyNetwork.GetParameterGradients();
 
-        // Apply gradient ascent (policy gradient: maximize J, so add gradients)
-        for (int i = 0; i < params_.Length; i++)
-        {
-            var update = NumOps.Multiply(_a2cOptions.PolicyLearningRate, grads[i]);
-            params_[i] = NumOps.Add(params_[i], update);
-        }
-
+        // Apply gradient ascent (vectorized: maximize J, so add scaled gradients)
+        params_ = (Vector<T>)Engine.Add(params_, Engine.Multiply(grads, _a2cOptions.PolicyLearningRate));
         _policyNetwork.UpdateParameters(params_);
-        // Gradients are managed internally by the network
     }
 
     private void UpdateValueNetwork()
     {
-        // Gradients have been accumulated via Backpropagate() calls in the training loop
         var params_ = _valueNetwork.GetParameters();
         var grads = _valueNetwork.GetParameterGradients();
 
-        // Apply gradient descent (minimize loss, so subtract gradients)
-        for (int i = 0; i < params_.Length; i++)
-        {
-            var update = NumOps.Multiply(_a2cOptions.ValueLearningRate, grads[i]);
-            params_[i] = NumOps.Subtract(params_[i], update);
-        }
-
+        // Apply gradient descent (vectorized: minimize loss, so subtract scaled gradients)
+        params_ = (Vector<T>)Engine.Subtract(params_, Engine.Multiply(grads, _a2cOptions.ValueLearningRate));
         _valueNetwork.UpdateParameters(params_);
         // Gradients are managed internally by the network
     }

@@ -1386,38 +1386,26 @@ internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
         // Apply auto-correlation (simplified)
         var acOutput = ApplyAutoCorrelation(combinedSeasonal, topK);
 
-        // Add & Norm
-        for (int i = 0; i < acOutput.Length; i++)
-        {
-            acOutput[i] = NumOps.Add(acOutput[i], seasonal[i]);
-        }
+        // Add & Norm (vectorized)
+        acOutput = Engine.TensorAdd(acOutput, seasonal);
         acOutput = LayerNorm(acOutput, _layerNorm1Gamma, _layerNorm1Beta);
 
         // Series decomposition
         var (newTrend, newSeasonal) = SeriesDecomposition(acOutput);
 
-        // Accumulate trend
-        for (int i = 0; i < trend.Length && i < newTrend.Length; i++)
-        {
-            trend[i] = NumOps.Add(trend[i], newTrend[i]);
-        }
+        // Accumulate trend (vectorized)
+        trend = Engine.TensorAdd(trend, newTrend);
 
         // Feed-forward on seasonal
         var ffOutput = FeedForward(newSeasonal);
 
-        // Add & Norm
-        for (int i = 0; i < ffOutput.Length; i++)
-        {
-            ffOutput[i] = NumOps.Add(ffOutput[i], newSeasonal[i]);
-        }
+        // Add & Norm (vectorized)
+        ffOutput = Engine.TensorAdd(ffOutput, newSeasonal);
         ffOutput = LayerNorm(ffOutput, _layerNorm2Gamma, _layerNorm2Beta);
 
         // Final decomposition
         var (finalTrend, finalSeasonal) = SeriesDecomposition(ffOutput);
-        for (int i = 0; i < trend.Length && i < finalTrend.Length; i++)
-        {
-            trend[i] = NumOps.Add(trend[i], finalTrend[i]);
-        }
+        trend = Engine.TensorAdd(trend, finalTrend);
 
         return (trend, finalSeasonal);
     }
@@ -1885,10 +1873,7 @@ internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 
         // Series decomposition after self-attention
         var (selfTrend, selfSeasonal) = SeriesDecomposition(normalized1);
-        for (int i = 0; i < decoderTrend.Length && i < selfTrend.Length; i++)
-        {
-            decoderTrend[i] = NumOps.Add(decoderTrend[i], selfTrend[i]);
-        }
+        decoderTrend = Engine.TensorAdd(decoderTrend, selfTrend);
 
         // 2. Cross auto-correlation with encoder outputs
         var crossAttnOutput = ApplyCrossAutoCorrelation(selfSeasonal, encoderSeasonal, topK);
@@ -1899,10 +1884,7 @@ internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 
         // Series decomposition after cross-attention
         var (crossTrend, crossSeasonal) = SeriesDecomposition(normalized2);
-        for (int i = 0; i < decoderTrend.Length && i < crossTrend.Length; i++)
-        {
-            decoderTrend[i] = NumOps.Add(decoderTrend[i], crossTrend[i]);
-        }
+        decoderTrend = Engine.TensorAdd(decoderTrend, crossTrend);
 
         // 3. Feed-forward network
         var ffOutput = FeedForward(crossSeasonal);
@@ -1913,10 +1895,7 @@ internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
 
         // Final decomposition
         var (finalTrend, finalSeasonal) = SeriesDecomposition(normalized3);
-        for (int i = 0; i < decoderTrend.Length && i < finalTrend.Length; i++)
-        {
-            decoderTrend[i] = NumOps.Add(decoderTrend[i], finalTrend[i]);
-        }
+        decoderTrend = Engine.TensorAdd(decoderTrend, finalTrend);
 
         return (decoderTrend, finalSeasonal);
     }

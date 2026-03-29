@@ -124,15 +124,7 @@ public class FalconMambaLanguageModel<T> : NeuralNetworkBase<T>
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        SetTrainingMode(true);
-        var predictions = Predict(input);
-        LastLoss = LossFunction.CalculateLoss(predictions.ToVector(), expectedOutput.ToVector());
-        var outputGradients = LossFunction.CalculateDerivative(predictions.ToVector(), expectedOutput.ToVector());
-        Backpropagate(Tensor<T>.FromVector(outputGradients));
-        var parameterGradients = GetParameterGradients();
-        parameterGradients = ClipGradient(parameterGradients);
-        UpdateParameters(parameterGradients);
-        SetTrainingMode(false);
+        StandardTrainStep(input, expectedOutput);
     }
 
     public override void UpdateParameters(Vector<T> gradients)

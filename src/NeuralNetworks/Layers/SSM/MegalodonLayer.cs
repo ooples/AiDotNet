@@ -151,6 +151,8 @@ public class MegalodonLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Gets the model dimension.
@@ -1170,21 +1172,21 @@ public class MegalodonLayer<T> : LayerBase<T>
     {
         if (_emaAlphaRealGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_emaAlphaRealGradient!.ToArray()),
-            new Vector<T>(_emaAlphaImagGradient!.ToArray()),
-            new Vector<T>(_emaInputWeightsGradient!.ToArray()),
-            new Vector<T>(_emaInputBiasGradient!.ToArray()),
-            new Vector<T>(_emaOutputWeightsGradient!.ToArray()),
-            new Vector<T>(_emaOutputBiasGradient!.ToArray()),
-            new Vector<T>(_tsNormGammaGradient!.ToArray()),
-            new Vector<T>(_tsNormBetaGradient!.ToArray()),
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_gateWeightsGradient!.ToArray()),
-            new Vector<T>(_gateBiasGradient!.ToArray()),
-            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
+            (_emaAlphaRealGradient is not null ? Vector<T>.FromMemory(_emaAlphaRealGradient.Data) : new Vector<T>(0)),
+            (_emaAlphaImagGradient is not null ? Vector<T>.FromMemory(_emaAlphaImagGradient.Data) : new Vector<T>(0)),
+            (_emaInputWeightsGradient is not null ? Vector<T>.FromMemory(_emaInputWeightsGradient.Data) : new Vector<T>(0)),
+            (_emaInputBiasGradient is not null ? Vector<T>.FromMemory(_emaInputBiasGradient.Data) : new Vector<T>(0)),
+            (_emaOutputWeightsGradient is not null ? Vector<T>.FromMemory(_emaOutputWeightsGradient.Data) : new Vector<T>(0)),
+            (_emaOutputBiasGradient is not null ? Vector<T>.FromMemory(_emaOutputBiasGradient.Data) : new Vector<T>(0)),
+            (_tsNormGammaGradient is not null ? Vector<T>.FromMemory(_tsNormGammaGradient.Data) : new Vector<T>(0)),
+            (_tsNormBetaGradient is not null ? Vector<T>.FromMemory(_tsNormBetaGradient.Data) : new Vector<T>(0)),
+            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
+            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
+            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
+            (_gateWeightsGradient is not null ? Vector<T>.FromMemory(_gateWeightsGradient.Data) : new Vector<T>(0)),
+            (_gateBiasGradient is not null ? Vector<T>.FromMemory(_gateBiasGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()
@@ -1231,6 +1233,27 @@ public class MegalodonLayer<T> : LayerBase<T>
 
     #endregion
 
+    /// <inheritdoc />
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
+        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
+        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
+        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
+
+        inputNodes.Add(xNode);
+        inputNodes.Add(outWeightsNode);
+        inputNodes.Add(outBiasNode);
+
+        var outT = TensorOperations<T>.Transpose(outWeightsNode);
+        var finalOutput = TensorOperations<T>.MatrixMultiply(xNode, outT);
+        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
+
+        return outputWithBias;
+    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

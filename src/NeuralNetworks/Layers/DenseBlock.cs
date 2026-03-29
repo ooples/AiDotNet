@@ -71,7 +71,7 @@ public class DenseBlock<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        return new Vector<T>(_layers.SelectMany(l => l.GetParameterGradients().ToArray()).ToArray());
+        return Vector<T>.Wrap(_layers.SelectMany(l => l.GetParameterGradients().ToArray()).ToArray());
     }
 
     public override void ClearGradients()
@@ -307,7 +307,7 @@ public class DenseBlock<T> : LayerBase<T>
     /// </summary>
     public override Vector<T> GetParameters()
     {
-        return new Vector<T>(_layers.SelectMany(l => l.GetParameters().ToArray()).ToArray());
+        return Vector<T>.Wrap(_layers.SelectMany(l => l.GetParameters().ToArray()).ToArray());
     }
 
     /// <summary>
@@ -347,6 +347,69 @@ public class DenseBlock<T> : LayerBase<T>
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    public override bool SupportsJitCompilation
+    {
+        get
+        {
+            // Check all sub-layers support JIT
+            foreach (var layer in _layers)
+            {
+                if (!layer.SupportsJitCompilation)
+                    return false;
+            }
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Exports the computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the DenseBlock.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph representing the DenseBlock with dense connectivity:
+    /// Each layer's output is concatenated with all previous features along the channel dimension.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes is null)
+        {
+            throw new ArgumentNullException(nameof(inputNodes));
+        }
+
+        if (InputShape is null || InputShape.Length == 0)
+        {
+            throw new InvalidOperationException("Layer input shape not configured.");
+        }
+
+        // Create symbolic input node with batch dimension
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Current features (accumulated via concatenation)
+        var currentFeatures = inputNode;
+
+        // Process each layer with dense connectivity
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            var layer = _layers[i];
+
+            // Build the layer's computation graph using the current accumulated features
+            var layerOutput = layer.BuildComputationGraph(currentFeatures, $"layer{i}_");
+
+            // Concatenate new features with existing features along channel dimension (axis 1)
+            var nodesToConcat = new List<ComputationNode<T>> { currentFeatures, layerOutput };
+            currentFeatures = TensorOperations<T>.Concat(nodesToConcat, axis: 1);
+        }
+
+        return currentFeatures;
+    }
 
     #region Helper Methods
 

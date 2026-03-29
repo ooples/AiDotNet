@@ -945,8 +945,8 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     {
         // Use Vector.Concatenate for production-grade parameter extraction
         return Vector<T>.Concatenate(
-            new Vector<T>(_convWeights.ToArray()),
-            new Vector<T>(_convBias.ToArray())
+            Vector<T>.FromMemory(_convWeights.Data),
+            Vector<T>.FromMemory(_convBias.Data)
         );
     }
 
@@ -979,19 +979,9 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameterGradients()
     {
-        var wGrad = _convWeightsGradient != null ? new Vector<T>(_convWeightsGradient.ToArray()) : new Vector<T>(_convWeights.Length);
-        var bGrad = _convBiasGradient != null ? new Vector<T>(_convBiasGradient.ToArray()) : new Vector<T>(_convBias.Length);
+        var wGrad = _convWeightsGradient != null ? (_convWeightsGradient is not null ? Vector<T>.FromMemory(_convWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_convWeights.Length);
+        var bGrad = _convBiasGradient != null ? (_convBiasGradient is not null ? Vector<T>.FromMemory(_convBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_convBias.Length);
         return Vector<T>.Concatenate(wGrad, bGrad);
-    }
-
-    internal override Dictionary<string, string> GetMetadata()
-    {
-        var metadata = base.GetMetadata();
-        metadata["CapsuleChannels"] = _capsuleChannels.ToString();
-        metadata["CapsuleDimension"] = _capsuleDimension.ToString();
-        metadata["KernelSize"] = _kernelSize.ToString();
-        metadata["Stride"] = _stride.ToString();
-        return metadata;
     }
 
     public override void ClearGradients()

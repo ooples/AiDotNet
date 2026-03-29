@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.PINNs;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.PhysicsInformed
@@ -360,11 +361,13 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             public int OutputDimension => 1;
             public string Name => "Two-Scale Heat Equation";
 
-            public double ComputeResidual(double[] inputs, double[] outputs, PDEDerivatives<double> derivatives)
+            public double ComputeResidual(Vector<double> inputs, Vector<double> outputs, PDEDerivatives<double> derivatives)
             {
                 // Combined residual (coarse + fine)
-                double coarse = ComputeScaleResidual(0, inputs, outputs, derivatives);
-                double fine = ComputeScaleResidual(1, inputs, outputs, derivatives);
+                var inputsArr = inputs.ToArray();
+                var outputsArr = outputs.ToArray();
+                double coarse = ComputeScaleResidual(0, inputsArr, outputsArr, derivatives);
+                double fine = ComputeScaleResidual(1, inputsArr, outputsArr, derivatives);
                 return coarse + fine;
             }
 
@@ -467,7 +470,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             public int OutputDimension => 1;
             public string Name => $"Heat Equation (k={_diffusivity:G4})";
 
-            public double ComputeResidual(double[] inputs, double[] outputs, PDEDerivatives<double> derivatives)
+            public double ComputeResidual(Vector<double> inputs, Vector<double> outputs, PDEDerivatives<double> derivatives)
             {
                 if (derivatives.FirstDerivatives == null || derivatives.SecondDerivatives == null)
                 {
@@ -497,12 +500,12 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
 
             public string Name => $"Dirichlet BC at x={_position}";
 
-            public bool IsOnBoundary(double[] inputs)
+            public bool IsOnBoundary(Vector<double> inputs)
             {
                 return Math.Abs(inputs[0] - _position) < 1e-6;
             }
 
-            public double ComputeBoundaryResidual(double[] inputs, double[] outputs, PDEDerivatives<double> derivatives)
+            public double ComputeBoundaryResidual(Vector<double> inputs, Vector<double> outputs, PDEDerivatives<double> derivatives)
             {
                 return outputs[0] - _value;
             }

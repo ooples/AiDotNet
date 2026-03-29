@@ -97,7 +97,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the gamma (scale) parameters.
     /// </summary>
-    public Vector<T> GetGamma() => _gamma.ToVector();
+    public Vector<T> GetGamma() => Vector<T>.FromMemory(_gamma.Data);
 
     /// <summary>
     /// Gets the gamma (scale) parameters as a tensor.
@@ -107,7 +107,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the beta (shift) parameters.
     /// </summary>
-    public Vector<T> GetBeta() => _beta.ToVector();
+    public Vector<T> GetBeta() => Vector<T>.FromMemory(_beta.Data);
 
     /// <summary>
     /// Gets the beta (shift) parameters as a tensor.
@@ -498,7 +498,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
         if (!_affine)
             return new Vector<T>(0);
 
-        return Vector<T>.Concatenate(_gamma.ToVector(), _beta.ToVector());
+        return Vector<T>.Concatenate(Vector<T>.FromMemory(_gamma.Data), Vector<T>.FromMemory(_beta.Data));
     }
 
     /// <summary>
@@ -541,7 +541,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_gammaGradient == null || _betaGradient == null) return new Vector<T>(ParameterCount);
-        return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
+        return Vector<T>.Concatenate((_gammaGradient is not null ? Vector<T>.FromMemory(_gammaGradient.Data) : new Vector<T>(0)), (_betaGradient is not null ? Vector<T>.FromMemory(_betaGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
@@ -565,5 +565,51 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
         _gpuSpatialSize = 0;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <remarks>
+    /// Instance normalization supports JIT compilation by leveraging GroupNorm with numGroups = numChannels.
+    /// </remarks>
+    public override bool SupportsJitCompilation => true;
 
+    /// <summary>
+    /// Exports the computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the InstanceNormalization operation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph representing the Instance Normalization layer.
+    /// Instance normalization is implemented as GroupNorm with numGroups = numChannels,
+    /// meaning each channel is normalized independently across spatial dimensions.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes is null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape is null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create symbolic input node with batch dimension
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Create gamma and beta parameter nodes
+        var gammaNode = TensorOperations<T>.Constant(_gamma, "gamma");
+        var betaNode = TensorOperations<T>.Constant(_beta, "beta");
+
+        // Apply GroupNorm operation with numGroups = numChannels (instance norm)
+        var outputNode = TensorOperations<T>.GroupNorm(
+            inputNode,
+            _numChannels, // numGroups = numChannels for instance norm
+            gammaNode,
+            betaNode,
+            NumOps.ToDouble(_epsilon));
+
+        return outputNode;
+    }
 }
