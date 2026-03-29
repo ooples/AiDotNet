@@ -634,53 +634,33 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Compute LoRA-XS weight delta: delta = U_r * Σ_r * R * V_r^T * scaling
-        // Where scaling = alpha / rank
         int outputSize = _frozenU.Rows;
         int inputSize = _frozenVt.Columns;
         int rank = Rank;
         double scaling = Alpha / rank;
 
-        // Step 1: Compute R * V_r^T (rank × inputSize)
-        var RVt = new Matrix<T>(rank, inputSize);
-        for (int i = 0; i < rank; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < rank; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_trainableR[i, k], _frozenVt[k, j]));
-                }
-                RVt[i, j] = sum;
-            }
-        }
+        // Step 1: R * V_r^T — vectorized Engine.TensorMatMul
+        var rTensor = Tensor<T>.FromMatrix(_trainableR);
+        var vtTensor = Tensor<T>.FromMatrix(_frozenVt);
+        var RVtTensor = Engine.TensorMatMul(rTensor, vtTensor);
 
-        // Step 2: Compute Σ_r * (R * V_r^T) - diagonal scaling (rank × inputSize)
-        var SigmaRVt = new Matrix<T>(rank, inputSize);
+        // Step 2: Σ_r * (R * V_r^T) — diagonal scaling per row
         for (int i = 0; i < rank; i++)
         {
             T sigma = _frozenSigma[i];
             for (int j = 0; j < inputSize; j++)
             {
-                SigmaRVt[i, j] = NumOps.Multiply(sigma, RVt[i, j]);
+                RVtTensor[i, j] = NumOps.Multiply(sigma, RVtTensor[i, j]);
             }
         }
 
-        // Step 3: Compute U_r * (Σ_r * R * V_r^T) (outputSize × inputSize)
-        var loraWeights = new Matrix<T>(outputSize, inputSize);
-        for (int i = 0; i < outputSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < rank; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_frozenU[i, k], SigmaRVt[k, j]));
-                }
-                // Apply scaling factor
-                loraWeights[i, j] = NumOps.Multiply(sum, NumOps.FromDouble(scaling));
-            }
-        }
+        // Step 3: U_r * (Σ_r * R * V_r^T) — vectorized Engine.TensorMatMul
+        var uTensor = Tensor<T>.FromMatrix(_frozenU);
+        var loraWeightsTensor = Engine.TensorMatMul(uTensor, RVtTensor);
+
+        // Apply scaling factor
+        loraWeightsTensor = Engine.TensorMultiplyScalar(loraWeightsTensor, NumOps.FromDouble(scaling));
+        var loraWeights = loraWeightsTensor.ToMatrix();
 
         // Get base layer parameters
         Vector<T> baseParams = _baseLayer.GetParameters();
@@ -739,25 +719,13 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
                 $"Matrix columns ({matrix.Columns}) must match tensor vector size ({vectorSize})");
         }
 
-        int outputSize = matrix.Rows;
-        Vector<T> resultData = new Vector<T>(batchSize * outputSize);
+        // Batched matmul: [batchSize, vectorSize] @ matrix^T = [batchSize, outputSize]
+        // Reshape tensor to [batchSize, vectorSize] if needed
+        var input2D = tensor.Rank == 2 ? tensor : tensor.Reshape(batchSize, vectorSize);
+        var matTensor = Tensor<T>.FromMatrix(matrix).Transpose(new[] { 1, 0 });
+        var result = Engine.TensorMatMul(input2D, matTensor);
 
-        // Perform batched matrix-vector multiplication
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < outputSize; i++)
-            {
-                T sum = NumOps.Zero;
-                for (int j = 0; j < vectorSize; j++)
-                {
-                    int inputIdx = b * vectorSize + j;
-                    sum = NumOps.Add(sum, NumOps.Multiply(matrix[i, j], tensor[inputIdx]));
-                }
-                resultData[b * outputSize + i] = sum;
-            }
-        }
-
-        return new Tensor<T>(new[] { batchSize, outputSize }, resultData);
+        return result;
     }
 
     /// <summary>
