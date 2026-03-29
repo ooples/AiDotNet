@@ -836,7 +836,16 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Capture non-null adjacency matrix for use in the method
         var adjacencyMatrix = _adjacencyMatrix;
         bool adj2D = adjacencyMatrix.Shape.Length == 2;
-        var rawActivationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
+
+        // ApplyActivation cached the pre-activation input in the 3D internal format
+        // [batch, nodes, features]. Derive the canonical 3D shape from _lastInput and
+        // reshape both _lastOutput and outputGradient to match before computing the derivative.
+        int batchDim = _lastInput.Shape[0];
+        int nodesDim = _lastInput.Shape[1];
+        var target3D = new[] { batchDim, nodesDim, _outputFeatures };
+        var activOutput = _lastOutput.Rank == 3 ? _lastOutput : _lastOutput.Reshape(target3D);
+        var outGrad = outputGradient.Rank == 3 ? outputGradient : outputGradient.Reshape(target3D);
+        var rawActivationGradient = ApplyActivationDerivativeFromOutput(activOutput, outGrad);
         int batchSize = _lastInput.Shape[0];
         int numNodes = _lastInput.Shape[1];
         T numHeadsT = NumOps.FromDouble(_numHeads);
@@ -1362,13 +1371,13 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     public override Vector<T> GetParameterGradients()
     {
         var weightsGrad = _weightsGradient != null
-            ? (_weightsGradient is not null ? Vector<T>.FromMemory(_weightsGradient.Data) : new Vector<T>(0))
+            ? new Vector<T>(_weightsGradient.ToArray())
             : new Vector<T>(_weights.Length);
         var attnGrad = _attentionWeightsGradient != null
-            ? (_attentionWeightsGradient is not null ? Vector<T>.FromMemory(_attentionWeightsGradient.Data) : new Vector<T>(0))
+            ? new Vector<T>(_attentionWeightsGradient.ToArray())
             : new Vector<T>(_attentionWeights.Length);
         var biasGrad = _biasGradient != null
-            ? (_biasGradient is not null ? Vector<T>.FromMemory(_biasGradient.Data) : new Vector<T>(0))
+            ? new Vector<T>(_biasGradient.ToArray())
             : new Vector<T>(_bias.Length);
 
         return Vector<T>.Concatenate(weightsGrad, attnGrad, biasGrad);
@@ -1378,9 +1387,9 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_weights.Data),
-            Vector<T>.FromMemory(_attentionWeights.Data),
-            Vector<T>.FromMemory(_bias.Data)
+            new Vector<T>(_weights.ToArray()),
+            new Vector<T>(_attentionWeights.ToArray()),
+            new Vector<T>(_bias.ToArray())
         );
     }
 
