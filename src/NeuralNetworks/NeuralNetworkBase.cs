@@ -595,6 +595,47 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// GPU forward pass with named auxiliary inputs routed to multi-port layers.
+    /// Mirrors <see cref="ForwardWithMemory(Tensor{T}, IReadOnlyDictionary{string, Tensor{T}})"/>
+    /// but keeps all data on GPU.
+    /// </summary>
+    /// <param name="input">Primary GPU input tensor.</param>
+    /// <param name="auxiliaryInputs">Named GPU auxiliary tensors (e.g., "time_embed").</param>
+    /// <returns>Final GPU output tensor.</returns>
+    public virtual IGpuTensor<T> ForwardGpu(
+        IGpuTensor<T> input,
+        IReadOnlyDictionary<string, IGpuTensor<T>> auxiliaryInputs)
+    {
+        if (!CanTrainOnGpu)
+            throw new InvalidOperationException("GPU forward pass is not supported.");
+
+        var current = input;
+        foreach (var layer in Layers)
+        {
+            if (layer is not LayerBase<T> layerBase)
+                throw new InvalidOperationException(
+                    $"Layer {layer.GetType().Name} does not inherit from LayerBase<T>.");
+
+            if (layerBase.InputPorts.Count > 1)
+            {
+                var namedInputs = new Dictionary<string, IGpuTensor<T>> { ["input"] = current };
+                foreach (var port in layerBase.InputPorts)
+                {
+                    if (port.Name != "input" && auxiliaryInputs.TryGetValue(port.Name, out var aux))
+                        namedInputs[port.Name] = aux;
+                }
+                current = layerBase.ForwardGpu(namedInputs);
+            }
+            else
+            {
+                current = layerBase.ForwardGpu(current);
+            }
+        }
+
+        return current;
+    }
+
+    /// <summary>
     /// Performs backpropagation through all layers entirely on GPU.
     /// </summary>
     /// <param name="outputGradients">The GPU-resident gradient of loss with respect to network output.</param>

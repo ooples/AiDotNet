@@ -1503,6 +1503,32 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
             $"GPU backward pass is not supported by {GetType().Name}. Use Backward() instead or check CanTrainOnGpu first.");
     }
 
+    // ─── Named-port GPU overloads (#1058 Step 4) ─────────────────────
+
+    /// <summary>
+    /// GPU forward pass with named inputs. Default delegates to <see cref="ForwardGpu(IGpuTensor{T}[])"/>
+    /// using the "input" port or all values in order.
+    /// </summary>
+    public virtual IGpuTensor<T> ForwardGpu(IReadOnlyDictionary<string, IGpuTensor<T>> inputs)
+    {
+        if (inputs.TryGetValue("input", out var input))
+            return ForwardGpu(input);
+
+        return ForwardGpu(inputs.Values.ToArray());
+    }
+
+    /// <summary>
+    /// GPU backward pass with named gradient outputs. Default delegates to single-input
+    /// <see cref="BackwardGpu(IGpuTensor{T})"/>.
+    /// </summary>
+    public virtual IReadOnlyDictionary<string, IGpuTensor<T>> BackwardGpuMulti(
+        IReadOnlyDictionary<string, IGpuTensor<T>> outputGradients)
+    {
+        var grad = outputGradients.TryGetValue("output", out var g) ? g : outputGradients.Values.First();
+        var inputGrad = BackwardGpu(grad);
+        return new Dictionary<string, IGpuTensor<T>> { ["input"] = inputGrad };
+    }
+
     /// <summary>
     /// Updates the layer's parameters on GPU using the specified optimizer configuration.
     /// </summary>

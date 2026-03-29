@@ -158,6 +158,23 @@ public class LayerPortTests
     }
 
     [Fact]
+    public void LayerBase_ForwardGpuDict_ThrowsOnEmptyDict()
+    {
+        var layer = new DenseLayer<double>(4, 2);
+        var dict = new Dictionary<string, AiDotNet.Tensors.Engines.Gpu.IGpuTensor<double>>();
+        // Empty dict → no "input" key → falls through to ForwardGpu(params) with 0 args → throws
+        Assert.ThrowsAny<Exception>(() => layer.ForwardGpu(dict));
+    }
+
+    [Fact]
+    public void LayerBase_BackwardGpuMulti_ThrowsOnEmptyDict()
+    {
+        var layer = new DenseLayer<double>(4, 2);
+        var dict = new Dictionary<string, AiDotNet.Tensors.Engines.Gpu.IGpuTensor<double>>();
+        Assert.ThrowsAny<Exception>(() => layer.BackwardGpuMulti(dict));
+    }
+
+    [Fact]
     public void SingleInputLayer_MultiInputForward_IgnoresExtraKeys()
     {
         var layer = new DenseLayer<double>(4, 2);
