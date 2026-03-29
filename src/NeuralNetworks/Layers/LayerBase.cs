@@ -49,6 +49,41 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
+    /// Tape-aware tensor operations. Zero-overhead when no GradientTape is active
+    /// (delegates directly to Engine). When a tape IS active, operations are recorded
+    /// for reverse-mode automatic differentiation — same architecture as PyTorch autograd.
+    /// </summary>
+    /// <remarks>
+    /// Use <c>Ops.Add(a, b)</c> instead of <c>Engine.TensorAdd(a, b)</c> in Forward()
+    /// methods to enable end-to-end gradient computation through layers.
+    /// </remarks>
+    protected static class Ops
+    {
+        public static Tensor<T> Add(Tensor<T> a, Tensor<T> b) => DifferentiableOps<T>.Add(a, b);
+        public static Tensor<T> Subtract(Tensor<T> a, Tensor<T> b) => DifferentiableOps<T>.Subtract(a, b);
+        public static Tensor<T> Multiply(Tensor<T> a, Tensor<T> b) => DifferentiableOps<T>.Multiply(a, b);
+        public static Tensor<T> Divide(Tensor<T> a, Tensor<T> b) => DifferentiableOps<T>.Divide(a, b);
+        public static Tensor<T> Negate(Tensor<T> a) => DifferentiableOps<T>.Negate(a);
+        public static Tensor<T> MatMul(Tensor<T> a, Tensor<T> b) => DifferentiableOps<T>.MatMul(a, b);
+        public static Tensor<T> Transpose(Tensor<T> a) => DifferentiableOps<T>.Transpose(a);
+        public static Tensor<T> MultiplyScalar(Tensor<T> a, T scalar) => DifferentiableOps<T>.MultiplyScalar(a, scalar);
+        public static Tensor<T> AddScalar(Tensor<T> a, T scalar) => DifferentiableOps<T>.AddScalar(a, scalar);
+        public static Tensor<T> Sum(Tensor<T> a) => DifferentiableOps<T>.Sum(a);
+        public static Tensor<T> Mean(Tensor<T> a) => DifferentiableOps<T>.Mean(a);
+        public static Tensor<T> Sigmoid(Tensor<T> x) => DifferentiableOps<T>.Sigmoid(x);
+        public static Tensor<T> Tanh(Tensor<T> x) => DifferentiableOps<T>.Tanh(x);
+        public static Tensor<T> ReLU(Tensor<T> x) => DifferentiableOps<T>.ReLU(x);
+        public static Tensor<T> GELU(Tensor<T> x) => DifferentiableOps<T>.GELU(x);
+        public static Tensor<T> Swish(Tensor<T> x) => DifferentiableOps<T>.Swish(x);
+        public static Tensor<T> Log(Tensor<T> x) => DifferentiableOps<T>.Log(x);
+        public static Tensor<T> Exp(Tensor<T> x) => DifferentiableOps<T>.Exp(x);
+        public static Tensor<T> Sqrt(Tensor<T> x) => DifferentiableOps<T>.Sqrt(x);
+        public static Tensor<T> Reshape(Tensor<T> a, int[] newShape) => DifferentiableOps<T>.Reshape(a, newShape);
+        public static Tensor<T> Concatenate(Tensor<T>[] tensors, int axis = 0) => DifferentiableOps<T>.Concatenate(tensors, axis);
+        public static Tensor<T> Dropout(Tensor<T> x, double p, bool training, Random? rng = null) => DifferentiableOps<T>.Dropout(x, p, training, rng);
+    }
+
+    /// <summary>
     /// Gets the element-wise activation function for this layer, if specified.
     /// </summary>
     /// <remarks>
