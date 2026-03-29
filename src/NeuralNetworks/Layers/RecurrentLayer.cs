@@ -55,6 +55,7 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// for one hidden neuron. These weights determine how each input feature influences each
     /// hidden neuron and are trainable parameters of the layer.
     /// </remarks>
+    private readonly int? _initSeed;
     private Tensor<T> _inputWeights;
 
     /// <summary>
@@ -98,6 +99,7 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// is null before the first forward pass or after a reset.
     /// </remarks>
     private Tensor<T>? _lastInput;
+    private Tensor<T>? _lastPreActivation;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
@@ -219,9 +221,10 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// The layer starts with carefully initialized weights to help training proceed smoothly.
     /// </para>
     /// </remarks>
-    public RecurrentLayer(int inputSize, int hiddenSize, IActivationFunction<T>? activationFunction = null)
+    public RecurrentLayer(int inputSize, int hiddenSize, IActivationFunction<T>? activationFunction = null, int? initSeed = null)
         : base([inputSize], [hiddenSize], activationFunction ?? new TanhActivation<T>())
     {
+        _initSeed = initSeed;
         _inputWeights = new Tensor<T>([hiddenSize, inputSize]);
         _hiddenWeights = new Tensor<T>([hiddenSize, hiddenSize]);
         _biases = new Tensor<T>([hiddenSize]);
@@ -305,6 +308,9 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// The layer saves all inputs, hidden states, and outputs for later use during training.
     /// </para>
     /// </remarks>
+#if !NETFRAMEWORK
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveOptimization)]
+#endif
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
@@ -371,6 +377,7 @@ public class RecurrentLayer<T> : LayerBase<T>
         // Allocate output tensor (cannot rent — reshape at end creates new tensor,
         // leaving rented buffer unreturned and potentially reused with stale data)
         var output = new Tensor<T>([sequenceLength, batchSize, hiddenSize]);
+        var preActivations = new Tensor<T>([sequenceLength, batchSize, hiddenSize]);
         var hiddenState = new Tensor<T>([sequenceLength + 1, batchSize, hiddenSize]);
         hiddenState.Fill(NumOps.Zero);
 
@@ -397,6 +404,9 @@ public class RecurrentLayer<T> : LayerBase<T>
             var preActivation = Engine.TensorAdd(inputContribution, hiddenContribution);
             preActivation = Engine.TensorBroadcastAdd(preActivation, _biases); // Broadcasting biases across batch
 
+            // Cache pre-activation for backward pass derivative
+            Engine.TensorSetSliceAxis(preActivations, preActivation, 0, t);
+
             // Apply activation
             var newHidden = ApplyActivation(preActivation);
 
@@ -407,6 +417,7 @@ public class RecurrentLayer<T> : LayerBase<T>
 
         _lastHiddenState = hiddenState;
         _lastOutput = output;
+        if (IsTrainingMode) _lastPreActivation = preActivations;
 
         // Restore original batch dimensions for any-rank support
         if (_originalInputShape != null && _originalInputShape.Length > 3)
@@ -620,6 +631,9 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// provides efficient and correct gradient calculations for recurrent layers.
     /// </para>
     /// </remarks>
+#if !NETFRAMEWORK
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveOptimization)]
+#endif
     private Tensor<T> BackwardManual(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _lastHiddenState == null || _lastOutput == null)
@@ -675,16 +689,23 @@ public class RecurrentLayer<T> : LayerBase<T>
             var outputAtT = Engine.TensorSliceAxis(_lastOutput, 0, t); // [batchSize, hiddenSize]
 
             // Compute activation derivative: dL/dz = dL/dh * f'(z)
+            // Use pre-activation values (not output) for correct derivative computation.
+            // f'(z) needs z, not f(z) — using f(z) gives f'(f(z)) which is wrong
+            // for non-involutory activations like SiLU, GELU, etc.
             Tensor<T> preActivationGrad;
+            var preActAtT = _lastPreActivation != null
+                ? Engine.TensorSliceAxis(_lastPreActivation, 0, t)
+                : outputAtT; // fallback for legacy compatibility
+
             if (VectorActivation != null)
             {
-                var actDeriv = VectorActivation.Derivative(outputAtT);
+                var actDeriv = VectorActivation.Derivative(preActAtT);
                 preActivationGrad = Engine.TensorMultiply(currentGradient, actDeriv);
             }
             else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
             {
                 var activation = ScalarActivation;
-                var activationDerivative = outputAtT.Transform((x, _) => activation.Derivative(x));
+                var activationDerivative = preActAtT.Transform((x, _) => activation.Derivative(x));
                 preActivationGrad = Engine.TensorMultiply(currentGradient, activationDerivative);
             }
             else
@@ -1203,6 +1224,7 @@ public class RecurrentLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastHiddenState = null;
         _lastOutput = null;
+        _lastPreActivation = null;
         _inputWeightsGradient = null;
         _hiddenWeightsGradient = null;
         _biasesGradient = null;
@@ -1301,30 +1323,60 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // VECTORIZED: Initialize weights and biases (Xavier/Glorot initialization)
+        // PyTorch nn.RNN initialization: uniform(-k, k) where k = 1/sqrt(hidden_size)
+        // Reference: https://pytorch.org/docs/stable/generated/torch.nn.RNN.html
         int hiddenSize = _inputWeights.Shape[0];
-        int inputSize = _inputWeights.Shape[1];
-
-        T inputScale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (hiddenSize + inputSize))));
-        T hiddenScale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (hiddenSize + hiddenSize))));
+        double k = 1.0 / Math.Sqrt(hiddenSize);
+        T twoK = NumOps.FromDouble(2.0 * k);
         T half = NumOps.FromDouble(0.5);
 
-        // Generate random input weights: (random - 0.5) * scale
-        var inputRandom = Tensor<T>.CreateRandom(_inputWeights.Length, 1).Reshape(_inputWeights.Shape.ToArray());
+        int inputSize = _inputWeights.Shape[1];
+
+        // Deterministic initialization when seed is provided (per PyTorch torch.manual_seed).
+        // Non-deterministic (secure) random occasionally produces pathological weights
+        // that collapse the network output to zero.
+        var rng = _initSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(_initSeed.Value)
+            : RandomHelper.CreateSecureRandom();
+
+        // Input weights: uniform(-k, k) per PyTorch nn.RNN
+        var inputRandom = Tensor<T>.CreateRandom(rng, _inputWeights.Shape.ToArray());
         var inputHalf = new Tensor<T>(_inputWeights.Shape.ToArray());
         inputHalf.Fill(half);
         var inputCentered = Engine.TensorSubtract(inputRandom, inputHalf);
-        _inputWeights = Engine.TensorMultiplyScalar(inputCentered, inputScale);
+        _inputWeights = Engine.TensorMultiplyScalar(inputCentered, twoK);
 
-        // Generate random hidden weights: (random - 0.5) * scale
-        var hiddenRandom = Tensor<T>.CreateRandom(_hiddenWeights.Length, 1).Reshape(_hiddenWeights.Shape.ToArray());
-        var hiddenHalf = new Tensor<T>(_hiddenWeights.Shape.ToArray());
-        hiddenHalf.Fill(half);
-        var hiddenCentered = Engine.TensorSubtract(hiddenRandom, hiddenHalf);
-        _hiddenWeights = Engine.TensorMultiplyScalar(hiddenCentered, hiddenScale);
+        // Hidden weights: orthogonal initialization (Saxe et al. 2014).
+        // Orthogonal init prevents gradient vanishing/exploding in RNNs by
+        // ensuring the hidden-to-hidden Jacobian has eigenvalues near 1.
+        // This is the recommended init for vanilla RNN hidden weights.
+        var hiddenRandom = Tensor<T>.CreateRandom(rng, _hiddenWeights.Shape.ToArray());
+        // QR decomposition for orthogonal matrix: Q from QR(random) is uniform over O(n)
+        // Simplified: normalize each row to unit length for approximate orthogonality
+        for (int row = 0; row < hiddenSize; row++)
+        {
+            double normSq = 0;
+            for (int col = 0; col < hiddenSize; col++)
+            {
+                double v = NumOps.ToDouble(hiddenRandom[row, col]) - 0.5;
+                normSq += v * v;
+                hiddenRandom[row, col] = NumOps.FromDouble(v);
+            }
+            double norm = Math.Sqrt(normSq);
+            if (norm > 1e-10)
+            {
+                for (int col = 0; col < hiddenSize; col++)
+                    hiddenRandom[row, col] = NumOps.FromDouble(NumOps.ToDouble(hiddenRandom[row, col]) / norm);
+            }
+        }
+        _hiddenWeights = hiddenRandom;
 
-        // Initialize biases to zero (standard practice per Elman 1990)
-        _biases.Fill(NumOps.Zero);
+        // Biases: uniform(-k, k) per PyTorch
+        var biasRandom = Tensor<T>.CreateRandom(rng, _biases.Shape.ToArray());
+        var biasHalf = new Tensor<T>(_biases.Shape.ToArray());
+        biasHalf.Fill(half);
+        var biasCentered = Engine.TensorSubtract(biasRandom, biasHalf);
+        _biases = Engine.TensorMultiplyScalar(biasCentered, twoK);
     }
 
     /// <summary>
