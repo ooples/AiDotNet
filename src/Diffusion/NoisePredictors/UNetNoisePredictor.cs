@@ -927,17 +927,37 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     #region Layer-Level Backpropagation
 
+    // Skip connections saved during forward for proper gradient splitting
+    private List<Tensor<T>>? _lastSkips;
+    private Tensor<T>? _lastTimeEmbed;
+
+    /// <summary>
+    /// Stores skip connections and time embedding during forward for backward pass.
+    /// Call this from PredictNoiseWithEmbedding during training.
+    /// </summary>
+    internal void SaveForwardState(List<Tensor<T>> skips, Tensor<T> timeEmbed)
+    {
+        _lastSkips = skips;
+        _lastTimeEmbed = timeEmbed;
+    }
+
     /// <inheritdoc />
     protected override void Backpropagate(Tensor<T> lossGradient)
     {
         var grad = lossGradient;
+        var numOps = NumOps;
 
         // Output convolution backward
         grad = BackwardLayer(_outputConv, grad);
 
-        // Decoder backward (reverse order) with skip connection gradients
-        var skipGrads = new Tensor<T>[_encoderBlocks.Count(b => b.Downsample == null)];
-        int skipIdx = 0;
+        // Decoder backward (reverse order)
+        // During forward, decoder blocks concatenate skip connections along channel axis.
+        // Backward: after ResBlock backward, gradient has shape matching concatenated input.
+        // Split it: first part is decoder gradient, second part is skip gradient for encoder.
+        var skipGrads = new Dictionary<int, Tensor<T>>(); // encoder block index → skip gradient
+        int skipCount = _lastSkips?.Count ?? 0;
+        int skipIdx = skipCount - 1;
+
         for (int i = _decoderBlocks.Count - 1; i >= 0; i--)
         {
             var block = _decoderBlocks[i];
@@ -950,9 +970,26 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
                 grad = BackwardLayer(block.CrossAttentionBlock, grad);
                 grad = BackwardLayer(block.AttentionBlock, grad);
                 grad = BackwardLayer(block.ResBlock, grad);
-                // Skip connection gradient stored for encoder backward
-                if (skipIdx < skipGrads.Length)
-                    skipGrads[skipIdx++] = grad;
+
+                // Split gradient for skip connection if this block had one
+                if (skipIdx >= 0 && _lastSkips is not null)
+                {
+                    int skipChannels = _lastSkips[skipIdx].Shape[1];
+                    int decoderChannels = grad.Shape[1] - skipChannels;
+
+                    if (decoderChannels > 0 && grad.Shape[1] > decoderChannels)
+                    {
+                        // Split along channel axis: [decoder_channels, skip_channels]
+                        var splitGrads = SplitChannels(grad, decoderChannels, skipChannels);
+                        grad = splitGrads.decoder;
+
+                        // Find the encoder block that produced this skip
+                        int encoderIdx = FindEncoderBlockForSkip(skipIdx);
+                        if (encoderIdx >= 0)
+                            skipGrads[encoderIdx] = splitGrads.skip;
+                    }
+                    skipIdx--;
+                }
             }
         }
 
@@ -965,7 +1002,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             grad = BackwardLayer(block.ResBlock, grad);
         }
 
-        // Encoder backward (reverse order)
+        // Encoder backward (reverse order) — add skip gradients from decoder
         for (int i = _encoderBlocks.Count - 1; i >= 0; i--)
         {
             var block = _encoderBlocks[i];
@@ -975,6 +1012,17 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             }
             else
             {
+                // Add skip connection gradient if this encoder block had a skip
+                if (skipGrads.TryGetValue(i, out var skipGrad))
+                {
+                    // Accumulate: grad += skipGrad (both same shape)
+                    if (grad.Length == skipGrad.Length)
+                    {
+                        for (int k = 0; k < grad.Length; k++)
+                            grad[k] = numOps.Add(grad[k], skipGrad[k]);
+                    }
+                }
+
                 grad = BackwardLayer(block.CrossAttentionBlock, grad);
                 grad = BackwardLayer(block.AttentionBlock, grad);
                 grad = BackwardLayer(block.ResBlock, grad);
@@ -984,8 +1032,100 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // Input convolution backward
         BackwardLayer(_inputConv, grad);
 
-        // Time embedding MLP backward (receives gradient from all ResBlocks that used it)
-        // Time embed gradients are accumulated within the DiffusionResBlock backward passes
+        // Time embedding MLP backward
+        // DiffusionResBlock stores time_embed gradients internally.
+        // Accumulate from all ResBlocks and backprop through MLP.
+        if (_lastTimeEmbed is not null && _timeEmbedMlp1 is not null && _timeEmbedMlp2 is not null)
+        {
+            var timeGrad = AccumulateTimeEmbedGradients();
+            if (timeGrad is not null)
+            {
+                timeGrad = _timeEmbedMlp2.Backward(timeGrad);
+                _timeEmbedMlp1.Backward(timeGrad);
+            }
+        }
+    }
+
+    private (Tensor<T> decoder, Tensor<T> skip) SplitChannels(Tensor<T> grad, int decoderChannels, int skipChannels)
+    {
+        // Split along axis 1 (channel dimension): grad [B, C_dec+C_skip, H, W]
+        int batch = grad.Shape[0];
+        int totalChannels = grad.Shape[1];
+        int height = grad.Shape.Length > 2 ? grad.Shape[2] : 1;
+        int width = grad.Shape.Length > 3 ? grad.Shape[3] : 1;
+        int spatialSize = height * width;
+
+        var decoderGrad = new Tensor<T>([batch, decoderChannels, height, width]);
+        var skipGrad = new Tensor<T>([batch, skipChannels, height, width]);
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < decoderChannels; c++)
+            {
+                int srcOffset = ((b * totalChannels) + c) * spatialSize;
+                int dstOffset = ((b * decoderChannels) + c) * spatialSize;
+                for (int s = 0; s < spatialSize; s++)
+                    decoderGrad[dstOffset + s] = grad[srcOffset + s];
+            }
+            for (int c = 0; c < skipChannels; c++)
+            {
+                int srcOffset = ((b * totalChannels) + decoderChannels + c) * spatialSize;
+                int dstOffset = ((b * skipChannels) + c) * spatialSize;
+                for (int s = 0; s < spatialSize; s++)
+                    skipGrad[dstOffset + s] = grad[srcOffset + s];
+            }
+        }
+
+        return (decoderGrad, skipGrad);
+    }
+
+    private int FindEncoderBlockForSkip(int skipIndex)
+    {
+        // Skip connections come from non-downsample encoder blocks in order
+        int skipCount = 0;
+        for (int i = 0; i < _encoderBlocks.Count; i++)
+        {
+            if (_encoderBlocks[i].Downsample == null)
+            {
+                if (skipCount == skipIndex)
+                    return i;
+                skipCount++;
+            }
+        }
+        return -1;
+    }
+
+    private Tensor<T>? AccumulateTimeEmbedGradients()
+    {
+        // Collect time embedding gradients from all DiffusionResBlocks
+        Tensor<T>? accumulated = null;
+        var numOps = NumOps;
+
+        void AccumulateFromBlock(ILayer<T>? layer)
+        {
+            if (layer is DiffusionResBlock<T> resBlock)
+            {
+                var timeGrad = resBlock.GetTimeEmbedGradient();
+                if (timeGrad is not null)
+                {
+                    if (accumulated is null)
+                    {
+                        accumulated = timeGrad;
+                    }
+                    else
+                    {
+                        for (int i = 0; i < accumulated.Length && i < timeGrad.Length; i++)
+                            accumulated[i] = numOps.Add(accumulated[i], timeGrad[i]);
+                    }
+                }
+            }
+        }
+
+        foreach (var block in _encoderBlocks) AccumulateFromBlock(block.ResBlock);
+        foreach (var block in _middleBlocks) AccumulateFromBlock(block.ResBlock);
+        foreach (var block in _decoderBlocks) AccumulateFromBlock(block.ResBlock);
+
+        return accumulated;
     }
 
     private static Tensor<T> BackwardLayer(ILayer<T>? layer, Tensor<T> grad)

@@ -208,13 +208,39 @@ public class DiffusionResBlock<T> : LayerBase<T>
         return h;
     }
 
+    // Stores time embed gradient for collection by UNet backward
+    private Tensor<T>? _timeEmbedGradient;
+
+    /// <summary>
+    /// Gets the accumulated time embedding gradient from the last backward pass.
+    /// Called by UNetNoisePredictor to propagate gradients through the time MLP.
+    /// </summary>
+    public Tensor<T>? GetTimeEmbedGradient() => _timeEmbedGradient;
+
     /// <inheritdoc />
     public override Tensor<T> Backward(Tensor<T> outputGradient)
     {
-        // Residual add: gradient flows equally to both branches
-        // Main branch: Conv2 ← SiLU ← Norm2 ← Conv1 ← SiLU ← Norm1
+        _timeEmbedGradient = null;
+
+        // Residual add: gradient flows to both main branch and skip branch
+        // Main branch backward (reverse of forward):
+        // Forward: norm1 → SiLU → conv1 → (+timeProj) → norm2 → SiLU → conv2
+        // Backward: conv2 → norm2 → (time grad split) → conv1 → norm1
         var mainGrad = _conv2.Backward(outputGradient);
         mainGrad = _norm2.Backward(mainGrad);
+
+        // Time conditioning backward: the time projection was ADDED to h,
+        // so its gradient is the same as mainGrad at this point (before conv1).
+        // Propagate back through _timeMlp to get the time embed gradient.
+        if (_timeEmbedDim > 0)
+        {
+            // mainGrad shape: [B, outChannels, H, W]
+            // Time projection was broadcast from [B, outChannels, 1, 1]
+            // Sum over spatial dimensions to get [B, outChannels] gradient
+            var timeGrad = Engine.ReduceSum(mainGrad, new[] { 2, 3 }, keepDims: false);
+            _timeEmbedGradient = _timeMlp.Backward(timeGrad);
+        }
+
         mainGrad = _conv1.Backward(mainGrad);
         mainGrad = _norm1.Backward(mainGrad);
 
