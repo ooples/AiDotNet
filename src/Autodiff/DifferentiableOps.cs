@@ -25,7 +25,7 @@ namespace AiDotNet.Autodiff;
 /// </para>
 /// <para><b>Reference:</b> Baydin et al. "Automatic Differentiation in Machine Learning: a Survey" (2018)</para>
 /// </remarks>
-internal static class DifferentiableOps<T>
+public static class DifferentiableOps<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static IEngine Engine => AiDotNetEngine.Current;
@@ -89,71 +89,84 @@ internal static class DifferentiableOps<T>
     /// <summary>Elementwise addition: c = a + b. Supports broadcasting.</summary>
     public static Tensor<T> Add(Tensor<T> a, Tensor<T> b)
     {
-        var aShape = a.Shape.ToArray();
-        var bShape = b.Shape.ToArray();
         var result = Engine.TensorAdd(a, b);
-        GradientTape<T>.Current?.RecordOp("Add", [a, b], result,
-            grad =>
-            [
-                ReduceBroadcastGrad(grad, aShape),
-                ReduceBroadcastGrad(grad, bShape)
-            ]);
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            var aShape = a.Shape.ToArray();
+            var bShape = b.Shape.ToArray();
+            tape.RecordOp("Add", [a, b], result,
+                grad =>
+                [
+                    ReduceBroadcastGrad(grad, aShape),
+                    ReduceBroadcastGrad(grad, bShape)
+                ]);
+        }
         return result;
     }
 
     /// <summary>Elementwise subtraction: c = a - b. Supports broadcasting.</summary>
     public static Tensor<T> Subtract(Tensor<T> a, Tensor<T> b)
     {
-        var aShape = a.Shape.ToArray();
-        var bShape = b.Shape.ToArray();
         var result = Engine.TensorSubtract(a, b);
-        GradientTape<T>.Current?.RecordOp("Subtract", [a, b], result,
-            grad =>
-            [
-                ReduceBroadcastGrad(grad, aShape),
-                ReduceBroadcastGrad(Engine.TensorNegate(grad), bShape)
-            ]);
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            var aShape = a.Shape.ToArray();
+            var bShape = b.Shape.ToArray();
+            tape.RecordOp("Subtract", [a, b], result,
+                grad =>
+                [
+                    ReduceBroadcastGrad(grad, aShape),
+                    ReduceBroadcastGrad(Engine.TensorNegate(grad), bShape)
+                ]);
+        }
         return result;
     }
 
     /// <summary>Elementwise multiplication (Hadamard product): c = a ⊙ b. Supports broadcasting.</summary>
     public static Tensor<T> Multiply(Tensor<T> a, Tensor<T> b)
     {
-        var aShape = a.Shape.ToArray();
-        var bShape = b.Shape.ToArray();
         var result = Engine.TensorMultiply(a, b);
-        GradientTape<T>.Current?.RecordOp("Multiply", [a, b], result,
-            grad =>
-            [
-                ReduceBroadcastGrad(Engine.TensorMultiply(grad, b), aShape),
-                ReduceBroadcastGrad(Engine.TensorMultiply(grad, a), bShape)
-            ]);
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            var aShape = a.Shape.ToArray();
+            var bShape = b.Shape.ToArray();
+            tape.RecordOp("Multiply", [a, b], result,
+                grad =>
+                [
+                    ReduceBroadcastGrad(Engine.TensorMultiply(grad, b), aShape),
+                    ReduceBroadcastGrad(Engine.TensorMultiply(grad, a), bShape)
+                ]);
+        }
         return result;
     }
 
     /// <summary>Elementwise division: c = a / b. Supports broadcasting. Guards against b=0.</summary>
     public static Tensor<T> Divide(Tensor<T> a, Tensor<T> b)
     {
-        var aShape = a.Shape.ToArray();
-        var bShape = b.Shape.ToArray();
         var result = Engine.TensorDivide(a, b);
-        GradientTape<T>.Current?.RecordOp("Divide", [a, b], result,
-            grad =>
-            {
-                // d(a/b)/da = 1/b, d(a/b)/db = -a/b²
-                // Guard: clamp b² away from zero to prevent Inf/NaN
-                var gradA = Engine.TensorDivide(grad, b);
-                var bSquared = Engine.TensorMultiply(b, b);
-                // Clamp bSquared to epsilon to avoid division by zero
-                var eps = NumOps.FromDouble(1e-12);
-                var safeBSquared = new Tensor<T>(bSquared.Shape.ToArray());
-                for (int i = 0; i < bSquared.Length; i++)
-                    safeBSquared[i] = NumOps.GreaterThan(
-                        NumOps.Abs(bSquared[i]), eps) ? bSquared[i] : eps;
-                var gradB = Engine.TensorNegate(Engine.TensorDivide(
-                    Engine.TensorMultiply(grad, a), safeBSquared));
-                return [ReduceBroadcastGrad(gradA, aShape), ReduceBroadcastGrad(gradB, bShape)];
-            });
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            var aShape = a.Shape.ToArray();
+            var bShape = b.Shape.ToArray();
+            tape.RecordOp("Divide", [a, b], result,
+                grad =>
+                {
+                    var gradA = Engine.TensorDivide(grad, b);
+                    var bSquared = Engine.TensorMultiply(b, b);
+                    var eps = NumOps.FromDouble(1e-12);
+                    var safeBSquared = new Tensor<T>(bSquared.Shape.ToArray());
+                    for (int i = 0; i < bSquared.Length; i++)
+                        safeBSquared[i] = NumOps.GreaterThan(
+                            NumOps.Abs(bSquared[i]), eps) ? bSquared[i] : eps;
+                    var gradB = Engine.TensorNegate(Engine.TensorDivide(
+                        Engine.TensorMultiply(grad, a), safeBSquared));
+                    return [ReduceBroadcastGrad(gradA, aShape), ReduceBroadcastGrad(gradB, bShape)];
+                });
+        }
         return result;
     }
 
@@ -182,7 +195,7 @@ internal static class DifferentiableOps<T>
     {
         var result = Engine.TensorAddScalar(a, scalar);
         GradientTape<T>.Current?.RecordOp("AddScalar", [a], result,
-            grad => [grad]); // d(a+c)/da = 1
+            grad => [grad]);
         return result;
     }
 
@@ -204,10 +217,8 @@ internal static class DifferentiableOps<T>
         GradientTape<T>.Current?.RecordOp("MatMul", [a, b], result,
             grad =>
             {
-                // dL/dA = grad @ B^T
                 var bT = Engine.TensorTranspose(b);
                 var gradA = Engine.TensorMatMul(grad, bT);
-                // dL/dB = A^T @ grad
                 var aT = Engine.TensorTranspose(a);
                 var gradB = Engine.TensorMatMul(aT, grad);
                 return [gradA, gradB];
@@ -354,20 +365,19 @@ internal static class DifferentiableOps<T>
     public static Tensor<T> Abs(Tensor<T> x)
     {
         var result = new Tensor<T>(x.Shape.ToArray());
-        var signs = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
-        {
-            double xi = NumOps.ToDouble(x[i]);
-            result[i] = NumOps.FromDouble(Math.Abs(xi));
-            signs[i] = NumOps.FromDouble(xi >= 0 ? 1.0 : -1.0);
-        }
+            result[i] = NumOps.FromDouble(Math.Abs(NumOps.ToDouble(x[i])));
 
-        GradientTape<T>.Current?.RecordOp("Abs", [x], result,
-            grad =>
-            {
-                // d|x|/dx = sign(x)
-                return [Engine.TensorMultiply(grad, signs)];
-            });
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            var signs = new Tensor<T>(x.Shape.ToArray());
+            for (int i = 0; i < x.Length; i++)
+                signs[i] = NumOps.FromDouble(NumOps.ToDouble(x[i]) >= 0 ? 1.0 : -1.0);
+
+            tape.RecordOp("Abs", [x], result,
+                grad => [Engine.TensorMultiply(grad, signs)]);
+        }
         return result;
     }
 
@@ -375,105 +385,106 @@ internal static class DifferentiableOps<T>
     public static Tensor<T> Clamp(Tensor<T> x, double min, double max)
     {
         var result = new Tensor<T>(x.Shape.ToArray());
-        var mask = new Tensor<T>(x.Shape.ToArray());
+        var tape = GradientTape<T>.Current;
+        Tensor<T>? mask = null;
+        if (tape is not null)
+            mask = new Tensor<T>(x.Shape.ToArray());
+
         for (int i = 0; i < x.Length; i++)
         {
             double xi = NumOps.ToDouble(x[i]);
-            double clamped = Math.Max(min, Math.Min(max, xi));
-            result[i] = NumOps.FromDouble(clamped);
-            mask[i] = (xi >= min && xi <= max) ? NumOps.One : NumOps.Zero;
+            result[i] = NumOps.FromDouble(Math.Max(min, Math.Min(max, xi)));
+            if (mask is not null)
+                mask[i] = (xi >= min && xi <= max) ? NumOps.One : NumOps.Zero;
         }
 
-        GradientTape<T>.Current?.RecordOp("Clamp", [x], result,
-            grad =>
-            {
-                // Gradient passes through where x is in [min, max], zero elsewhere
-                return [Engine.TensorMultiply(grad, mask)];
-            });
+        if (tape is not null)
+        {
+            var capturedMask = mask;
+            tape.RecordOp("Clamp", [x], result,
+                grad => [Engine.TensorMultiply(grad, capturedMask ?? grad)]);
+        }
         return result;
     }
 
     // ─── Activation ops ──────────────────────────────────────────────
 
-    /// <summary>Elementwise sigmoid: σ(x) = 1/(1+exp(-x)).</summary>
+    /// <summary>Elementwise sigmoid: σ(x) = 1/(1+exp(-x)). Uses Engine vectorized path.</summary>
     public static Tensor<T> Sigmoid(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape.ToArray());
-        for (int i = 0; i < x.Length; i++)
+        var result = Engine.Sigmoid(x);
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
         {
-            double val = NumOps.ToDouble(x[i]);
-            result[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-val)));
-        }
-
-        GradientTape<T>.Current?.RecordOp("Sigmoid", [x], result,
-            grad =>
-            {
-                // σ'(x) = σ(x) * (1 - σ(x)) — single loop, zero extra allocations
-                var dx = new Tensor<T>(grad.Shape.ToArray());
-                for (int i = 0; i < grad.Length; i++)
+            tape.RecordOp("Sigmoid", [x], result,
+                grad =>
                 {
-                    double si = NumOps.ToDouble(result[i]);
-                    dx[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * si * (1.0 - si));
-                }
-                return [dx];
-            });
+                    // σ'(x) = σ(x) * (1 - σ(x))
+                    return [Engine.SigmoidBackward(grad, result)];
+                });
+        }
         return result;
     }
 
-    /// <summary>Elementwise tanh.</summary>
+    /// <summary>Elementwise tanh. Uses Engine vectorized path.</summary>
     public static Tensor<T> Tanh(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape.ToArray());
-        for (int i = 0; i < x.Length; i++)
-            result[i] = NumOps.FromDouble(Math.Tanh(NumOps.ToDouble(x[i])));
-
-        GradientTape<T>.Current?.RecordOp("Tanh", [x], result,
-            grad =>
-            {
-                // tanh'(x) = 1 - tanh²(x) — single loop, zero extra allocations
-                var dx = new Tensor<T>(grad.Shape.ToArray());
-                for (int i = 0; i < grad.Length; i++)
+        var result = Engine.Tanh(x);
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("Tanh", [x], result,
+                grad =>
                 {
-                    double ti = NumOps.ToDouble(result[i]);
-                    dx[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * (1.0 - ti * ti));
-                }
-                return [dx];
-            });
+                    // tanh'(x) = 1 - tanh²(x)
+                    return [Engine.TanhBackward(grad, result)];
+                });
+        }
         return result;
     }
 
     /// <summary>Elementwise ReLU: max(0, x). Uses byte mask (1 byte vs 4-8 bytes per element).</summary>
     public static Tensor<T> ReLU(Tensor<T> x)
     {
-        var result = new Tensor<T>(x.Shape.ToArray());
-        // Byte mask: 1 byte per element instead of sizeof(T) per element
-        var mask = new byte[x.Length];
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            // When recording, compute with mask for backward
+            var result = new Tensor<T>(x.Shape.ToArray());
+            var mask = new byte[x.Length];
+            for (int i = 0; i < x.Length; i++)
+            {
+                double val = NumOps.ToDouble(x[i]);
+                result[i] = val > 0 ? x[i] : NumOps.Zero;
+                mask[i] = val > 0 ? (byte)1 : (byte)0;
+            }
+
+            var shape = x.Shape.ToArray();
+            tape.RecordOp("ReLU", [x], result,
+                grad =>
+                {
+                    var dx = new Tensor<T>(shape);
+                    for (int i = 0; i < grad.Length; i++)
+                        dx[i] = mask[i] == 1 ? grad[i] : NumOps.Zero;
+                    return [dx];
+                });
+            return result;
+        }
+
+        // No tape — just compute forward (Engine ReLU or manual)
+        var fwd = new Tensor<T>(x.Shape.ToArray());
         for (int i = 0; i < x.Length; i++)
         {
             double val = NumOps.ToDouble(x[i]);
-            result[i] = val > 0 ? x[i] : NumOps.Zero;
-            mask[i] = val > 0 ? (byte)1 : (byte)0;
+            fwd[i] = val > 0 ? x[i] : NumOps.Zero;
         }
-
-        var shape = x.Shape.ToArray();
-        GradientTape<T>.Current?.RecordOp("ReLU", [x], result,
-            grad =>
-            {
-                // ReLU'(x) = 1 if x > 0, else 0 — single loop with byte mask
-                var dx = new Tensor<T>(shape);
-                for (int i = 0; i < grad.Length; i++)
-                    dx[i] = mask[i] == 1 ? grad[i] : NumOps.Zero;
-                return [dx];
-            });
-        return result;
+        return fwd;
     }
 
     /// <summary>Elementwise GELU (Gaussian Error Linear Unit).</summary>
     public static Tensor<T> GELU(Tensor<T> x)
     {
-        // GELU(x) = x * Φ(x) where Φ is the standard normal CDF
-        // Approximation: 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x³)))
-        const double sqrt2OverPi = 0.7978845608028654; // sqrt(2/π)
+        const double sqrt2OverPi = 0.7978845608028654;
         const double coeff = 0.044715;
 
         var result = new Tensor<T>(x.Shape.ToArray());
@@ -481,57 +492,56 @@ internal static class DifferentiableOps<T>
         {
             double xi = NumOps.ToDouble(x[i]);
             double inner = sqrt2OverPi * (xi + coeff * xi * xi * xi);
-            double tanhInner = Math.Tanh(inner);
-            result[i] = NumOps.FromDouble(0.5 * xi * (1.0 + tanhInner));
+            result[i] = NumOps.FromDouble(0.5 * xi * (1.0 + Math.Tanh(inner)));
         }
 
-        GradientTape<T>.Current?.RecordOp("GELU", [x], result,
-            grad =>
-            {
-                // GELU'(x) = 0.5 * (1 + tanh(c)) + 0.5 * x * sech²(c) * c'
-                // where c = sqrt(2/π) * (x + 0.044715x³), c' = sqrt(2/π) * (1 + 3*0.044715*x²)
-                var derivative = new Tensor<T>(x.Shape.ToArray());
-                for (int i = 0; i < x.Length; i++)
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("GELU", [x], result,
+                grad =>
                 {
-                    double xi = NumOps.ToDouble(x[i]);
-                    double c = sqrt2OverPi * (xi + coeff * xi * xi * xi);
-                    double tanhC = Math.Tanh(c);
-                    double sech2C = 1.0 - tanhC * tanhC;
-                    double cPrime = sqrt2OverPi * (1.0 + 3.0 * coeff * xi * xi);
-                    double geluPrime = 0.5 * (1.0 + tanhC) + 0.5 * xi * sech2C * cPrime;
-                    derivative[i] = NumOps.FromDouble(geluPrime);
-                }
-                return [Engine.TensorMultiply(grad, derivative)];
-            });
+                    var derivative = new Tensor<T>(x.Shape.ToArray());
+                    for (int i = 0; i < x.Length; i++)
+                    {
+                        double xi = NumOps.ToDouble(x[i]);
+                        double c = sqrt2OverPi * (xi + coeff * xi * xi * xi);
+                        double tanhC = Math.Tanh(c);
+                        double sech2C = 1.0 - tanhC * tanhC;
+                        double cPrime = sqrt2OverPi * (1.0 + 3.0 * coeff * xi * xi);
+                        double geluPrime = 0.5 * (1.0 + tanhC) + 0.5 * xi * sech2C * cPrime;
+                        derivative[i] = NumOps.FromDouble(geluPrime);
+                    }
+                    return [Engine.TensorMultiply(grad, derivative)];
+                });
+        }
         return result;
     }
 
-    /// <summary>Elementwise Swish/SiLU: x * σ(x).</summary>
+    /// <summary>Elementwise Swish/SiLU: x * σ(x). Uses Engine vectorized sigmoid.</summary>
     public static Tensor<T> Swish(Tensor<T> x)
     {
-        var sig = new Tensor<T>(x.Shape.ToArray());
-        var result = new Tensor<T>(x.Shape.ToArray());
-        for (int i = 0; i < x.Length; i++)
-        {
-            double xi = NumOps.ToDouble(x[i]);
-            double s = 1.0 / (1.0 + Math.Exp(-xi));
-            sig[i] = NumOps.FromDouble(s);
-            result[i] = NumOps.FromDouble(xi * s);
-        }
+        // Forward: Swish(x) = x * σ(x) — use Engine.Sigmoid for vectorized σ
+        var sig = Engine.Sigmoid(x);
+        var result = Engine.TensorMultiply(x, sig);
 
-        GradientTape<T>.Current?.RecordOp("Swish", [x], result,
-            grad =>
-            {
-                // Swish'(x) = σ(x) + x * σ(x) * (1 - σ(x)) = σ(x) * (1 + x * (1 - σ(x)))
-                var derivative = new Tensor<T>(x.Shape.ToArray());
-                for (int i = 0; i < x.Length; i++)
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("Swish", [x], result,
+                grad =>
                 {
-                    double xi = NumOps.ToDouble(x[i]);
-                    double s = NumOps.ToDouble(sig[i]);
-                    derivative[i] = NumOps.FromDouble(s * (1.0 + xi * (1.0 - s)));
-                }
-                return [Engine.TensorMultiply(grad, derivative)];
-            });
+                    // Swish'(x) = σ(x) * (1 + x * (1 - σ(x)))
+                    var derivative = new Tensor<T>(x.Shape.ToArray());
+                    for (int i = 0; i < x.Length; i++)
+                    {
+                        double xi = NumOps.ToDouble(x[i]);
+                        double s = NumOps.ToDouble(sig[i]);
+                        derivative[i] = NumOps.FromDouble(s * (1.0 + xi * (1.0 - s)));
+                    }
+                    return [Engine.TensorMultiply(grad, derivative)];
+                });
+        }
         return result;
     }
 
@@ -540,11 +550,14 @@ internal static class DifferentiableOps<T>
     /// <summary>Reshape tensor (no data copy — gradient just reshapes back).</summary>
     public static Tensor<T> Reshape(Tensor<T> a, int[] newShape)
     {
-        var originalShape = a.Shape.ToArray();
         var result = a.Reshape(newShape);
-
-        GradientTape<T>.Current?.RecordOp("Reshape", [a], result,
-            grad => [grad.Reshape(originalShape)]);
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            var originalShape = a.Shape.ToArray();
+            tape.RecordOp("Reshape", [a], result,
+                grad => [grad.Reshape(originalShape)]);
+        }
         return result;
     }
 
