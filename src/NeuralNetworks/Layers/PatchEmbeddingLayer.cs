@@ -492,7 +492,16 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        var activationGradient = ApplyActivationDerivative(_lastPreActivation, outputGradient);
+        // Reshape gradient to match _lastPreActivation shape if needed
+        // Forward may have reshaped output; backward gradient must match pre-activation shape
+        var grad = outputGradient;
+        if (!_lastPreActivation.Shape.ToArray().SequenceEqual(outputGradient.Shape.ToArray()) &&
+            _lastPreActivation.Length == outputGradient.Length)
+        {
+            grad = outputGradient.Reshape(_lastPreActivation.Shape.ToArray());
+        }
+
+        var activationGradient = ApplyActivationDerivative(_lastPreActivation, grad);
 
         int batchSize = _lastInput.Shape[0];
         int patchDim = _channels * _patchSize * _patchSize;
