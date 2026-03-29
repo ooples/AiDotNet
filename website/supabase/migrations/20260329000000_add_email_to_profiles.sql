@@ -64,12 +64,13 @@ create trigger on_auth_user_email_update
 -- Helper function to get the current user's protected fields (bypasses RLS)
 -- Bound to auth.uid() internally to prevent callers from reading other users' data
 create or replace function public.get_profile_protected_fields()
-returns table(role text, subscription_tier text, subscription_status text, stripe_customer_id text)
+returns table(role text, subscription_tier text, subscription_status text, stripe_customer_id text, email text)
 language sql
 security definer
+stable
 set search_path = 'pg_catalog, public'
 as $$
-  select p.role, p.subscription_tier, p.subscription_status, p.stripe_customer_id
+  select p.role, p.subscription_tier, p.subscription_status, p.stripe_customer_id, p.email
   from public.profiles p
   where p.id = auth.uid()
   limit 1;
@@ -83,7 +84,7 @@ create policy "Users can update own profile"
   using (auth.uid() = id)
   with check (
     auth.uid() = id
-    and email is not distinct from (select p.email from public.profiles p where p.id = auth.uid())
+    and email is not distinct from (select pf.email from public.get_profile_protected_fields() pf)
     and role = (select pf.role from public.get_profile_protected_fields() pf)
     and subscription_tier = (select pf.subscription_tier from public.get_profile_protected_fields() pf)
     and subscription_status = (select pf.subscription_status from public.get_profile_protected_fields() pf)
