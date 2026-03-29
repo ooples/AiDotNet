@@ -1,6 +1,7 @@
 using System;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.PDEs;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.PhysicsInformed.PDEs;
@@ -68,8 +69,8 @@ public class AdvancedPDETests
         double t = 0.5;
         double V = 10.0;
 
-        var inputs = new[] { S, t };
-        var outputs = new[] { V };
+        var inputs = new Vector<double>(new double[] { S, t });
+        var outputs = new Vector<double>(new double[] { V });
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { 0.0, 0.0 } },  // dV/dS = 0, dV/dt = 0
             new[, ,] { { { 0.0, 0.0 }, { 0.0, 0.0 } } });  // d2V/dS2 = 0
@@ -97,8 +98,8 @@ public class AdvancedPDETests
         double t = 0.5;
         double V = S;  // V = S
 
-        var inputs = new[] { S, t };
-        var outputs = new[] { V };
+        var inputs = new Vector<double>(new double[] { S, t });
+        var outputs = new Vector<double>(new double[] { V });
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { 1.0, 0.0 } },  // dV/dS = 1, dV/dt = 0
             new[, ,] { { { 0.0, 0.0 }, { 0.0, 0.0 } } });  // d2V/dS2 = 0
@@ -123,8 +124,8 @@ public class AdvancedPDETests
         double S = 100.0;
         double t = 0.5;
 
-        var inputs = new[] { S, t };
-        var outputs = new[] { 10.0 };
+        var inputs = new Vector<double>(new double[] { S, t });
+        var outputs = new Vector<double>(new double[] { 10.0 });
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { 0.5, 0.1 } },
             new[, ,] { { { 0.02, 0.0 }, { 0.0, 0.0 } } });
@@ -204,8 +205,8 @@ public class AdvancedPDETests
     {
         var pde = new LinearElasticityEquation<double>(1.0, 1.0);
 
-        var inputs = new[] { 0.5, 0.5 };
-        var outputs = new[] { 0.0, 0.0 };  // u = 0, v = 0
+        var inputs = new Vector<double>(new double[] { 0.5, 0.5 });
+        var outputs = new Vector<double>(new double[] { 0.0, 0.0 });  // u = 0, v = 0
 
         // All derivatives zero
         var firstDerivatives = new double[2, 2];
@@ -231,8 +232,8 @@ public class AdvancedPDETests
     {
         var pde = new LinearElasticityEquation<double>(1.0, 1.0);
 
-        var inputs = new[] { 0.5, 0.5 };
-        var outputs = new[] { 0.1, 0.05 };  // Non-zero displacements
+        var inputs = new Vector<double>(new double[] { 0.5, 0.5 });
+        var outputs = new Vector<double>(new double[] { 0.1, 0.05 });  // Non-zero displacements
 
         // Uniform strain: first derivatives constant, second derivatives zero
         var firstDerivatives = new double[2, 2];
@@ -312,8 +313,8 @@ public class AdvancedPDETests
         var pde = new AdvectionDiffusionEquation<double>(D, 0.0);  // No advection
 
         // Constant concentration: all derivatives zero
-        var inputs = new[] { 0.5, 0.1 };
-        var outputs = new[] { 1.0 };  // c = 1
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 1.0 });  // c = 1
 
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { 0.0, 0.0 } },
@@ -344,8 +345,8 @@ public class AdvancedPDETests
         double dcdx = Math.Cos(xi);
         double dcdt = -v * Math.Cos(xi);
 
-        var inputs = new[] { x, t };
-        var outputs = new[] { c };
+        var inputs = new Vector<double>(new double[] { x, t });
+        var outputs = new Vector<double>(new double[] { c });
 
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { dcdx, dcdt } },
@@ -370,8 +371,8 @@ public class AdvancedPDETests
             velocityY: 0.5,
             sourceTerm: 0.0);
 
-        var inputs = new[] { 0.5, 0.5, 0.1 };
-        var outputs = new[] { 1.0 };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 1.0 });
 
         // All derivatives zero for uniform concentration
         var firstDerivatives = new double[1, 3];
@@ -399,8 +400,8 @@ public class AdvancedPDETests
         double v = 1.0;
         var pde = new AdvectionDiffusionEquation<double>(D, v);
 
-        var inputs = new[] { 0.5, 0.1 };
-        var outputs = new[] { 1.0 };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 1.0 });
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { 0.5, 0.3 } },
             new[, ,] { { { 0.2, 0.0 }, { 0.0, 0.0 } } });
@@ -460,8 +461,8 @@ public class AdvancedPDETests
     {
         var pde = KortewegDeVriesEquation<double>.Canonical();
 
-        var inputs = new[] { 0.5, 0.1 };
-        var outputs = new[] { 1.0 };  // u = constant
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 1.0 });  // u = constant
 
         var derivatives = CreateDerivativesWithThird(1, 2,
             new[,] { { 0.0, 0.0 } },
@@ -482,8 +483,8 @@ public class AdvancedPDETests
     {
         var pde = KortewegDeVriesEquation<double>.Canonical();
 
-        var inputs = new[] { 0.5, 0.1 };
-        var outputs = new[] { 0.0 };  // u = 0
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 0.0 });  // u = 0
 
         var derivatives = CreateDerivativesWithThird(1, 2,
             new[,] { { 0.0, 0.0 } },
@@ -513,8 +514,8 @@ public class AdvancedPDETests
         double dudt = 0.2;
         double d3udx3 = 0.05;
 
-        var inputs = new[] { x, t };
-        var outputs = new[] { u };
+        var inputs = new Vector<double>(new double[] { x, t });
+        var outputs = new Vector<double>(new double[] { u });
 
         var derivatives = CreateDerivativesWithThird(1, 2,
             new[,] { { dudx, dudt } },
@@ -542,8 +543,8 @@ public class AdvancedPDETests
         double u = 0.5;
         double dudx = 0.1;
 
-        var inputs = new[] { 0.5, 0.1 };
-        var outputs = new[] { u };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { u });
 
         var derivatives = CreateDerivativesWithThird(1, 2,
             new[,] { { dudx, 0.2 } },

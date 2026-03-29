@@ -4,6 +4,7 @@ using AiDotNet.PhysicsInformed.Benchmarks;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.PhysicsInformed.PDEs;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.PhysicsInformed;
@@ -776,8 +777,8 @@ public class PhysicsInformedExtendedIntegrationTests
         // Uniform flow: u = constant, v = 0, p = constant
         // All derivatives are zero for uniform flow
         var ns = new NavierStokesEquation<double>(viscosity: 0.01, density: 1.0);
-        var inputs = new double[] { 0.5, 0.5, 0.0 }; // [x, y, t]
-        var outputs = new double[] { 1.0, 0.0, 0.0 }; // [u, v, p] - uniform velocity in x
+        var inputs = new Vector<double>(new double[] { 0.5, 0.5, 0.0 }); // [x, y, t]
+        var outputs = new Vector<double>(new double[] { 1.0, 0.0, 0.0 }); // [u, v, p] - uniform velocity in x
 
         var derivatives = new PDEDerivatives<double>
         {
@@ -793,8 +794,8 @@ public class PhysicsInformedExtendedIntegrationTests
     public void NavierStokesEquation_ComputeResidual_WrongOutputDim_Throws()
     {
         var ns = new NavierStokesEquation<double>();
-        var inputs = new double[] { 0.5, 0.5, 0.0 };
-        var outputs = new double[] { 1.0, 0.0 }; // Wrong - needs 3
+        var inputs = new Vector<double>(new double[] { 0.5, 0.5, 0.0 });
+        var outputs = new Vector<double>(new double[] { 1.0, 0.0 }); // Wrong - needs 3
 
         var derivatives = new PDEDerivatives<double>
         {
@@ -810,8 +811,8 @@ public class PhysicsInformedExtendedIntegrationTests
     public void NavierStokesEquation_ComputeResidualGradient_ReturnsGradient()
     {
         var ns = new NavierStokesEquation<double>();
-        var inputs = new double[] { 0.5, 0.5, 0.0 };
-        var outputs = new double[] { 1.0, 0.0, 0.0 };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.5, 0.0 });
+        var outputs = new Vector<double>(new double[] { 1.0, 0.0, 0.0 });
 
         var derivatives = new PDEDerivatives<double>
         {
@@ -862,8 +863,8 @@ public class PhysicsInformedExtendedIntegrationTests
         // residual = 0 + 0 + 0 - r*V = -r*V
         var r = 0.05;
         var bs = new BlackScholesEquation<double>(volatility: 0.2, riskFreeRate: r);
-        var inputs = new double[] { 100.0, 0.5 }; // S=100, t=0.5
-        var outputs = new double[] { 10.0 }; // V=10
+        var inputs = new Vector<double>(new double[] { 100.0, 0.5 }); // S=100, t=0.5
+        var outputs = new Vector<double>(new double[] { 10.0 }); // V=10
 
         var derivatives = new PDEDerivatives<double>
         {
@@ -882,8 +883,8 @@ public class PhysicsInformedExtendedIntegrationTests
     {
         var r = 0.05;
         var bs = new BlackScholesEquation<double>(volatility: 0.2, riskFreeRate: r);
-        var inputs = new double[] { 100.0, 0.5 };
-        var outputs = new double[] { 10.0 };
+        var inputs = new Vector<double>(new double[] { 100.0, 0.5 });
+        var outputs = new Vector<double>(new double[] { 10.0 });
 
         var derivatives = new PDEDerivatives<double>
         {
@@ -936,8 +937,8 @@ public class PhysicsInformedExtendedIntegrationTests
     {
         // Zero wavefunction with zero derivatives should give zero residual
         var se = new SchrodingerEquation<double>();
-        var inputs = new double[] { 0.5, 0.1 }; // [x, t]
-        var outputs = new double[] { 0.0, 0.0 }; // [psi_r, psi_i] = 0
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 }); // [x, t]
+        var outputs = new Vector<double>(new double[] { 0.0, 0.0 }); // [psi_r, psi_i] = 0
 
         var derivatives = new PDEDerivatives<double>
         {
@@ -953,8 +954,8 @@ public class PhysicsInformedExtendedIntegrationTests
     public void SchrodingerEquation_ComputeResidual_WrongOutputDim_Throws()
     {
         var se = new SchrodingerEquation<double>();
-        var inputs = new double[] { 0.5, 0.1 };
-        var outputs = new double[] { 1.0 }; // Wrong - needs 2
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 1.0 }); // Wrong - needs 2
 
         var derivatives = new PDEDerivatives<double>
         {
@@ -1003,8 +1004,8 @@ public class PhysicsInformedExtendedIntegrationTests
     {
         // Constant concentration with zero source: all derivatives are zero, residual = 0 - source
         var ade = new AdvectionDiffusionEquation<double>(diffusionCoeff: 0.1, velocityX: 1.0, sourceTerm: 0.0);
-        var inputs = new double[] { 0.5, 0.1 };
-        var outputs = new double[] { 1.0 };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 1.0 });
 
         var derivatives = new PDEDerivatives<double>
         {
@@ -1020,8 +1021,8 @@ public class PhysicsInformedExtendedIntegrationTests
     public void AdvectionDiffusionEquation_ComputeResidualGradient_1D()
     {
         var ade = new AdvectionDiffusionEquation<double>(diffusionCoeff: 0.1, velocityX: 1.0, sourceTerm: 0.0);
-        var inputs = new double[] { 0.5, 0.1 };
-        var outputs = new double[] { 1.0 };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 1.0 });
 
         var derivatives = new PDEDerivatives<double>
         {
@@ -1068,8 +1069,8 @@ public class PhysicsInformedExtendedIntegrationTests
     {
         // Zero displacement with zero body forces: all derivatives are zero, residual = 0
         var le = new LinearElasticityEquation<double>(lambda: 1.0, mu: 0.5);
-        var inputs = new double[] { 0.5, 0.5 };
-        var outputs = new double[] { 0.0, 0.0 }; // No displacement
+        var inputs = new Vector<double>(new double[] { 0.5, 0.5 });
+        var outputs = new Vector<double>(new double[] { 0.0, 0.0 }); // No displacement
 
         var derivatives = new PDEDerivatives<double>
         {
@@ -1100,8 +1101,8 @@ public class PhysicsInformedExtendedIntegrationTests
     {
         // Zero fields with zero derivatives: residual = 0
         var maxwell = new MaxwellEquations<double>(permittivity: 1.0, permeability: 1.0);
-        var inputs = new double[] { 0.5, 0.5, 0.0 };
-        var outputs = new double[] { 0.0, 0.0, 0.0 }; // No EM fields
+        var inputs = new Vector<double>(new double[] { 0.5, 0.5, 0.0 });
+        var outputs = new Vector<double>(new double[] { 0.0, 0.0, 0.0 }); // No EM fields
 
         var derivatives = new PDEDerivatives<double>
         {
@@ -1138,8 +1139,8 @@ public class PhysicsInformedExtendedIntegrationTests
     public void AllenCahnEquation_ComputeResidualGradient_ReturnsGradient()
     {
         var ac = new AllenCahnEquation<double>(epsilon: 0.01);
-        var inputs = new double[] { 0.5, 0.1 };
-        var outputs = new double[] { 0.5 };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 0.5 });
 
         var derivatives = new PDEDerivatives<double>
         {
@@ -1174,8 +1175,8 @@ public class PhysicsInformedExtendedIntegrationTests
     public void BurgersEquation_ComputeResidualGradient_ReturnsGradient()
     {
         var burgers = new BurgersEquation<double>(viscosity: 0.01);
-        var inputs = new double[] { 0.5, 0.1 };
-        var outputs = new double[] { 1.0 };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 1.0 });
 
         var derivatives = new PDEDerivatives<double>
         {
@@ -1232,8 +1233,8 @@ public class PhysicsInformedExtendedIntegrationTests
     public void WaveEquation_ComputeResidualGradient_Returns()
     {
         var wave = new WaveEquation<double>(waveSpeed: 2.0);
-        var inputs = new double[] { 0.5, 0.1 };
-        var outputs = new double[] { 1.0 };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 1.0 });
 
         var derivatives = new PDEDerivatives<double>
         {
@@ -1258,8 +1259,8 @@ public class PhysicsInformedExtendedIntegrationTests
     public void HeatEquation_ComputeResidualGradient_Correctness()
     {
         var heat = new HeatEquation<double>(thermalDiffusivity: 0.5);
-        var inputs = new double[] { 0.5, 0.1 };
-        var outputs = new double[] { 1.0 };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 1.0 });
 
         var derivatives = new PDEDerivatives<double>
         {
@@ -1320,8 +1321,8 @@ public class PhysicsInformedExtendedIntegrationTests
     public void PoissonEquation_ComputeResidualGradient_Returns()
     {
         var poisson = new PoissonEquation<double>(spatialDimension: 2);
-        var inputs = new double[] { 0.5, 0.5 };
-        var outputs = new double[] { 1.0 };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.5 });
+        var outputs = new Vector<double>(new double[] { 1.0 });
 
         var derivatives = new PDEDerivatives<double>
         {
@@ -1363,8 +1364,8 @@ public class PhysicsInformedExtendedIntegrationTests
     public void KortewegDeVriesEquation_ConstantSolution_ZeroResidual()
     {
         var kdv = new KortewegDeVriesEquation<double>(alpha: 6.0, beta: 1.0);
-        var inputs = new double[] { 0.5, 0.1 };
-        var outputs = new double[] { 0.0 }; // Constant = 0
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 0.0 }); // Constant = 0
 
         var derivatives = new PDEDerivatives<double>
         {
@@ -1461,7 +1462,7 @@ public class PhysicsInformedExtendedIntegrationTests
         var heat = new HeatEquation<double>(thermalDiffusivity: 1.0);
         var loss = new PhysicsInformedLoss<double>(pdeSpecification: heat);
 
-        var predictions = new double[] { 0.5 };
+        var predictions = new Vector<double>(new double[] { 0.5 });
         var derivatives = new PDEDerivatives<double>
         {
             FirstDerivatives = new double[1, 2] { { 0.0, 0.1 } }, // dudx=0, dudt=0.1
@@ -1469,7 +1470,7 @@ public class PhysicsInformedExtendedIntegrationTests
         };
         // d2udx2 = 0, so residual = dudt - alpha * d2udx2 = 0.1 - 0 = 0.1
         // PDE loss = residual^2 = 0.01
-        var inputs = new double[] { 0.5, 0.1 };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
 
         double totalLoss = loss.ComputePhysicsLoss(predictions, null, derivatives, inputs);
         Assert.Equal(0.01, totalLoss, 1e-6);
