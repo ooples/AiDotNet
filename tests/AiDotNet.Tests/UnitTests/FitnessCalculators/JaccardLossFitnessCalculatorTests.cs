@@ -325,11 +325,11 @@ namespace AiDotNetTests.UnitTests.FitnessCalculators
             // Act
             var result = calculator.CalculateFitnessScore(dataSet);
 
-            // Assert
-            // Intersection = min(0.3,0.6) + min(0.7,0.4) + min(0.5,0.8) = 0.3 + 0.4 + 0.5 = 1.2
-            // Union = max(0.3,0.6) + max(0.7,0.4) + max(0.5,0.8) = 0.6 + 0.7 + 0.8 = 2.1
-            // IoU = 1.2 / 2.1 ≈ 0.5714, Loss = 1 - 0.5714 ≈ 0.4286
-            Assert.Equal(0.42857142857142855, result, 10);
+            // Assert — Soft IoU per PyTorch standard (differentiable):
+            // Intersection = Σ(p*a) = 0.3*0.6 + 0.7*0.4 + 0.5*0.8 = 0.18 + 0.28 + 0.40 = 0.86
+            // Union = Σp + Σa - Σ(p*a) = 1.5 + 1.8 - 0.86 = 2.44
+            // IoU = 0.86 / 2.44 ≈ 0.35246, Loss = 1 - 0.35246 ≈ 0.64754
+            Assert.Equal(0.64754098360655738, result, 10);
         }
 
         [Fact]
