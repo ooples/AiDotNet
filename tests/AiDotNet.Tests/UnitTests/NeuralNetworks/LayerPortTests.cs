@@ -113,4 +113,64 @@ public class LayerPortTests
         var port = new LayerPort("mask", [8, 8], Required: false);
         Assert.False(port.Required);
     }
+
+    [Fact]
+    public void DiffusionResBlock_MultiInputForward_IncludesTimeConditioning()
+    {
+        int channels = 4;
+        int spatial = 8;
+        int timeEmbedDim = 16;
+
+        // Use TWO blocks with identical parameters to compare with/without time embed
+        var block1 = new AiDotNet.Diffusion.NoisePredictors.DiffusionResBlock<double>(
+            inChannels: channels, outChannels: channels, spatialSize: spatial, timeEmbedDim: timeEmbedDim);
+        var block2 = new AiDotNet.Diffusion.NoisePredictors.DiffusionResBlock<double>(
+            inChannels: channels, outChannels: channels, spatialSize: spatial, timeEmbedDim: timeEmbedDim);
+        // Copy parameters so both blocks are identical
+        block2.SetParameters(block1.GetParameters());
+
+        var input = new Tensor<double>([1, channels, spatial, spatial]);
+        var timeEmbed = new Tensor<double>([1, timeEmbedDim]);
+        var rng = new Random(42);
+        for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble() * 0.5;
+        for (int i = 0; i < timeEmbed.Length; i++) timeEmbed[i] = rng.NextDouble() * 2.0;
+
+        // block1: Forward WITHOUT time embed
+        var outputNoTime = block1.Forward(input);
+
+        // block2: Forward WITH time embed via named ports
+        var outputWithTime = block2.Forward(new Dictionary<string, Tensor<double>>
+        {
+            ["input"] = input,
+            ["time_embed"] = timeEmbed
+        });
+
+        // Verify that Forward(dict) with time_embed calls the time-conditioned path.
+        // Compare against Forward(input, timeEmbed) directly to confirm routing works.
+        block1.ResetState();
+        var outputDirect = block1.Forward(input, timeEmbed);
+
+        // The multi-input Forward via dict should produce the same result as direct Forward(input, timeEmbed)
+        for (int i = 0; i < Math.Min(outputDirect.Length, outputWithTime.Length); i++)
+        {
+            Assert.Equal(outputDirect[i], outputWithTime[i], 10);
+        }
+    }
+
+    [Fact]
+    public void SingleInputLayer_MultiInputForward_IgnoresExtraKeys()
+    {
+        var layer = new DenseLayer<double>(4, 2);
+        var input = new Tensor<double>([1, 4]);
+        for (int i = 0; i < 4; i++) input[0, i] = (i + 1) * 0.1;
+
+        // Pass extra key that doesn't match any port — should be ignored
+        var result = layer.Forward(new Dictionary<string, Tensor<double>>
+        {
+            ["input"] = input,
+            ["extra_data"] = new Tensor<double>([3])
+        });
+
+        Assert.True(result.Length > 0);
+    }
 }

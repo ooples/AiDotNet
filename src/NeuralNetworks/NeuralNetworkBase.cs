@@ -1065,6 +1065,49 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Forward pass with named auxiliary inputs that are routed to layers declaring matching ports.
+    /// Layers with a single "input" port receive the sequential output as usual.
+    /// Layers with additional ports (e.g., "time_embed") receive the matching tensor from <paramref name="auxiliaryInputs"/>.
+    /// </summary>
+    /// <param name="input">Primary input tensor (routed as "input" port to each layer).</param>
+    /// <param name="auxiliaryInputs">Named auxiliary tensors (e.g., "time_embed" → embedding tensor).</param>
+    /// <returns>Final output tensor.</returns>
+    public virtual Tensor<T> ForwardWithMemory(Tensor<T> input, IReadOnlyDictionary<string, Tensor<T>> auxiliaryInputs)
+    {
+        if (!SupportsTraining)
+            throw new InvalidOperationException("This network does not support training mode");
+
+        Tensor<T> current = input;
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            _layerInputs[i] = current;
+
+            // Check if this layer needs auxiliary inputs beyond the sequential "input"
+            var layer = Layers[i];
+            if (layer is LayerBase<T> typedLayer && typedLayer.InputPorts.Count > 1)
+            {
+                // Build named input dictionary: "input" = sequential data + any matching auxiliary ports
+                var namedInputs = new Dictionary<string, Tensor<T>> { ["input"] = current };
+                foreach (var port in typedLayer.InputPorts)
+                {
+                    if (port.Name != "input" && auxiliaryInputs.TryGetValue(port.Name, out var aux))
+                        namedInputs[port.Name] = aux;
+                }
+                current = typedLayer.Forward(namedInputs);
+            }
+            else
+            {
+                current = layer.ForwardWithPrecisionCheck(current);
+            }
+
+            _layerOutputs[i] = current;
+        }
+
+        return current;
+    }
+
+    /// <summary>
     /// Performs forward pass with gradient checkpointing to reduce memory usage.
     /// </summary>
     /// <param name="input">Input tensor.</param>
