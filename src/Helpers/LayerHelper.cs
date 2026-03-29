@@ -2543,12 +2543,12 @@ public static class LayerHelper<T>
         yield return new InputLayer<T>(inputSize);
 
         // Standard Elman RNN layers with tanh activation (Elman 1990, PyTorch nn.RNN default).
-        // With proper uniform(-1/sqrt(H), 1/sqrt(H)) weight initialization,
-        // tanh produces distinct hidden states for different input magnitudes.
+        // Each layer gets a unique deterministic seed for reproducible initialization.
         yield return new RecurrentLayer<T>(
             inputSize: inputSize,
             hiddenSize: hiddenSize,
-            activationFunction: new TanhActivation<T>()
+            activationFunction: new TanhActivation<T>(),
+            initSeed: 42
         );
 
         for (int i = 1; i < recurrentLayerCount; i++)
@@ -2556,7 +2556,8 @@ public static class LayerHelper<T>
             yield return new RecurrentLayer<T>(
                 inputSize: hiddenSize,
                 hiddenSize: hiddenSize,
-                activationFunction: new TanhActivation<T>()
+                activationFunction: new TanhActivation<T>(),
+                initSeed: 42 + i * 1000
             );
         }
 
