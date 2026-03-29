@@ -1075,6 +1075,84 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
 
     #endregion
 
+    #region Layer-Level Backpropagation
+
+    protected override void Backpropagate(Tensor<T> lossGradient)
+    {
+        var grad = lossGradient;
+
+        grad = BackwardLayer(_outputConv, grad);
+
+        for (int i = _decoderBlocks.Count - 1; i >= 0; i--)
+            BackwardBlock(_decoderBlocks[i], ref grad);
+
+        for (int i = _middleBlocks.Count - 1; i >= 0; i--)
+            BackwardBlock(_middleBlocks[i], ref grad);
+
+        for (int i = _encoderBlocks.Count - 1; i >= 0; i--)
+            BackwardBlock(_encoderBlocks[i], ref grad);
+
+        BackwardLayer(_imageCondProjection, grad);
+        BackwardLayer(_timeEmbedMlp2, grad);
+        BackwardLayer(_timeEmbedMlp1, grad);
+        BackwardLayer(_inputConv, grad);
+    }
+
+    private static Tensor<T> BackwardLayer(ILayer<T>? layer, Tensor<T> grad)
+    {
+        if (layer == null) return grad;
+        return layer.Backward(grad);
+    }
+
+    private static void BackwardBlock(VideoBlock block, ref Tensor<T> grad)
+    {
+        grad = BackwardLayer(block.Upsample, grad);
+        grad = BackwardLayer(block.Downsample, grad);
+        grad = BackwardLayer(block.CrossAttention, grad);
+        grad = BackwardLayer(block.TemporalAttention, grad);
+        grad = BackwardLayer(block.SpatialAttention, grad);
+        grad = BackwardLayer(block.TemporalResBlock, grad);
+        grad = BackwardLayer(block.SpatialResBlock, grad);
+    }
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var gradients = new List<T>();
+
+        AddLayerGradients(gradients, _inputConv);
+        AddLayerGradients(gradients, _timeEmbedMlp1);
+        AddLayerGradients(gradients, _timeEmbedMlp2);
+        AddLayerGradients(gradients, _imageCondProjection);
+
+        foreach (var block in _encoderBlocks) AddBlockGradients(gradients, block);
+        foreach (var block in _middleBlocks) AddBlockGradients(gradients, block);
+        foreach (var block in _decoderBlocks) AddBlockGradients(gradients, block);
+
+        AddLayerGradients(gradients, _outputConv);
+
+        return new Vector<T>(gradients.ToArray());
+    }
+
+    private void AddLayerGradients(List<T> gradients, ILayer<T>? layer)
+    {
+        if (layer == null) return;
+        var g = layer.GetParameterGradients();
+        for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
+    }
+
+    private void AddBlockGradients(List<T> gradients, VideoBlock block)
+    {
+        AddLayerGradients(gradients, block.SpatialResBlock);
+        AddLayerGradients(gradients, block.TemporalResBlock);
+        AddLayerGradients(gradients, block.SpatialAttention);
+        AddLayerGradients(gradients, block.TemporalAttention);
+        AddLayerGradients(gradients, block.CrossAttention);
+        AddLayerGradients(gradients, block.Downsample);
+        AddLayerGradients(gradients, block.Upsample);
+    }
+
+    #endregion
+
     /// <summary>
     /// Internal structure for video U-Net blocks.
     /// </summary>

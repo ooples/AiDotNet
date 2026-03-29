@@ -1124,4 +1124,115 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     #endregion
+
+    #region Layer-Level Backpropagation
+
+    protected override void Backpropagate(Tensor<T> lossGradient)
+    {
+        var grad = lossGradient;
+
+        if (_outputProj != null) grad = _outputProj.Backward(grad);
+        if (_adalnModulation != null) _adalnModulation.Backward(grad);
+        if (_finalNorm != null) grad = _finalNorm.Backward(grad);
+
+        for (int i = _singleBlocks.Count - 1; i >= 0; i--)
+        {
+            var block = _singleBlocks[i];
+            block.AdaLN.Backward(grad);
+            grad = block.MLP2.Backward(grad);
+            grad = block.MLP1.Backward(grad);
+            grad = block.OutProj.Backward(grad);
+            block.VProj.Backward(grad);
+            block.KProj.Backward(grad);
+            grad = block.QProj.Backward(grad);
+            grad = block.Norm.Backward(grad);
+        }
+
+        for (int i = _jointBlocks.Count - 1; i >= 0; i--)
+        {
+            var block = _jointBlocks[i];
+            block.TextAdaLN.Backward(grad);
+            block.TextMLP2.Backward(grad);
+            block.TextMLP1.Backward(grad);
+            block.TextOutProj.Backward(grad);
+            block.TextVProj.Backward(grad);
+            block.TextKProj.Backward(grad);
+            block.TextQProj.Backward(grad);
+            block.TextNorm2.Backward(grad);
+            block.TextNorm1.Backward(grad);
+            block.ImageAdaLN.Backward(grad);
+            grad = block.ImageMLP2.Backward(grad);
+            grad = block.ImageMLP1.Backward(grad);
+            grad = block.ImageOutProj.Backward(grad);
+            block.ImageVProj.Backward(grad);
+            block.ImageKProj.Backward(grad);
+            grad = block.ImageQProj.Backward(grad);
+            grad = block.ImageNorm2.Backward(grad);
+            grad = block.ImageNorm1.Backward(grad);
+        }
+
+        if (_contextProj != null) _contextProj.Backward(grad);
+        if (_timeEmbed2 != null) _timeEmbed2.Backward(grad);
+        if (_timeEmbed1 != null) _timeEmbed1.Backward(grad);
+        if (_patchEmbed != null) _patchEmbed.Backward(grad);
+    }
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var allGrads = new List<T>();
+
+        AddLayerGrads(allGrads, _patchEmbed);
+        AddLayerGrads(allGrads, _timeEmbed1);
+        AddLayerGrads(allGrads, _timeEmbed2);
+        AddLayerGrads(allGrads, _contextProj);
+
+        foreach (var block in _jointBlocks)
+        {
+            AddLayerGrads(allGrads, block.ImageNorm1);
+            AddLayerGrads(allGrads, block.ImageQProj);
+            AddLayerGrads(allGrads, block.ImageKProj);
+            AddLayerGrads(allGrads, block.ImageVProj);
+            AddLayerGrads(allGrads, block.ImageOutProj);
+            AddLayerGrads(allGrads, block.ImageNorm2);
+            AddLayerGrads(allGrads, block.ImageMLP1);
+            AddLayerGrads(allGrads, block.ImageMLP2);
+            AddLayerGrads(allGrads, block.ImageAdaLN);
+            AddLayerGrads(allGrads, block.TextNorm1);
+            AddLayerGrads(allGrads, block.TextQProj);
+            AddLayerGrads(allGrads, block.TextKProj);
+            AddLayerGrads(allGrads, block.TextVProj);
+            AddLayerGrads(allGrads, block.TextOutProj);
+            AddLayerGrads(allGrads, block.TextNorm2);
+            AddLayerGrads(allGrads, block.TextMLP1);
+            AddLayerGrads(allGrads, block.TextMLP2);
+            AddLayerGrads(allGrads, block.TextAdaLN);
+        }
+
+        foreach (var block in _singleBlocks)
+        {
+            AddLayerGrads(allGrads, block.Norm);
+            AddLayerGrads(allGrads, block.QProj);
+            AddLayerGrads(allGrads, block.KProj);
+            AddLayerGrads(allGrads, block.VProj);
+            AddLayerGrads(allGrads, block.OutProj);
+            AddLayerGrads(allGrads, block.MLP1);
+            AddLayerGrads(allGrads, block.MLP2);
+            AddLayerGrads(allGrads, block.AdaLN);
+        }
+
+        AddLayerGrads(allGrads, _finalNorm);
+        AddLayerGrads(allGrads, _adalnModulation);
+        AddLayerGrads(allGrads, _outputProj);
+
+        return new Vector<T>(allGrads.ToArray());
+    }
+
+    private static void AddLayerGrads(List<T> list, ILayer<T>? layer)
+    {
+        if (layer == null) return;
+        var g = layer.GetParameterGradients();
+        for (int i = 0; i < g.Length; i++) list.Add(g[i]);
+    }
+
+    #endregion
 }
