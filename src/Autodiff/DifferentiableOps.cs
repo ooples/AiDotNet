@@ -186,6 +186,15 @@ internal static class DifferentiableOps<T>
         return result;
     }
 
+    /// <summary>Divide all elements by a scalar: c = a / scalar.</summary>
+    public static Tensor<T> DivideScalar(Tensor<T> a, T scalar)
+    {
+        var result = Engine.TensorDivideScalar(a, scalar);
+        GradientTape<T>.Current?.RecordOp("DivideScalar", [a], result,
+            grad => [Engine.TensorDivideScalar(grad, scalar)]);
+        return result;
+    }
+
     // ─── Matrix ops ──────────────────────────────────────────────────
 
     /// <summary>Matrix multiplication: C = A @ B.</summary>
@@ -1119,7 +1128,112 @@ internal static class DifferentiableOps<T>
         return result;
     }
 
-    // ─── Softmax ─────────────────────────────────────────────────────
+    /// <summary>
+    /// Group normalization. Normalizes within groups of channels.
+    /// Per Wu &amp; He (2018) "Group Normalization".
+    /// </summary>
+    /// <param name="input">Input [N, C, ...] or [C, ...] where C is divisible by numGroups.</param>
+    /// <param name="gamma">Scale [C].</param>
+    /// <param name="beta">Shift [C].</param>
+    /// <param name="numGroups">Number of groups to divide channels into.</param>
+    /// <param name="epsilon">Numerical stability constant.</param>
+    public static Tensor<T> GroupNorm(
+        Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, int numGroups, double epsilon = 1e-5)
+    {
+        var shape = input.Shape.ToArray();
+        int channels = shape.Length >= 2 ? shape[1] : shape[0];
+        if (channels % numGroups != 0)
+            throw new ArgumentException($"Channels ({channels}) must be divisible by numGroups ({numGroups}).");
+
+        int channelsPerGroup = channels / numGroups;
+        int n = shape.Length >= 2 ? shape[0] : 1;
+        int spatialSize = input.Length / (n * channels);
+
+        var result = new Tensor<T>(shape);
+        var groupMeans = new double[n * numGroups];
+        var groupVars = new double[n * numGroups];
+
+        // Forward: compute per-group mean/var, normalize, scale+shift
+        for (int b = 0; b < n; b++)
+        {
+            for (int g = 0; g < numGroups; g++)
+            {
+                int gIdx = b * numGroups + g;
+                double sum = 0;
+                int count = channelsPerGroup * spatialSize;
+                for (int c = g * channelsPerGroup; c < (g + 1) * channelsPerGroup; c++)
+                    for (int s = 0; s < spatialSize; s++)
+                        sum += NumOps.ToDouble(input[(b * channels + c) * spatialSize + s]);
+                groupMeans[gIdx] = sum / count;
+
+                double varSum = 0;
+                for (int c = g * channelsPerGroup; c < (g + 1) * channelsPerGroup; c++)
+                    for (int s = 0; s < spatialSize; s++)
+                    {
+                        double diff = NumOps.ToDouble(input[(b * channels + c) * spatialSize + s]) - groupMeans[gIdx];
+                        varSum += diff * diff;
+                    }
+                groupVars[gIdx] = varSum / count;
+
+                double invStd = 1.0 / Math.Sqrt(groupVars[gIdx] + epsilon);
+                for (int c = g * channelsPerGroup; c < (g + 1) * channelsPerGroup; c++)
+                    for (int s = 0; s < spatialSize; s++)
+                    {
+                        int idx = (b * channels + c) * spatialSize + s;
+                        double xHat = (NumOps.ToDouble(input[idx]) - groupMeans[gIdx]) * invStd;
+                        result[idx] = NumOps.FromDouble(xHat * NumOps.ToDouble(gamma[c]) + NumOps.ToDouble(beta[c]));
+                    }
+            }
+        }
+
+        GradientTape<T>.Current?.RecordOp("GroupNorm", [input, gamma, beta], result,
+            grad =>
+            {
+                var inputGrad = new Tensor<T>(shape);
+                var gammaGrad = new Tensor<T>(gamma.Shape.ToArray());
+                var betaGrad = new Tensor<T>(beta.Shape.ToArray());
+
+                for (int b = 0; b < n; b++)
+                {
+                    for (int g = 0; g < numGroups; g++)
+                    {
+                        int gIdx = b * numGroups + g;
+                        double invStd = 1.0 / Math.Sqrt(groupVars[gIdx] + epsilon);
+                        int count = channelsPerGroup * spatialSize;
+
+                        double sumDG = 0, sumDGXhat = 0;
+                        for (int c = g * channelsPerGroup; c < (g + 1) * channelsPerGroup; c++)
+                            for (int s = 0; s < spatialSize; s++)
+                            {
+                                int idx = (b * channels + c) * spatialSize + s;
+                                double xHat = (NumOps.ToDouble(input[idx]) - groupMeans[gIdx]) * invStd;
+                                double dg = NumOps.ToDouble(grad[idx]) * NumOps.ToDouble(gamma[c]);
+                                sumDG += dg;
+                                sumDGXhat += dg * xHat;
+                            }
+
+                        for (int c = g * channelsPerGroup; c < (g + 1) * channelsPerGroup; c++)
+                            for (int s = 0; s < spatialSize; s++)
+                            {
+                                int idx = (b * channels + c) * spatialSize + s;
+                                double xHat = (NumOps.ToDouble(input[idx]) - groupMeans[gIdx]) * invStd;
+                                double dg = NumOps.ToDouble(grad[idx]) * NumOps.ToDouble(gamma[c]);
+                                double dx = invStd * (dg - sumDG / count - xHat * sumDGXhat / count);
+                                inputGrad[idx] = NumOps.FromDouble(dx);
+
+                                gammaGrad[c] = NumOps.Add(gammaGrad[c],
+                                    NumOps.FromDouble(NumOps.ToDouble(grad[idx]) * xHat));
+                                betaGrad[c] = NumOps.Add(betaGrad[c], grad[idx]);
+                            }
+                    }
+                }
+
+                return [inputGrad, gammaGrad, betaGrad];
+            });
+        return result;
+    }
+
+    // ─── Softmax / CrossEntropy / LogSoftmax ─────────────────────────
 
     /// <summary>
     /// Softmax over the last dimension.
@@ -1170,6 +1284,113 @@ internal static class DifferentiableOps<T>
                     }
                 }
                 return [inputGrad];
+            });
+        return result;
+    }
+
+    /// <summary>
+    /// Numerically stable log-softmax: log(softmax(x)) = x - log(sum(exp(x))).
+    /// Uses log-sum-exp trick to avoid overflow.
+    /// </summary>
+    public static Tensor<T> LogSoftmax(Tensor<T> x)
+    {
+        int lastDim = x.Shape[^1];
+        int outerSize = x.Length / lastDim;
+        var result = new Tensor<T>(x.Shape.ToArray());
+
+        for (int o = 0; o < outerSize; o++)
+        {
+            // Log-sum-exp trick: log(sum(exp(x_i))) = max + log(sum(exp(x_i - max)))
+            double maxVal = double.MinValue;
+            for (int d = 0; d < lastDim; d++)
+                maxVal = Math.Max(maxVal, NumOps.ToDouble(x[o * lastDim + d]));
+
+            double logSumExp = 0;
+            for (int d = 0; d < lastDim; d++)
+                logSumExp += Math.Exp(NumOps.ToDouble(x[o * lastDim + d]) - maxVal);
+            logSumExp = maxVal + Math.Log(logSumExp);
+
+            for (int d = 0; d < lastDim; d++)
+                result[o * lastDim + d] = NumOps.FromDouble(NumOps.ToDouble(x[o * lastDim + d]) - logSumExp);
+        }
+
+        GradientTape<T>.Current?.RecordOp("LogSoftmax", [x], result,
+            grad =>
+            {
+                // d(logSoftmax)/dx = I - softmax(x)
+                // dx_i = grad_i - softmax_i * sum(grad)
+                var inputGrad = new Tensor<T>(x.Shape.ToArray());
+                for (int o = 0; o < outerSize; o++)
+                {
+                    double sumGrad = 0;
+                    for (int d = 0; d < lastDim; d++)
+                        sumGrad += NumOps.ToDouble(grad[o * lastDim + d]);
+
+                    for (int d = 0; d < lastDim; d++)
+                    {
+                        double softmax_d = Math.Exp(NumOps.ToDouble(result[o * lastDim + d]));
+                        inputGrad[o * lastDim + d] = NumOps.FromDouble(
+                            NumOps.ToDouble(grad[o * lastDim + d]) - softmax_d * sumGrad);
+                    }
+                }
+                return [inputGrad];
+            });
+        return result;
+    }
+
+    /// <summary>
+    /// Fused cross-entropy loss: -sum(targets * log_softmax(logits)) / batch_size.
+    /// Numerically stable — uses log-sum-exp internally.
+    /// </summary>
+    /// <param name="logits">Raw logits [N, C] (NOT softmax output).</param>
+    /// <param name="targets">Target probabilities [N, C] (one-hot or soft labels).</param>
+    public static Tensor<T> CrossEntropyLoss(Tensor<T> logits, Tensor<T> targets)
+    {
+        int n = logits.Shape[0];
+        int c = logits.Length / n;
+
+        // Compute log_softmax
+        var logSoftmax = new double[logits.Length];
+        for (int b = 0; b < n; b++)
+        {
+            double maxVal = double.MinValue;
+            for (int j = 0; j < c; j++)
+                maxVal = Math.Max(maxVal, NumOps.ToDouble(logits[b * c + j]));
+
+            double logSumExp = 0;
+            for (int j = 0; j < c; j++)
+                logSumExp += Math.Exp(NumOps.ToDouble(logits[b * c + j]) - maxVal);
+            logSumExp = maxVal + Math.Log(logSumExp);
+
+            for (int j = 0; j < c; j++)
+                logSoftmax[b * c + j] = NumOps.ToDouble(logits[b * c + j]) - logSumExp;
+        }
+
+        // Loss = -sum(targets * log_softmax) / N
+        double loss = 0;
+        for (int i = 0; i < logits.Length; i++)
+            loss -= NumOps.ToDouble(targets[i]) * logSoftmax[i];
+        loss /= n;
+
+        var result = new Tensor<T>([1]);
+        result[0] = NumOps.FromDouble(loss);
+
+        GradientTape<T>.Current?.RecordOp("CrossEntropyLoss", [logits], result,
+            grad =>
+            {
+                // d(CE)/d(logits) = (softmax - targets) / N * upstream_grad
+                var logitGrad = new Tensor<T>(logits.Shape.ToArray());
+                double scale = NumOps.ToDouble(grad[0]) / n;
+                for (int b = 0; b < n; b++)
+                {
+                    for (int j = 0; j < c; j++)
+                    {
+                        double softmax_j = Math.Exp(logSoftmax[b * c + j]);
+                        logitGrad[b * c + j] = NumOps.FromDouble(
+                            (softmax_j - NumOps.ToDouble(targets[b * c + j])) * scale);
+                    }
+                }
+                return [logitGrad];
             });
         return result;
     }

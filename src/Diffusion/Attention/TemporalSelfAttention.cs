@@ -140,14 +140,6 @@ public class TemporalSelfAttention<T> : LayerBase<T>
         _temporalAttention.ResetState();
     }
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        return _temporalAttention.ExportComputationGraph(inputNodes);
-    }
 
     /// <inheritdoc />
     public override Dictionary<string, string> GetDiagnostics()

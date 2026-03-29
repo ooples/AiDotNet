@@ -103,11 +103,12 @@ public sealed class GradientTape<T> : IDisposable
 
         if (!Persistent)
         {
-            _ops.Clear();
-            _watched.Clear();
+            lock (_opsLock)
+            {
+                _ops.Clear();
+                _watched.Clear();
+            }
         }
-
-        GC.SuppressFinalize(this);
     }
 
     // ─── Public API ──────────────────────────────────────────────────
@@ -119,7 +120,7 @@ public sealed class GradientTape<T> : IDisposable
     public void Watch(Tensor<T> tensor)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(GradientTape<T>));
-        _watched.Add(tensor);
+        lock (_opsLock) { _watched.Add(tensor); }
     }
 
     /// <summary>
@@ -307,8 +308,11 @@ public sealed class GradientTape<T> : IDisposable
                 "Non-persistent tapes should be disposed and recreated.");
         }
 
-        lock (_opsLock) { _ops.Clear(); }
-        _watched.Clear();
+        lock (_opsLock)
+        {
+            _ops.Clear();
+            _watched.Clear();
+        }
         _used = false;
         IsRecording = true;
     }
@@ -372,7 +376,7 @@ public sealed class GradientTape<T> : IDisposable
                         if (double.IsNaN(val) || double.IsInfinity(val))
                             throw new ArithmeticException(
                                 $"Op '{entry.OpName}' backward produced {(double.IsNaN(val) ? "NaN" : "Inf")} " +
-                                $"at input[{j}][{k}]. Enable DetectAnomaly on the tape to debug.");
+                                $"at input[{j}][{k}]. Check forward inputs for numerical issues.");
                     }
                 }
             }
@@ -397,9 +401,11 @@ public sealed class GradientTape<T> : IDisposable
             }
         }
 
-        // Filter to only watched tensors
+        // Filter to only watched tensors (snapshot under lock for thread safety)
+        Tensor<T>[] watchedSnapshot;
+        lock (_opsLock) { watchedSnapshot = _watched.ToArray(); }
         var result = new Dictionary<Tensor<T>, Tensor<T>>(ReferenceEqualityComparer.Instance);
-        foreach (var tensor in _watched)
+        foreach (var tensor in watchedSnapshot)
         {
             if (grads.TryGetValue(tensor, out var grad))
                 result[tensor] = grad;
@@ -408,22 +414,6 @@ public sealed class GradientTape<T> : IDisposable
         return result;
     }
 
-    /// <summary>
-    /// Element-wise tensor addition for gradient accumulation.
-    /// Uses direct loop to avoid recording to tape during backward.
-    /// </summary>
-    private static Tensor<T> TensorAdd(Tensor<T> a, Tensor<T> b, INumericOperations<T> ops)
-    {
-        if (a.Length != b.Length)
-            throw new ArgumentException(
-                $"Cannot accumulate gradients: shape [{string.Join(",", a.Shape.ToArray())}] " +
-                $"vs [{string.Join(",", b.Shape.ToArray())}].");
-
-        var result = new Tensor<T>(a.Shape.ToArray());
-        for (int i = 0; i < a.Length; i++)
-            result[i] = ops.Add(a[i], b[i]);
-        return result;
-    }
 }
 
 /// <summary>

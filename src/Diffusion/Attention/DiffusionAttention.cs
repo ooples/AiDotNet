@@ -342,15 +342,6 @@ public class DiffusionAttention<T> : LayerBase<T>
         _standardAttention.ResetState();
     }
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        // Delegate to Flash Attention for JIT
-        return _flashAttention.ExportComputationGraph(inputNodes);
-    }
 
     /// <summary>
     /// Gets diagnostic information about the layer.
@@ -609,14 +600,5 @@ public class DiffusionCrossAttention<T> : LayerBase<T>
         _crossAttention.ResetState();
     }
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
 
-    /// <inheritdoc />
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "DiffusionCrossAttention JIT compilation requires context input. " +
-            "Use the layer in interpreted mode.");
-    }
 }

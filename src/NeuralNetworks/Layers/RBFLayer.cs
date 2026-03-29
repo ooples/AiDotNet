@@ -670,30 +670,5 @@ public class RBFLayer<T> : LayerBase<T>
             widthSpan[i] = NumOps.FromDouble(Random.NextDouble());
     }
 
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input [batch, inputSize]
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // _centers is already a Tensor [numCenters, inputSize]
-        var centersNode = TensorOperations<T>.Constant(_centers, "centers");
-
-        // Convert widths to epsilons: epsilon = 1 / (2 * width²) for Gaussian RBF
-        var epsilonsTensor = ComputeEpsilonsFromWidths();
-        var epsilonsNode = TensorOperations<T>.Constant(epsilonsTensor, "epsilons");
-
-        // Use RBFKernel operation: computes exp(-epsilon * distance²)
-        return TensorOperations<T>.RBFKernel(inputNode, centersNode, epsilonsNode);
-    }
-
-    public override bool SupportsJitCompilation => true;
 
 }

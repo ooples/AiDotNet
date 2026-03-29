@@ -913,32 +913,6 @@ public class FullyConnectedLayer<T> : LayerBase<T>
         _gpuInputShape = [];
     }
 
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Use _weights and _biases directly - they are already Tensor<T>
-        var weightsNode = TensorOperations<T>.Constant(_weights, "weights");
-        var biasesNode = TensorOperations<T>.Constant(_biases, "biases");
-
-        var matmulNode = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
-        var addNode = TensorOperations<T>.Add(matmulNode, biasesNode);
-
-        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
-        {
-            return ScalarActivation.ApplyToGraph(addNode);
-        }
-
-        return addNode;
-    }
 
     /// <inheritdoc />
     public override Tensor<T>? GetWeights() => _weights;
@@ -946,19 +920,6 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T>? GetBiases() => _biases;
 
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            if (_weights == null || _biases == null)
-                return false;
-
-            if (ScalarActivation != null)
-                return ScalarActivation.SupportsJitCompilation;
-
-            return true;
-        }
-    }
 
     /// <summary>
     /// Gets whether this layer has a GPU implementation.

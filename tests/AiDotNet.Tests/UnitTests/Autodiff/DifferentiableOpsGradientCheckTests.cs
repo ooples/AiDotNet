@@ -382,6 +382,111 @@ public class DifferentiableOpsGradientCheckTests
             name: "Softmax (weighted)");
     }
 
+    // ─── New ops from audit: DivideScalar, GroupNorm, LogSoftmax, CrossEntropy ──
+
+    [Fact]
+    public void DivideScalar_GradientCheck()
+    {
+        var a = Tensor(6.0, 8.0, 10.0);
+        GradientCheck(inputs: [a], forward: xs => DifferentiableOps<double>.DivideScalar(xs[0], 2.0), name: "DivideScalar");
+    }
+
+    [Fact]
+    public void GroupNorm_GradientCheck()
+    {
+        // [N=1, C=4, spatial=2] with 2 groups
+        var input = new Tensor<double>([1, 4, 2]);
+        var rng = new Random(42);
+        for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble() * 2 - 1;
+        var gamma = new Tensor<double>([4], new Vector<double>([1.2, 0.9, 1.1, 0.8]));
+        var beta = new Tensor<double>([4], new Vector<double>([0.1, 0.0, -0.1, 0.05]));
+        var weights = new Tensor<double>([1, 4, 2]);
+        for (int i = 0; i < weights.Length; i++) weights[i] = 0.1 * (i + 1);
+
+        GradientCheck(
+            inputs: [input, gamma, beta],
+            forward: xs =>
+            {
+                var normed = DifferentiableOps<double>.GroupNorm(xs[0], xs[1], xs[2], numGroups: 2);
+                return DifferentiableOps<double>.Multiply(normed, weights);
+            },
+            name: "GroupNorm (weighted)");
+    }
+
+    [Fact]
+    public void LogSoftmax_GradientCheck()
+    {
+        var x = Tensor(1.0, 2.0, 3.0, 0.5);
+        var weights = Tensor(0.1, 0.4, 0.3, 0.2);
+        GradientCheck(
+            inputs: [x],
+            forward: xs => DifferentiableOps<double>.Multiply(
+                DifferentiableOps<double>.LogSoftmax(xs[0]), weights),
+            name: "LogSoftmax (weighted)");
+    }
+
+    [Fact]
+    public void CrossEntropyLoss_GradientCheck()
+    {
+        var logits = new Tensor<double>([2, 3], new Vector<double>([1.0, 2.0, 0.5, 0.1, 0.9, 2.0]));
+        var targets = new Tensor<double>([2, 3], new Vector<double>([1, 0, 0, 0, 0, 1])); // One-hot
+        GradientCheck(
+            inputs: [logits],
+            forward: xs => DifferentiableOps<double>.CrossEntropyLoss(xs[0], targets),
+            name: "CrossEntropyLoss");
+    }
+
+    // ─── Missing gradient checks from audit (Reshape, Dropout, Pool, Embed) ──
+
+    [Fact]
+    public void Reshape_GradientCheck()
+    {
+        var x = new Tensor<double>([2, 3], new Vector<double>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]));
+        GradientCheck(
+            inputs: [x],
+            forward: xs => DifferentiableOps<double>.Reshape(xs[0], [3, 2]),
+            name: "Reshape");
+    }
+
+    [Fact]
+    public void AvgPool2D_GradientCheck()
+    {
+        // [C=1, H=4, W=4] — pool 2x2 stride 2
+        var x = new Tensor<double>([1, 4, 4]);
+        var rng = new Random(42);
+        for (int i = 0; i < x.Length; i++) x[i] = rng.NextDouble();
+        GradientCheck(
+            inputs: [x],
+            forward: xs => DifferentiableOps<double>.AvgPool2D(xs[0], poolSize: 2, stride: 2),
+            name: "AvgPool2D");
+    }
+
+    [Fact]
+    public void MaxPool2D_GradientCheck()
+    {
+        // [C=1, H=4, W=4] — pool 2x2 stride 2, avoid ties
+        var x = new Tensor<double>([1, 4, 4]);
+        for (int i = 0; i < x.Length; i++) x[i] = i * 0.1 + 0.01; // No ties
+        GradientCheck(
+            inputs: [x],
+            forward: xs => DifferentiableOps<double>.MaxPool2D(xs[0], poolSize: 2, stride: 2),
+            name: "MaxPool2D");
+    }
+
+    [Fact]
+    public void Embedding_GradientCheck()
+    {
+        var table = new Tensor<double>([5, 3]); // 5 words, 3-dim embeddings
+        var rng = new Random(42);
+        for (int i = 0; i < table.Length; i++) table[i] = rng.NextDouble();
+        var indices = new int[] { 0, 2, 4 }; // Look up 3 words
+
+        GradientCheck(
+            inputs: [table],
+            forward: xs => DifferentiableOps<double>.Embedding(xs[0], indices),
+            name: "Embedding");
+    }
+
     // ─── End-to-end: Conv + BatchNorm + ReLU chain ───────────────────
 
     [Fact]

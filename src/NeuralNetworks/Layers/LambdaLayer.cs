@@ -442,48 +442,5 @@ public class LambdaLayer<T> : LayerBase<T>
         _lastOutput = null;
     }
 
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
-
-        // Check if we have a traceable expression
-        if (_traceableExpression == null)
-        {
-            throw new NotSupportedException(
-                "LambdaLayer with opaque functions does not support JIT compilation. " +
-                "Use the constructor that accepts a traceable expression (Func<ComputationNode<T>, ComputationNode<T>>) " +
-                "to enable JIT compilation.");
-        }
-
-        // Apply the traceable expression to build the computation graph
-        var input = inputNodes[0];
-        var output = _traceableExpression(input);
-
-        // Apply activation if present
-        output = ApplyActivationToGraph(output);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> if a traceable expression was provided; otherwise, <c>false</c>.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// JIT compilation is only supported when the LambdaLayer was created with a traceable expression
-    /// that uses TensorOperations. Opaque user-defined functions cannot be compiled.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => _traceableExpression != null;
 
 }

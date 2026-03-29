@@ -154,20 +154,6 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // Check all conv layers support JIT
-            foreach (var conv in _convLayers)
-            {
-                if (!conv.SupportsJitCompilation)
-                    return false;
-            }
-            return true;
-        }
-    }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
@@ -920,22 +906,6 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         }
     }
 
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape is null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input node with batch dimension [batch, channels, height, width]
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return BuildComputationGraph(inputNode, "");
-    }
 
     /// <inheritdoc />
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)

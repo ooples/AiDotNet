@@ -329,30 +329,26 @@ namespace AiDotNet.Autodiff
 
         private static bool SupportsAutodiffGraph(NeuralNetworkBase<T> network)
         {
-            // GradientTape-based autodiff works for all layers — no longer depends on
-            // ExportComputationGraph / SupportsJitCompilation (#1057/#1059)
-            return true;
+            // GradientTape-based autodiff works for all layers via Forward() recording.
+            // Only fail if network has zero layers (nothing to differentiate).
+            return network.Layers.Count > 0;
         }
 
+        /// <summary>
+        /// Builds a computation graph using the legacy ComputationNode path.
+        /// Falls back to this only when GradientTape is not available.
+        /// </summary>
         private static ComputationNode<T> BuildGraph(
             NeuralNetworkBase<T> network,
             ComputationNode<T> inputNode)
         {
-            // Legacy graph-building path — retained for callers that still use ComputationNode.
-            // New code should use GradientTape<T> instead.
             var current = inputNode;
             foreach (var layer in network.Layers)
             {
                 var inputs = new System.Collections.Generic.List<ComputationNode<T>> { current };
-                try
-                {
-                    current = layer.ExportComputationGraph(inputs);
-                }
-                catch (NotSupportedException)
-                {
-                    // Layer doesn't support graph export — pass through unchanged.
-                    // The tape-based autodiff path handles this correctly.
-                }
+                // Use ExportComputationGraph if the layer overrides it, otherwise throw.
+                // Do NOT silently swallow failures — that produces wrong gradients (F12/F13).
+                current = layer.ExportComputationGraph(inputs);
             }
 
             return current;

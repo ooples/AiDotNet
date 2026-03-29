@@ -532,62 +532,6 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
         _projectBn.ResetState();
     }
 
-    /// <summary>
-    /// Gets whether this block supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // Check all required sub-layers support JIT
-            if (_hasExpansion)
-            {
-                if (_expandConv is null || !_expandConv.SupportsJitCompilation ||
-                    _expandBn is null || !_expandBn.SupportsJitCompilation)
-                    return false;
-            }
-
-            if (!_dwConv.SupportsJitCompilation || !_dwBn.SupportsJitCompilation)
-                return false;
-
-            if (_useSE && _se is not null && !_se.SupportsJitCompilation)
-                return false;
-
-            if (!_projectConv.SupportsJitCompilation || !_projectBn.SupportsJitCompilation)
-                return false;
-
-            // Check activation supports JIT
-            if (ScalarActivation is not null && !ScalarActivation.SupportsJitCompilation)
-                return false;
-
-            return true;
-        }
-    }
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node.</returns>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes));
-        }
-
-        if (InputShape is null || InputShape.Length == 0)
-        {
-            throw new InvalidOperationException("Layer input shape not configured.");
-        }
-
-        // Create symbolic input node with batch dimension [B, C, H, W]
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return BuildComputationGraph(inputNode, "");
-    }
 
     /// <inheritdoc />
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
