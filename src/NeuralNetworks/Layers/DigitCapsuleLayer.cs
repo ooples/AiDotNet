@@ -970,7 +970,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Use ToArray() for production-grade parameter extraction
-        return new Vector<T>(_weights.ToArray());
+        return _weights.ToVector();
     }
 
     /// <summary>
@@ -1003,7 +1003,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     {
         if (_weightsGradient == null)
             return new Vector<T>(_weights.Length);
-        return new Vector<T>(_weightsGradient.ToArray());
+        return _weightsGradient.ToVector();
     }
 
     public override void ClearGradients()

@@ -1596,7 +1596,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         // Ensure weights and biases are initialized (supports lazy initialization)
         EnsureInitialized();
-        return Vector<T>.Concatenate(new Vector<T>(_weights.ToArray()), new Vector<T>(_biases.ToArray()));
+        return Vector<T>.Concatenate(_weights.ToVector(), _biases.ToVector());
     }
 
     /// <summary>
@@ -1610,8 +1610,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         return Vector<T>.Concatenate(
-            new Vector<T>(_weightsGradient.ToArray()),
-            new Vector<T>(_biasesGradient.ToArray()));
+            _weightsGradient.ToVector(),
+            _biasesGradient.ToVector());
     }
 
     /// <summary>

@@ -423,8 +423,8 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         if (_depthwiseKernelsGradient == null || _pointwiseKernelsGradient == null || _biasesGradient == null)
             return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(new Vector<T>(_depthwiseKernelsGradient.ToArray()), new Vector<T>(_pointwiseKernelsGradient.ToArray())),
-            new Vector<T>(_biasesGradient.ToArray()));
+            Vector<T>.Concatenate(_depthwiseKernelsGradient.ToVector(), _pointwiseKernelsGradient.ToVector()),
+            _biasesGradient.ToVector());
     }
 
     public override void ClearGradients()

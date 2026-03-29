@@ -1482,8 +1482,8 @@ public class SpikingLayer<T> : LayerBase<T>
             return new Vector<T>(ParameterCount);
 
         return Vector<T>.Concatenate(
-            new Vector<T>(_weightGradients.ToArray()),
-            new Vector<T>(_biasGradients.ToArray())
+            _weightGradients.ToVector(),
+            _biasGradients.ToVector()
         );
     }
 

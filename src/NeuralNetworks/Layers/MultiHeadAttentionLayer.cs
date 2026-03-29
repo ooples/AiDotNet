@@ -1498,11 +1498,11 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeights.ToArray()),
-            new Vector<T>(_keyWeights.ToArray()),
-            new Vector<T>(_valueWeights.ToArray()),
-            new Vector<T>(_outputWeights.ToArray()),
-            new Vector<T>(_outputBias.ToArray()));
+            _queryWeights.ToVector(),
+            _keyWeights.ToVector(),
+            _valueWeights.ToVector(),
+            _outputWeights.ToVector(),
+            _outputBias.ToVector());
     }
 
     /// <summary>
@@ -1591,11 +1591,11 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null)
             return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient.ToArray()),
-            new Vector<T>(_keyWeightsGradient.ToArray()),
-            new Vector<T>(_valueWeightsGradient.ToArray()),
-            new Vector<T>(_outputWeightsGradient?.ToArray() ?? new T[_outputWeights.Length]),
-            new Vector<T>(_outputBiasGradient?.ToArray() ?? new T[_outputBias.Length]));
+            _queryWeightsGradient.ToVector(),
+            _keyWeightsGradient.ToVector(),
+            _valueWeightsGradient.ToVector(),
+            _outputWeightsGradient is not null ? _outputWeightsGradient.ToVector() : new Vector<T>(_outputWeights.Length),
+            _outputBiasGradient is not null ? _outputBiasGradient.ToVector() : new Vector<T>(_outputBias.Length));
     }
 
     public override void ClearGradients()

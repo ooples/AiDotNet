@@ -1621,16 +1621,16 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Vector<T> GetParameterGradients()
     {
         var gW1 = _weights1Gradient != null
-            ? new Vector<T>(_weights1Gradient.ToArray())
+            ? _weights1Gradient.ToVector()
             : new Vector<T>(_weights1.Length);
         var gB1 = _bias1Gradient != null
-            ? new Vector<T>(_bias1Gradient.ToArray())
+            ? _bias1Gradient.ToVector()
             : new Vector<T>(_bias1.Length);
         var gW2 = _weights2Gradient != null
-            ? new Vector<T>(_weights2Gradient.ToArray())
+            ? _weights2Gradient.ToVector()
             : new Vector<T>(_weights2.Length);
         var gB2 = _bias2Gradient != null
-            ? new Vector<T>(_bias2Gradient.ToArray())
+            ? _bias2Gradient.ToVector()
             : new Vector<T>(_bias2.Length);
 
         return Vector<T>.Concatenate(

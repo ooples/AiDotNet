@@ -1099,24 +1099,24 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
     {
         // Use Vector.Concatenate to efficiently combine all parameters
         return Vector<T>.Concatenate(
-            new Vector<T>(_edgeNetworkWeights1.ToArray()),
-            new Vector<T>(_edgeNetworkWeights2.ToArray()),
-            new Vector<T>(_edgeNetworkBias1.ToArray()),
-            new Vector<T>(_edgeNetworkBias2.ToArray()),
-            new Vector<T>(_selfWeights.ToArray()),
-            new Vector<T>(_bias.ToArray())
+            _edgeNetworkWeights1.ToVector(),
+            _edgeNetworkWeights2.ToVector(),
+            _edgeNetworkBias1.ToVector(),
+            _edgeNetworkBias2.ToVector(),
+            _selfWeights.ToVector(),
+            _bias.ToVector()
         );
     }
 
     public override Vector<T> GetParameterGradients()
     {
         return Vector<T>.Concatenate(
-            _edgeNetworkWeights1Gradient != null ? new Vector<T>(_edgeNetworkWeights1Gradient.ToArray()) : new Vector<T>(_edgeNetworkWeights1.Length),
-            _edgeNetworkWeights2Gradient != null ? new Vector<T>(_edgeNetworkWeights2Gradient.ToArray()) : new Vector<T>(_edgeNetworkWeights2.Length),
-            _edgeNetworkBias1Gradient != null ? new Vector<T>(_edgeNetworkBias1Gradient.ToArray()) : new Vector<T>(_edgeNetworkBias1.Length),
-            _edgeNetworkBias2Gradient != null ? new Vector<T>(_edgeNetworkBias2Gradient.ToArray()) : new Vector<T>(_edgeNetworkBias2.Length),
-            _selfWeightsGradient != null ? new Vector<T>(_selfWeightsGradient.ToArray()) : new Vector<T>(_selfWeights.Length),
-            _biasGradient != null ? new Vector<T>(_biasGradient.ToArray()) : new Vector<T>(_bias.Length)
+            _edgeNetworkWeights1Gradient != null ? _edgeNetworkWeights1Gradient.ToVector() : new Vector<T>(_edgeNetworkWeights1.Length),
+            _edgeNetworkWeights2Gradient != null ? _edgeNetworkWeights2Gradient.ToVector() : new Vector<T>(_edgeNetworkWeights2.Length),
+            _edgeNetworkBias1Gradient != null ? _edgeNetworkBias1Gradient.ToVector() : new Vector<T>(_edgeNetworkBias1.Length),
+            _edgeNetworkBias2Gradient != null ? _edgeNetworkBias2Gradient.ToVector() : new Vector<T>(_edgeNetworkBias2.Length),
+            _selfWeightsGradient != null ? _selfWeightsGradient.ToVector() : new Vector<T>(_selfWeights.Length),
+            _biasGradient != null ? _biasGradient.ToVector() : new Vector<T>(_bias.Length)
         );
     }
 

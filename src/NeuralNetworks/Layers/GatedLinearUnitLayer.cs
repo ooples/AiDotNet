@@ -865,10 +865,10 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            new Vector<T>(_linearWeights.ToArray()),
-            new Vector<T>(_gateWeights.ToArray()),
-            new Vector<T>(_linearBias.ToArray()),
-            new Vector<T>(_gateBias.ToArray()));
+            _linearWeights.ToVector(),
+            _gateWeights.ToVector(),
+            _linearBias.ToVector(),
+            _gateBias.ToVector());
     }
 
     /// <summary>
@@ -958,10 +958,10 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
             _linearBiasGradient == null || _gateBiasGradient == null)
             return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_linearWeightsGradient.ToArray()),
-            new Vector<T>(_gateWeightsGradient.ToArray()),
-            new Vector<T>(_linearBiasGradient.ToArray()),
-            new Vector<T>(_gateBiasGradient.ToArray()));
+            _linearWeightsGradient.ToVector(),
+            _gateWeightsGradient.ToVector(),
+            _linearBiasGradient.ToVector(),
+            _gateBiasGradient.ToVector());
     }
 
     public override void ClearGradients()

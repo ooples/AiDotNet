@@ -1085,8 +1085,8 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         // Use Vector.Concatenate for production-grade parameter extraction
         return Vector<T>.Concatenate(
-            new Vector<T>(_transformationMatrix.ToArray()),
-            new Vector<T>(_bias.ToArray())
+            _transformationMatrix.ToVector(),
+            _bias.ToVector()
         );
     }
 
@@ -1119,10 +1119,10 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Vector<T> GetParameterGradients()
     {
         var matGrad = _transformationMatrixGradient != null
-            ? new Vector<T>(_transformationMatrixGradient.ToArray())
+            ? _transformationMatrixGradient.ToVector()
             : new Vector<T>(_transformationMatrix.Length);
         var biasGrad = _biasGradient != null
-            ? new Vector<T>(_biasGradient.ToArray())
+            ? _biasGradient.ToVector()
             : new Vector<T>(_bias.Length);
         return Vector<T>.Concatenate(matGrad, biasGrad);
     }

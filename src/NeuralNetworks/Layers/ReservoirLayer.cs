@@ -676,7 +676,7 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </remarks>
     public Vector<T> GetState()
     {
-        return new Vector<T>(_reservoirState.ToArray());
+        return _reservoirState.ToVector();
     }
 
     /// <summary>

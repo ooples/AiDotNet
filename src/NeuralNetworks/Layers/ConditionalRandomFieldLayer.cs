@@ -1018,9 +1018,9 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Use Vector<T>.Concatenate for efficient parameter collection
-        var flatTrans = new Vector<T>(_transitionMatrix.ToArray());
-        var flatStart = new Vector<T>(_startScores.ToArray());
-        var flatEnd = new Vector<T>(_endScores.ToArray());
+        var flatTrans = _transitionMatrix.ToVector();
+        var flatStart = _startScores.ToVector();
+        var flatEnd = _endScores.ToVector();
 
         return Vector<T>.Concatenate(Vector<T>.Concatenate(flatTrans, flatStart), flatEnd);
     }
@@ -1055,13 +1055,13 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         var flatTrans = _transitionMatrixGradient != null
-            ? new Vector<T>(_transitionMatrixGradient.ToArray())
+            ? _transitionMatrixGradient.ToVector()
             : new Vector<T>(_numClasses * _numClasses);
         var flatStart = _startScoresGradient != null
-            ? new Vector<T>(_startScoresGradient.ToArray())
+            ? _startScoresGradient.ToVector()
             : new Vector<T>(_numClasses);
         var flatEnd = _endScoresGradient != null
-            ? new Vector<T>(_endScoresGradient.ToArray())
+            ? _endScoresGradient.ToVector()
             : new Vector<T>(_numClasses);
 
         return Vector<T>.Concatenate(Vector<T>.Concatenate(flatTrans, flatStart), flatEnd);

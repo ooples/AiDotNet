@@ -1222,13 +1222,13 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
+        return Vector<T>.Concatenate(_kernels.ToVector(), _biases.ToVector());
     }
 
     public override Vector<T> GetParameterGradients()
     {
-        var kGrad = _kernelGradients != null ? new Vector<T>(_kernelGradients.ToArray()) : new Vector<T>(_kernels.Length);
-        var bGrad = _biasGradients != null ? new Vector<T>(_biasGradients.ToArray()) : new Vector<T>(_biases.Length);
+        var kGrad = _kernelGradients != null ? _kernelGradients.ToVector() : new Vector<T>(_kernels.Length);
+        var bGrad = _biasGradients != null ? _biasGradients.ToVector() : new Vector<T>(_biases.Length);
         return Vector<T>.Concatenate(kGrad, bGrad);
     }
 

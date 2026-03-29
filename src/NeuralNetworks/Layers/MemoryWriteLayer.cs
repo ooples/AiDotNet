@@ -994,11 +994,11 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         // Use Vector.Concatenate to efficiently combine all parameters
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeights.ToArray()),
-            new Vector<T>(_keyWeights.ToArray()),
-            new Vector<T>(_valueWeights.ToArray()),
-            new Vector<T>(_outputWeights.ToArray()),
-            new Vector<T>(_outputBias.ToArray())
+            _queryWeights.ToVector(),
+            _keyWeights.ToVector(),
+            _valueWeights.ToVector(),
+            _outputWeights.ToVector(),
+            _outputBias.ToVector()
         );
     }
 
@@ -1109,11 +1109,11 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _outputWeightsGradient == null || _outputBiasGradient == null)
             return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient.ToArray()),
-            new Vector<T>(_keyWeightsGradient.ToArray()),
-            new Vector<T>(_valueWeightsGradient.ToArray()),
-            new Vector<T>(_outputWeightsGradient.ToArray()),
-            new Vector<T>(_outputBiasGradient.ToArray()));
+            _queryWeightsGradient.ToVector(),
+            _keyWeightsGradient.ToVector(),
+            _valueWeightsGradient.ToVector(),
+            _outputWeightsGradient.ToVector(),
+            _outputBiasGradient.ToVector());
     }
 
     public override void ClearGradients()

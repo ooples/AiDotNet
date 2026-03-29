@@ -657,8 +657,8 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         if (_projectionWeightsGradient == null || _projectionBiasGradient == null)
             return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_projectionWeightsGradient.ToArray()),
-            new Vector<T>(_projectionBiasGradient.ToArray()));
+            _projectionWeightsGradient.ToVector(),
+            _projectionBiasGradient.ToVector());
     }
 
     public override void ClearGradients()

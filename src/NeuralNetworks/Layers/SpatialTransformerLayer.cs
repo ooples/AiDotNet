@@ -1320,10 +1320,10 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Vector<T> GetParameters()
     {
         // Use Vector<T>.Concatenate for efficient parameter collection
-        var flatW1 = new Vector<T>(_localizationWeights1.ToArray());
-        var flatB1 = new Vector<T>(_localizationBias1.ToArray());
-        var flatW2 = new Vector<T>(_localizationWeights2.ToArray());
-        var flatB2 = new Vector<T>(_localizationBias2.ToArray());
+        var flatW1 = _localizationWeights1.ToVector();
+        var flatB1 = _localizationBias1.ToVector();
+        var flatW2 = _localizationWeights2.ToVector();
+        var flatB2 = _localizationBias2.ToVector();
 
         return Vector<T>.Concatenate(
             Vector<T>.Concatenate(flatW1, flatB1),
@@ -1360,16 +1360,16 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Vector<T> GetParameterGradients()
     {
         var gW1 = _localizationWeights1Gradient != null
-            ? new Vector<T>(_localizationWeights1Gradient.ToArray())
+            ? _localizationWeights1Gradient.ToVector()
             : new Vector<T>(_localizationWeights1.Length);
         var gB1 = _localizationBias1Gradient != null
-            ? new Vector<T>(_localizationBias1Gradient.ToArray())
+            ? _localizationBias1Gradient.ToVector()
             : new Vector<T>(_localizationBias1.Length);
         var gW2 = _localizationWeights2Gradient != null
-            ? new Vector<T>(_localizationWeights2Gradient.ToArray())
+            ? _localizationWeights2Gradient.ToVector()
             : new Vector<T>(_localizationWeights2.Length);
         var gB2 = _localizationBias2Gradient != null
-            ? new Vector<T>(_localizationBias2Gradient.ToArray())
+            ? _localizationBias2Gradient.ToVector()
             : new Vector<T>(_localizationBias2.Length);
 
         return Vector<T>.Concatenate(

@@ -1364,8 +1364,8 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     {
         // Use Vector.Concatenate to efficiently combine all parameters
         return Vector<T>.Concatenate(
-            new Vector<T>(_weights.ToArray()),
-            new Vector<T>(_bias.ToArray())
+            _weights.ToVector(),
+            _bias.ToVector()
         );
     }
 
@@ -1429,8 +1429,8 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         }
 
         return Vector<T>.Concatenate(
-            new Vector<T>(_weightsGradient.ToArray()),
-            new Vector<T>(_biasGradient.ToArray())
+            _weightsGradient.ToVector(),
+            _biasGradient.ToVector()
         );
     }
 

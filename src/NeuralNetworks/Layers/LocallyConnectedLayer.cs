@@ -1177,10 +1177,10 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Get weight parameters as vector
-        var weightVector = new Vector<T>(_weights.ToArray());
+        var weightVector = _weights.ToVector();
 
         // Get bias parameters as vector
-        var biasVector = new Vector<T>(_biases.ToArray());
+        var biasVector = _biases.ToVector();
 
         // Concatenate weights and biases
         return Vector<T>.Concatenate(weightVector, biasVector);
@@ -1215,10 +1215,10 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         var wGrad = _weightGradients != null
-            ? new Vector<T>(_weightGradients.ToArray())
+            ? _weightGradients.ToVector()
             : new Vector<T>(_weights.Length);
         var bGrad = _biasGradients != null
-            ? new Vector<T>(_biasGradients.ToArray())
+            ? _biasGradients.ToVector()
             : new Vector<T>(_biases.Length);
         return Vector<T>.Concatenate(wGrad, bGrad);
     }

@@ -109,7 +109,7 @@ public class Conv3DLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_kernelsGradient == null || _biasesGradient == null) return new Vector<T>(ParameterCount);
-        return Vector<T>.Concatenate(new Vector<T>(_kernelsGradient.ToArray()), new Vector<T>(_biasesGradient.ToArray()));
+        return Vector<T>.Concatenate(_kernelsGradient.ToVector(), _biasesGradient.ToVector());
     }
 
     public override void ClearGradients() { base.ClearGradients(); _kernelsGradient = null; _biasesGradient = null; }
@@ -819,8 +819,8 @@ public class Conv3DLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            new Vector<T>(_kernels.ToArray()),
-            new Vector<T>(_biases.ToArray()));
+            _kernels.ToVector(),
+            _biases.ToVector());
     }
 
     /// <summary>

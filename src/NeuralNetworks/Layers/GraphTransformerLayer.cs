@@ -1604,34 +1604,34 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeights.ToArray()),
-            new Vector<T>(_keyWeights.ToArray()),
-            new Vector<T>(_valueWeights.ToArray()),
-            new Vector<T>(_outputWeights.ToArray()),
-            new Vector<T>(_outputBias.ToArray()),
-            new Vector<T>(_ffnWeights1.ToArray()),
-            new Vector<T>(_ffnWeights2.ToArray()),
-            new Vector<T>(_ffnBias1.ToArray()),
-            new Vector<T>(_ffnBias2.ToArray()),
-            new Vector<T>(_layerNorm1Scale.ToArray()),
-            new Vector<T>(_layerNorm1Bias.ToArray()),
-            new Vector<T>(_layerNorm2Scale.ToArray()),
-            new Vector<T>(_layerNorm2Bias.ToArray())
+            _queryWeights.ToVector(),
+            _keyWeights.ToVector(),
+            _valueWeights.ToVector(),
+            _outputWeights.ToVector(),
+            _outputBias.ToVector(),
+            _ffnWeights1.ToVector(),
+            _ffnWeights2.ToVector(),
+            _ffnBias1.ToVector(),
+            _ffnBias2.ToVector(),
+            _layerNorm1Scale.ToVector(),
+            _layerNorm1Bias.ToVector(),
+            _layerNorm2Scale.ToVector(),
+            _layerNorm2Bias.ToVector()
         );
     }
 
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
-        var gQuery = _queryWeightsGradient != null ? new Vector<T>(_queryWeightsGradient.ToArray()) : new Vector<T>(_queryWeights.Length);
-        var gKey = _keyWeightsGradient != null ? new Vector<T>(_keyWeightsGradient.ToArray()) : new Vector<T>(_keyWeights.Length);
-        var gValue = _valueWeightsGradient != null ? new Vector<T>(_valueWeightsGradient.ToArray()) : new Vector<T>(_valueWeights.Length);
-        var gOutputWeights = _outputWeightsGradient != null ? new Vector<T>(_outputWeightsGradient.ToArray()) : new Vector<T>(_outputWeights.Length);
-        var gOutputBias = _outputBiasGradient != null ? new Vector<T>(_outputBiasGradient.ToArray()) : new Vector<T>(_outputBias.Length);
-        var gFfnWeights1 = _ffnWeights1Gradient != null ? new Vector<T>(_ffnWeights1Gradient.ToArray()) : new Vector<T>(_ffnWeights1.Length);
-        var gFfnWeights2 = _ffnWeights2Gradient != null ? new Vector<T>(_ffnWeights2Gradient.ToArray()) : new Vector<T>(_ffnWeights2.Length);
-        var gFfnBias1 = _ffnBias1Gradient != null ? new Vector<T>(_ffnBias1Gradient.ToArray()) : new Vector<T>(_ffnBias1.Length);
-        var gFfnBias2 = _ffnBias2Gradient != null ? new Vector<T>(_ffnBias2Gradient.ToArray()) : new Vector<T>(_ffnBias2.Length);
+        var gQuery = _queryWeightsGradient != null ? _queryWeightsGradient.ToVector() : new Vector<T>(_queryWeights.Length);
+        var gKey = _keyWeightsGradient != null ? _keyWeightsGradient.ToVector() : new Vector<T>(_keyWeights.Length);
+        var gValue = _valueWeightsGradient != null ? _valueWeightsGradient.ToVector() : new Vector<T>(_valueWeights.Length);
+        var gOutputWeights = _outputWeightsGradient != null ? _outputWeightsGradient.ToVector() : new Vector<T>(_outputWeights.Length);
+        var gOutputBias = _outputBiasGradient != null ? _outputBiasGradient.ToVector() : new Vector<T>(_outputBias.Length);
+        var gFfnWeights1 = _ffnWeights1Gradient != null ? _ffnWeights1Gradient.ToVector() : new Vector<T>(_ffnWeights1.Length);
+        var gFfnWeights2 = _ffnWeights2Gradient != null ? _ffnWeights2Gradient.ToVector() : new Vector<T>(_ffnWeights2.Length);
+        var gFfnBias1 = _ffnBias1Gradient != null ? _ffnBias1Gradient.ToVector() : new Vector<T>(_ffnBias1.Length);
+        var gFfnBias2 = _ffnBias2Gradient != null ? _ffnBias2Gradient.ToVector() : new Vector<T>(_ffnBias2.Length);
         var gLn1Scale = new Vector<T>(_layerNorm1Scale.Length);
         var gLn1Bias = new Vector<T>(_layerNorm1Bias.Length);
         var gLn2Scale = new Vector<T>(_layerNorm2Scale.Length);

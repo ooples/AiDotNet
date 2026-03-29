@@ -2046,8 +2046,8 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     {
         var timeParams = new Vector<T>(DiffusionTimes);
         return Vector<T>.Concatenate(
-            new Vector<T>(_weights.ToArray()),
-            new Vector<T>(_biases.ToArray()),
+            _weights.ToVector(),
+            _biases.ToVector(),
             timeParams);
     }
 
