@@ -1701,15 +1701,15 @@ public class GRULayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            new Vector<T>(_Wz.ToArray()),
-            new Vector<T>(_Wr.ToArray()),
-            new Vector<T>(_Wh.ToArray()),
-            new Vector<T>(_Uz.ToArray()),
-            new Vector<T>(_Ur.ToArray()),
-            new Vector<T>(_Uh.ToArray()),
-            new Vector<T>(_bz.ToArray()),
-            new Vector<T>(_br.ToArray()),
-            new Vector<T>(_bh.ToArray())
+            _Wz.ToVector(),
+            _Wr.ToVector(),
+            _Wh.ToVector(),
+            _Uz.ToVector(),
+            _Ur.ToVector(),
+            _Uh.ToVector(),
+            _bz.ToVector(),
+            _br.ToVector(),
+            _bh.ToVector()
         );
     }
 
@@ -1744,15 +1744,15 @@ public class GRULayer<T> : LayerBase<T>
         }
 
         return Vector<T>.Concatenate(
-            new Vector<T>(_dWz.ToArray()),
-            new Vector<T>(_dWr.ToArray()),
-            new Vector<T>(_dWh.ToArray()),
-            new Vector<T>(_dUz.ToArray()),
-            new Vector<T>(_dUr.ToArray()),
-            new Vector<T>(_dUh.ToArray()),
-            new Vector<T>(_dbz.ToArray()),
-            new Vector<T>(_dbr.ToArray()),
-            new Vector<T>(_dbh.ToArray())
+            _dWz.ToVector(),
+            _dWr.ToVector(),
+            _dWh.ToVector(),
+            _dUz.ToVector(),
+            _dUr.ToVector(),
+            _dUh.ToVector(),
+            _dbz.ToVector(),
+            _dbr.ToVector(),
+            _dbh.ToVector()
         );
     }
 

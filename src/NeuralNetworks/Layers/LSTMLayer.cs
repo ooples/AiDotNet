@@ -2647,18 +2647,18 @@ public class LSTMLayer<T> : LayerBase<T>
     {
         // Use Vector.Concatenate for production-grade parameter extraction
         return Vector<T>.Concatenate(
-            new Vector<T>(_weightsFi.ToArray()),
-            new Vector<T>(_weightsIi.ToArray()),
-            new Vector<T>(_weightsCi.ToArray()),
-            new Vector<T>(_weightsOi.ToArray()),
-            new Vector<T>(_weightsFh.ToArray()),
-            new Vector<T>(_weightsIh.ToArray()),
-            new Vector<T>(_weightsCh.ToArray()),
-            new Vector<T>(_weightsOh.ToArray()),
-            new Vector<T>(_biasF.ToArray()),
-            new Vector<T>(_biasI.ToArray()),
-            new Vector<T>(_biasC.ToArray()),
-            new Vector<T>(_biasO.ToArray())
+            _weightsFi.ToVector(),
+            _weightsIi.ToVector(),
+            _weightsCi.ToVector(),
+            _weightsOi.ToVector(),
+            _weightsFh.ToVector(),
+            _weightsIh.ToVector(),
+            _weightsCh.ToVector(),
+            _weightsOh.ToVector(),
+            _biasF.ToVector(),
+            _biasI.ToVector(),
+            _biasC.ToVector(),
+            _biasO.ToVector()
         );
     }
 
@@ -2670,18 +2670,18 @@ public class LSTMLayer<T> : LayerBase<T>
         Tensor<T> Get(string key) => Gradients.TryGetValue(key, out var t) ? t : new Tensor<T>([0]);
 
         return Vector<T>.Concatenate(
-            new Vector<T>(Get("weightsFi").ToArray()),
-            new Vector<T>(Get("weightsIi").ToArray()),
-            new Vector<T>(Get("weightsCi").ToArray()),
-            new Vector<T>(Get("weightsOi").ToArray()),
-            new Vector<T>(Get("weightsFh").ToArray()),
-            new Vector<T>(Get("weightsIh").ToArray()),
-            new Vector<T>(Get("weightsCh").ToArray()),
-            new Vector<T>(Get("weightsOh").ToArray()),
-            new Vector<T>(Get("biasF").ToArray()),
-            new Vector<T>(Get("biasI").ToArray()),
-            new Vector<T>(Get("biasC").ToArray()),
-            new Vector<T>(Get("biasO").ToArray())
+            Get("weightsFi").ToVector(),
+            Get("weightsIi").ToVector(),
+            Get("weightsCi").ToVector(),
+            Get("weightsOi").ToVector(),
+            Get("weightsFh").ToVector(),
+            Get("weightsIh").ToVector(),
+            Get("weightsCh").ToVector(),
+            Get("weightsOh").ToVector(),
+            Get("biasF").ToVector(),
+            Get("biasI").ToVector(),
+            Get("biasC").ToVector(),
+            Get("biasO").ToVector()
         );
     }
 
