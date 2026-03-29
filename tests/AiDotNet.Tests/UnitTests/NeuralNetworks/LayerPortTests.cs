@@ -139,20 +139,15 @@ public class LayerPortTests
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble() * 0.5;
         for (int i = 0; i < timeEmbed.Length; i++) timeEmbed[i] = rng.NextDouble() * 2.0;
 
-        // block1: Forward WITHOUT time embed
-        var outputNoTime = block1.Forward(input);
+        // block1: Forward with time embed via direct call
+        var outputDirect = block1.Forward(input, timeEmbed);
 
-        // block2: Forward WITH time embed via named ports
+        // block2: Forward WITH time embed via named ports dict
         var outputWithTime = block2.Forward(new Dictionary<string, Tensor<double>>
         {
             ["input"] = input,
             ["time_embed"] = timeEmbed
         });
-
-        // Verify that Forward(dict) with time_embed calls the time-conditioned path.
-        // Compare against Forward(input, timeEmbed) directly to confirm routing works.
-        block1.ResetState();
-        var outputDirect = block1.Forward(input, timeEmbed);
 
         // The multi-input Forward via dict should produce the same result as direct Forward(input, timeEmbed)
         for (int i = 0; i < Math.Min(outputDirect.Length, outputWithTime.Length); i++)

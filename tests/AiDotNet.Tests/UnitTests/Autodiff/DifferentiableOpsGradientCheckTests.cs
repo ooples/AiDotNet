@@ -231,6 +231,50 @@ public class DifferentiableOpsGradientCheckTests
             name: "MSE(pred, target)");
     }
 
+    // ─── Math ops ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void Log_GradientCheck()
+    {
+        var x = Tensor(0.5, 1.0, 2.0, 3.0); // Positive values only
+        GradientCheck(inputs: [x], forward: xs => DifferentiableOps<double>.Log(xs[0]), name: "Log");
+    }
+
+    [Fact]
+    public void Exp_GradientCheck()
+    {
+        var x = Tensor(-1.0, 0.0, 0.5, 1.0); // Small values to avoid overflow
+        GradientCheck(inputs: [x], forward: xs => DifferentiableOps<double>.Exp(xs[0]), name: "Exp");
+    }
+
+    [Fact]
+    public void Pow_GradientCheck()
+    {
+        var x = Tensor(0.5, 1.0, 2.0, 3.0); // Positive for fractional powers
+        GradientCheck(inputs: [x], forward: xs => DifferentiableOps<double>.Pow(xs[0], 2.5), name: "Pow");
+    }
+
+    [Fact]
+    public void Sqrt_GradientCheck()
+    {
+        var x = Tensor(0.25, 1.0, 4.0, 9.0); // Positive values
+        GradientCheck(inputs: [x], forward: xs => DifferentiableOps<double>.Sqrt(xs[0]), name: "Sqrt");
+    }
+
+    [Fact]
+    public void Abs_GradientCheck()
+    {
+        var x = Tensor(-2.0, -0.5, 0.5, 2.0); // Avoid x=0 (non-differentiable)
+        GradientCheck(inputs: [x], forward: xs => DifferentiableOps<double>.Abs(xs[0]), name: "Abs");
+    }
+
+    [Fact]
+    public void Clamp_GradientCheck()
+    {
+        var x = Tensor(-2.0, 0.5, 1.5, 3.0); // Some in range, some out
+        GradientCheck(inputs: [x], forward: xs => DifferentiableOps<double>.Clamp(xs[0], 0.0, 2.0), name: "Clamp");
+    }
+
     // ─── Conv ops ─────────────────────────────────────────────────────
 
     [Fact]

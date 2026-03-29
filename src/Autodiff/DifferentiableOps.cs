@@ -30,56 +30,129 @@ internal static class DifferentiableOps<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static IEngine Engine => AiDotNetEngine.Current;
 
+    // ─── Broadcast gradient reduction ────────────────────────────────
+
+    /// <summary>
+    /// Reduces a gradient tensor to match the original input shape by summing
+    /// along dimensions that were broadcast during the forward pass.
+    /// Required for correct autodiff when operands have different shapes.
+    /// </summary>
+    private static Tensor<T> ReduceBroadcastGrad(Tensor<T> grad, int[] targetShape)
+    {
+        var gradShape = grad.Shape.ToArray();
+
+        // Same shape — no reduction needed
+        if (gradShape.SequenceEqual(targetShape))
+            return grad;
+
+        // Same total length but different shape — just reshape
+        int gradLen = grad.Length;
+        int targetLen = 1;
+        foreach (int d in targetShape) targetLen *= d;
+        if (gradLen == targetLen)
+            return grad.Reshape(targetShape);
+
+        // Scalar target — sum everything
+        if (targetShape.Length == 0 || (targetShape.Length == 1 && targetShape[0] == 1))
+        {
+            T sum = NumOps.Zero;
+            for (int i = 0; i < grad.Length; i++)
+                sum = NumOps.Add(sum, grad[i]);
+            var scalar = new Tensor<T>([1]);
+            scalar[0] = sum;
+            return scalar;
+        }
+
+        // General case: pad targetShape with leading 1s to match grad rank,
+        // then sum along dimensions where target has size 1
+        int rank = gradShape.Length;
+        var padded = new int[rank];
+        int offset = rank - targetShape.Length;
+        for (int i = 0; i < rank; i++)
+            padded[i] = i < offset ? 1 : targetShape[i - offset];
+
+        // Find axes to reduce (where padded == 1 but grad > 1)
+        var result = grad;
+        for (int axis = 0; axis < rank; axis++)
+        {
+            if (padded[axis] == 1 && gradShape[axis] > 1)
+            {
+                result = Engine.ReduceSum(result, new[] { axis }, keepDims: true);
+            }
+        }
+
+        return result.Reshape(targetShape);
+    }
+
     // ─── Elementwise ops ─────────────────────────────────────────────
 
-    /// <summary>Elementwise addition: c = a + b.</summary>
+    /// <summary>Elementwise addition: c = a + b. Supports broadcasting.</summary>
     public static Tensor<T> Add(Tensor<T> a, Tensor<T> b)
     {
+        var aShape = a.Shape.ToArray();
+        var bShape = b.Shape.ToArray();
         var result = Engine.TensorAdd(a, b);
         GradientTape<T>.Current?.RecordOp("Add", [a, b], result,
-            grad => [grad, grad]);
-        return result;
-    }
-
-    /// <summary>Elementwise subtraction: c = a - b.</summary>
-    public static Tensor<T> Subtract(Tensor<T> a, Tensor<T> b)
-    {
-        var result = Engine.TensorSubtract(a, b);
-        GradientTape<T>.Current?.RecordOp("Subtract", [a, b], result,
-            grad =>
-            {
-                var negGrad = Engine.TensorNegate(grad);
-                return [grad, negGrad];
-            });
-        return result;
-    }
-
-    /// <summary>Elementwise multiplication (Hadamard product): c = a ⊙ b.</summary>
-    public static Tensor<T> Multiply(Tensor<T> a, Tensor<T> b)
-    {
-        var result = Engine.TensorMultiply(a, b);
-        GradientTape<T>.Current?.RecordOp("Multiply", [a, b], result,
             grad =>
             [
-                Engine.TensorMultiply(grad, b),
-                Engine.TensorMultiply(grad, a)
+                ReduceBroadcastGrad(grad, aShape),
+                ReduceBroadcastGrad(grad, bShape)
             ]);
         return result;
     }
 
-    /// <summary>Elementwise division: c = a / b.</summary>
+    /// <summary>Elementwise subtraction: c = a - b. Supports broadcasting.</summary>
+    public static Tensor<T> Subtract(Tensor<T> a, Tensor<T> b)
+    {
+        var aShape = a.Shape.ToArray();
+        var bShape = b.Shape.ToArray();
+        var result = Engine.TensorSubtract(a, b);
+        GradientTape<T>.Current?.RecordOp("Subtract", [a, b], result,
+            grad =>
+            [
+                ReduceBroadcastGrad(grad, aShape),
+                ReduceBroadcastGrad(Engine.TensorNegate(grad), bShape)
+            ]);
+        return result;
+    }
+
+    /// <summary>Elementwise multiplication (Hadamard product): c = a ⊙ b. Supports broadcasting.</summary>
+    public static Tensor<T> Multiply(Tensor<T> a, Tensor<T> b)
+    {
+        var aShape = a.Shape.ToArray();
+        var bShape = b.Shape.ToArray();
+        var result = Engine.TensorMultiply(a, b);
+        GradientTape<T>.Current?.RecordOp("Multiply", [a, b], result,
+            grad =>
+            [
+                ReduceBroadcastGrad(Engine.TensorMultiply(grad, b), aShape),
+                ReduceBroadcastGrad(Engine.TensorMultiply(grad, a), bShape)
+            ]);
+        return result;
+    }
+
+    /// <summary>Elementwise division: c = a / b. Supports broadcasting. Guards against b=0.</summary>
     public static Tensor<T> Divide(Tensor<T> a, Tensor<T> b)
     {
+        var aShape = a.Shape.ToArray();
+        var bShape = b.Shape.ToArray();
         var result = Engine.TensorDivide(a, b);
         GradientTape<T>.Current?.RecordOp("Divide", [a, b], result,
             grad =>
             {
                 // d(a/b)/da = 1/b, d(a/b)/db = -a/b²
+                // Guard: clamp b² away from zero to prevent Inf/NaN
                 var gradA = Engine.TensorDivide(grad, b);
                 var bSquared = Engine.TensorMultiply(b, b);
+                // Clamp bSquared to epsilon to avoid division by zero
+                var eps = NumOps.FromDouble(1e-12);
+                var safeBSquared = new Tensor<T>(bSquared.Shape.ToArray());
+                for (int i = 0; i < bSquared.Length; i++)
+                    safeBSquared[i] = NumOps.GreaterThan(
+                        NumOps.Abs(bSquared[i]), eps) ? bSquared[i] : eps;
                 var gradB = Engine.TensorNegate(Engine.TensorDivide(
-                    Engine.TensorMultiply(grad, a), bSquared));
-                return [gradA, gradB];
+                    Engine.TensorMultiply(grad, a), safeBSquared));
+                return [ReduceBroadcastGrad(gradA, aShape), ReduceBroadcastGrad(gradB, bShape)];
             });
         return result;
     }
@@ -188,6 +261,133 @@ internal static class DifferentiableOps<T>
         return result;
     }
 
+    // ─── Math ops (Log, Exp, Pow, Sqrt, Abs, Clamp) ───────────────────
+
+    /// <summary>Elementwise natural logarithm. Needed for NLLLoss, KL divergence.</summary>
+    public static Tensor<T> Log(Tensor<T> x)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
+            result[i] = NumOps.FromDouble(Math.Log(Math.Max(NumOps.ToDouble(x[i]), 1e-12)));
+
+        GradientTape<T>.Current?.RecordOp("Log", [x], result,
+            grad =>
+            {
+                // d(log(x))/dx = 1/x, clamped for safety
+                var dx = new Tensor<T>(x.Shape.ToArray());
+                for (int i = 0; i < x.Length; i++)
+                {
+                    double xi = Math.Max(NumOps.ToDouble(x[i]), 1e-12);
+                    dx[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) / xi);
+                }
+                return [dx];
+            });
+        return result;
+    }
+
+    /// <summary>Elementwise exponential. Needed for log-space computations.</summary>
+    public static Tensor<T> Exp(Tensor<T> x)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
+            result[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(x[i])));
+
+        GradientTape<T>.Current?.RecordOp("Exp", [x], result,
+            grad =>
+            {
+                // d(exp(x))/dx = exp(x) = result
+                return [Engine.TensorMultiply(grad, result)];
+            });
+        return result;
+    }
+
+    /// <summary>Elementwise power: x^n. Needed for Lp norms, polynomial features.</summary>
+    public static Tensor<T> Pow(Tensor<T> x, double n)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
+            result[i] = NumOps.FromDouble(Math.Pow(NumOps.ToDouble(x[i]), n));
+
+        GradientTape<T>.Current?.RecordOp("Pow", [x], result,
+            grad =>
+            {
+                // d(x^n)/dx = n * x^(n-1)
+                var dx = new Tensor<T>(x.Shape.ToArray());
+                for (int i = 0; i < x.Length; i++)
+                {
+                    double xi = NumOps.ToDouble(x[i]);
+                    dx[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * n * Math.Pow(xi, n - 1));
+                }
+                return [dx];
+            });
+        return result;
+    }
+
+    /// <summary>Elementwise square root. Needed for RMSNorm, distance metrics.</summary>
+    public static Tensor<T> Sqrt(Tensor<T> x)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
+            result[i] = NumOps.FromDouble(Math.Sqrt(Math.Max(NumOps.ToDouble(x[i]), 0)));
+
+        GradientTape<T>.Current?.RecordOp("Sqrt", [x], result,
+            grad =>
+            {
+                // d(sqrt(x))/dx = 1/(2*sqrt(x)), clamped for safety
+                var dx = new Tensor<T>(x.Shape.ToArray());
+                for (int i = 0; i < x.Length; i++)
+                {
+                    double sqrtX = Math.Max(NumOps.ToDouble(result[i]), 1e-12);
+                    dx[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) / (2.0 * sqrtX));
+                }
+                return [dx];
+            });
+        return result;
+    }
+
+    /// <summary>Elementwise absolute value. Needed for L1 loss.</summary>
+    public static Tensor<T> Abs(Tensor<T> x)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        var signs = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
+        {
+            double xi = NumOps.ToDouble(x[i]);
+            result[i] = NumOps.FromDouble(Math.Abs(xi));
+            signs[i] = NumOps.FromDouble(xi >= 0 ? 1.0 : -1.0);
+        }
+
+        GradientTape<T>.Current?.RecordOp("Abs", [x], result,
+            grad =>
+            {
+                // d|x|/dx = sign(x)
+                return [Engine.TensorMultiply(grad, signs)];
+            });
+        return result;
+    }
+
+    /// <summary>Elementwise clamp to [min, max]. Needed for gradient clipping, ReLU6.</summary>
+    public static Tensor<T> Clamp(Tensor<T> x, double min, double max)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        var mask = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
+        {
+            double xi = NumOps.ToDouble(x[i]);
+            double clamped = Math.Max(min, Math.Min(max, xi));
+            result[i] = NumOps.FromDouble(clamped);
+            mask[i] = (xi >= min && xi <= max) ? NumOps.One : NumOps.Zero;
+        }
+
+        GradientTape<T>.Current?.RecordOp("Clamp", [x], result,
+            grad =>
+            {
+                // Gradient passes through where x is in [min, max], zero elsewhere
+                return [Engine.TensorMultiply(grad, mask)];
+            });
+        return result;
+    }
+
     // ─── Activation ops ──────────────────────────────────────────────
 
     /// <summary>Elementwise sigmoid: σ(x) = 1/(1+exp(-x)).</summary>
@@ -203,11 +403,14 @@ internal static class DifferentiableOps<T>
         GradientTape<T>.Current?.RecordOp("Sigmoid", [x], result,
             grad =>
             {
-                // σ'(x) = σ(x) * (1 - σ(x))
-                var ones = Tensor<T>.CreateDefault(result.Shape.ToArray(), NumOps.One);
-                var oneMinusSigmoid = Engine.TensorSubtract(ones, result);
-                var derivative = Engine.TensorMultiply(result, oneMinusSigmoid);
-                return [Engine.TensorMultiply(grad, derivative)];
+                // σ'(x) = σ(x) * (1 - σ(x)) — single loop, zero extra allocations
+                var dx = new Tensor<T>(grad.Shape.ToArray());
+                for (int i = 0; i < grad.Length; i++)
+                {
+                    double si = NumOps.ToDouble(result[i]);
+                    dx[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * si * (1.0 - si));
+                }
+                return [dx];
             });
         return result;
     }
@@ -222,11 +425,14 @@ internal static class DifferentiableOps<T>
         GradientTape<T>.Current?.RecordOp("Tanh", [x], result,
             grad =>
             {
-                // tanh'(x) = 1 - tanh²(x)
-                var tanhSquared = Engine.TensorMultiply(result, result);
-                var ones = Tensor<T>.CreateDefault(result.Shape.ToArray(), NumOps.One);
-                var derivative = Engine.TensorSubtract(ones, tanhSquared);
-                return [Engine.TensorMultiply(grad, derivative)];
+                // tanh'(x) = 1 - tanh²(x) — single loop, zero extra allocations
+                var dx = new Tensor<T>(grad.Shape.ToArray());
+                for (int i = 0; i < grad.Length; i++)
+                {
+                    double ti = NumOps.ToDouble(result[i]);
+                    dx[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * (1.0 - ti * ti));
+                }
+                return [dx];
             });
         return result;
     }

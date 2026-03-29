@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -44,28 +43,28 @@ public sealed class GradientTape<T> : IDisposable
 
     // ─── Thread/async-safe active tape ───────────────────────────────
 
-    private static readonly AsyncLocal<ImmutableStack<GradientTape<T>>?> _tapeStack = new();
+    private static readonly AsyncLocal<Stack<GradientTape<T>>?> _tapeStack = new();
 
     /// <summary>
     /// Gets the currently active tape, or null if none is active.
-    /// Propagates correctly across async/await boundaries using an immutable stack
-    /// so that child async flows get copy-on-write isolation.
+    /// Uses AsyncLocal for correct propagation across async/await boundaries.
     /// </summary>
     public static GradientTape<T>? Current
     {
         get
         {
             var stack = _tapeStack.Value;
-            return stack is not null && !stack.IsEmpty ? stack.Peek() : null;
+            return stack is { Count: > 0 } ? stack.Peek() : null;
         }
     }
 
     // ─── Instance state ──────────────────────────────────────────────
 
     private readonly List<TapeEntry> _ops = [];
+    private readonly object _opsLock = new();
     private readonly HashSet<Tensor<T>> _watched = new(ReferenceEqualityComparer.Instance);
-    private bool _disposed;
-    private bool _used;
+    private volatile bool _disposed;
+    private volatile bool _used;
 
     /// <summary>
     /// If true, the tape can compute gradients multiple times.
@@ -86,8 +85,8 @@ public sealed class GradientTape<T> : IDisposable
     public GradientTape(bool persistent = false)
     {
         Persistent = persistent;
-        var stack = _tapeStack.Value ?? ImmutableStack<GradientTape<T>>.Empty;
-        _tapeStack.Value = stack.Push(this);
+        _tapeStack.Value ??= new Stack<GradientTape<T>>();
+        _tapeStack.Value.Push(this);
     }
 
     /// <inheritdoc/>
@@ -99,8 +98,8 @@ public sealed class GradientTape<T> : IDisposable
         IsRecording = false;
 
         var stack = _tapeStack.Value;
-        if (stack is not null && !stack.IsEmpty && ReferenceEquals(stack.Peek(), this))
-            _tapeStack.Value = stack.Pop();
+        if (stack is { Count: > 0 } && ReferenceEquals(stack.Peek(), this))
+            stack.Pop();
 
         if (!Persistent)
         {
@@ -241,7 +240,10 @@ public sealed class GradientTape<T> : IDisposable
             }
         }
 
-        _ops.Add(new TapeEntry(opName, inputs, output, backward));
+        lock (_opsLock)
+        {
+            _ops.Add(new TapeEntry(opName, inputs, output, backward));
+        }
     }
 
     /// <summary>
@@ -261,7 +263,6 @@ public sealed class GradientTape<T> : IDisposable
             throw new InvalidOperationException(
                 "Non-persistent GradientTape can only compute gradients once. " +
                 "Set persistent: true in the constructor to reuse.");
-        _used = true;
 
         // Stop recording during backward to avoid recording gradient ops
         bool wasRecording = IsRecording;
@@ -269,7 +270,21 @@ public sealed class GradientTape<T> : IDisposable
 
         try
         {
-            return ReverseAccumulate(loss);
+            var result = ReverseAccumulate(loss);
+
+            // Mark as used AFTER successful gradient computation (#5 fix).
+            // If backward throws, the tape remains usable for retry.
+            _used = true;
+
+            // Release closure references for non-persistent tapes (#10 fix).
+            // The backward closures capture forward tensors — release them immediately
+            // instead of waiting for Dispose().
+            if (!Persistent)
+            {
+                lock (_opsLock) { _ops.Clear(); }
+            }
+
+            return result;
         }
         finally
         {
@@ -292,11 +307,18 @@ public sealed class GradientTape<T> : IDisposable
                 "Non-persistent tapes should be disposed and recreated.");
         }
 
-        _ops.Clear();
+        lock (_opsLock) { _ops.Clear(); }
         _watched.Clear();
         _used = false;
         IsRecording = true;
     }
+
+    /// <summary>
+    /// Enables anomaly detection during backward pass. When true, each backward
+    /// function's output is checked for NaN/Inf and an exception is thrown immediately.
+    /// Like PyTorch's <c>torch.autograd.set_detect_anomaly(True)</c>.
+    /// </summary>
+    public bool DetectAnomaly { get; set; }
 
     // ─── Reverse-mode AD core ────────────────────────────────────────
 
@@ -338,17 +360,35 @@ public sealed class GradientTape<T> : IDisposable
                     $"Op '{entry.OpName}' backward returned {inputGrads.Length} gradients " +
                     $"but has {entry.Inputs.Length} inputs.");
 
-            // Accumulate gradients for each input
+            // Anomaly detection: check for NaN/Inf in backward outputs
+            if (DetectAnomaly)
+            {
+                for (int j = 0; j < inputGrads.Length; j++)
+                {
+                    if (inputGrads[j] is null) continue;
+                    for (int k = 0; k < inputGrads[j].Length; k++)
+                    {
+                        double val = numOps.ToDouble(inputGrads[j][k]);
+                        if (double.IsNaN(val) || double.IsInfinity(val))
+                            throw new ArithmeticException(
+                                $"Op '{entry.OpName}' backward produced {(double.IsNaN(val) ? "NaN" : "Inf")} " +
+                                $"at input[{j}][{k}]. Enable DetectAnomaly on the tape to debug.");
+                    }
+                }
+            }
+
+            // Accumulate gradients for each input (in-place when possible)
             for (int j = 0; j < entry.Inputs.Length; j++)
             {
                 var input = entry.Inputs[j];
                 var grad = inputGrads[j];
-                if (grad is null) continue; // null means "no gradient for this input"
+                if (grad is null) continue;
 
                 if (grads.TryGetValue(input, out var existing))
                 {
-                    // Accumulate: gradient for tensors used in multiple ops
-                    grads[input] = TensorAdd(existing, grad, numOps);
+                    // In-place accumulation: avoids allocating a new tensor (#9 fix)
+                    for (int k = 0; k < existing.Length && k < grad.Length; k++)
+                        existing[k] = numOps.Add(existing[k], grad[k]);
                 }
                 else
                 {
