@@ -682,25 +682,25 @@ public class RWKVLayer<T> : LayerBase<T>
     {
         if (_timeMixRGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_timeMixRGradient!.ToArray()),
-            new Vector<T>(_timeMixKGradient!.ToArray()),
-            new Vector<T>(_timeMixVGradient!.ToArray()),
-            new Vector<T>(_receptanceWeightsGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_outputWeightsGradient?.ToArray() ?? new T[_outputWeights.Length]),
-            new Vector<T>(_decayWeightsGradient!.ToArray()),
-            new Vector<T>(_decayBiasGradient!.ToArray()),
-            new Vector<T>(_bonusGradient!.ToArray()),
-            new Vector<T>(_channelMixRGradient!.ToArray()),
-            new Vector<T>(_channelMixKGradient!.ToArray()),
-            new Vector<T>(_channelKeyWeightsGradient!.ToArray()),
-            new Vector<T>(_channelValueWeightsGradient!.ToArray()),
-            new Vector<T>(_channelReceptanceWeightsGradient!.ToArray()),
-            new Vector<T>(_normGamma1Gradient!.ToArray()),
-            new Vector<T>(_normBeta1Gradient!.ToArray()),
-            new Vector<T>(_normGamma2Gradient!.ToArray()),
-            new Vector<T>(_normBeta2Gradient!.ToArray()));
+            _timeMixRGradient!.ToVector(),
+            _timeMixKGradient!.ToVector(),
+            _timeMixVGradient!.ToVector(),
+            _receptanceWeightsGradient!.ToVector(),
+            _keyWeightsGradient!.ToVector(),
+            _valueWeightsGradient!.ToVector(),
+            _outputWeightsGradient?.ToVector() ?? new Vector<T>(_outputWeights.Length),
+            _decayWeightsGradient!.ToVector(),
+            _decayBiasGradient!.ToVector(),
+            _bonusGradient!.ToVector(),
+            _channelMixRGradient!.ToVector(),
+            _channelMixKGradient!.ToVector(),
+            _channelKeyWeightsGradient!.ToVector(),
+            _channelValueWeightsGradient!.ToVector(),
+            _channelReceptanceWeightsGradient!.ToVector(),
+            _normGamma1Gradient!.ToVector(),
+            _normBeta1Gradient!.ToVector(),
+            _normGamma2Gradient!.ToVector(),
+            _normBeta2Gradient!.ToVector());
     }
 
     public override void ClearGradients()

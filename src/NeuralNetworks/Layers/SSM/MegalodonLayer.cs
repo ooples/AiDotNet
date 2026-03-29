@@ -1172,21 +1172,21 @@ public class MegalodonLayer<T> : LayerBase<T>
     {
         if (_emaAlphaRealGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_emaAlphaRealGradient!.ToArray()),
-            new Vector<T>(_emaAlphaImagGradient!.ToArray()),
-            new Vector<T>(_emaInputWeightsGradient!.ToArray()),
-            new Vector<T>(_emaInputBiasGradient!.ToArray()),
-            new Vector<T>(_emaOutputWeightsGradient!.ToArray()),
-            new Vector<T>(_emaOutputBiasGradient!.ToArray()),
-            new Vector<T>(_tsNormGammaGradient!.ToArray()),
-            new Vector<T>(_tsNormBetaGradient!.ToArray()),
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_gateWeightsGradient!.ToArray()),
-            new Vector<T>(_gateBiasGradient!.ToArray()),
-            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
+            _emaAlphaRealGradient!.ToVector(),
+            _emaAlphaImagGradient!.ToVector(),
+            _emaInputWeightsGradient!.ToVector(),
+            _emaInputBiasGradient!.ToVector(),
+            _emaOutputWeightsGradient!.ToVector(),
+            _emaOutputBiasGradient!.ToVector(),
+            _tsNormGammaGradient!.ToVector(),
+            _tsNormBetaGradient!.ToVector(),
+            _queryWeightsGradient!.ToVector(),
+            _keyWeightsGradient!.ToVector(),
+            _valueWeightsGradient!.ToVector(),
+            _gateWeightsGradient!.ToVector(),
+            _gateBiasGradient!.ToVector(),
+            _outputProjectionWeightsGradient!.ToVector(),
+            _outputProjectionBiasGradient!.ToVector());
     }
 
     public override void ClearGradients()
