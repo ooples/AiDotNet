@@ -1257,7 +1257,7 @@ public class GRULayer<T> : LayerBase<T>
             var ones1 = new Tensor<T>(_lastZ.Shape.ToArray());
             ones1.Fill(NumOps.One);
             var oneMinusLastZ = ones1.Subtract(_lastZ);
-            // Note: ones1 reused below for tanh derivative
+            // Note: ones1 reused below for tanh derivative and r gate
 
             var dh_candidate = dh.ElementwiseMultiply(oneMinusLastZ);
             // dh/dz = h_prev - h_candidate. For single timestep, h_prev = 0
@@ -1276,9 +1276,10 @@ public class GRULayer<T> : LayerBase<T>
             // z = sigmoid(z_pre), dz_pre = dz * z * (1-z)
             var dz_pre = dz.ElementwiseMultiply(_lastZ).ElementwiseMultiply(oneMinusLastZ);
 
-            // r gate gradient: d(r * h_prev) = dh_candidate_pre @ Uh
+            // r gate gradient: d(r * h_prev)/dr = h_prev (NOT h_t)
+            // h̃ = tanh(W·x + U·(r ⊙ h_{t-1})), so gradient flows through h_{t-1}
             var dr_times_h = dh_candidate_pre.Multiply(_Uh);
-            var dr = dr_times_h.ElementwiseMultiply(_lastHiddenState);
+            var dr = dr_times_h.ElementwiseMultiply(h_prev_for_dz);
             var dr_pre = dr.ElementwiseMultiply(_lastR).ElementwiseMultiply(ones1.Subtract(_lastR));
 
             // Input gradient: dx = dz_pre @ Wz + dr_pre @ Wr + dh_candidate_pre @ Wh
