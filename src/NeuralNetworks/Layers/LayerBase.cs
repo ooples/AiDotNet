@@ -2095,16 +2095,19 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
             var flatOutputGrad = outputGradient.Reshape(new[] { batchElements, vectorLength });
             var flatInputGrad = new Tensor<T>(new[] { batchElements, vectorLength });
 
+            // Batched matrix-vector multiply: inputGrad[i] = derivative[i] @ gradient[i]
             for (int i = 0; i < batchElements; i++)
             {
+                // Extract [vectorLength, vectorLength] slice and [vectorLength, 1] column
+                var derivSlice = flatDerivative.Slice(0, i, i + 1).Reshape(vectorLength, vectorLength);
+                var gradCol = flatOutputGrad.Slice(0, i, i + 1).Reshape(vectorLength, 1);
+                var result = Engine.TensorMatMul(derivSlice, gradCol).Reshape(vectorLength);
+
+                // Copy result into output
+                int offset = i * vectorLength;
                 for (int j = 0; j < vectorLength; j++)
                 {
-                    T sum = NumOps.Zero;
-                    for (int k = 0; k < vectorLength; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(flatDerivative[i, j, k], flatOutputGrad[i, k]));
-                    }
-                    flatInputGrad[i, j] = sum;
+                    flatInputGrad[offset + j] = result[j];
                 }
             }
 

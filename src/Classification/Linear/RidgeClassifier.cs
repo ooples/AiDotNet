@@ -130,39 +130,24 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
         // Compute ridge regression solution: w = (X'X + alpha*I)^(-1) X'y
         T alpha = NumOps.FromDouble(Options.Alpha);
 
-        // Pre-extract columns from X as Vector<T> for Engine.DotProduct
-        var xCols = new Vector<T>[NumFeatures];
-        for (int col = 0; col < NumFeatures; col++)
-        {
-            xCols[col] = new Vector<T>(x.Rows);
-            for (int row = 0; row < x.Rows; row++)
-            {
-                xCols[col][row] = xCentered[row, col];
-            }
-        }
+        // Vectorized: X'X = X^T @ X using Engine.TensorMatMul
+        var xTensor = Tensor<T>.FromMatrix(xCentered);
+        var xTranspose = xTensor.Transpose([1, 0]);
+        var xtxTensor = Engine.TensorMatMul(xTranspose, xTensor);
 
-        // Compute X'X using Engine.DotProduct
+        // Convert to Matrix and add regularization to diagonal
         var xtx = new Matrix<T>(NumFeatures, NumFeatures);
         for (int i = 0; i < NumFeatures; i++)
-        {
             for (int j = 0; j < NumFeatures; j++)
             {
-                xtx[i, j] = Engine.DotProduct(xCols[i], xCols[j]);
-
-                // Add regularization to diagonal
-                if (i == j)
-                {
-                    xtx[i, j] = NumOps.Add(xtx[i, j], alpha);
-                }
+                xtx[i, j] = xtxTensor[i, j];
+                if (i == j) xtx[i, j] = NumOps.Add(xtx[i, j], alpha);
             }
-        }
 
-        // Compute X'y using Engine.DotProduct
-        var xty = new Vector<T>(NumFeatures);
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            xty[j] = Engine.DotProduct(xCols[j], yRegression);
-        }
+        // Vectorized: X'y = X^T @ y
+        var yTensor = Tensor<T>.FromVector(yRegression).Reshape(x.Rows, 1);
+        var xtyTensor = Engine.TensorMatMul(xTranspose, yTensor);
+        var xty = xtyTensor.Reshape(NumFeatures).ToVector();
 
         // Solve the linear system using Cholesky or simple Gaussian elimination
         Weights = SolveLinearSystem(xtx, xty);

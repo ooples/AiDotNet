@@ -555,16 +555,16 @@ public class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
     {
         if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
-            new Vector<T>(_recurrenceGateWeightsGradient!.ToArray()),
-            new Vector<T>(_recurrenceGateBiasGradient!.ToArray()),
-            new Vector<T>(_inputGateWeightsGradient!.ToArray()),
-            new Vector<T>(_inputGateBiasGradient!.ToArray()),
-            new Vector<T>(_valueProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_decayParamGradient!.ToArray()),
-            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
+            (_inputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_inputProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_inputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_inputProjectionBiasGradient.Data) : new Vector<T>(0)),
+            (_recurrenceGateWeightsGradient is not null ? Vector<T>.FromMemory(_recurrenceGateWeightsGradient.Data) : new Vector<T>(0)),
+            (_recurrenceGateBiasGradient is not null ? Vector<T>.FromMemory(_recurrenceGateBiasGradient.Data) : new Vector<T>(0)),
+            (_inputGateWeightsGradient is not null ? Vector<T>.FromMemory(_inputGateWeightsGradient.Data) : new Vector<T>(0)),
+            (_inputGateBiasGradient is not null ? Vector<T>.FromMemory(_inputGateBiasGradient.Data) : new Vector<T>(0)),
+            (_valueProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_valueProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_decayParamGradient is not null ? Vector<T>.FromMemory(_decayParamGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()

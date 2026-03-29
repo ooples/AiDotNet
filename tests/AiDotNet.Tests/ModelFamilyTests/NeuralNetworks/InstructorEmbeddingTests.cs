@@ -6,9 +6,6 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
 public class InstructorEmbeddingTests : EmbeddingModelTestBase
 {
-    protected override int[] InputShape => [768];
-    protected override int[] OutputShape => [768];
-
     protected override INeuralNetworkModel<double> CreateNetwork()
         => new InstructorEmbedding<double>();
 }

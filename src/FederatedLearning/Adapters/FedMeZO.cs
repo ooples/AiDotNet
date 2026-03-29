@@ -130,17 +130,14 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
         var z = GeneratePerturbation(seed);
         var eps = NumOps.FromDouble(_perturbationScale);
 
-        var wPlus = new T[_modelDim];
-        var wMinus = new T[_modelDim];
+        // Vectorized: perturbation = z * eps, wPlus = w + perturbation, wMinus = w - perturbation
+        var zVec = new Vector<T>(z);
+        var wVec = new Vector<T>(weights);
+        var perturbation = (Vector<T>)Engine.Multiply(zVec, eps);
+        var wPlus = (Vector<T>)Engine.Add(wVec, perturbation);
+        var wMinus = (Vector<T>)Engine.Subtract(wVec, perturbation);
 
-        for (int i = 0; i < _modelDim; i++)
-        {
-            var perturbation = NumOps.Multiply(z[i], eps);
-            wPlus[i] = NumOps.Add(weights[i], perturbation);
-            wMinus[i] = NumOps.Subtract(weights[i], perturbation);
-        }
-
-        return (new Vector<T>(wPlus), new Vector<T>(wMinus));
+        return (wPlus, wMinus);
     }
 
     /// <summary>
@@ -162,15 +159,8 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
         double scale = lossDiff / (2.0 * _perturbationScale);
 
         var z = GeneratePerturbation(seed);
-        var grad = new T[_modelDim];
-        var scaleT = NumOps.FromDouble(scale);
-
-        for (int i = 0; i < _modelDim; i++)
-        {
-            grad[i] = NumOps.Multiply(z[i], scaleT);
-        }
-
-        return new Vector<T>(grad);
+        // Vectorized: grad = z * scale
+        return (Vector<T>)Engine.Multiply(new Vector<T>(z), NumOps.FromDouble(scale));
     }
 
     /// <summary>
@@ -238,15 +228,7 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
     {
         double scale = message.LossDifference / (2.0 * _perturbationScale);
         var z = GeneratePerturbation(message.Seed);
-        var grad = new T[_modelDim];
-        var scaleT = NumOps.FromDouble(scale);
-
-        for (int i = 0; i < _modelDim; i++)
-        {
-            grad[i] = NumOps.Multiply(z[i], scaleT);
-        }
-
-        return new Vector<T>(grad);
+        return (Vector<T>)Engine.Multiply(new Vector<T>(z), NumOps.FromDouble(scale));
     }
 
     /// <summary>
@@ -328,13 +310,10 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
         // Apply the aggregated ZO gradient update: w_new = w - lr * grad_estimate.
         var merged = new T[fullModelParameters.Length];
         var lr = NumOps.FromDouble(_learningRate);
-
-        for (int i = 0; i < fullModelParameters.Length; i++)
-        {
-            merged[i] = NumOps.Subtract(fullModelParameters[i], NumOps.Multiply(aggregatedAdapters[i], lr));
-        }
-
-        return new Vector<T>(merged);
+        // Vectorized: merged = fullParams - lr * aggregatedAdapters
+        var fullVec = new Vector<T>(fullModelParameters);
+        var adapVec = new Vector<T>(aggregatedAdapters);
+        return (Vector<T>)Engine.Subtract(fullVec, Engine.Multiply(adapVec, lr));
     }
 
     /// <inheritdoc/>
@@ -356,28 +335,20 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
                     $"Client {clientId} adapter length {adapters.Length} differs from expected {paramLen}.");
             }
         }
-        var aggregated = new T[paramLen];
+        var aggregated = new Vector<T>(paramLen);
         double totalWeight = 0;
 
         foreach (var (clientId, gradEstimate) in clientAdapters)
         {
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
             totalWeight += w;
-
-            var wT = NumOps.FromDouble(w);
-            for (int i = 0; i < paramLen; i++)
-            {
-                aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(gradEstimate[i], wT));
-            }
+            // Vectorized: aggregated += w * gradEstimate
+            aggregated = (Vector<T>)Engine.Add(aggregated, Engine.Multiply(gradEstimate, NumOps.FromDouble(w)));
         }
 
-        var invTotal = NumOps.FromDouble(1.0 / totalWeight);
-        for (int i = 0; i < paramLen; i++)
-        {
-            aggregated[i] = NumOps.Multiply(aggregated[i], invTotal);
-        }
-
-        return new Vector<T>(aggregated);
+        // Vectorized: aggregated /= totalWeight
+        aggregated = (Vector<T>)Engine.Multiply(aggregated, NumOps.FromDouble(1.0 / totalWeight));
+        return aggregated;
     }
 
     /// <summary>Gets the ZO perturbation scale (epsilon).</summary>

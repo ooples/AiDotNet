@@ -183,10 +183,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             }
             else
             {
-                for (int i = 0; i < accumulatedMetaGradients.Length; i++)
-                {
-                    accumulatedMetaGradients[i] = NumOps.Add(accumulatedMetaGradients[i], taskMetaGradients[i]);
-                }
+                accumulatedMetaGradients = (Vector<T>)Engine.Add(accumulatedMetaGradients, taskMetaGradients);
             }
         }
 
@@ -388,21 +385,15 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
 
             T alpha = NumOps.Divide(rsOld, pAp);
 
+            // Vectorized CG updates
             // x = x + alpha * p
-            for (int i = 0; i < n; i++)
-            {
-                x[i] = NumOps.Add(x[i], NumOps.Multiply(alpha, p[i]));
-            }
+            x = (Vector<T>)Engine.Add(x, Engine.Multiply(p, alpha));
 
             // r = r - alpha * Ap
-            for (int i = 0; i < n; i++)
-            {
-                r[i] = NumOps.Subtract(r[i], NumOps.Multiply(alpha, Ap[i]));
-            }
+            r = (Vector<T>)Engine.Subtract(r, Engine.Multiply(Ap, alpha));
 
             T rsNew = VectorHelper.DotProduct(r, r);
 
-            // Avoid division by zero
             if (NumOps.LessThan(rsOld, NumOps.FromDouble(1e-12)))
             {
                 break;
@@ -411,10 +402,7 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             T beta = NumOps.Divide(rsNew, rsOld);
 
             // p = r + beta * p
-            for (int i = 0; i < n; i++)
-            {
-                p[i] = NumOps.Add(r[i], NumOps.Multiply(beta, p[i]));
-            }
+            p = (Vector<T>)Engine.Add(r, Engine.Multiply(p, beta));
 
             rsOld = rsNew;
         }
@@ -447,43 +435,25 @@ public class iMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         // Get current parameters
         var theta = model.GetParameters();
 
-        // Compute gradient at theta + eps*v
-        var thetaPlus = new Vector<T>(theta.Length);
-        for (int i = 0; i < theta.Length; i++)
-        {
-            thetaPlus[i] = NumOps.Add(theta[i], NumOps.Multiply(eps, v[i]));
-        }
-        model.SetParameters(thetaPlus);
+        // Vectorized Hessian-vector product via finite differences
+        // theta + eps*v
+        var eDeltaV = (Vector<T>)Engine.Multiply(v, eps);
+        model.SetParameters((Vector<T>)Engine.Add(theta, eDeltaV));
         var gradPlus = ComputeGradients(model, task.SupportInput, task.SupportOutput);
 
-        // Compute gradient at theta - eps*v
-        var thetaMinus = new Vector<T>(theta.Length);
-        for (int i = 0; i < theta.Length; i++)
-        {
-            thetaMinus[i] = NumOps.Subtract(theta[i], NumOps.Multiply(eps, v[i]));
-        }
-        model.SetParameters(thetaMinus);
+        // theta - eps*v
+        model.SetParameters((Vector<T>)Engine.Subtract(theta, eDeltaV));
         var gradMinus = ComputeGradients(model, task.SupportInput, task.SupportOutput);
 
         // Restore original parameters
         model.SetParameters(theta);
 
         // H * v = (gradPlus - gradMinus) / (2 * eps)
-        var Hv = new Vector<T>(v.Length);
         T twoEps = NumOps.Multiply(NumOps.FromDouble(2.0), eps);
-        for (int i = 0; i < v.Length; i++)
-        {
-            Hv[i] = NumOps.Divide(NumOps.Subtract(gradPlus[i], gradMinus[i]), twoEps);
-        }
+        var Hv = (Vector<T>)Engine.Divide(Engine.Subtract(gradPlus, gradMinus), twoEps);
 
-        // Result = I*v + lambda*H*v = v + lambda*Hv
-        var result = new Vector<T>(v.Length);
-        for (int i = 0; i < v.Length; i++)
-        {
-            result[i] = NumOps.Add(v[i], NumOps.Multiply(lambda, Hv[i]));
-        }
-
-        return result;
+        // Vectorized: result = v + lambda * Hv
+        return (Vector<T>)Engine.Add(v, Engine.Multiply(Hv, lambda));
     }
 
 }

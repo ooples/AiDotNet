@@ -605,48 +605,35 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
             }
             concats[t] = concat;
 
-            // Forget gate
-            var f = new Vector<T>(_hiddenDim);
-            for (int j = 0; j < _hiddenDim; j++)
-            {
-                T sum = bf[j];
-                { var wc0 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc0[ii] = Wf[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc0)); }
-                double sigInput = NumOps.ToDouble(sum);
-                f[j] = NumOps.FromDouble(Sigmoid(sigInput));
-            }
+            // Vectorized LSTM gates using Engine.TensorMatMul
+            var concatTensor = Tensor<T>.FromVector(concat).Reshape(1, inputSize);
+
+            // Forget gate: f = sigmoid(concat @ Wf + bf)
+            var fTensor = Engine.TensorMatMul(concatTensor, Tensor<T>.FromMatrix(Wf));
+            fTensor = Engine.TensorBroadcastAdd(fTensor, Tensor<T>.FromVector(bf).Reshape(1, _hiddenDim));
+            fTensor = Engine.Sigmoid(fTensor);
+            var f = fTensor.Reshape(_hiddenDim).ToVector();
             fGates[t] = f;
 
-            // Input gate
-            var ig = new Vector<T>(_hiddenDim);
-            for (int j = 0; j < _hiddenDim; j++)
-            {
-                T sum = bi[j];
-                { var wc1 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc1[ii] = Wi[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc1)); }
-                double sigInput = NumOps.ToDouble(sum);
-                ig[j] = NumOps.FromDouble(Sigmoid(sigInput));
-            }
+            // Input gate: ig = sigmoid(concat @ Wi + bi)
+            var igTensor = Engine.TensorMatMul(concatTensor, Tensor<T>.FromMatrix(Wi));
+            igTensor = Engine.TensorBroadcastAdd(igTensor, Tensor<T>.FromVector(bi).Reshape(1, _hiddenDim));
+            igTensor = Engine.Sigmoid(igTensor);
+            var ig = igTensor.Reshape(_hiddenDim).ToVector();
             iGates[t] = ig;
 
-            // Cell candidate
-            var cCand = new Vector<T>(_hiddenDim);
-            for (int j = 0; j < _hiddenDim; j++)
-            {
-                T sum = bc[j];
-                { var wc2 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc2[ii] = Wc[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc2)); }
-                double tanhInput = NumOps.ToDouble(sum);
-                cCand[j] = NumOps.FromDouble(Math.Tanh(tanhInput));
-            }
+            // Cell candidate: cCand = tanh(concat @ Wc + bc)
+            var ccTensor = Engine.TensorMatMul(concatTensor, Tensor<T>.FromMatrix(Wc));
+            ccTensor = Engine.TensorBroadcastAdd(ccTensor, Tensor<T>.FromVector(bc).Reshape(1, _hiddenDim));
+            ccTensor = Engine.Tanh(ccTensor);
+            var cCand = ccTensor.Reshape(_hiddenDim).ToVector();
             cCandidates[t] = cCand;
 
-            // Output gate
-            var o = new Vector<T>(_hiddenDim);
-            for (int j = 0; j < _hiddenDim; j++)
-            {
-                T sum = bo[j];
-                { var wc3 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc3[ii] = Wo[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc3)); }
-                double sigInput = NumOps.ToDouble(sum);
-                o[j] = NumOps.FromDouble(Sigmoid(sigInput));
-            }
+            // Output gate: o = sigmoid(concat @ Wo + bo)
+            var oTensor = Engine.TensorMatMul(concatTensor, Tensor<T>.FromMatrix(Wo));
+            oTensor = Engine.TensorBroadcastAdd(oTensor, Tensor<T>.FromVector(bo).Reshape(1, _hiddenDim));
+            oTensor = Engine.Sigmoid(oTensor);
+            var o = oTensor.Reshape(_hiddenDim).ToVector();
             oGates[t] = o;
 
             // New cell and hidden state

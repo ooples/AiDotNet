@@ -85,8 +85,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
         private readonly bool _usesDefaultOptimizer;
 
         // Trainable parameters (the unknowns we're trying to find)
-        private T[] _parameters;
-        private T[]? _parameterGradients;
+        private Vector<T> _parameters;
+        private Vector<T>? _parameterGradients;
 
         // Current PDE with parameters applied
         private IPDESpecification<T>? _currentPDE;
@@ -159,7 +159,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
             _usesDefaultOptimizer = optimizer == null;
 
             // Initialize unknown parameters with initial guesses
-            _parameters = _inverseProblem.InitialParameterGuesses.ToArray();
+            _parameters = new Vector<T>(_inverseProblem.InitialParameterGuesses.ToArray());
             _parameterHistory = new List<T[]>();
 
             InitializeLayers();
@@ -420,7 +420,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 }
 
                 // Compute PDE residual
-                T residual = _currentPDE.ComputeResidual(inputArray, outputArray, derivatives);
+                T residual = _currentPDE.ComputeResidual(new Vector<T>(inputArray), new Vector<T>(outputArray), derivatives);
                 loss = NumOps.Add(loss, NumOps.Multiply(residual, residual));
             }
 
@@ -572,30 +572,22 @@ namespace AiDotNet.PhysicsInformed.PINNs
         private void UpdateUnknownParameters()
         {
             // Compute parameter gradients using finite differences
-            _parameterGradients = ComputeParameterGradients();
+            _parameterGradients = new Vector<T>(ComputeParameterGradients());
 
             T paramLR = NumOps.FromDouble(_options.ParameterLearningRate);
 
+            // Vectorized SGD step: params = params - lr * gradients
+            _parameters = (Vector<T>)Engine.Subtract(_parameters, Engine.Multiply(_parameterGradients, paramLR));
+
+            // Apply bounds clamping if specified
+            var lowerBounds = _inverseProblem.ParameterLowerBounds;
+            var upperBounds = _inverseProblem.ParameterUpperBounds;
             for (int i = 0; i < _parameters.Length; i++)
             {
-                // Gradient descent step
-                _parameters[i] = NumOps.Subtract(
-                    _parameters[i],
-                    NumOps.Multiply(paramLR, _parameterGradients[i]));
-
-                // Apply bounds if specified
-                var lowerBounds = _inverseProblem.ParameterLowerBounds;
-                var upperBounds = _inverseProblem.ParameterUpperBounds;
-
                 if (lowerBounds != null && NumOps.LessThan(_parameters[i], lowerBounds[i]))
-                {
                     _parameters[i] = lowerBounds[i];
-                }
-
                 if (upperBounds != null && NumOps.GreaterThan(_parameters[i], upperBounds[i]))
-                {
                     _parameters[i] = upperBounds[i];
-                }
             }
         }
 

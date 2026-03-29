@@ -360,20 +360,10 @@ public class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         int embDim = embeddings.Columns;
         int numClasses = labels.Columns;
 
-        // Compute X^T X
-        var xtx = new Matrix<T>(embDim, embDim);
-        for (int i = 0; i < embDim; i++)
-        {
-            for (int j = 0; j < embDim; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < numSamples; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(embeddings[k, i], embeddings[k, j]));
-                }
-                xtx[i, j] = sum;
-            }
-        }
+        // Compute X^T X — vectorized Engine.TensorMatMul
+        var embTensor = Tensor<T>.FromMatrix(embeddings);
+        var embT = embTensor.Transpose(new[] { 1, 0 });
+        var xtx = Engine.TensorMatMul(embT, embTensor).ToMatrix();
 
         // Add regularization: X^T X + λI
         T lambda = NumOps.FromDouble(_metaOptNetOptions.RegularizationStrength);
@@ -382,20 +372,9 @@ public class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
             xtx[i, i] = NumOps.Add(xtx[i, i], lambda);
         }
 
-        // Compute X^T y
-        var xty = new Matrix<T>(embDim, numClasses);
-        for (int i = 0; i < embDim; i++)
-        {
-            for (int c = 0; c < numClasses; c++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < numSamples; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(embeddings[k, i], labels[k, c]));
-                }
-                xty[i, c] = sum;
-            }
-        }
+        // Compute X^T y — vectorized Engine.TensorMatMul
+        var labelsTensor = Tensor<T>.FromMatrix(labels);
+        var xty = Engine.TensorMatMul(embT, labelsTensor).ToMatrix();
 
         // Solve (X^T X + λI) w = X^T y using Cholesky decomposition or simple inversion
         var weights = SolveLinearSystem(xtx, xty);
@@ -754,20 +733,10 @@ public class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
     /// </summary>
     private Matrix<T> MatrixMultiply(Matrix<T> a, Matrix<T> b)
     {
-        var result = new Matrix<T>(a.Rows, b.Columns);
-        for (int i = 0; i < a.Rows; i++)
-        {
-            for (int j = 0; j < b.Columns; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < Math.Min(a.Columns, b.Rows); k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(a[i, k], b[k, j]));
-                }
-                result[i, j] = sum;
-            }
-        }
-        return result;
+        // a @ b — vectorized Engine.TensorMatMul
+        var aTensor = Tensor<T>.FromMatrix(a);
+        var bTensor = Tensor<T>.FromMatrix(b);
+        return Engine.TensorMatMul(aTensor, bTensor).ToMatrix();
     }
 
     /// <summary>

@@ -476,17 +476,9 @@ public class MaxPool3DLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// <summary>
-    /// Returns layer-specific metadata for serialization (PoolSize, Stride).
+    /// Gets all trainable parameters. Max pooling has none.
     /// </summary>
-    internal override Dictionary<string, string> GetMetadata()
-    {
-        var metadata = base.GetMetadata();
-        metadata["PoolSize"] = PoolSize.ToString();
-        metadata["Stride"] = Stride.ToString();
-        return metadata;
-    }
-
+    /// <returns>An empty vector.</returns>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Empty();

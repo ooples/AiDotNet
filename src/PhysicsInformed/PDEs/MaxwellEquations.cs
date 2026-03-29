@@ -2,6 +2,7 @@ using System;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.PhysicsInformed.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.PhysicsInformed.PDEs
 {
@@ -109,7 +110,7 @@ namespace AiDotNet.PhysicsInformed.PDEs
         ///
         /// Returns the sum of squared residuals.
         /// </remarks>
-        public override T ComputeResidual(T[] inputs, T[] outputs, PDEDerivatives<T> derivatives)
+        public override T ComputeResidual(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives)
         {
             ValidateFirstDerivatives(derivatives);
 
@@ -171,7 +172,7 @@ namespace AiDotNet.PhysicsInformed.PDEs
         }
 
         /// <inheritdoc/>
-        public PDEResidualGradient<T> ComputeResidualGradient(T[] inputs, T[] outputs, PDEDerivatives<T> derivatives)
+        public PDEResidualGradient<T> ComputeResidualGradient(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives)
         {
             ValidateFirstDerivatives(derivatives);
 

@@ -274,22 +274,21 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
         // Compute loss
         LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
 
-        // Backward pass using proper loss gradient, reshaped to match forward output.
-        // Clip the loss gradient before backprop to prevent exploding gradients in recurrent paths
-        // (Pascanu et al., 2013 "On the difficulty of training recurrent neural networks").
+        // Backward pass using proper loss gradient, reshaped to match forward output
         var lossGradient = LossFunction.CalculateDerivative(outputVector, expectedVector);
-        var gradTensor = ClipGradient(Tensor<T>.FromVector(lossGradient));
+        var gradTensor = Tensor<T>.FromVector(lossGradient);
         if (gradTensor.Rank < output.Rank)
         {
             gradTensor = gradTensor.Reshape(output.Shape.ToArray());
         }
         Backpropagate(gradTensor);
 
-        // Use layer-level optimizer API for correct parameter-gradient association.
-        // The vector-level API (UpdateParameters(params, grads)) can have ordering mismatches
-        // when concatenating multi-layer gradients into flat vectors.
+        // Persistent Adam optimizer handles vanishing gradients in deep RNNs
         _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _trainOptimizer.UpdateParameters(Layers);
+        var paramGradients = GetParameterGradients();
+        var currentParams = GetParameters();
+        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGradients);
+        UpdateParameters(updatedParams);
 
         // Set network back to inference mode
         SetTrainingMode(false);

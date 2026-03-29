@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -294,11 +294,7 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> loraOutput = MaskOutputToRank(fullLoraOutput, activeRank);
 
         // Sum the outputs
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(baseOutput, loraOutput);
 
         return result;
     }
@@ -444,11 +440,7 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> loraInputGrad = BackwardWithRank(outputGradient, _cachedInput, _cachedActiveRank);
 
         // Sum input gradients
-        Tensor<T> inputGrad = new Tensor<T>(baseInputGrad.Shape.ToArray());
-        for (int i = 0; i < baseInputGrad.Length; i++)
-        {
-            inputGrad[i] = NumOps.Add(baseInputGrad[i], loraInputGrad[i]);
-        }
+        Tensor<T> inputGrad = Engine.TensorAdd(baseInputGrad, loraInputGrad);
 
         // Update parameter gradients from base and LoRA layers
         UpdateParameterGradientsFromLayers();

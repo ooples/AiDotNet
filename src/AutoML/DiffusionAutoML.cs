@@ -607,11 +607,9 @@ namespace AiDotNet.AutoML
         {
             await Task.Run(() =>
             {
-                // Train the model for a fixed number of iterations
-                // In practice, this would be more sophisticated
-                int numIterations = 100;
+                const int defaultTrainingIterations = 100;
 
-                for (int i = 0; i < numIterations; i++)
+                for (int i = 0; i < defaultTrainingIterations; i++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     model.Train(inputs, targets);
@@ -782,6 +780,7 @@ namespace AiDotNet.AutoML
         private readonly DiffusionTrialConfig<T> _config;
         private readonly int? _seed;
         private Random _random;
+        private T _lastTrainingLoss;
 
 
         public override int ParameterCount => _noisePredictor.ParameterCount + _vae.ParameterCount;
@@ -809,6 +808,7 @@ namespace AiDotNet.AutoML
             _random = seed.HasValue
                 ? RandomHelper.CreateSeededRandom(seed.Value)
                 : RandomHelper.CreateSecureRandom();
+            _lastTrainingLoss = NumOps.Zero;
         }
 
         public override Tensor<T> Predict(Tensor<T> input)
@@ -879,10 +879,13 @@ namespace AiDotNet.AutoML
             // Predict noise
             var predictedNoise = _noisePredictor.PredictNoise(noisyLatent, t, condition);
 
-            // Compute loss and update (simplified - actual training would use optimizer)
+            // Compute loss and store for monitoring
             var loss = ComputeMSELoss(predictedNoise, noise);
+            _lastTrainingLoss = loss;
 
-            // Gradient computation would happen here in a full implementation
+            // Update parameters via SPSA gradient estimation and apply
+            var gradients = ComputeGradients(input, expectedOutput);
+            ApplyGradients(gradients, NumOps.FromDouble(1e-4));
         }
 
         public override Vector<T> GetParameters()
@@ -1108,40 +1111,30 @@ namespace AiDotNet.AutoML
             T epsilon = NumOps.FromDouble(1e-5);
             T twoEps = NumOps.FromDouble(2e-5);
 
-            // Compute loss at current parameters
-            var prediction = Predict(input);
-            T baseLoss = loss.ComputeLoss(prediction, target);
-
             // SPSA gradient estimation: 2 forward passes regardless of parameter count.
             // Per-parameter finite differences don't work for diffusion models because
             // Predict uses random noise — each call measures sampling noise, not parameter sensitivity.
             var rng = RandomHelper.CreateSecureRandom();
             var delta = new Vector<T>(parameters.Length);
-            var perturbedParams = new Vector<T>(parameters.Length);
             for (int i = 0; i < parameters.Length; i++)
                 delta[i] = NumOps.FromDouble(rng.NextDouble() < 0.5 ? -1.0 : 1.0);
 
-            // f(x + eps*delta)
-            for (int i = 0; i < parameters.Length; i++)
-                perturbedParams[i] = NumOps.Add(parameters[i], NumOps.Multiply(epsilon, delta[i]));
-            SetParameters(perturbedParams);
-            var predPlus = Predict(input);
-            T lossPlus = loss.ComputeLoss(predPlus, target);
+            // Vectorized perturbations: params ± epsilon * delta
+            var eDelta = Engine.Multiply(delta, epsilon);
 
-            // f(x - eps*delta)
-            for (int i = 0; i < parameters.Length; i++)
-                perturbedParams[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(epsilon, delta[i]));
-            SetParameters(perturbedParams);
-            var predMinus = Predict(input);
-            T lossMinus = loss.ComputeLoss(predMinus, target);
+            SetParameters(Engine.Add(parameters, eDelta));
+            T lossPlus = loss.ComputeLoss(Predict(input), target);
 
-            // SPSA gradient: g_i = (f+ - f-) / (2*eps*delta_i)
+            SetParameters(Engine.Subtract(parameters, eDelta));
+            T lossMinus = loss.ComputeLoss(Predict(input), target);
+
+            // Vectorized SPSA gradient: g = (L+ - L-) / (2*eps*delta)
             T lossDiff = NumOps.Subtract(lossPlus, lossMinus);
-            for (int i = 0; i < parameters.Length; i++)
-                gradients[i] = NumOps.Divide(lossDiff, NumOps.Multiply(twoEps, delta[i]));
+            var scaledDelta = Engine.Multiply(delta, twoEps);
+            var gradientVec = Engine.Divide(Engine.Fill(parameters.Length, lossDiff), scaledDelta);
 
             SetParameters(parameters);
-            return new Vector<T>(gradients);
+            return gradientVec;
         }
 
         public override void ApplyGradients(Vector<T> gradients, T learningRate)

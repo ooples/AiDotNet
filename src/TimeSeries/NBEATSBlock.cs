@@ -283,70 +283,47 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
         for (int i = 0; i < _lookbackWindow && i < outputGradient.Length; i++)
             dBackcast[i] = outputGradient[i];
 
-        // Chain rule through basis expansion: output = BasisMatrix @ theta
-        // => dL/d_theta = BasisMatrix^T @ dL/d_output
+        // Chain rule: dL/d_theta = BasisMatrix^T @ dL/d_output — vectorized TensorMatMul
         var fcBasis = ComputeBasisMatrix(_thetaSizeForecast, _forecastHorizon);
-        var fcThetaGrad = new Vector<T>(_thetaSizeForecast);
-        for (int k = 0; k < _thetaSizeForecast; k++)
-        {
-            T sum = NumOps.Zero;
-            for (int t = 0; t < _forecastHorizon; t++)
-                sum = NumOps.Add(sum, NumOps.Multiply(fcBasis[t, k], dForecast[t]));
-            fcThetaGrad[k] = sum;
-        }
+        var fcBasisT = Tensor<T>.FromMatrix(fcBasis).Transpose(new[] { 1, 0 });
+        var dForecastCol = Tensor<T>.FromVector(dForecast).Reshape(_forecastHorizon, 1);
+        var fcThetaGrad = Engine.TensorMatMul(fcBasisT, dForecastCol).Reshape(_thetaSizeForecast).ToVector();
 
         var bcBasis = ComputeBasisMatrix(_thetaSizeBackcast, _lookbackWindow);
-        var bcThetaGrad = new Vector<T>(_thetaSizeBackcast);
-        for (int k = 0; k < _thetaSizeBackcast; k++)
-        {
-            T sum = NumOps.Zero;
-            for (int t = 0; t < _lookbackWindow; t++)
-                sum = NumOps.Add(sum, NumOps.Multiply(bcBasis[t, k], dBackcast[t]));
-            bcThetaGrad[k] = sum;
-        }
+        var bcBasisT = Tensor<T>.FromMatrix(bcBasis).Transpose(new[] { 1, 0 });
+        var dBackcastCol = Tensor<T>.FromVector(dBackcast).Reshape(_lookbackWindow, 1);
+        var bcThetaGrad = Engine.TensorMatMul(bcBasisT, dBackcastCol).Reshape(_thetaSizeBackcast).ToVector();
 
-        // Backward through forecast theta layer using proper theta gradient
+        // Backward through forecast theta layer
         int fcLayerIdx = _numHiddenLayers + 1;
         var fcW = _fcWeights[fcLayerIdx];
         var hiddenOut = _lastHiddenOutput ?? new Vector<T>(fcW.Columns);
 
-        // dL/dW_forecast = dL/d_theta_forecast * hidden^T
-        var wGrad = new Matrix<T>(fcW.Rows, fcW.Columns);
-        for (int i = 0; i < fcW.Rows; i++)
-            for (int j = 0; j < fcW.Columns; j++)
-                wGrad[i, j] = NumOps.Multiply(fcThetaGrad[i], hiddenOut[j]);
+        // dL/dW_forecast = theta_grad @ hidden^T — vectorized outer product
+        var fcThetaCol = Tensor<T>.FromVector(fcThetaGrad).Reshape(fcW.Rows, 1);
+        var hiddenRow = Tensor<T>.FromVector(hiddenOut).Reshape(1, fcW.Columns);
+        var wGrad = Engine.TensorMatMul(fcThetaCol, hiddenRow).ToMatrix();
         _weightGradients.Insert(0, wGrad);
         _biasGradients.Insert(0, fcThetaGrad.Clone());
 
-        // dL/d_hidden from forecast layer: W_forecast^T * dL/d_theta_forecast
-        var dHidden = new Vector<T>(fcW.Columns);
-        for (int j = 0; j < fcW.Columns; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < fcW.Rows; i++)
-                sum = NumOps.Add(sum, NumOps.Multiply(fcW[i, j], fcThetaGrad[i]));
-            dHidden[j] = sum;
-        }
+        // dL/d_hidden = W_forecast^T @ theta_grad — vectorized matmul
+        var fcWTensor = Tensor<T>.FromMatrix(fcW).Transpose(new[] { 1, 0 });
+        var dHidden = Engine.TensorMatMul(fcWTensor, fcThetaCol).Reshape(fcW.Columns).ToVector();
 
-        // Backward through backcast theta layer using proper theta gradient
+        // Backward through backcast theta layer
         int bcLayerIdx = _numHiddenLayers;
         var bcW = _fcWeights[bcLayerIdx];
 
-        var bcWGrad = new Matrix<T>(bcW.Rows, bcW.Columns);
-        for (int i = 0; i < bcW.Rows; i++)
-            for (int j = 0; j < bcW.Columns; j++)
-                bcWGrad[i, j] = NumOps.Multiply(bcThetaGrad[i], hiddenOut[j]);
+        // dL/dW_backcast = theta_grad @ hidden^T — vectorized outer product
+        var bcThetaCol = Tensor<T>.FromVector(bcThetaGrad).Reshape(bcW.Rows, 1);
+        var bcWGrad = Engine.TensorMatMul(bcThetaCol, hiddenRow).ToMatrix();
         _weightGradients.Insert(0, bcWGrad);
         _biasGradients.Insert(0, bcThetaGrad.Clone());
 
-        // Add backcast contribution to dHidden: W_backcast^T * dL/d_theta_backcast
-        for (int j = 0; j < bcW.Columns; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < bcW.Rows; i++)
-                sum = NumOps.Add(sum, NumOps.Multiply(bcW[i, j], bcThetaGrad[i]));
-            dHidden[j] = NumOps.Add(dHidden[j], sum);
-        }
+        // Add backcast contribution: dHidden += W_backcast^T @ bcThetaGrad
+        var bcWTensor = Tensor<T>.FromMatrix(bcW).Transpose(new[] { 1, 0 });
+        var bcDHidden = Engine.TensorMatMul(bcWTensor, bcThetaCol).Reshape(bcW.Columns).ToVector();
+        dHidden = (Vector<T>)Engine.Add(dHidden, bcDHidden);
 
         // Backward through hidden layers (reverse order)
         var currentGrad = dHidden;
@@ -355,29 +332,22 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
             var preAct = _preActivations[layer];
             var w = _fcWeights[layer];
 
-            // ReLU derivative: gradient passes through where preActivation > 0
+            // ReLU derivative
             var reluGrad = new Vector<T>(currentGrad.Length);
             for (int i = 0; i < reluGrad.Length; i++)
                 reluGrad[i] = NumOps.GreaterThan(preAct[i], NumOps.Zero) ? currentGrad[i] : NumOps.Zero;
 
-            // dL/dW = reluGrad * input^T
+            // dL/dW = reluGrad @ input^T — vectorized outer product
             var layerInput = layer > 0 ? _postActivations[layer - 1] : _lastInput;
-            var layerWGrad = new Matrix<T>(w.Rows, w.Columns);
-            for (int i = 0; i < w.Rows; i++)
-                for (int j = 0; j < w.Columns && j < layerInput!.Length; j++)
-                    layerWGrad[i, j] = NumOps.Multiply(reluGrad[i], layerInput![j]);
+            var reluCol = Tensor<T>.FromVector(reluGrad).Reshape(w.Rows, 1);
+            var inputRow = Tensor<T>.FromVector(layerInput!).Reshape(1, Math.Min(w.Columns, layerInput!.Length));
+            var layerWGrad = Engine.TensorMatMul(reluCol, inputRow).ToMatrix();
             _weightGradients.Insert(0, layerWGrad);
             _biasGradients.Insert(0, reluGrad.Clone());
 
-            // dL/d_input = W^T * reluGrad (always compute, including layer 0)
-            currentGrad = new Vector<T>(w.Columns);
-            for (int j = 0; j < w.Columns; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < w.Rows; i++)
-                    sum = NumOps.Add(sum, NumOps.Multiply(w[i, j], reluGrad[i]));
-                currentGrad[j] = sum;
-            }
+            // dL/d_input = W^T @ reluGrad — vectorized matmul
+            var wTensor = Tensor<T>.FromMatrix(w).Transpose(new[] { 1, 0 });
+            currentGrad = Engine.TensorMatMul(wTensor, reluCol).Reshape(w.Columns).ToVector();
         }
 
         // Convert input gradient to Tensor

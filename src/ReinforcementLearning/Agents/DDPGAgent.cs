@@ -414,13 +414,8 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         if (gradients.Length > 0)
         {
-            for (int i = 0; i < parameters.Length && i < gradients.Length; i++)
-            {
-                // Gradient descent: θ ← θ - α * ∇θ J
-                var update = NumOps.Multiply(learningRate, gradients[i]);
-                parameters[i] = NumOps.Subtract(parameters[i], update);
-            }
-
+            // Vectorized gradient descent: θ ← θ - α * ∇θ J
+            parameters = (Vector<T>)Engine.Subtract(parameters, Engine.Multiply(gradients, learningRate));
             network.UpdateParameters(parameters);
             // Gradients are managed internally by the network
         }

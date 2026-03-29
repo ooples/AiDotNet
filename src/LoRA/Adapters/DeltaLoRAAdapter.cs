@@ -236,30 +236,14 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
         // Get LoRA layer output
         Tensor<T> loraOutput = _loraLayer.Forward(input);
 
-        // Compute delta contribution: delta_weights @ input * delta_scaling
-        Tensor<T> deltaOutput = new Tensor<T>(baseOutput.Shape.ToArray());
+        // Compute delta contribution: delta_weights @ input * delta_scaling — vectorized
+        var deltaWeightsTensor = Tensor<T>.FromMatrix(_deltaWeights);
+        var inputCol = input.Reshape(_deltaWeights.Columns, 1);
+        var deltaOutput = Engine.TensorMatMul(deltaWeightsTensor, inputCol).Reshape(baseOutput.Shape.ToArray());
+        deltaOutput = Engine.TensorMultiplyScalar(deltaOutput, NumOps.FromDouble(_deltaScaling));
 
-        // For each output dimension
-        for (int i = 0; i < _deltaWeights.Rows; i++)
-        {
-            T sum = NumOps.Zero;
-            // Dot product with input
-            for (int j = 0; j < _deltaWeights.Columns; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(_deltaWeights[i, j], input[j]));
-            }
-            // Apply delta scaling
-            deltaOutput[i] = NumOps.Multiply(sum, NumOps.FromDouble(_deltaScaling));
-        }
-
-        // Combine all three outputs
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            result[i] = NumOps.Add(NumOps.Add(baseOutput[i], loraOutput[i]), deltaOutput[i]);
-        }
-
-        return result;
+        // Combine all three outputs — vectorized
+        return Engine.TensorAdd(Engine.TensorAdd(baseOutput, loraOutput), deltaOutput);
     }
 
     /// <summary>
@@ -293,54 +277,25 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass");
         }
 
-        // Compute delta gradients: outputGradient ⊗ input (outer product)
-        _deltaGradients = new Matrix<T>(_deltaWeights.Rows, _deltaWeights.Columns);
+        // Delta gradients: outer product (outputGradient ⊗ input) * scaling — vectorized
+        var outGradCol = outputGradient.Reshape(_deltaWeights.Rows, 1);
+        var inputRow = _lastInput.Reshape(1, _deltaWeights.Columns);
+        var deltaGradTensor = Engine.TensorMatMul(outGradCol, inputRow);
+        deltaGradTensor = Engine.TensorMultiplyScalar(deltaGradTensor, NumOps.FromDouble(_deltaScaling));
+        _deltaGradients = deltaGradTensor.ToMatrix();
 
-        for (int i = 0; i < _deltaWeights.Rows; i++)
-        {
-            for (int j = 0; j < _deltaWeights.Columns; j++)
-            {
-                // Gradient for delta[i,j] = outputGradient[i] * input[j] * delta_scaling
-                T grad = NumOps.Multiply(
-                    NumOps.Multiply(outputGradient[i], _lastInput[j]),
-                    NumOps.FromDouble(_deltaScaling)
-                );
-                _deltaGradients[i, j] = grad;
-            }
-        }
+        // Input gradient from delta weights: W^T @ (outputGradient * scaling) — vectorized
+        var scaledOutGrad = Engine.TensorMultiplyScalar(outputGradient, NumOps.FromDouble(_deltaScaling));
+        var deltaWeightsTensor = Tensor<T>.FromMatrix(_deltaWeights).Transpose(new[] { 1, 0 });
+        var scaledOutCol = scaledOutGrad.Reshape(_deltaWeights.Rows, 1);
+        var deltaInputGrad = Engine.TensorMatMul(deltaWeightsTensor, scaledOutCol).Reshape(_lastInput.Shape.ToArray());
 
-        // Compute input gradient contribution from delta weights
-        Tensor<T> deltaInputGrad = new Tensor<T>(_lastInput.Shape.ToArray());
-        for (int j = 0; j < _deltaWeights.Columns; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < _deltaWeights.Rows; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(
-                    _deltaWeights[i, j],
-                    NumOps.Multiply(outputGradient[i], NumOps.FromDouble(_deltaScaling))
-                ));
-            }
-            deltaInputGrad[j] = sum;
-        }
-
-        // Backward through LoRA layer
+        // Backward through LoRA and base layers
         Tensor<T> loraInputGrad = _loraLayer.Backward(outputGradient);
-
-        // Backward through base layer
         Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
 
-        // Combine all input gradients
-        Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape.ToArray());
-        for (int i = 0; i < loraInputGrad.Length; i++)
-        {
-            inputGrad[i] = NumOps.Add(
-                NumOps.Add(loraInputGrad[i], baseInputGrad[i]),
-                deltaInputGrad[i]
-            );
-        }
-
-        return inputGrad;
+        // Combine all input gradients — vectorized
+        return Engine.TensorAdd(Engine.TensorAdd(loraInputGrad, baseInputGrad), deltaInputGrad);
     }
 
     /// <summary>

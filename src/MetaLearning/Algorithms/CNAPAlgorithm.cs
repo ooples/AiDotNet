@@ -229,17 +229,11 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             {
                 if (accumulatedEncoderGradients != null)
                 {
-                    for (int i = 0; i < accumulatedEncoderGradients.Length; i++)
-                    {
-                        accumulatedEncoderGradients[i] = NumOps.Add(accumulatedEncoderGradients[i], encoderGradients[i]);
-                    }
+                    accumulatedEncoderGradients = (Vector<T>)Engine.Add(accumulatedEncoderGradients, encoderGradients);
                 }
                 if (accumulatedAdaptationGradients != null)
                 {
-                    for (int i = 0; i < accumulatedAdaptationGradients.Length; i++)
-                    {
-                        accumulatedAdaptationGradients[i] = NumOps.Add(accumulatedAdaptationGradients[i], adaptationGradients[i]);
-                    }
+                    accumulatedAdaptationGradients = (Vector<T>)Engine.Add(accumulatedAdaptationGradients, adaptationGradients);
                 }
             }
         }
@@ -475,17 +469,11 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         switch (_cnapOptions.FastWeightMode)
         {
             case FastWeightApplicationMode.Additive:
-                for (int i = 0; i < currentParams.Length; i++)
-                {
-                    modifiedParams[i] = NumOps.Add(currentParams[i], fastWeights[i]);
-                }
+                modifiedParams = (Vector<T>)Engine.Add(currentParams, fastWeights);
                 break;
 
             case FastWeightApplicationMode.Multiplicative:
-                for (int i = 0; i < currentParams.Length; i++)
-                {
-                    modifiedParams[i] = NumOps.Multiply(currentParams[i], fastWeights[i]);
-                }
+                modifiedParams = (Vector<T>)Engine.Multiply(currentParams, fastWeights);
                 break;
 
             case FastWeightApplicationMode.FiLM:
@@ -525,12 +513,7 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         if (norm > maxNorm)
         {
             T scaleFactor = NumOps.FromDouble(maxNorm / norm);
-            var normalized = new Vector<T>(weights.Length);
-            for (int i = 0; i < weights.Length; i++)
-            {
-                normalized[i] = NumOps.Multiply(weights[i], scaleFactor);
-            }
-            return normalized;
+            return (Vector<T>)Engine.Multiply(weights, scaleFactor);
         }
 
         return weights;
@@ -630,20 +613,14 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             }
             else
             {
-                for (int i = 0; i < accumulatedGradients.Length; i++)
-                {
-                    accumulatedGradients[i] = NumOps.Add(accumulatedGradients[i], gradients[i]);
-                }
+                accumulatedGradients = (Vector<T>)Engine.Add(accumulatedGradients, gradients);
             }
         }
 
         if (accumulatedGradients != null)
         {
             T batchSize = NumOps.FromDouble(taskBatch.BatchSize);
-            for (int i = 0; i < accumulatedGradients.Length; i++)
-            {
-                accumulatedGradients[i] = NumOps.Divide(accumulatedGradients[i], batchSize);
-            }
+            accumulatedGradients = (Vector<T>)Engine.Divide(accumulatedGradients, batchSize);
         }
 
         return accumulatedGradients;

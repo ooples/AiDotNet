@@ -330,7 +330,7 @@ public class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineClassifie
 
         _knownClasses.Add(label);
         NumClasses = _knownClasses.Count;
-        ClassLabels = new Vector<T>(_knownClasses.ToArray());
+        ClassLabels = Vector<T>.Wrap(_knownClasses.ToArray());
         return _knownClasses.Count - 1;
     }
 

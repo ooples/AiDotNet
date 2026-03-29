@@ -6,6 +6,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Interpretability.Explainers;
 using AiDotNet.MixedPrecision;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -2555,6 +2556,43 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     public abstract void Train(Tensor<T> input, Tensor<T> expectedOutput);
 
     /// <summary>
+    /// Persistent optimizer for models using the standard TrainStep pattern.
+    /// Lazily initialized on first use (Adam with default settings).
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTrainOptimizer;
+
+    /// <summary>
+    /// Standard training step following PyTorch pattern: forward → loss → backward → optimizer.step().
+    /// Models that override Train can call this to get correct gradient-based training.
+    /// </summary>
+    /// <param name="input">Input tensor.</param>
+    /// <param name="expectedOutput">Target tensor.</param>
+    protected virtual void StandardTrainStep(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        SetTrainingMode(true);
+
+        // Forward pass
+        var prediction = ForwardWithMemory(input);
+
+        // Compute loss
+        LastLoss = LossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
+
+        // Backward pass (accumulates gradients in layers)
+        var lossGradient = LossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
+        var gradTensor = Tensor<T>.FromVector(lossGradient);
+        if (gradTensor.Rank < prediction.Rank)
+            gradTensor = gradTensor.Reshape(prediction.Shape.ToArray());
+        Backpropagate(gradTensor);
+
+        // Optimizer step: apply accumulated gradients
+        _baseTrainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        var paramGrads = GetParameterGradients();
+        var currentParams = GetParameters();
+        var updatedParams = _baseTrainOptimizer.UpdateParameters(currentParams, paramGrads);
+        UpdateParameters(updatedParams);
+    }
+
+    /// <summary>
     /// Gets the metadata for this neural network model.
     /// </summary>
     /// <returns>A ModelMetaData object containing information about the model.</returns>
@@ -3984,20 +4022,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         var loss = lossFunction ?? DefaultLossFunction;
 
+        // Forward pass
         var prediction = Predict(input);
+
+        // Compute loss gradient dL/d(output)
         var lossDerivative = loss.CalculateDerivative(prediction.ToVector(), target.ToVector());
         var outputGradients = new Tensor<T>(prediction.Shape.ToArray(), lossDerivative);
 
+        // Backward pass through all layers (accumulates parameter gradients)
         Backpropagate(outputGradients);
 
-        var gradients = new List<T>();
-        foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            gradients.AddRange(layerParams.ToArray());
-        }
-
-        return new Vector<T>(gradients.ToArray());
+        // Collect accumulated parameter gradients from all layers
+        return GetParameterGradients();
     }
 
     /// <summary>

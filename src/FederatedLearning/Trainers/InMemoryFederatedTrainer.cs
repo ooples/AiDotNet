@@ -1,3 +1,4 @@
+using AiDotNet.Engines;
 using AiDotNet.FederatedLearning.Cryptography;
 using AiDotNet.FederatedLearning.Heterogeneity;
 using AiDotNet.FederatedLearning.Infrastructure;
@@ -1026,15 +1027,10 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             return target;
         }
 
-        var result = new Vector<T>(current.Length);
+        // Vectorized EMA: result = current + alpha * (target - current)
         var alphaT = NumOps.FromDouble(alpha);
-        for (int i = 0; i < current.Length; i++)
-        {
-            var diff = NumOps.Subtract(target[i], current[i]);
-            result[i] = NumOps.Add(current[i], NumOps.Multiply(alphaT, diff));
-        }
-
-        return result;
+        var diff = Engine.Subtract(target, current);
+        return (Vector<T>)Engine.Add(current, Engine.Multiply(diff, alphaT));
     }
 
     private static IFederatedServerOptimizer<T>? CreateDefaultServerOptimizer(FederatedServerOptimizerOptions? options)
@@ -1809,41 +1805,22 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             throw new ArgumentException("Global and local parameter vectors must have the same length for compression.");
         }
 
-        int n = globalParameters.Length;
-        var delta = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            delta[i] = NumOps.Subtract(localParameters[i], globalParameters[i]);
-        }
+        // Vectorized delta compression pipeline
+        var delta = (Vector<T>)Engine.Subtract(localParameters, globalParameters);
 
-        if (residuals != null && residuals.TryGetValue(clientId, out var residual) && residual.Length == n)
+        if (residuals != null && residuals.TryGetValue(clientId, out var residual) && residual.Length == delta.Length)
         {
-            for (int i = 0; i < n; i++)
-            {
-                delta[i] = NumOps.Add(delta[i], residual[i]);
-            }
+            delta = (Vector<T>)Engine.Add(delta, residual);
         }
 
         var compressedDelta = CompressDelta(delta, options, random, out uploadRatio);
 
         if (residuals != null && options.UseErrorFeedback)
         {
-            var newResidual = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                newResidual[i] = NumOps.Subtract(delta[i], compressedDelta[i]);
-            }
-
-            residuals[clientId] = newResidual;
+            residuals[clientId] = (Vector<T>)Engine.Subtract(delta, compressedDelta);
         }
 
-        var parametersToSend = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            parametersToSend[i] = NumOps.Add(globalParameters[i], compressedDelta[i]);
-        }
-
-        return parametersToSend;
+        return (Vector<T>)Engine.Add(globalParameters, compressedDelta);
     }
 
     private Vector<T> CompressDelta(Vector<T> delta, FederatedCompressionOptions options, Random random, out double uploadRatio)

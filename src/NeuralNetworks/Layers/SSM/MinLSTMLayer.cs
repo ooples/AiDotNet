@@ -640,16 +640,16 @@ public class MinLSTMLayer<T> : LayerBase<T>
     {
         if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
-            new Vector<T>(_forgetGateWeightsGradient!.ToArray()),
-            new Vector<T>(_forgetGateBiasGradient!.ToArray()),
-            new Vector<T>(_inputGateWeightsGradient!.ToArray()),
-            new Vector<T>(_inputGateBiasGradient!.ToArray()),
-            new Vector<T>(_cellCandidateWeightsGradient!.ToArray()),
-            new Vector<T>(_cellCandidateBiasGradient!.ToArray()),
-            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
+            (_inputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_inputProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_inputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_inputProjectionBiasGradient.Data) : new Vector<T>(0)),
+            (_forgetGateWeightsGradient is not null ? Vector<T>.FromMemory(_forgetGateWeightsGradient.Data) : new Vector<T>(0)),
+            (_forgetGateBiasGradient is not null ? Vector<T>.FromMemory(_forgetGateBiasGradient.Data) : new Vector<T>(0)),
+            (_inputGateWeightsGradient is not null ? Vector<T>.FromMemory(_inputGateWeightsGradient.Data) : new Vector<T>(0)),
+            (_inputGateBiasGradient is not null ? Vector<T>.FromMemory(_inputGateBiasGradient.Data) : new Vector<T>(0)),
+            (_cellCandidateWeightsGradient is not null ? Vector<T>.FromMemory(_cellCandidateWeightsGradient.Data) : new Vector<T>(0)),
+            (_cellCandidateBiasGradient is not null ? Vector<T>.FromMemory(_cellCandidateBiasGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()

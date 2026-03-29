@@ -1,4 +1,4 @@
-using AiDotNet.Extensions;
+﻿using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -332,11 +332,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> ttOutput = ComputeTensorTrainForward(input);
 
         // Sum the outputs
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            result[i] = NumOps.Add(baseOutput[i], ttOutput[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(baseOutput, ttOutput);
 
         return result;
     }
@@ -552,11 +548,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> ttInputGrad = ComputeTensorTrainBackward(outputGradient);
 
         // Sum input gradients
-        Tensor<T> inputGrad = new Tensor<T>(baseInputGrad.Shape.ToArray());
-        for (int i = 0; i < baseInputGrad.Length; i++)
-        {
-            inputGrad[i] = NumOps.Add(baseInputGrad[i], ttInputGrad[i]);
-        }
+        Tensor<T> inputGrad = Engine.TensorAdd(baseInputGrad, ttInputGrad);
 
         // Update parameter gradients vector
         UpdateParameterGradientsFromCores();

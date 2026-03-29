@@ -226,6 +226,10 @@ internal static class FlashAttention<T>
                 rowSum[i] = NumOps.Zero;
             }
 
+            // Pre-allocate reusable vectors for dot product (avoids O(seqLen^2) allocations)
+            var qVec = new Vector<T>(headDim);
+            var kVec = new Vector<T>(headDim);
+
             // Iterate over key/value blocks
             for (int kvBlock = 0; kvBlock < numBlocksKV; kvBlock++)
             {
@@ -257,9 +261,7 @@ internal static class FlashAttention<T>
                             continue;
                         }
 
-                        // Engine-accelerated Q·K dot product
-                        var qVec = new Vector<T>(headDim);
-                        var kVec = new Vector<T>(headDim);
+                        // Engine-accelerated Q·K dot product (reuses pre-allocated vectors)
                         for (int d = 0; d < headDim; d++)
                         {
                             qVec[d] = query[new[] { batch, qIdx, d }];
@@ -409,6 +411,10 @@ internal static class FlashAttention<T>
             var rowSum = new T[qBlockSize];
             var outputAcc = new T[qBlockSize, headDim];
 
+            // Pre-allocate reusable vectors for dot product
+            var qVec4d = new Vector<T>(headDim);
+            var kVec4d = new Vector<T>(headDim);
+
             for (int i = 0; i < qBlockSize; i++)
             {
                 rowMax[i] = negInf;
@@ -443,15 +449,13 @@ internal static class FlashAttention<T>
                             continue;
                         }
 
-                        // Engine-accelerated Q·K dot product (backward pass)
-                        var qVec2 = new Vector<T>(headDim);
-                        var kVec2 = new Vector<T>(headDim);
+                        // Engine-accelerated Q·K dot product (reuses pre-allocated vectors)
                         for (int d = 0; d < headDim; d++)
                         {
-                            qVec2[d] = query[new[] { batch, head, qIdx, d }];
-                            kVec2[d] = key[new[] { batch, head, kIdx, d }];
+                            qVec4d[d] = query[new[] { batch, head, qIdx, d }];
+                            kVec4d[d] = key[new[] { batch, head, kIdx, d }];
                         }
-                        T dotProduct = AiDotNetEngine.Current.DotProduct(qVec2, kVec2);
+                        T dotProduct = AiDotNetEngine.Current.DotProduct(qVec4d, kVec4d);
 
                         T score = NumOps.Multiply(dotProduct, scale);
 

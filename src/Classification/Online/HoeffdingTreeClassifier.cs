@@ -257,7 +257,7 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
             _knownClasses.Clear();
             _knownClasses.AddRange(savedClasses);
             NumClasses = _knownClasses.Count;
-            ClassLabels = new Vector<T>(_knownClasses.ToArray());
+            ClassLabels = Vector<T>.Wrap(_knownClasses.ToArray());
 
             // Re-feed all data with stable bin ranges
             PartialFit(x, y);
@@ -460,7 +460,7 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
 
         _knownClasses.Add(label);
         NumClasses = _knownClasses.Count;
-        ClassLabels = new Vector<T>(_knownClasses.ToArray());
+        ClassLabels = Vector<T>.Wrap(_knownClasses.ToArray());
         return _knownClasses.Count - 1;
     }
 

@@ -109,19 +109,10 @@ public class Conv3DLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_kernelsGradient == null || _biasesGradient == null) return new Vector<T>(ParameterCount);
-        return Vector<T>.Concatenate(new Vector<T>(_kernelsGradient.ToArray()), new Vector<T>(_biasesGradient.ToArray()));
+        return Vector<T>.Concatenate((_kernelsGradient is not null ? Vector<T>.FromMemory(_kernelsGradient.Data) : new Vector<T>(0)), (_biasesGradient is not null ? Vector<T>.FromMemory(_biasesGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients() { base.ClearGradients(); _kernelsGradient = null; _biasesGradient = null; }
-
-    internal override Dictionary<string, string> GetMetadata()
-    {
-        var metadata = base.GetMetadata();
-        metadata["KernelSize"] = KernelSize.ToString();
-        metadata["Stride"] = Stride.ToString();
-        metadata["Padding"] = Padding.ToString();
-        return metadata;
-    }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports JIT compilation for accelerated execution.
@@ -828,8 +819,8 @@ public class Conv3DLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            new Vector<T>(_kernels.ToArray()),
-            new Vector<T>(_biases.ToArray()));
+            Vector<T>.FromMemory(_kernels.Data),
+            Vector<T>.FromMemory(_biases.Data));
     }
 
     /// <summary>

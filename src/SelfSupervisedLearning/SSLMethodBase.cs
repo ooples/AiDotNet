@@ -387,22 +387,9 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
         var aNorm = L2Normalize(a);
         var bNorm = L2Normalize(b);
 
-        // Compute dot product along last dimension
-        var batchSize = a.Shape[0];
-        var dim = a.Shape[1];
-        var result = new T[batchSize];
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < dim; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(aNorm[i, j], bNorm[i, j]));
-            }
-            result[i] = sum;
-        }
-
-        return new Tensor<T>(result, [batchSize]);
+        // Compute dot product along last dimension: element-wise multiply then ReduceSum along dim 1
+        var product = Engine.TensorMultiply(aNorm, bNorm);
+        return Engine.ReduceSum(product, [1], keepDims: false);
     }
 
     /// <summary>

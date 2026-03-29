@@ -321,10 +321,7 @@ public static class DeserializationHelper
             double dropout = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var initStrategyType = typeof(IInitializationStrategy<>).MakeGenericType(typeof(T));
-            // Try 7-param constructor (with IInitializationStrategy) then 6-param fallback
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double), typeof(double), activationFuncType, initStrategyType })
-                    ?? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double), typeof(double), activationFuncType });
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double), typeof(double), activationFuncType });
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find GraphAttentionLayer constructor with expected signature.");
@@ -342,9 +339,7 @@ public static class DeserializationHelper
                 }
             }
 
-            instance = ctor.GetParameters().Length == 7
-                ? ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation, null })
-                : ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation });
+            instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, numHeads, alpha, dropout, activation });
         }
         else if (genericDef == typeof(GraphConvolutionalLayer<>))
         {
@@ -433,79 +428,6 @@ public static class DeserializationHelper
                 throw new InvalidOperationException($"Cannot find ConvolutionalLayer constructor.");
             }
             instance = ctor.Invoke(new object?[] { inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding, null, null });
-        }
-        else if (genericDef == typeof(Conv3DLayer<>))
-        {
-            // Conv3DLayer(int inputChannels, int outputChannels, int kernelSize, int inputDepth, int inputHeight, int inputWidth, int stride, int padding, IActivationFunction<T>?)
-            // Input shape format: [channels, depth, height, width]
-            int inputChannels = inputShape.Length > 0 ? inputShape[0] : 1;
-            int inputDepthC = inputShape.Length > 1 ? inputShape[1] : 1;
-            int inputHeightC = inputShape.Length > 2 ? inputShape[2] : 1;
-            int inputWidthC = inputShape.Length > 3 ? inputShape[3] : 1;
-            int outputChannels = outputShape.Length > 0 ? outputShape[0] : 1;
-            int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 3;
-            int stride = TryGetInt(additionalParams, "Stride") ?? 1;
-            int padding = TryGetInt(additionalParams, "Padding") ?? 0;
-
-            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType });
-            if (ctor is null)
-                throw new InvalidOperationException("Cannot find Conv3DLayer constructor with expected signature.");
-            instance = ctor.Invoke(new object?[] { inputChannels, outputChannels, kernelSize, inputDepthC, inputHeightC, inputWidthC, stride, padding, null });
-        }
-        else if (genericDef == typeof(PrimaryCapsuleLayer<>))
-        {
-            // PrimaryCapsuleLayer(int inputChannels, int capsuleChannels, int capsuleDimension, int kernelSize, int stride, IActivationFunction<T>?)
-            int inputChannels = inputShape.Length > 0 ? inputShape[0] : 1;
-            int capsuleChannels = TryGetInt(additionalParams, "CapsuleChannels") ?? 32;
-            int capsuleDimension = TryGetInt(additionalParams, "CapsuleDimension") ?? 8;
-            int kernelSize = TryGetInt(additionalParams, "KernelSize") ?? 9;
-            int stride = TryGetInt(additionalParams, "Stride") ?? 2;
-
-            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType });
-            if (ctor is null)
-                throw new InvalidOperationException("Cannot find PrimaryCapsuleLayer constructor with expected signature.");
-            instance = ctor.Invoke(new object?[] { inputChannels, capsuleChannels, capsuleDimension, kernelSize, stride, null });
-        }
-        else if (genericDef == typeof(DigitCapsuleLayer<>))
-        {
-            // DigitCapsuleLayer(int inputCapsules, int inputCapsuleDimension, int numClasses, int outputCapsuleDimension, int routingIterations)
-            int inputCapsules = TryGetInt(additionalParams, "InputCapsules") ?? inputShape[0];
-            int inputCapsuleDim = TryGetInt(additionalParams, "InputCapsuleDimension") ?? (inputShape.Length > 1 ? inputShape[1] : 8);
-            int numClasses = TryGetInt(additionalParams, "NumClasses") ?? outputShape[0];
-            int outputCapsuleDim = TryGetInt(additionalParams, "OutputCapsuleDimension") ?? (outputShape.Length > 1 ? outputShape[1] : 16);
-            int routingIter = TryGetInt(additionalParams, "RoutingIterations") ?? 3;
-
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int) });
-            if (ctor is null)
-                throw new InvalidOperationException("Cannot find DigitCapsuleLayer constructor with expected signature.");
-            instance = ctor.Invoke(new object[] { inputCapsules, inputCapsuleDim, numClasses, outputCapsuleDim, routingIter });
-        }
-        else if (genericDef == typeof(ReconstructionLayer<>))
-        {
-            // ReconstructionLayer(int inputDimension, int hidden1Dimension, int hidden2Dimension, int outputDimension, IActivationFunction<T>?, IActivationFunction<T>?)
-            int inputDim = inputShape[0];
-            int outputDim = outputShape[0];
-            int hidden1 = TryGetInt(additionalParams, "Hidden1Dimension") ?? Math.Max(inputDim / 2, 64);
-            int hidden2 = TryGetInt(additionalParams, "Hidden2Dimension") ?? Math.Max(inputDim / 4, 32);
-
-            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, activationFuncType });
-            if (ctor is null)
-                throw new InvalidOperationException("Cannot find ReconstructionLayer constructor.");
-            instance = ctor.Invoke(new object?[] { inputDim, hidden1, hidden2, outputDim, null, null });
-        }
-        else if (genericDef == typeof(MaxPool3DLayer<>))
-        {
-            // MaxPool3DLayer(int[] inputShape, int poolSize, int stride = 0)
-            int poolSize = TryGetInt(additionalParams, "PoolSize") ?? 2;
-            int stride = TryGetInt(additionalParams, "Stride") ?? 0;
-
-            var ctor = type.GetConstructor(new Type[] { typeof(int[]), typeof(int), typeof(int) });
-            if (ctor is null)
-                throw new InvalidOperationException("Cannot find MaxPool3DLayer constructor.");
-            instance = ctor.Invoke(new object[] { inputShape, poolSize, stride });
         }
         else if (genericDef == typeof(PoolingLayer<>))
         {

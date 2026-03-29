@@ -587,7 +587,7 @@ public class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
                 var combinedDerivatives = SumDerivatives(lfDerivatives, correctionDerivatives);
 
                 // Compute PDE residual using the combined solution and derivatives
-                T residual = _pdeSpecification.ComputeResidual(point, hfOutput, combinedDerivatives);
+                T residual = _pdeSpecification.ComputeResidual(new Vector<T>(point), new Vector<T>(hfOutput), combinedDerivatives);
 
                 // Accumulate squared residual
                 loss = NumOps.Add(loss, NumOps.Multiply(residual, residual));

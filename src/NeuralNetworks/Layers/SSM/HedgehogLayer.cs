@@ -888,17 +888,17 @@ public class HedgehogLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_featureMapW1Gradient!.ToArray()),
-            new Vector<T>(_featureMapB1Gradient!.ToArray()),
-            new Vector<T>(_featureMapW2Gradient!.ToArray()),
-            new Vector<T>(_featureMapB2Gradient!.ToArray()),
-            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
-            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
-            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
-            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
+            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
+            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
+            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
+            (_featureMapW1Gradient is not null ? Vector<T>.FromMemory(_featureMapW1Gradient.Data) : new Vector<T>(0)),
+            (_featureMapB1Gradient is not null ? Vector<T>.FromMemory(_featureMapB1Gradient.Data) : new Vector<T>(0)),
+            (_featureMapW2Gradient is not null ? Vector<T>.FromMemory(_featureMapW2Gradient.Data) : new Vector<T>(0)),
+            (_featureMapB2Gradient is not null ? Vector<T>.FromMemory(_featureMapB2Gradient.Data) : new Vector<T>(0)),
+            _outputGateWeightsGradient is not null ? (_outputGateWeightsGradient is not null ? Vector<T>.FromMemory(_outputGateWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateWeights.Length),
+            _outputGateBiasGradient is not null ? (_outputGateBiasGradient is not null ? Vector<T>.FromMemory(_outputGateBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateBias.Length),
+            _outputProjectionWeightsGradient is not null ? (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionWeights.Length),
+            _outputProjectionBiasGradient is not null ? (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionBias.Length));
     }
 
     public override void ClearGradients()

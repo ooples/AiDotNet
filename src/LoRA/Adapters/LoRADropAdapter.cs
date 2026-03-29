@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -295,11 +295,7 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Sum the outputs
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
-        for (int i = 0; i < baseOutput.Length; i++)
-        {
-            result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);
-        }
+        Tensor<T> result = Engine.TensorAdd(baseOutput, loraOutput);
 
         return result;
     }
@@ -371,11 +367,7 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
 
         // Sum input gradients
-        Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape.ToArray());
-        for (int i = 0; i < loraInputGrad.Length; i++)
-        {
-            inputGrad[i] = NumOps.Add(loraInputGrad[i], baseInputGrad[i]);
-        }
+        Tensor<T> inputGrad = Engine.TensorAdd(loraInputGrad, baseInputGrad);
 
         // Update parameter gradients vector
         UpdateParameterGradientsFromLayers();
@@ -466,11 +458,25 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
         // Create new parameters with merged weights
         Vector<T> mergedParams = new Vector<T>(baseParams.Length);
 
-        // Merge weights
+        // Merge weights — loraWeights from MergeWeights() is [inputSize, outputSize].
+        // DenseLayer stores weights as [inputSize, outputSize] (input-major).
+        // FullyConnectedLayer stores weights as [outputSize, inputSize] (output-major).
+        bool isOutputMajor = _baseLayer is FullyConnectedLayer<T>;
         for (int i = 0; i < weightCount; i++)
         {
-            int row = i / inputSize;
-            int col = i % inputSize;
+            int row, col;
+            if (isOutputMajor)
+            {
+                int outputIdx = i / inputSize;
+                int inputIdx = i % inputSize;
+                row = inputIdx;
+                col = outputIdx;
+            }
+            else
+            {
+                row = i / outputSize;
+                col = i % outputSize;
+            }
             mergedParams[i] = NumOps.Add(baseParams[i], loraWeights[row, col]);
         }
 

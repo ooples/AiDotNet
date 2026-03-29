@@ -1,8 +1,10 @@
 using System;
 using System.Linq;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.PhysicsInformed.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.PhysicsInformed
 {
@@ -90,7 +92,7 @@ namespace AiDotNet.PhysicsInformed
         /// <param name="derivatives">Derivatives needed for PDE computation.</param>
         /// <param name="inputs">Input points where predictions were made.</param>
         /// <returns>The total loss value.</returns>
-        public T ComputePhysicsLoss(T[] predictions, T[]? targets, PDEDerivatives<T> derivatives, T[] inputs)
+        public T ComputePhysicsLoss(Vector<T> predictions, Vector<T>? targets, PDEDerivatives<T> derivatives, Vector<T> inputs)
         {
             T totalLoss = NumOps.Zero;
 
@@ -132,7 +134,7 @@ namespace AiDotNet.PhysicsInformed
         /// This overload is domain-specific and intentionally separate from <see cref="ILossFunction{T}"/>.
         /// Prefer <see cref="ComputePhysicsLoss"/> for clarity.
         /// </remarks>
-        public T ComputeLoss(T[] predictions, T[]? targets, PDEDerivatives<T> derivatives, T[] inputs)
+        public T ComputeLoss(Vector<T> predictions, Vector<T>? targets, PDEDerivatives<T> derivatives, Vector<T> inputs)
         {
             return ComputePhysicsLoss(predictions, targets, derivatives, inputs);
         }
@@ -146,10 +148,10 @@ namespace AiDotNet.PhysicsInformed
         /// <param name="inputs">Input points where predictions were made.</param>
         /// <returns>The loss and gradients for this sample.</returns>
         public PhysicsLossGradient<T> ComputePhysicsLossGradients(
-            T[] predictions,
-            T[]? targets,
+            Vector<T> predictions,
+            Vector<T>? targets,
             PDEDerivatives<T> derivatives,
-            T[] inputs)
+            Vector<T> inputs)
         {
             if (predictions == null)
             {
@@ -171,18 +173,13 @@ namespace AiDotNet.PhysicsInformed
                     throw new ArgumentException("Predictions and targets must have the same length.");
                 }
 
-                T sumSquaredError = NumOps.Zero;
+                // Vectorized data loss: MSE + gradient accumulation
+                var error = (Vector<T>)Engine.Subtract(predictions, targets);
+                T sumSquaredError = VectorHelper.DotProduct(error, error);
                 T scale = NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(predictions.Length));
-
-                for (int i = 0; i < predictions.Length; i++)
-                {
-                    T error = NumOps.Subtract(predictions[i], targets[i]);
-                    sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Multiply(error, error));
-                    T grad = NumOps.Multiply(scale, error);
-                    gradients.OutputGradients[i] = NumOps.Add(
-                        gradients.OutputGradients[i],
-                        NumOps.Multiply(_dataWeight, grad));
-                }
+                var grad = (Vector<T>)Engine.Multiply(error, scale);
+                var weightedGrad = (Vector<T>)Engine.Multiply(grad, _dataWeight);
+                gradients.OutputGradients = (Vector<T>)Engine.Add(gradients.OutputGradients, weightedGrad);
 
                 T dataLoss = NumOps.Divide(sumSquaredError, NumOps.FromDouble(predictions.Length));
                 totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(_dataWeight, dataLoss));
@@ -229,24 +226,38 @@ namespace AiDotNet.PhysicsInformed
 
             if (_initialCondition != null && _initialCondition.IsAtInitialTime(inputs))
             {
-                T[] spatialInputs = new T[inputs.Length - 1];
-                Array.Copy(inputs, spatialInputs, spatialInputs.Length);
-                T[] expectedValues = _initialCondition.ComputeInitialValue(spatialInputs);
+                var spatialInputs = new Vector<T>(inputs.Length - 1);
+                for (int si = 0; si < spatialInputs.Length; si++)
+                    spatialInputs[si] = inputs[si];
+                var expectedValues = _initialCondition.ComputeInitialValue(spatialInputs);
                 int count = Math.Min(predictions.Length, expectedValues.Length);
 
                 if (count > 0)
                 {
-                    T sumSquaredError = NumOps.Zero;
-                    T scale = NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(count));
+                    // Vectorized initial condition loss
+                    // Slice to matching length if needed
+                    var predSlice = count == predictions.Length ? predictions : new Vector<T>(count);
+                    var expSlice = count == expectedValues.Length ? expectedValues : new Vector<T>(count);
+                    if (count < predictions.Length)
+                        for (int si = 0; si < count; si++) predSlice[si] = predictions[si];
+                    if (count < expectedValues.Length)
+                        for (int si = 0; si < count; si++) expSlice[si] = expectedValues[si];
 
-                    for (int i = 0; i < count; i++)
+                    var error = (Vector<T>)Engine.Subtract(predSlice, expSlice);
+                    T sumSquaredError = VectorHelper.DotProduct(error, error);
+                    T scale = NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(count));
+                    var grad = (Vector<T>)Engine.Multiply(error, scale);
+                    var weightedGrad = (Vector<T>)Engine.Multiply(grad, _initialWeight);
+
+                    // Accumulate into output gradients (may need to add only to first 'count' elements)
+                    if (count == gradients.OutputGradients.Length)
                     {
-                        T error = NumOps.Subtract(predictions[i], expectedValues[i]);
-                        sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Multiply(error, error));
-                        T grad = NumOps.Multiply(scale, error);
-                        gradients.OutputGradients[i] = NumOps.Add(
-                            gradients.OutputGradients[i],
-                            NumOps.Multiply(_initialWeight, grad));
+                        gradients.OutputGradients = (Vector<T>)Engine.Add(gradients.OutputGradients, weightedGrad);
+                    }
+                    else
+                    {
+                        for (int si = 0; si < count; si++)
+                            gradients.OutputGradients[si] = NumOps.Add(gradients.OutputGradients[si], weightedGrad[si]);
                     }
 
                     T initialLoss = NumOps.Divide(sumSquaredError, NumOps.FromDouble(count));
@@ -259,8 +270,8 @@ namespace AiDotNet.PhysicsInformed
         }
 
         private PDEResidualGradient<T> ComputeResidualGradient(
-            T[] inputs,
-            T[] predictions,
+            Vector<T> inputs,
+            Vector<T> predictions,
             PDEDerivatives<T> derivatives)
         {
             if (_pdeSpecification is IPDEResidualGradient<T> gradientProvider)
@@ -277,8 +288,8 @@ namespace AiDotNet.PhysicsInformed
 
         private PDEResidualGradient<T> ComputeBoundaryResidualGradient(
             IBoundaryCondition<T> boundaryCondition,
-            T[] inputs,
-            T[] predictions,
+            Vector<T> inputs,
+            Vector<T> predictions,
             PDEDerivatives<T> derivatives)
         {
             if (boundaryCondition is IBoundaryConditionGradient<T> gradientProvider)
@@ -294,9 +305,9 @@ namespace AiDotNet.PhysicsInformed
         }
 
         private PDEResidualGradient<T> ComputeResidualGradientFallback(
-            Func<T[], T[], PDEDerivatives<T>, T> residualFunction,
-            T[] inputs,
-            T[] predictions,
+            Func<Vector<T>, Vector<T>, PDEDerivatives<T>, T> residualFunction,
+            Vector<T> inputs,
+            Vector<T> predictions,
             PDEDerivatives<T> derivatives)
         {
             int outputDim = predictions.Length;
@@ -306,8 +317,7 @@ namespace AiDotNet.PhysicsInformed
             T eps = NumOps.FromDouble(1e-4);
             T invTwoEps = NumOps.Divide(NumOps.One, NumOps.Multiply(NumOps.FromDouble(2.0), eps));
 
-            var outputCopy = new T[outputDim];
-            Array.Copy(predictions, outputCopy, outputDim);
+            var outputCopy = new Vector<T>(predictions);
 
             for (int i = 0; i < outputDim; i++)
             {
@@ -391,12 +401,9 @@ namespace AiDotNet.PhysicsInformed
 
         private void AccumulateResidualGradient(PhysicsLossGradient<T> target, PDEResidualGradient<T> source, T scale)
         {
-            for (int i = 0; i < source.OutputGradients.Length; i++)
-            {
-                target.OutputGradients[i] = NumOps.Add(
-                    target.OutputGradients[i],
-                    NumOps.Multiply(scale, source.OutputGradients[i]));
-            }
+            // Vectorized: target.OutputGrad += scale * source.OutputGrad
+            var scaledGrad = (Vector<T>)Engine.Multiply(source.OutputGradients, scale);
+            target.OutputGradients = (Vector<T>)Engine.Add(target.OutputGradients, scaledGrad);
 
             for (int outIdx = 0; outIdx < source.FirstDerivatives.GetLength(0); outIdx++)
             {
@@ -424,12 +431,9 @@ namespace AiDotNet.PhysicsInformed
 
         private void AccumulateScaledGradients(PhysicsLossGradient<T> target, PhysicsLossGradient<T> source, T scale)
         {
-            for (int i = 0; i < source.OutputGradients.Length; i++)
-            {
-                target.OutputGradients[i] = NumOps.Add(
-                    target.OutputGradients[i],
-                    NumOps.Multiply(scale, source.OutputGradients[i]));
-            }
+            // Vectorized: target.OutputGrad += scale * source.OutputGrad
+            var scaledGrad = (Vector<T>)Engine.Multiply(source.OutputGradients, scale);
+            target.OutputGradients = (Vector<T>)Engine.Add(target.OutputGradients, scaledGrad);
 
             for (int outIdx = 0; outIdx < source.FirstDerivatives.GetLength(0); outIdx++)
             {
@@ -458,27 +462,23 @@ namespace AiDotNet.PhysicsInformed
         /// <summary>
         /// Computes the data fitting loss (Mean Squared Error).
         /// </summary>
-        private T ComputeDataLoss(T[] predictions, T[] targets)
+        private T ComputeDataLoss(Vector<T> predictions, Vector<T> targets)
         {
             if (predictions.Length != targets.Length)
             {
                 throw new ArgumentException("Predictions and targets must have the same length.");
             }
 
-            T sumSquaredError = NumOps.Zero;
-            for (int i = 0; i < predictions.Length; i++)
-            {
-                T error = NumOps.Subtract(predictions[i], targets[i]);
-                sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Multiply(error, error));
-            }
-
+            // Vectorized MSE: sum((pred - target)^2) / N
+            var error = (Vector<T>)Engine.Subtract(predictions, targets);
+            T sumSquaredError = VectorHelper.DotProduct(error, error);
             return NumOps.Divide(sumSquaredError, NumOps.FromDouble(predictions.Length));
         }
 
         /// <summary>
         /// Computes the PDE residual loss.
         /// </summary>
-        private T ComputePDELoss(T[] inputs, T[] predictions, PDEDerivatives<T> derivatives)
+        private T ComputePDELoss(Vector<T> inputs, Vector<T> predictions, PDEDerivatives<T> derivatives)
         {
             if (_pdeSpecification == null)
             {
@@ -492,7 +492,7 @@ namespace AiDotNet.PhysicsInformed
         /// <summary>
         /// Computes the boundary condition loss.
         /// </summary>
-        private T ComputeBoundaryLoss(T[] inputs, T[] predictions, PDEDerivatives<T> derivatives)
+        private T ComputeBoundaryLoss(Vector<T> inputs, Vector<T> predictions, PDEDerivatives<T> derivatives)
         {
             if (_boundaryConditions == null || _boundaryConditions.Length == 0)
             {
@@ -517,7 +517,7 @@ namespace AiDotNet.PhysicsInformed
         /// <summary>
         /// Computes the initial condition loss.
         /// </summary>
-        private T ComputeInitialLoss(T[] inputs, T[] predictions)
+        private T ComputeInitialLoss(Vector<T> inputs, Vector<T> predictions)
         {
             if (_initialCondition == null)
             {
@@ -530,10 +530,11 @@ namespace AiDotNet.PhysicsInformed
             }
 
             // Extract spatial coordinates (all except the last which is time)
-            T[] spatialInputs = new T[inputs.Length - 1];
-            Array.Copy(inputs, spatialInputs, spatialInputs.Length);
+            var spatialInputs = new Vector<T>(inputs.Length - 1);
+            for (int si = 0; si < spatialInputs.Length; si++)
+                spatialInputs[si] = inputs[si];
 
-            T[] expectedValues = _initialCondition.ComputeInitialValue(spatialInputs);
+            var expectedValues = _initialCondition.ComputeInitialValue(spatialInputs);
 
             int count = Math.Min(predictions.Length, expectedValues.Length);
             if (count == 0)
@@ -541,13 +542,16 @@ namespace AiDotNet.PhysicsInformed
                 return NumOps.Zero;
             }
 
-            T sumSquaredError = NumOps.Zero;
-            for (int i = 0; i < count; i++)
-            {
-                T error = NumOps.Subtract(predictions[i], expectedValues[i]);
-                sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Multiply(error, error));
-            }
+            // Vectorized MSE for initial condition
+            var predSlice = count == predictions.Length ? predictions : new Vector<T>(count);
+            var expSlice = count == expectedValues.Length ? expectedValues : new Vector<T>(count);
+            if (count < predictions.Length)
+                for (int si = 0; si < count; si++) predSlice[si] = predictions[si];
+            if (count < expectedValues.Length)
+                for (int si = 0; si < count; si++) expSlice[si] = expectedValues[si];
 
+            var error = (Vector<T>)Engine.Subtract(predSlice, expSlice);
+            T sumSquaredError = VectorHelper.DotProduct(error, error);
             return NumOps.Divide(sumSquaredError, NumOps.FromDouble(count));
         }
 
@@ -557,16 +561,9 @@ namespace AiDotNet.PhysicsInformed
         /// </summary>
         public T[] ComputeDerivative(T[] predictions, T[] targets)
         {
-            // For simplicity, return MSE derivative for data loss component
-            T[] derivative = new T[predictions.Length];
-            T scale = NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(predictions.Length));
-
-            for (int i = 0; i < predictions.Length; i++)
-            {
-                derivative[i] = NumOps.Multiply(scale, NumOps.Subtract(predictions[i], targets[i]));
-            }
-
-            return derivative;
+            // Delegate to vectorized overload
+            var result = CalculateDerivative(new Vector<T>(predictions), new Vector<T>(targets));
+            return result.ToArray();
         }
 
         /// <inheritdoc/>
@@ -574,13 +571,9 @@ namespace AiDotNet.PhysicsInformed
         {
             ValidateVectorLengths(predicted, actual);
 
-            T sumSquaredError = NumOps.Zero;
-            for (int i = 0; i < predicted.Length; i++)
-            {
-                T error = NumOps.Subtract(predicted[i], actual[i]);
-                sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Multiply(error, error));
-            }
-
+            // Vectorized MSE: sum((pred - actual)^2) / N
+            var error = (Vector<T>)Engine.Subtract(predicted, actual);
+            T sumSquaredError = VectorHelper.DotProduct(error, error);
             return NumOps.Divide(sumSquaredError, NumOps.FromDouble(predicted.Length));
         }
 
@@ -589,15 +582,9 @@ namespace AiDotNet.PhysicsInformed
         {
             ValidateVectorLengths(predicted, actual);
 
-            var derivative = new Vector<T>(predicted.Length);
+            // Vectorized MSE derivative: 2/N * (predicted - actual)
             T scale = NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(predicted.Length));
-
-            for (int i = 0; i < predicted.Length; i++)
-            {
-                derivative[i] = NumOps.Multiply(scale, NumOps.Subtract(predicted[i], actual[i]));
-            }
-
-            return derivative;
+            return (Vector<T>)Engine.Multiply(Engine.Subtract(predicted, actual), scale);
         }
     }
 
@@ -620,7 +607,7 @@ namespace AiDotNet.PhysicsInformed
             }
 
             Loss = numOps.Zero;
-            OutputGradients = new T[outputDimension];
+            OutputGradients = new Vector<T>(outputDimension);
             FirstDerivatives = new T[outputDimension, inputDimension];
             SecondDerivatives = new T[outputDimension, inputDimension, inputDimension];
         }
@@ -633,7 +620,7 @@ namespace AiDotNet.PhysicsInformed
         /// <summary>
         /// Gradient of loss with respect to outputs.
         /// </summary>
-        public T[] OutputGradients { get; }
+        public Vector<T> OutputGradients { get; set; }
 
         /// <summary>
         /// Gradient of loss with respect to first derivatives.

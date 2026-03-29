@@ -828,13 +828,13 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     public override Vector<T> GetParameterGradients()
     {
         var selfGrad = _selfWeightsGradient != null
-            ? new Vector<T>(_selfWeightsGradient.ToArray())
+            ? (_selfWeightsGradient is not null ? Vector<T>.FromMemory(_selfWeightsGradient.Data) : new Vector<T>(0))
             : new Vector<T>(_selfWeights.Length);
         var neighborGrad = _neighborWeightsGradient != null
-            ? new Vector<T>(_neighborWeightsGradient.ToArray())
+            ? (_neighborWeightsGradient is not null ? Vector<T>.FromMemory(_neighborWeightsGradient.Data) : new Vector<T>(0))
             : new Vector<T>(_neighborWeights.Length);
         var biasGrad = _biasGradient != null
-            ? new Vector<T>(_biasGradient.ToArray())
+            ? (_biasGradient is not null ? Vector<T>.FromMemory(_biasGradient.Data) : new Vector<T>(0))
             : new Vector<T>(_bias.Length);
 
         return Vector<T>.Concatenate(selfGrad, neighborGrad, biasGrad);
@@ -855,9 +855,9 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            new Vector<T>(_selfWeights.ToArray()),
-            new Vector<T>(_neighborWeights.ToArray()),
-            new Vector<T>(_bias.ToArray())
+            Vector<T>.FromMemory(_selfWeights.Data),
+            Vector<T>.FromMemory(_neighborWeights.Data),
+            Vector<T>.FromMemory(_bias.Data)
         );
     }
 

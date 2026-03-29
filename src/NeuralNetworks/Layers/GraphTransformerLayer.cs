@@ -1009,21 +1009,23 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
                 }
             }
 
-            // Apply attention to values: attn @ V
+            // Apply attention to values: attn @ V — per-batch TensorMatMul
             for (int b = 0; b < batchSize; b++)
             {
+                // Extract [numNodes, numNodes] attention weights and [numNodes, headDim] values
+                var attnSlice = new Tensor<T>([numNodes, numNodes]);
+                var valSlice = new Tensor<T>([numNodes, _headDim]);
                 for (int i = 0; i < numNodes; i++)
                 {
+                    for (int j = 0; j < numNodes; j++)
+                        attnSlice[i, j] = _lastAttentionWeights[b, h, i, j];
                     for (int d = 0; d < _headDim; d++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int j = 0; j < numNodes; j++)
-                        {
-                            sum = NumOps.Add(sum, NumOps.Multiply(_lastAttentionWeights[b, h, i, j], _lastValues[b, h, j, d]));
-                        }
-                        headOutputs[b, h, i, d] = sum;
-                    }
+                        valSlice[i, d] = _lastValues[b, h, i, d];
                 }
+                var result = Engine.TensorMatMul(attnSlice, valSlice);
+                for (int i = 0; i < numNodes; i++)
+                    for (int d = 0; d < _headDim; d++)
+                        headOutputs[b, h, i, d] = result[i, d];
             }
         }
 
@@ -1253,22 +1255,17 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
     private Tensor<T> BackwardFFNWeights2(Tensor<T> hidden, Tensor<T> grad, int batchSize, int numNodes)
     {
-        // For each batch: hidden^T @ grad
+        // For each batch: hidden^T @ grad — per-batch TensorMatMul
         var result = new Tensor<T>([batchSize, _ffnHiddenDim, _outputFeatures]);
         for (int b = 0; b < batchSize; b++)
         {
-            for (int i = 0; i < _ffnHiddenDim; i++)
-            {
-                for (int j = 0; j < _outputFeatures; j++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int n = 0; n < numNodes; n++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(hidden[b, n, i], grad[b, n, j]));
-                    }
-                    result[b, i, j] = sum;
-                }
-            }
+            var hiddenSlice = hidden.Slice(0, b, b + 1).Reshape(numNodes, _ffnHiddenDim);
+            var gradSlice = grad.Slice(0, b, b + 1).Reshape(numNodes, _outputFeatures);
+            var hiddenT = hiddenSlice.Transpose(new[] { 1, 0 });
+            var batchResult = Engine.TensorMatMul(hiddenT, gradSlice);
+            int offset = b * _ffnHiddenDim * _outputFeatures;
+            for (int idx = 0; idx < _ffnHiddenDim * _outputFeatures; idx++)
+                result[offset + idx] = batchResult[idx];
         }
         return result;
     }
@@ -1303,21 +1300,17 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
     private Tensor<T> BackwardFFNWeights1(Tensor<T> input, Tensor<T> grad, int batchSize, int numNodes)
     {
+        // For each batch: input^T @ grad — per-batch TensorMatMul
         var result = new Tensor<T>([batchSize, _outputFeatures, _ffnHiddenDim]);
         for (int b = 0; b < batchSize; b++)
         {
-            for (int i = 0; i < _outputFeatures; i++)
-            {
-                for (int j = 0; j < _ffnHiddenDim; j++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int n = 0; n < numNodes; n++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(input[b, n, i], grad[b, n, j]));
-                    }
-                    result[b, i, j] = sum;
-                }
-            }
+            var inputSlice = input.Slice(0, b, b + 1).Reshape(numNodes, _outputFeatures);
+            var gradSlice = grad.Slice(0, b, b + 1).Reshape(numNodes, _ffnHiddenDim);
+            var inputT = inputSlice.Transpose(new[] { 1, 0 });
+            var batchResult = Engine.TensorMatMul(inputT, gradSlice);
+            int offset = b * _outputFeatures * _ffnHiddenDim;
+            for (int idx = 0; idx < _outputFeatures * _ffnHiddenDim; idx++)
+                result[offset + idx] = batchResult[idx];
         }
         return result;
     }
@@ -1329,21 +1322,17 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
     private Tensor<T> BackwardOutputWeights(Tensor<T> concatenated, Tensor<T> grad, int batchSize, int numNodes)
     {
-        var result = new Tensor<T>([batchSize, _numHeads * _headDim, _outputFeatures]);
+        int concatDim = _numHeads * _headDim;
+        var result = new Tensor<T>([batchSize, concatDim, _outputFeatures]);
         for (int b = 0; b < batchSize; b++)
         {
-            for (int i = 0; i < _numHeads * _headDim; i++)
-            {
-                for (int j = 0; j < _outputFeatures; j++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int n = 0; n < numNodes; n++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(concatenated[b, n, i], grad[b, n, j]));
-                    }
-                    result[b, i, j] = sum;
-                }
-            }
+            var concatSlice = concatenated.Slice(0, b, b + 1).Reshape(numNodes, concatDim);
+            var gradSlice = grad.Slice(0, b, b + 1).Reshape(numNodes, _outputFeatures);
+            var concatT = concatSlice.Transpose(new[] { 1, 0 });
+            var batchResult = Engine.TensorMatMul(concatT, gradSlice);
+            int offset = b * concatDim * _outputFeatures;
+            for (int idx = 0; idx < concatDim * _outputFeatures; idx++)
+                result[offset + idx] = batchResult[idx];
         }
         return result;
     }
@@ -1615,34 +1604,34 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeights.ToArray()),
-            new Vector<T>(_keyWeights.ToArray()),
-            new Vector<T>(_valueWeights.ToArray()),
-            new Vector<T>(_outputWeights.ToArray()),
-            new Vector<T>(_outputBias.ToArray()),
-            new Vector<T>(_ffnWeights1.ToArray()),
-            new Vector<T>(_ffnWeights2.ToArray()),
-            new Vector<T>(_ffnBias1.ToArray()),
-            new Vector<T>(_ffnBias2.ToArray()),
-            new Vector<T>(_layerNorm1Scale.ToArray()),
-            new Vector<T>(_layerNorm1Bias.ToArray()),
-            new Vector<T>(_layerNorm2Scale.ToArray()),
-            new Vector<T>(_layerNorm2Bias.ToArray())
+            Vector<T>.FromMemory(_queryWeights.Data),
+            Vector<T>.FromMemory(_keyWeights.Data),
+            Vector<T>.FromMemory(_valueWeights.Data),
+            Vector<T>.FromMemory(_outputWeights.Data),
+            Vector<T>.FromMemory(_outputBias.Data),
+            Vector<T>.FromMemory(_ffnWeights1.Data),
+            Vector<T>.FromMemory(_ffnWeights2.Data),
+            Vector<T>.FromMemory(_ffnBias1.Data),
+            Vector<T>.FromMemory(_ffnBias2.Data),
+            Vector<T>.FromMemory(_layerNorm1Scale.Data),
+            Vector<T>.FromMemory(_layerNorm1Bias.Data),
+            Vector<T>.FromMemory(_layerNorm2Scale.Data),
+            Vector<T>.FromMemory(_layerNorm2Bias.Data)
         );
     }
 
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
-        var gQuery = _queryWeightsGradient != null ? new Vector<T>(_queryWeightsGradient.ToArray()) : new Vector<T>(_queryWeights.Length);
-        var gKey = _keyWeightsGradient != null ? new Vector<T>(_keyWeightsGradient.ToArray()) : new Vector<T>(_keyWeights.Length);
-        var gValue = _valueWeightsGradient != null ? new Vector<T>(_valueWeightsGradient.ToArray()) : new Vector<T>(_valueWeights.Length);
-        var gOutputWeights = _outputWeightsGradient != null ? new Vector<T>(_outputWeightsGradient.ToArray()) : new Vector<T>(_outputWeights.Length);
-        var gOutputBias = _outputBiasGradient != null ? new Vector<T>(_outputBiasGradient.ToArray()) : new Vector<T>(_outputBias.Length);
-        var gFfnWeights1 = _ffnWeights1Gradient != null ? new Vector<T>(_ffnWeights1Gradient.ToArray()) : new Vector<T>(_ffnWeights1.Length);
-        var gFfnWeights2 = _ffnWeights2Gradient != null ? new Vector<T>(_ffnWeights2Gradient.ToArray()) : new Vector<T>(_ffnWeights2.Length);
-        var gFfnBias1 = _ffnBias1Gradient != null ? new Vector<T>(_ffnBias1Gradient.ToArray()) : new Vector<T>(_ffnBias1.Length);
-        var gFfnBias2 = _ffnBias2Gradient != null ? new Vector<T>(_ffnBias2Gradient.ToArray()) : new Vector<T>(_ffnBias2.Length);
+        var gQuery = _queryWeightsGradient != null ? (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_queryWeights.Length);
+        var gKey = _keyWeightsGradient != null ? (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_keyWeights.Length);
+        var gValue = _valueWeightsGradient != null ? (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_valueWeights.Length);
+        var gOutputWeights = _outputWeightsGradient != null ? (_outputWeightsGradient is not null ? Vector<T>.FromMemory(_outputWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputWeights.Length);
+        var gOutputBias = _outputBiasGradient != null ? (_outputBiasGradient is not null ? Vector<T>.FromMemory(_outputBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputBias.Length);
+        var gFfnWeights1 = _ffnWeights1Gradient != null ? (_ffnWeights1Gradient is not null ? Vector<T>.FromMemory(_ffnWeights1Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_ffnWeights1.Length);
+        var gFfnWeights2 = _ffnWeights2Gradient != null ? (_ffnWeights2Gradient is not null ? Vector<T>.FromMemory(_ffnWeights2Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_ffnWeights2.Length);
+        var gFfnBias1 = _ffnBias1Gradient != null ? (_ffnBias1Gradient is not null ? Vector<T>.FromMemory(_ffnBias1Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_ffnBias1.Length);
+        var gFfnBias2 = _ffnBias2Gradient != null ? (_ffnBias2Gradient is not null ? Vector<T>.FromMemory(_ffnBias2Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_ffnBias2.Length);
         var gLn1Scale = new Vector<T>(_layerNorm1Scale.Length);
         var gLn1Bias = new Vector<T>(_layerNorm1Bias.Length);
         var gLn2Scale = new Vector<T>(_layerNorm2Scale.Length);

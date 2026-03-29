@@ -46,8 +46,6 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// This layer processes the input and transforms it to the first hidden dimension.
     /// It applies the hidden activation function to its output.
     /// </remarks>
-    private int _hidden1Dim;
-    private int _hidden2Dim;
     private readonly FullyConnectedLayer<T> _fc1;
 
     /// <summary>
@@ -181,8 +179,6 @@ public class ReconstructionLayer<T> : LayerBase<T>
         : base([inputDimension], [outputDimension])
     {
         _useVectorActivation = false;
-        _hidden1Dim = hidden1Dimension;
-        _hidden2Dim = hidden2Dimension;
         hiddenActivation ??= new ReLUActivation<T>();
         outputActivation ??= new SigmoidActivation<T>();
 
@@ -233,8 +229,6 @@ public class ReconstructionLayer<T> : LayerBase<T>
         : base([inputDimension], [outputDimension])
     {
         _useVectorActivation = true;
-        _hidden1Dim = hidden1Dimension;
-        _hidden2Dim = hidden2Dimension;
         hiddenVectorActivation ??= new ReLUActivation<T>();
         outputVectorActivation ??= new SigmoidActivation<T>();
 
@@ -405,9 +399,7 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// <para>
     /// This method serializes the state of the reconstruction layer to a binary writer. It writes the
     /// vector activation flag and then serializes each of the three fully connected layers in sequence.
-    /// Hidden dimensions are implicitly captured by the FC layers' own serialization (each stores its
-    /// input/output sizes). GetMetadata() separately exports Hidden1Dimension and Hidden2Dimension
-    /// for the deserialization constructor registered in DeserializationHelper.
+    /// This is useful for saving the layer's state to disk or sending it over a network.
     /// </para>
     /// <para><b>For Beginners:</b> This method saves the layer's state so it can be loaded later.
     /// 
@@ -428,8 +420,6 @@ public class ReconstructionLayer<T> : LayerBase<T>
     public override void Serialize(BinaryWriter writer)
     {
         writer.Write(_useVectorActivation);
-        writer.Write(_hidden1Dim);
-        writer.Write(_hidden2Dim);
         _fc1.Serialize(writer);
         _fc2.Serialize(writer);
         _fc3.Serialize(writer);
@@ -463,8 +453,6 @@ public class ReconstructionLayer<T> : LayerBase<T>
     public override void Deserialize(BinaryReader reader)
     {
         _useVectorActivation = reader.ReadBoolean();
-        _hidden1Dim = reader.ReadInt32();
-        _hidden2Dim = reader.ReadInt32();
         _fc1.Deserialize(reader);
         _fc2.Deserialize(reader);
         _fc3.Deserialize(reader);
@@ -539,14 +527,6 @@ public class ReconstructionLayer<T> : LayerBase<T>
             _fc1.GetParameterGradients(),
             _fc2.GetParameterGradients(),
             _fc3.GetParameterGradients());
-    }
-
-    internal override Dictionary<string, string> GetMetadata()
-    {
-        var metadata = base.GetMetadata();
-        metadata["Hidden1Dimension"] = _hidden1Dim.ToString();
-        metadata["Hidden2Dimension"] = _hidden2Dim.ToString();
-        return metadata;
     }
 
     public override void ClearGradients()
