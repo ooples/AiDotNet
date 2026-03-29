@@ -925,6 +925,126 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     #endregion
 
+    #region Layer-Level Backpropagation
+
+    /// <inheritdoc />
+    protected override void Backpropagate(Tensor<T> lossGradient)
+    {
+        var grad = lossGradient;
+
+        // Output convolution backward
+        grad = BackwardLayer(_outputConv, grad);
+
+        // Decoder backward (reverse order) with skip connection gradients
+        var skipGrads = new Tensor<T>[_encoderBlocks.Count(b => b.Downsample == null)];
+        int skipIdx = 0;
+        for (int i = _decoderBlocks.Count - 1; i >= 0; i--)
+        {
+            var block = _decoderBlocks[i];
+            if (block.Upsample != null)
+            {
+                grad = BackwardLayer(block.Upsample, grad);
+            }
+            else
+            {
+                grad = BackwardLayer(block.CrossAttentionBlock, grad);
+                grad = BackwardLayer(block.AttentionBlock, grad);
+                grad = BackwardLayer(block.ResBlock, grad);
+                // Skip connection gradient stored for encoder backward
+                if (skipIdx < skipGrads.Length)
+                    skipGrads[skipIdx++] = grad;
+            }
+        }
+
+        // Middle backward (reverse order)
+        for (int i = _middleBlocks.Count - 1; i >= 0; i--)
+        {
+            var block = _middleBlocks[i];
+            grad = BackwardLayer(block.CrossAttentionBlock, grad);
+            grad = BackwardLayer(block.AttentionBlock, grad);
+            grad = BackwardLayer(block.ResBlock, grad);
+        }
+
+        // Encoder backward (reverse order)
+        for (int i = _encoderBlocks.Count - 1; i >= 0; i--)
+        {
+            var block = _encoderBlocks[i];
+            if (block.Downsample != null)
+            {
+                grad = BackwardLayer(block.Downsample, grad);
+            }
+            else
+            {
+                grad = BackwardLayer(block.CrossAttentionBlock, grad);
+                grad = BackwardLayer(block.AttentionBlock, grad);
+                grad = BackwardLayer(block.ResBlock, grad);
+            }
+        }
+
+        // Input convolution backward
+        BackwardLayer(_inputConv, grad);
+
+        // Time embedding MLP backward (receives gradient from all ResBlocks that used it)
+        // Time embed gradients are accumulated within the DiffusionResBlock backward passes
+    }
+
+    private static Tensor<T> BackwardLayer(ILayer<T>? layer, Tensor<T> grad)
+    {
+        if (layer == null) return grad;
+        return layer.Backward(grad);
+    }
+
+    /// <inheritdoc />
+    protected override Vector<T> GetParameterGradients()
+    {
+        // Collect gradients in the same order as GetParameters
+        var layerGrads = new List<Vector<T>>();
+        int totalCount = 0;
+
+        CollectLayerGradients(layerGrads, ref totalCount, _inputConv);
+        CollectLayerGradients(layerGrads, ref totalCount, _timeEmbedMlp1);
+        CollectLayerGradients(layerGrads, ref totalCount, _timeEmbedMlp2);
+
+        for (int i = 0; i < _encoderBlocks.Count; i++)
+            CollectBlockGradients(layerGrads, ref totalCount, _encoderBlocks[i]);
+        for (int i = 0; i < _middleBlocks.Count; i++)
+            CollectBlockGradients(layerGrads, ref totalCount, _middleBlocks[i]);
+        for (int i = 0; i < _decoderBlocks.Count; i++)
+            CollectBlockGradients(layerGrads, ref totalCount, _decoderBlocks[i]);
+
+        CollectLayerGradients(layerGrads, ref totalCount, _outputConv);
+
+        var gradients = new Vector<T>(totalCount);
+        int idx = 0;
+        for (int v = 0; v < layerGrads.Count; v++)
+        {
+            var g = layerGrads[v];
+            for (int i = 0; i < g.Length; i++)
+                gradients[idx++] = g[i];
+        }
+
+        return gradients;
+    }
+
+    private static void CollectLayerGradients(List<Vector<T>> dest, ref int totalCount, ILayer<T>? layer)
+    {
+        if (layer == null) return;
+        var g = layer.GetParameterGradients();
+        dest.Add(g);
+        totalCount += g.Length;
+    }
+
+    private static void CollectBlockGradients(List<Vector<T>> dest, ref int totalCount, UNetBlock block)
+    {
+        CollectLayerGradients(dest, ref totalCount, block.ResBlock);
+        CollectLayerGradients(dest, ref totalCount, block.AttentionBlock);
+        CollectLayerGradients(dest, ref totalCount, block.CrossAttentionBlock);
+        CollectLayerGradients(dest, ref totalCount, block.Downsample);
+        CollectLayerGradients(dest, ref totalCount, block.Upsample);
+    }
+
+    #endregion
+
     /// <summary>
     /// Structure for U-Net blocks containing residual, attention, and sampling layers.
     /// </summary>

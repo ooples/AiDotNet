@@ -627,4 +627,65 @@ public class StandardVAE<T> : VAEModelBase<T>
     }
 
     #endregion
+
+    #region Layer-Level Backpropagation
+
+    /// <inheritdoc />
+    protected override void BackpropagateVAE(Tensor<T> lossGradient)
+    {
+        var grad = lossGradient;
+
+        // Decoder backward (reverse)
+        grad = BackwardLayer(_outputConv, grad);
+        for (int i = _decoderLayers.Count - 1; i >= 0; i--)
+            grad = BackwardLayer(_decoderLayers[i], grad);
+
+        // Latent space backward
+        grad = BackwardLayer(_postQuantConv, grad);
+        grad = BackwardLayer(_quantConv, grad);
+        // Mean/logVar paths share the same gradient from the latent
+        BackwardLayer(_logVarConv, grad);
+        grad = BackwardLayer(_meanConv, grad);
+
+        // Encoder backward (reverse)
+        for (int i = _encoderLayers.Count - 1; i >= 0; i--)
+            grad = BackwardLayer(_encoderLayers[i], grad);
+
+        BackwardLayer(_inputConv, grad);
+    }
+
+    private static Tensor<T> BackwardLayer(ILayer<T>? layer, Tensor<T> grad)
+    {
+        if (layer == null) return grad;
+        return layer.Backward(grad);
+    }
+
+    /// <inheritdoc />
+    protected override Vector<T> GetParameterGradients()
+    {
+        var gradients = new List<T>();
+
+        AddLayerGradients(gradients, _inputConv);
+        foreach (var layer in _encoderLayers)
+            AddLayerGradients(gradients, layer);
+        AddLayerGradients(gradients, _meanConv);
+        AddLayerGradients(gradients, _logVarConv);
+        AddLayerGradients(gradients, _quantConv);
+        AddLayerGradients(gradients, _postQuantConv);
+        foreach (var layer in _decoderLayers)
+            AddLayerGradients(gradients, layer);
+        AddLayerGradients(gradients, _outputConv);
+
+        return new Vector<T>(gradients.ToArray());
+    }
+
+    private static void AddLayerGradients(List<T> gradients, ILayer<T>? layer)
+    {
+        if (layer == null) return;
+        var g = layer.GetParameterGradients();
+        for (int i = 0; i < g.Length; i++)
+            gradients.Add(g[i]);
+    }
+
+    #endregion
 }
