@@ -890,6 +890,73 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </remarks>
     public abstract Tensor<T> Forward(Tensor<T> input);
 
+    // ─── Named port infrastructure (#1058) ───────────────────────────
+
+    /// <summary>
+    /// Declares the named input ports this layer accepts.
+    /// Default: single port named "input" with the layer's input shape.
+    /// Override for multi-input layers (e.g., DiffusionResBlock, CrossAttention).
+    /// </summary>
+    public virtual IReadOnlyList<LayerPort> InputPorts =>
+        [new LayerPort("input", GetInputShape())];
+
+    /// <summary>
+    /// Declares the named output ports this layer produces.
+    /// Default: single port named "output" with the layer's output shape.
+    /// </summary>
+    public virtual IReadOnlyList<LayerPort> OutputPorts =>
+        [new LayerPort("output", GetOutputShape())];
+
+    /// <summary>
+    /// Multi-input forward pass. Receives inputs by name, enabling layers that
+    /// need multiple distinct tensors (time embeddings, conditioning, Q/K/V, etc.).
+    /// </summary>
+    /// <param name="inputs">Named input tensors matching <see cref="InputPorts"/>.</param>
+    /// <returns>Output tensor.</returns>
+    /// <remarks>
+    /// <para>Default implementation delegates to single-input <see cref="Forward(Tensor{T})"/>
+    /// using the "input" port or the first available tensor. Override for multi-input layers.</para>
+    /// <para><b>For Beginners:</b> Most layers only need one input, so this just calls
+    /// the regular Forward. Layers like DiffusionResBlock override this to accept
+    /// both the image data AND time step information.</para>
+    /// </remarks>
+    public virtual Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    {
+        if (inputs.TryGetValue("input", out var input))
+            return Forward(input);
+
+        if (inputs.Count == 1)
+            return Forward(inputs.Values.First());
+
+        // Validate required ports
+        var missing = InputPorts
+            .Where(p => p.Required && !inputs.ContainsKey(p.Name))
+            .Select(p => p.Name)
+            .ToList();
+
+        if (missing.Count > 0)
+            throw new ArgumentException(
+                $"{GetType().Name} requires input ports: {string.Join(", ", missing)}. " +
+                $"Provided: {string.Join(", ", inputs.Keys)}.");
+
+        throw new NotSupportedException(
+            $"{GetType().Name} has {InputPorts.Count} input ports but does not override " +
+            $"Forward(IReadOnlyDictionary). Override it to handle: " +
+            $"{string.Join(", ", InputPorts.Select(p => p.Name))}.");
+    }
+
+    /// <summary>
+    /// Multi-output backward pass. Returns gradients per named input port.
+    /// Default delegates to single-input <see cref="Backward(Tensor{T})"/>.
+    /// </summary>
+    public virtual IReadOnlyDictionary<string, Tensor<T>> BackwardMulti(
+        IReadOnlyDictionary<string, Tensor<T>> outputGradients)
+    {
+        var grad = outputGradients.TryGetValue("output", out var g) ? g : outputGradients.Values.First();
+        var inputGrad = Backward(grad);
+        return new Dictionary<string, Tensor<T>> { ["input"] = inputGrad };
+    }
+
     #region Mixed Precision Support
 
     /// <summary>

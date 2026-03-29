@@ -138,6 +138,24 @@ public class DiffusionResBlock<T> : LayerBase<T>
     }
 
     /// <summary>
+    // ─── Named ports (#1058) ────────────────────────────────────────
+
+    /// <inheritdoc/>
+    public override IReadOnlyList<LayerPort> InputPorts =>
+        _timeEmbedDim > 0
+            ? [new LayerPort("input", GetInputShape()), new LayerPort("time_embed", [_timeEmbedDim])]
+            : [new LayerPort("input", GetInputShape())];
+
+    /// <inheritdoc/>
+    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    {
+        var input = inputs["input"];
+        if (inputs.TryGetValue("time_embed", out var timeEmbed))
+            return Forward(input, timeEmbed);
+        return Forward(input);
+    }
+
+    /// <summary>
     /// Forward pass implementing the DDPM residual block.
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
