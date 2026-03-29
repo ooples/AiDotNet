@@ -220,11 +220,9 @@ internal static class DifferentiableOps<T>
     /// <summary>Sum all elements to a scalar.</summary>
     public static Tensor<T> Sum(Tensor<T> a)
     {
+        // Use Engine's SIMD-accelerated sum when available
         var result = new Tensor<T>([1]);
-        T sum = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-            sum = NumOps.Add(sum, a[i]);
-        result[0] = sum;
+        result[0] = Engine.TensorSum(a);
 
         GradientTape<T>.Current?.RecordOp("Sum", [a], result,
             grad =>
@@ -244,11 +242,9 @@ internal static class DifferentiableOps<T>
             throw new ArgumentException("Cannot compute mean of a zero-length tensor.", nameof(a));
         }
 
+        // Use Engine's SIMD-accelerated sum then divide by count
         var result = new Tensor<T>([1]);
-        T sum = NumOps.Zero;
-        for (int i = 0; i < a.Length; i++)
-            sum = NumOps.Add(sum, a[i]);
-        result[0] = NumOps.Divide(sum, NumOps.FromDouble(a.Length));
+        result[0] = NumOps.Divide(Engine.TensorSum(a), NumOps.FromDouble(a.Length));
 
         GradientTape<T>.Current?.RecordOp("Mean", [a], result,
             grad =>
@@ -693,6 +689,196 @@ internal static class DifferentiableOps<T>
         return results;
     }
 
+    // ─── Dropout / Pooling / Embedding ops ─────────────────────────────
+
+    /// <summary>
+    /// Dropout: randomly zeros elements with probability p during training.
+    /// Backward: gradient is masked by the same pattern used in forward.
+    /// </summary>
+    public static Tensor<T> Dropout(Tensor<T> x, double p, bool training, Random? rng = null)
+    {
+        if (!training || p <= 0)
+            return x;
+
+        rng ??= new Random();
+        var result = new Tensor<T>(x.Shape.ToArray());
+        var mask = new byte[x.Length];
+        double scale = 1.0 / (1.0 - p);
+
+        for (int i = 0; i < x.Length; i++)
+        {
+            if (rng.NextDouble() >= p)
+            {
+                mask[i] = 1;
+                result[i] = NumOps.FromDouble(NumOps.ToDouble(x[i]) * scale);
+            }
+            else
+            {
+                mask[i] = 0;
+                result[i] = NumOps.Zero;
+            }
+        }
+
+        var shape = x.Shape.ToArray();
+        GradientTape<T>.Current?.RecordOp("Dropout", [x], result,
+            grad =>
+            {
+                var dx = new Tensor<T>(shape);
+                for (int i = 0; i < grad.Length; i++)
+                    dx[i] = mask[i] == 1 ? NumOps.FromDouble(NumOps.ToDouble(grad[i]) * scale) : NumOps.Zero;
+                return [dx];
+            });
+        return result;
+    }
+
+    /// <summary>
+    /// 2D average pooling. Backward distributes gradient evenly to each pooled region.
+    /// </summary>
+    public static Tensor<T> AvgPool2D(Tensor<T> x, int poolSize, int stride)
+    {
+        var shape = x.Shape.ToArray();
+        // Expect [N, C, H, W] or [C, H, W]
+        int rank = shape.Length;
+        int h = shape[rank - 2];
+        int w = shape[rank - 1];
+        int outH = (h - poolSize) / stride + 1;
+        int outW = (w - poolSize) / stride + 1;
+
+        var outShape = (int[])shape.Clone();
+        outShape[rank - 2] = outH;
+        outShape[rank - 1] = outW;
+        var result = new Tensor<T>(outShape);
+
+        int channels = x.Length / (h * w);
+        double invPoolArea = 1.0 / (poolSize * poolSize);
+
+        for (int c = 0; c < channels; c++)
+        {
+            for (int oh = 0; oh < outH; oh++)
+            {
+                for (int ow = 0; ow < outW; ow++)
+                {
+                    double sum = 0;
+                    for (int ph = 0; ph < poolSize; ph++)
+                        for (int pw = 0; pw < poolSize; pw++)
+                            sum += NumOps.ToDouble(x[c * h * w + (oh * stride + ph) * w + ow * stride + pw]);
+                    result[c * outH * outW + oh * outW + ow] = NumOps.FromDouble(sum * invPoolArea);
+                }
+            }
+        }
+
+        GradientTape<T>.Current?.RecordOp("AvgPool2D", [x], result,
+            grad =>
+            {
+                var dx = new Tensor<T>(shape);
+                double invArea = 1.0 / (poolSize * poolSize);
+                for (int c = 0; c < channels; c++)
+                {
+                    for (int oh = 0; oh < outH; oh++)
+                    {
+                        for (int ow = 0; ow < outW; ow++)
+                        {
+                            double g = NumOps.ToDouble(grad[c * outH * outW + oh * outW + ow]) * invArea;
+                            for (int ph = 0; ph < poolSize; ph++)
+                                for (int pw = 0; pw < poolSize; pw++)
+                                {
+                                    int idx = c * h * w + (oh * stride + ph) * w + ow * stride + pw;
+                                    dx[idx] = NumOps.FromDouble(NumOps.ToDouble(dx[idx]) + g);
+                                }
+                        }
+                    }
+                }
+                return [dx];
+            });
+        return result;
+    }
+
+    /// <summary>
+    /// 2D max pooling. Stores argmax indices for backward pass.
+    /// </summary>
+    public static Tensor<T> MaxPool2D(Tensor<T> x, int poolSize, int stride)
+    {
+        var shape = x.Shape.ToArray();
+        int rank = shape.Length;
+        int h = shape[rank - 2];
+        int w = shape[rank - 1];
+        int outH = (h - poolSize) / stride + 1;
+        int outW = (w - poolSize) / stride + 1;
+
+        var outShape = (int[])shape.Clone();
+        outShape[rank - 2] = outH;
+        outShape[rank - 1] = outW;
+        var result = new Tensor<T>(outShape);
+        var argmax = new int[result.Length]; // Store which input index was max
+
+        int channels = x.Length / (h * w);
+
+        for (int c = 0; c < channels; c++)
+        {
+            for (int oh = 0; oh < outH; oh++)
+            {
+                for (int ow = 0; ow < outW; ow++)
+                {
+                    double maxVal = double.MinValue;
+                    int maxIdx = 0;
+                    for (int ph = 0; ph < poolSize; ph++)
+                    {
+                        for (int pw = 0; pw < poolSize; pw++)
+                        {
+                            int idx = c * h * w + (oh * stride + ph) * w + ow * stride + pw;
+                            double val = NumOps.ToDouble(x[idx]);
+                            if (val > maxVal)
+                            {
+                                maxVal = val;
+                                maxIdx = idx;
+                            }
+                        }
+                    }
+                    int outIdx = c * outH * outW + oh * outW + ow;
+                    result[outIdx] = NumOps.FromDouble(maxVal);
+                    argmax[outIdx] = maxIdx;
+                }
+            }
+        }
+
+        GradientTape<T>.Current?.RecordOp("MaxPool2D", [x], result,
+            grad =>
+            {
+                // Gradient flows only to the max element in each pool window
+                var dx = new Tensor<T>(shape);
+                for (int i = 0; i < grad.Length; i++)
+                    dx[argmax[i]] = NumOps.Add(dx[argmax[i]], grad[i]);
+                return [dx];
+            });
+        return result;
+    }
+
+    /// <summary>
+    /// Embedding lookup: maps integer indices to dense vectors.
+    /// Backward: sparse gradient accumulation into the embedding table.
+    /// </summary>
+    public static Tensor<T> Embedding(Tensor<T> table, int[] indices)
+    {
+        int embDim = table.Shape[1];
+        var result = new Tensor<T>([indices.Length, embDim]);
+        for (int i = 0; i < indices.Length; i++)
+            for (int d = 0; d < embDim; d++)
+                result[i * embDim + d] = table[indices[i] * embDim + d];
+
+        GradientTape<T>.Current?.RecordOp("Embedding", [table], result,
+            grad =>
+            {
+                // Sparse gradient: accumulate into rows that were looked up
+                var tableGrad = new Tensor<T>(table.Shape.ToArray());
+                for (int i = 0; i < indices.Length; i++)
+                    for (int d = 0; d < embDim; d++)
+                        tableGrad[indices[i] * embDim + d] = NumOps.Add(
+                            tableGrad[indices[i] * embDim + d], grad[i * embDim + d]);
+                return [tableGrad];
+            });
+        return result;
+    }
+
     // ─── Conv ops ────────────────────────────────────────────────────
 
     /// <summary>
@@ -823,23 +1009,35 @@ internal static class DifferentiableOps<T>
     public static Tensor<T> BatchNorm(
         Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double epsilon = 1e-5)
     {
-        if (input.Shape.Length != 2)
+        // Support 2D [N,D] and 4D [N,C,H,W] (per Ioffe & Szegedy 2015).
+        // For 4D: reshape to [N, C, H*W], normalize per-channel, reshape back.
+        bool is4D = input.Shape.Length == 4;
+        Tensor<T> flatInput;
+        int n, features;
+
+        if (is4D)
+        {
+            int batchSize = input.Shape[0];
+            int channels = input.Shape[1];
+            int spatial = input.Shape[2] * input.Shape[3];
+            flatInput = input.Reshape([batchSize, channels * spatial]);
+            n = batchSize;
+            features = channels * spatial;
+        }
+        else if (input.Shape.Length == 2)
+        {
+            flatInput = input;
+            n = input.Shape[0];
+            features = input.Length / n;
+        }
+        else
         {
             throw new NotSupportedException(
-                "BatchNorm currently supports only [N, D] inputs. " +
-                "[N, C, H, W] support requires channel-wise normalization.");
+                $"BatchNorm supports [N,D] or [N,C,H,W] inputs. Got rank {input.Shape.Length}.");
         }
 
-        // Treat as [N, features] where features = total / N
-        int n = input.Shape[0];
-        int features = input.Length / n;
-
-        if (gamma.Length != features || beta.Length != features)
-        {
-            throw new ArgumentException(
-                $"gamma ({gamma.Length}) and beta ({beta.Length}) must match the feature dimension ({features}).");
-        }
-        var result = new Tensor<T>(input.Shape.ToArray());
+        // gamma/beta may be [C] for 4D or [features] for 2D — use modulo for broadcasting
+        var flatResult = new Tensor<T>(flatInput.Shape.ToArray());
 
         var means = new double[features];
         var vars = new double[features];
@@ -849,13 +1047,13 @@ internal static class DifferentiableOps<T>
         {
             double sum = 0;
             for (int b = 0; b < n; b++)
-                sum += NumOps.ToDouble(input[b * features + f]);
+                sum += NumOps.ToDouble(flatInput[b * features + f]);
             means[f] = sum / n;
 
             double varSum = 0;
             for (int b = 0; b < n; b++)
             {
-                double diff = NumOps.ToDouble(input[b * features + f]) - means[f];
+                double diff = NumOps.ToDouble(flatInput[b * features + f]) - means[f];
                 varSum += diff * diff;
             }
             vars[f] = varSum / n;
@@ -867,18 +1065,23 @@ internal static class DifferentiableOps<T>
             for (int f = 0; f < features; f++)
             {
                 double invStd = 1.0 / Math.Sqrt(vars[f] + epsilon);
-                double xHat = (NumOps.ToDouble(input[b * features + f]) - means[f]) * invStd;
-                int gammaIdx = f % gamma.Length; // Handle broadcasting
+                double xHat = (NumOps.ToDouble(flatInput[b * features + f]) - means[f]) * invStd;
+                int gammaIdx = f % gamma.Length;
                 double scaled = xHat * NumOps.ToDouble(gamma[gammaIdx]) + NumOps.ToDouble(beta[gammaIdx]);
-                result[b * features + f] = NumOps.FromDouble(scaled);
+                flatResult[b * features + f] = NumOps.FromDouble(scaled);
             }
         }
 
+        // Reshape back to original shape for 4D inputs
+        var result = is4D ? flatResult.Reshape(input.Shape.ToArray()) : flatResult;
+
+        var originalShape = input.Shape.ToArray();
         GradientTape<T>.Current?.RecordOp("BatchNorm", [input, gamma, beta], result,
             grad =>
             {
                 // Per Ioffe & Szegedy 2015, BatchNorm backward:
-                var inputGrad = new Tensor<T>(input.Shape.ToArray());
+                var flatGrad = is4D ? grad.Reshape([n, features]) : grad;
+                var flatInputGrad = new Tensor<T>([n, features]);
                 var gammaGrad = new Tensor<T>(gamma.Shape.ToArray());
                 var betaGrad = new Tensor<T>(beta.Shape.ToArray());
 
@@ -891,25 +1094,26 @@ internal static class DifferentiableOps<T>
                     double sumDoutGammaXhat = 0;
                     for (int b = 0; b < n; b++)
                     {
-                        double xHat = (NumOps.ToDouble(input[b * features + f]) - means[f]) * invStd;
-                        double dg = NumOps.ToDouble(grad[b * features + f]) * NumOps.ToDouble(gamma[gIdx]);
+                        double xHat = (NumOps.ToDouble(flatInput[b * features + f]) - means[f]) * invStd;
+                        double dg = NumOps.ToDouble(flatGrad[b * features + f]) * NumOps.ToDouble(gamma[gIdx]);
                         sumDoutGamma += dg;
                         sumDoutGammaXhat += dg * xHat;
                     }
 
                     for (int b = 0; b < n; b++)
                     {
-                        double xHat = (NumOps.ToDouble(input[b * features + f]) - means[f]) * invStd;
-                        double dg = NumOps.ToDouble(grad[b * features + f]) * NumOps.ToDouble(gamma[gIdx]);
+                        double xHat = (NumOps.ToDouble(flatInput[b * features + f]) - means[f]) * invStd;
+                        double dg = NumOps.ToDouble(flatGrad[b * features + f]) * NumOps.ToDouble(gamma[gIdx]);
                         double dx = invStd * (dg - sumDoutGamma / n - xHat * sumDoutGammaXhat / n);
-                        inputGrad[b * features + f] = NumOps.FromDouble(dx);
+                        flatInputGrad[b * features + f] = NumOps.FromDouble(dx);
 
                         gammaGrad[gIdx] = NumOps.Add(gammaGrad[gIdx],
-                            NumOps.FromDouble(NumOps.ToDouble(grad[b * features + f]) * xHat));
-                        betaGrad[gIdx] = NumOps.Add(betaGrad[gIdx], grad[b * features + f]);
+                            NumOps.FromDouble(NumOps.ToDouble(flatGrad[b * features + f]) * xHat));
+                        betaGrad[gIdx] = NumOps.Add(betaGrad[gIdx], flatGrad[b * features + f]);
                     }
                 }
 
+                var inputGrad = is4D ? flatInputGrad.Reshape(originalShape) : flatInputGrad;
                 return [inputGrad, gammaGrad, betaGrad];
             });
         return result;

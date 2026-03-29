@@ -226,7 +226,7 @@ public sealed class GradientTape<T> : IDisposable
         Tensor<T> output,
         Func<Tensor<T>, Tensor<T>[]> backward)
     {
-        if (!IsRecording) return;
+        if (!IsRecording || NoGradScope<T>.IsSuppressed) return;
 
         // Reject ops whose output aliases an input — the reverse pass keys
         // gradients by tensor identity, so aliasing would corrupt accumulation.
@@ -442,21 +442,22 @@ public sealed class GradientTape<T> : IDisposable
 /// </remarks>
 internal sealed class NoGradScope<T> : IDisposable
 {
-    private readonly GradientTape<T>? _tape;
-    private readonly bool _wasRecording;
+    // AsyncLocal counter: each async flow has its own suppression depth.
+    // This prevents one flow's NoGradScope from affecting sibling flows.
+    private static readonly AsyncLocal<int> _suppressionDepth = new();
+
+    /// <summary>Returns true if recording is currently suppressed in this async flow.</summary>
+    internal static bool IsSuppressed => _suppressionDepth.Value > 0;
 
     public NoGradScope()
     {
-        _tape = GradientTape<T>.Current;
-        _wasRecording = _tape?.IsRecording ?? false;
-        if (_tape is not null)
-            _tape.IsRecording = false;
+        _suppressionDepth.Value++;
     }
 
     public void Dispose()
     {
-        if (_tape is not null)
-            _tape.IsRecording = _wasRecording;
+        if (_suppressionDepth.Value > 0)
+            _suppressionDepth.Value--;
     }
 }
 

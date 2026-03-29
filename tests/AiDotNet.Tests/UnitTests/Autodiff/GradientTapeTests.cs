@@ -161,9 +161,7 @@ public class GradientTapeTests
         using var tape = new GradientTape<double>();
         tape.Watch(x);
 
-        Assert.True(tape.IsRecording);
-
-        // Record an op outside the scope - this should be tracked
+        // Record an op outside the scope — this should be tracked
         var y = new Tensor<double>([1], new Vector<double>([3.0]));
         tape.RecordOp("double", [x], y, grad =>
         {
@@ -174,13 +172,14 @@ public class GradientTapeTests
 
         using (var _ = new NoGradScope<double>())
         {
-            Assert.False(tape.IsRecording);
-            // This op should NOT be recorded
+            // NoGradScope uses per-flow AsyncLocal suppression
+            Assert.True(NoGradScope<double>.IsSuppressed);
+            // This op should NOT be recorded (suppressed)
             var ignored = new Tensor<double>([1], new Vector<double>([99.0]));
             tape.RecordOp("should_be_ignored", [y], ignored, grad => [grad]);
         }
 
-        Assert.True(tape.IsRecording);
+        Assert.False(NoGradScope<double>.IsSuppressed);
 
         // Gradient should only reflect the "double" op, not the ignored one
         var grads = tape.Gradient(y);
