@@ -385,18 +385,11 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
 
         // Input projection
         projected = new Matrix<T>(seqLen, _modelDim);
-        for (int t = 0; t < seqLen; t++)
-        {
-            for (int j = 0; j < _modelDim; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < _inputDim; i++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(sequence[t, i], inputProj[i, j]));
-                }
-                projected[t, j] = sum;
-            }
-        }
+        // Input projection: [seqLen, inputDim] @ [inputDim, modelDim] — vectorized TensorMatMul
+        var seqTensor = Tensor<T>.FromMatrix(sequence);
+        var projTensor = Tensor<T>.FromMatrix(inputProj);
+        var projResult = Engine.TensorMatMul(seqTensor, projTensor);
+        projected = projResult.ToMatrix();
 
         // Add positional encoding
         AddPositionalEncoding(projected);
@@ -405,35 +398,23 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
         Matrix<T> attention;
         (attnOutput, attention) = SelfAttention(projected);
 
-        // Feed-forward with caching of hidden activations
-        ffHidden = new Matrix<T>(seqLen, ffDim);
-        var output = new Matrix<T>(seqLen, _modelDim);
+        // Feed-forward layer 1: hidden = ReLU(attnOutput @ W1 + b1) — vectorized
+        var attnTensor = Tensor<T>.FromMatrix(attnOutput);
+        var w1Tensor = Tensor<T>.FromMatrix(W1);
+        var ffPre = Engine.TensorMatMul(attnTensor, w1Tensor);
+        // Add bias: broadcast [1, ffDim] across [seqLen, ffDim]
+        var b1Broadcast = Tensor<T>.FromVector(b1).Reshape(1, ffDim);
+        ffPre = Engine.TensorBroadcastAdd(ffPre, b1Broadcast);
+        // ReLU
+        var ffHiddenTensor = Engine.ReLU(ffPre);
+        ffHidden = ffHiddenTensor.ToMatrix();
 
-        for (int t = 0; t < seqLen; t++)
-        {
-            // First layer with ReLU
-            for (int j = 0; j < ffDim; j++)
-            {
-                T sum = b1[j];
-                for (int i = 0; i < _modelDim; i++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(attnOutput[t, i], W1[i, j]));
-                }
-                double val = NumOps.ToDouble(sum);
-                ffHidden[t, j] = NumOps.FromDouble(Math.Max(0, val));
-            }
-
-            // Second layer with residual
-            for (int j = 0; j < _modelDim; j++)
-            {
-                T sum = b2[j];
-                for (int i = 0; i < ffDim; i++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(ffHidden[t, i], W2[i, j]));
-                }
-                output[t, j] = NumOps.Add(sum, attnOutput[t, j]);
-            }
-        }
+        // Feed-forward layer 2: output = ffHidden @ W2 + b2 + residual — vectorized
+        var w2Tensor = Tensor<T>.FromMatrix(W2);
+        var ffOut = Engine.TensorMatMul(ffHiddenTensor, w2Tensor);
+        var b2Broadcast = Tensor<T>.FromVector(b2).Reshape(1, _modelDim);
+        ffOut = Engine.TensorBroadcastAdd(ffOut, b2Broadcast);
+        var output = Engine.TensorAdd(ffOut, attnTensor).ToMatrix();
 
         // Compute prior association and discrepancy
         var priorAssoc = ComputePriorAssociation(seqLen);
