@@ -416,24 +416,22 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
                         dOutput[j] = NumOps.Multiply(NumOps.FromDouble(2), diff);
                     }
 
-                    // Backprop through output layer
-                    var dH2 = new Vector<T>(_hiddenDim);
+                    // Backprop output layer: dH2 = W3 @ dOutput — vectorized matmul
+                    var w3Tensor = Tensor<T>.FromMatrix(w3);
+                    var dOutCol = Tensor<T>.FromVector(dOutput).Reshape(_outputDim, 1);
+                    var dH2 = Engine.TensorMatMul(w3Tensor, dOutCol).Reshape(_hiddenDim).ToVector();
+
+                    // Accumulate dW3 += h2 @ dOutput^T — vectorized outer product
+                    var h2Col = Tensor<T>.FromVector(h2).Reshape(_hiddenDim, 1);
+                    var dOutRow = Tensor<T>.FromVector(dOutput).Reshape(1, _outputDim);
+                    var dW3Sample = Engine.TensorMatMul(h2Col, dOutRow);
+                    var dW3Tensor = Tensor<T>.FromMatrix(dW3);
+                    dW3Tensor = Engine.TensorAdd(dW3Tensor, dW3Sample);
                     for (int i = 0; i < _hiddenDim; i++)
-                    {
-                        dH2[i] = NumOps.Zero;
-                    }
-                    for (int i = 0; i < _hiddenDim; i++)
-                    {
                         for (int j = 0; j < _outputDim; j++)
-                        {
-                            dW3[i, j] = NumOps.Add(dW3[i, j], NumOps.Multiply(h2[i], dOutput[j]));
-                            dH2[i] = NumOps.Add(dH2[i], NumOps.Multiply(w3[i, j], dOutput[j]));
-                        }
-                    }
+                            dW3[i, j] = dW3Tensor[i, j];
                     for (int j = 0; j < _outputDim; j++)
-                    {
                         dB3[j] = NumOps.Add(dB3[j], dOutput[j]);
-                    }
 
                     // ReLU derivative for h2
                     for (int i = 0; i < _hiddenDim; i++)
@@ -441,24 +439,22 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
                         if (!NumOps.GreaterThan(h2[i], NumOps.Zero)) dH2[i] = NumOps.Zero;
                     }
 
-                    // Backprop through layer 2
-                    var dH1 = new Vector<T>(_hiddenDim);
+                    // Backprop layer 2: dH1 = W2 @ dH2 — vectorized matmul
+                    var w2Tensor = Tensor<T>.FromMatrix(w2);
+                    var dH2Col = Tensor<T>.FromVector(dH2).Reshape(_hiddenDim, 1);
+                    var dH1 = Engine.TensorMatMul(w2Tensor, dH2Col).Reshape(_hiddenDim).ToVector();
+
+                    // Accumulate dW2 += h1 @ dH2^T — vectorized outer product
+                    var h1Col = Tensor<T>.FromVector(h1).Reshape(_hiddenDim, 1);
+                    var dH2Row = Tensor<T>.FromVector(dH2).Reshape(1, _hiddenDim);
+                    var dW2Sample = Engine.TensorMatMul(h1Col, dH2Row);
+                    var dW2Tensor = Tensor<T>.FromMatrix(dW2);
+                    dW2Tensor = Engine.TensorAdd(dW2Tensor, dW2Sample);
                     for (int i = 0; i < _hiddenDim; i++)
-                    {
-                        dH1[i] = NumOps.Zero;
-                    }
-                    for (int i = 0; i < _hiddenDim; i++)
-                    {
                         for (int j = 0; j < _hiddenDim; j++)
-                        {
-                            dW2[i, j] = NumOps.Add(dW2[i, j], NumOps.Multiply(h1[i], dH2[j]));
-                            dH1[i] = NumOps.Add(dH1[i], NumOps.Multiply(w2[i, j], dH2[j]));
-                        }
-                    }
+                            dW2[i, j] = dW2Tensor[i, j];
                     for (int j = 0; j < _hiddenDim; j++)
-                    {
                         dB2[j] = NumOps.Add(dB2[j], dH2[j]);
-                    }
 
                     // ReLU derivative for h1
                     for (int i = 0; i < _hiddenDim; i++)
@@ -466,18 +462,17 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
                         if (!NumOps.GreaterThan(h1[i], NumOps.Zero)) dH1[i] = NumOps.Zero;
                     }
 
-                    // Backprop through layer 1
+                    // Backprop layer 1: dW1 += x @ dH1^T — vectorized outer product
+                    var xCol = Tensor<T>.FromVector(x).Reshape(_inputDim, 1);
+                    var dH1Row = Tensor<T>.FromVector(dH1).Reshape(1, _hiddenDim);
+                    var dW1Sample = Engine.TensorMatMul(xCol, dH1Row);
+                    var dW1Tensor = Tensor<T>.FromMatrix(dW1);
+                    dW1Tensor = Engine.TensorAdd(dW1Tensor, dW1Sample);
                     for (int i = 0; i < _inputDim; i++)
-                    {
                         for (int j = 0; j < _hiddenDim; j++)
-                        {
-                            dW1[i, j] = NumOps.Add(dW1[i, j], NumOps.Multiply(x[i], dH1[j]));
-                        }
-                    }
+                            dW1[i, j] = dW1Tensor[i, j];
                     for (int j = 0; j < _hiddenDim; j++)
-                    {
                         dB1[j] = NumOps.Add(dB1[j], dH1[j]);
-                    }
                 }
 
                 // Update weights
