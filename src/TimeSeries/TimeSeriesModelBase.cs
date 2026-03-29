@@ -435,6 +435,9 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// </remarks>
     public virtual Vector<T> Predict(Matrix<T> input)
     {
+        // Suppress tape recording during inference
+        using var _noGrad = new Autodiff.NoGradScope<T>();
+
         // Check if model is trained
         if (!IsTrained)
         {

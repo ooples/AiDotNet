@@ -179,6 +179,9 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         if (invalidDims.Length > 0)
             throw new ArgumentOutOfRangeException(nameof(shape), $"All dimensions must be positive, but found {invalidDims[0]}.");
 
+        // Suppress tape recording during inference (like PyTorch torch.no_grad())
+        using var _ = new NoGradScope<T>();
+
         // Set up random generator
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
 

@@ -190,7 +190,8 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <inheritdoc />
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
-        // For VAE, prediction is encode->decode (reconstruction)
+        // Suppress tape recording during inference
+        using var _ = new NoGradScope<T>();
         var latent = Encode(input, sampleMode: false);
         return Decode(latent);
     }

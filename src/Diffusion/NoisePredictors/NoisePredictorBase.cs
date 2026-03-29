@@ -162,8 +162,8 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
     /// <inheritdoc />
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
-        // For noise predictors, prediction requires a timestep
-        // Default to middle timestep if not specified
+        // Suppress tape recording during inference
+        using var _ = new NoGradScope<T>();
         return PredictNoise(input, 500, null);
     }
 
