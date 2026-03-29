@@ -374,105 +374,39 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
             _matricesBGradient[r] = new Matrix<T>(inputSize, outputSize);
         }
 
-        // Accumulate input gradients
-        Matrix<T> inputGradMatrix = new Matrix<T>(batchSize, inputSize);
+        // Compute input^T @ grad once — shared across all ranks
+        var inputTensorBW = Tensor<T>.FromMatrix(inputMatrix);
+        var gradTensorBW = Tensor<T>.FromMatrix(gradMatrix);
+        var inputT = inputTensorBW.Transpose(new[] { 1, 0 });
+        var inputTGrad = Engine.TensorMatMul(inputT, gradTensorBW); // [inputSize, outputSize]
 
-        // For each rank dimension, compute gradients
+        // Accumulate input gradient using deltaWeights computed per-rank
+        var inputGradTensor = new Tensor<T>(new[] { batchSize, inputSize });
+
         for (int r = 0; r < Rank; r++)
         {
-            // Compute intermediate = input * A[r]
-            Matrix<T> intermediate = new Matrix<T>(batchSize, outputSize);
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int o = 0; o < outputSize; o++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int i = 0; i < inputSize; i++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(inputMatrix[b, i], _matricesA[r][i, o]));
-                    }
-                    intermediate[b, o] = sum;
-                }
-            }
+            // dB[r] = (input^T @ grad) ⊙ A[r] * scaling — vectorized
+            var aTensor = Tensor<T>.FromMatrix(_matricesA[r]);
+            var bGrad = Engine.TensorMultiply(inputTGrad, aTensor);
+            bGrad = Engine.TensorMultiplyScalar(bGrad, _scaling);
+            _matricesBGradient[r] = bGrad.ToMatrix();
 
-            // Gradient for B[r]: Chain rule for Hadamard product in weight space
-            // dL/dB[r][i,o] = sum_batch(dL/dy[b,o] * dy/dB[r][i,o])
-            // where dy[b,o]/dB[r][i,o] = input[b,i] * A[r][i,o]
-            // Therefore: dL/dB[r][i,o] = sum_batch(gradOutput[b,o] * input[b,i] * A[r][i,o])
-            for (int i = 0; i < inputSize; i++)
-            {
-                for (int o = 0; o < outputSize; o++)
-                {
-                    T gradSum = NumOps.Zero;
-                    for (int b = 0; b < batchSize; b++)
-                    {
-                        T inputVal = inputMatrix[b, i];
-                        T aVal = _matricesA[r][i, o];
-                        T outputGrad = gradMatrix[b, o];
-                        // dL/dB = gradOutput * input * A (all element-wise for this specific element)
-                        T contribution = NumOps.Multiply(NumOps.Multiply(outputGrad, inputVal), aVal);
-                        gradSum = NumOps.Add(gradSum, contribution);
-                    }
-                    _matricesBGradient[r][i, o] = NumOps.Multiply(gradSum, _scaling);
-                }
-            }
+            // dA[r] = (input^T @ grad) ⊙ B[r] * scaling — vectorized
+            var bTensor = Tensor<T>.FromMatrix(_matricesB[r]);
+            var aGrad = Engine.TensorMultiply(inputTGrad, bTensor);
+            aGrad = Engine.TensorMultiplyScalar(aGrad, _scaling);
+            _matricesAGradient[r] = aGrad.ToMatrix();
 
-            // Gradient for A[r]: Chain rule for Hadamard product in weight space
-            // dL/dA[r][i,o] = sum_batch(dL/dy[b,o] * dy/dA[r][i,o])
-            // where dy[b,o]/dA[r][i,o] = input[b,i] * B[r][i,o]
-            // Therefore: dL/dA[r][i,o] = sum_batch(gradOutput[b,o] * input[b,i] * B[r][i,o])
-            for (int i = 0; i < inputSize; i++)
-            {
-                for (int o = 0; o < outputSize; o++)
-                {
-                    T gradSum = NumOps.Zero;
-                    for (int b = 0; b < batchSize; b++)
-                    {
-                        T inputVal = inputMatrix[b, i];
-                        T bVal = _matricesB[r][i, o];
-                        T outputGrad = gradMatrix[b, o];
-                        // dL/dA = gradOutput * input * B (all element-wise for this specific element)
-                        T contribution = NumOps.Multiply(NumOps.Multiply(outputGrad, inputVal), bVal);
-                        gradSum = NumOps.Add(gradSum, contribution);
-                    }
-                    _matricesAGradient[r][i, o] = NumOps.Multiply(gradSum, _scaling);
-                }
-            }
-
-            // Input gradient contribution from this rank
-            // dL/dinput[b,i] = sum_o(dL/dy[b,o] * dy/dinput[b,i])
-            // where dy[b,o]/dinput[b,i] = sum_r(A[r][i,o] * B[r][i,o]) = ΔW[i,o]
-            // Therefore: dL/dinput[b,i] = sum_o(gradOutput[b,o] * ΔW[i,o])
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int i = 0; i < inputSize; i++)
-                {
-                    T gradSum = NumOps.Zero;
-                    for (int o = 0; o < outputSize; o++)
-                    {
-                        // For this specific rank r, contribution is gradOutput * (A[r] ⊙ B[r])
-                        T hadamardProduct = NumOps.Multiply(_matricesA[r][i, o], _matricesB[r][i, o]);
-                        T contribution = NumOps.Multiply(gradMatrix[b, o], hadamardProduct);
-                        gradSum = NumOps.Add(gradSum, contribution);
-                    }
-                    T scaled = NumOps.Multiply(gradSum, _scaling);
-                    inputGradMatrix[b, i] = NumOps.Add(inputGradMatrix[b, i], scaled);
-                }
-            }
+            // Input gradient: grad @ (A[r] ⊙ B[r])^T * scaling — vectorized
+            var hadamard = Engine.TensorMultiply(aTensor, bTensor);
+            var hadamardT = hadamard.Transpose(new[] { 1, 0 });
+            var rankInputGrad = Engine.TensorMatMul(gradTensorBW, hadamardT);
+            rankInputGrad = Engine.TensorMultiplyScalar(rankInputGrad, _scaling);
+            inputGradTensor = Engine.TensorAdd(inputGradTensor, rankInputGrad);
         }
 
-        // Convert input gradient back to tensor
-        Vector<T> inputGradData = new Vector<T>(batchSize * inputSize);
-        int idx = 0;
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < inputSize; i++)
-            {
-                inputGradData[idx++] = inputGradMatrix[b, i];
-            }
-        }
-
-        return new Tensor<T>(new[] { batchSize, inputSize }, inputGradData);
+        // Return input gradient tensor directly
+        return inputGradTensor.Reshape(batchSize, inputSize);
     }
 
 
