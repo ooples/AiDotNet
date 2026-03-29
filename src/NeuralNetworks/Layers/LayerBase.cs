@@ -81,6 +81,16 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         public static Tensor<T> Reshape(Tensor<T> a, int[] newShape) => DifferentiableOps<T>.Reshape(a, newShape);
         public static Tensor<T> Concatenate(Tensor<T>[] tensors, int axis = 0) => DifferentiableOps<T>.Concatenate(tensors, axis);
         public static Tensor<T> Dropout(Tensor<T> x, double p, bool training, Random? rng = null) => DifferentiableOps<T>.Dropout(x, p, training, rng);
+        public static Tensor<T> Softplus(Tensor<T> x, double beta = 1.0) => DifferentiableOps<T>.Softplus(x, beta);
+        public static Tensor<T> LogSoftmax(Tensor<T> x, int axis = -1) => DifferentiableOps<T>.LogSoftmax(x, axis);
+        public static Tensor<T> LeakyReLU(Tensor<T> x, double alpha = 0.01) => DifferentiableOps<T>.LeakyReLU(x, alpha);
+        public static Tensor<T> ELU(Tensor<T> x, double alpha = 1.0) => DifferentiableOps<T>.ELU(x, alpha);
+        public static Tensor<T> SELU(Tensor<T> x) => DifferentiableOps<T>.SELU(x);
+        public static Tensor<T> Mish(Tensor<T> x) => DifferentiableOps<T>.Mish(x);
+        public static Tensor<T> HardSigmoid(Tensor<T> x) => DifferentiableOps<T>.HardSigmoid(x);
+        public static Tensor<T> HardSwish(Tensor<T> x) => DifferentiableOps<T>.HardSwish(x);
+        public static Tensor<T> Permute(Tensor<T> a, int[] axes) => DifferentiableOps<T>.Permute(a, axes);
+        public static Tensor<T> Where(Tensor<T> condition, Tensor<T> x, Tensor<T> y) => DifferentiableOps<T>.Where(condition, x, y);
     }
 
     /// <summary>

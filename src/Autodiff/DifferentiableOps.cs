@@ -1406,4 +1406,356 @@ public static class DifferentiableOps<T>
             });
         return result;
     }
+
+    // ─── Additional ops (PyTorch parity) ────────────────────────────
+
+    /// <summary>Elementwise softplus: log(1 + exp(x)). Needed for VAE variance, smooth ReLU.</summary>
+    public static Tensor<T> Softplus(Tensor<T> x, double beta = 1.0, double threshold = 20.0)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
+        {
+            double xi = NumOps.ToDouble(x[i]) * beta;
+            result[i] = xi > threshold
+                ? x[i] // Linear for large values (numerical stability)
+                : NumOps.FromDouble(Math.Log(1.0 + Math.Exp(xi)) / beta);
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("Softplus", [x], result,
+                grad =>
+                {
+                    // d(softplus)/dx = sigmoid(beta * x)
+                    var dx = new Tensor<T>(x.Shape.ToArray());
+                    for (int i = 0; i < x.Length; i++)
+                    {
+                        double xi = NumOps.ToDouble(x[i]) * beta;
+                        double sig = xi > threshold ? 1.0 : 1.0 / (1.0 + Math.Exp(-xi));
+                        dx[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * sig);
+                    }
+                    return [dx];
+                });
+        }
+        return result;
+    }
+
+    /// <summary>Log-softmax with numerical stability: log(softmax(x)) = x - log(sum(exp(x))).</summary>
+    public static Tensor<T> LogSoftmax(Tensor<T> x, int axis = -1)
+    {
+        int rank = x.Shape.Length;
+        if (axis < 0) axis += rank;
+        int axisSize = x.Shape[axis];
+
+        // Compute along axis: logsoftmax = x - max(x) - log(sum(exp(x - max(x))))
+        var result = new Tensor<T>(x.Shape.ToArray());
+        int outerSize = 1, innerSize = 1;
+        for (int i = 0; i < axis; i++) outerSize *= x.Shape[i];
+        for (int i = axis + 1; i < rank; i++) innerSize *= x.Shape[i];
+
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int inner = 0; inner < innerSize; inner++)
+            {
+                // Find max for stability
+                double maxVal = double.NegativeInfinity;
+                for (int j = 0; j < axisSize; j++)
+                {
+                    int idx = (outer * axisSize + j) * innerSize + inner;
+                    double v = NumOps.ToDouble(x[idx]);
+                    if (v > maxVal) maxVal = v;
+                }
+
+                // Compute log-sum-exp
+                double logSumExp = 0;
+                for (int j = 0; j < axisSize; j++)
+                {
+                    int idx = (outer * axisSize + j) * innerSize + inner;
+                    logSumExp += Math.Exp(NumOps.ToDouble(x[idx]) - maxVal);
+                }
+                logSumExp = maxVal + Math.Log(logSumExp);
+
+                // LogSoftmax = x - logSumExp
+                for (int j = 0; j < axisSize; j++)
+                {
+                    int idx = (outer * axisSize + j) * innerSize + inner;
+                    result[idx] = NumOps.FromDouble(NumOps.ToDouble(x[idx]) - logSumExp);
+                }
+            }
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("LogSoftmax", [x], result,
+                grad =>
+                {
+                    // d(logsoftmax)/dx = grad - softmax * sum(grad, axis)
+                    var dx = new Tensor<T>(x.Shape.ToArray());
+                    for (int outer = 0; outer < outerSize; outer++)
+                    {
+                        for (int inner = 0; inner < innerSize; inner++)
+                        {
+                            double sumGrad = 0;
+                            for (int j = 0; j < axisSize; j++)
+                            {
+                                int idx = (outer * axisSize + j) * innerSize + inner;
+                                sumGrad += NumOps.ToDouble(grad[idx]);
+                            }
+                            for (int j = 0; j < axisSize; j++)
+                            {
+                                int idx = (outer * axisSize + j) * innerSize + inner;
+                                double softmax_j = Math.Exp(NumOps.ToDouble(result[idx]));
+                                dx[idx] = NumOps.FromDouble(
+                                    NumOps.ToDouble(grad[idx]) - softmax_j * sumGrad);
+                            }
+                        }
+                    }
+                    return [dx];
+                });
+        }
+        return result;
+    }
+
+    /// <summary>Elementwise LeakyReLU: max(alpha*x, x).</summary>
+    public static Tensor<T> LeakyReLU(Tensor<T> x, double alpha = 0.01)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        var tape = GradientTape<T>.Current;
+        byte[]? mask = tape is not null ? new byte[x.Length] : null;
+
+        for (int i = 0; i < x.Length; i++)
+        {
+            double val = NumOps.ToDouble(x[i]);
+            result[i] = val >= 0 ? x[i] : NumOps.FromDouble(val * alpha);
+            if (mask is not null) mask[i] = val >= 0 ? (byte)1 : (byte)0;
+        }
+
+        if (tape is not null)
+        {
+            var capturedMask = mask;
+            tape.RecordOp("LeakyReLU", [x], result,
+                grad =>
+                {
+                    var dx = new Tensor<T>(grad.Shape.ToArray());
+                    for (int i = 0; i < grad.Length; i++)
+                        dx[i] = capturedMask![i] == 1
+                            ? grad[i]
+                            : NumOps.FromDouble(NumOps.ToDouble(grad[i]) * alpha);
+                    return [dx];
+                });
+        }
+        return result;
+    }
+
+    /// <summary>Elementwise ELU: x if x >= 0, alpha*(exp(x)-1) otherwise.</summary>
+    public static Tensor<T> ELU(Tensor<T> x, double alpha = 1.0)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
+        {
+            double val = NumOps.ToDouble(x[i]);
+            result[i] = val >= 0 ? x[i] : NumOps.FromDouble(alpha * (Math.Exp(val) - 1.0));
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("ELU", [x], result,
+                grad =>
+                {
+                    var dx = new Tensor<T>(x.Shape.ToArray());
+                    for (int i = 0; i < x.Length; i++)
+                    {
+                        double val = NumOps.ToDouble(x[i]);
+                        double deriv = val >= 0 ? 1.0 : NumOps.ToDouble(result[i]) + alpha;
+                        dx[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * deriv);
+                    }
+                    return [dx];
+                });
+        }
+        return result;
+    }
+
+    /// <summary>Elementwise SELU (scaled ELU for self-normalizing networks).</summary>
+    public static Tensor<T> SELU(Tensor<T> x)
+    {
+        const double lambdaSelu = 1.0507009873554804934193349852946;
+        const double alphaSelu = 1.6732632423543772848170429916717;
+
+        var result = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
+        {
+            double val = NumOps.ToDouble(x[i]);
+            result[i] = val >= 0
+                ? NumOps.FromDouble(lambdaSelu * val)
+                : NumOps.FromDouble(lambdaSelu * alphaSelu * (Math.Exp(val) - 1.0));
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("SELU", [x], result,
+                grad =>
+                {
+                    var dx = new Tensor<T>(x.Shape.ToArray());
+                    for (int i = 0; i < x.Length; i++)
+                    {
+                        double val = NumOps.ToDouble(x[i]);
+                        double deriv = val >= 0 ? lambdaSelu : lambdaSelu * alphaSelu * Math.Exp(val);
+                        dx[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * deriv);
+                    }
+                    return [dx];
+                });
+        }
+        return result;
+    }
+
+    /// <summary>Permute tensor dimensions (generalized transpose for any rank).</summary>
+    public static Tensor<T> Permute(Tensor<T> a, int[] axes)
+    {
+        var result = a.Transpose(axes);
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            // Inverse permutation: if forward is perm[i] = j, backward is inv[j] = i
+            var inverse = new int[axes.Length];
+            for (int i = 0; i < axes.Length; i++) inverse[axes[i]] = i;
+            tape.RecordOp("Permute", [a], result,
+                grad => [grad.Transpose(inverse)]);
+        }
+        return result;
+    }
+
+    /// <summary>Where/select: out[i] = condition[i] ? x[i] : y[i].</summary>
+    public static Tensor<T> Where(Tensor<T> condition, Tensor<T> x, Tensor<T> y)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
+        {
+            bool cond = NumOps.ToDouble(condition[i]) != 0;
+            result[i] = cond ? x[i] : y[i];
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("Where", [x, y], result,
+                grad =>
+                {
+                    var gradX = new Tensor<T>(x.Shape.ToArray());
+                    var gradY = new Tensor<T>(y.Shape.ToArray());
+                    for (int i = 0; i < grad.Length; i++)
+                    {
+                        bool cond = NumOps.ToDouble(condition[i]) != 0;
+                        gradX[i] = cond ? grad[i] : NumOps.Zero;
+                        gradY[i] = cond ? NumOps.Zero : grad[i];
+                    }
+                    return [gradX, gradY];
+                });
+        }
+        return result;
+    }
+
+    /// <summary>Mish activation: x * tanh(softplus(x)).</summary>
+    public static Tensor<T> Mish(Tensor<T> x)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
+        {
+            double xi = NumOps.ToDouble(x[i]);
+            double sp = Math.Log(1.0 + Math.Exp(xi));
+            result[i] = NumOps.FromDouble(xi * Math.Tanh(sp));
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("Mish", [x], result,
+                grad =>
+                {
+                    // Mish'(x) = tanh(sp) + x * sech²(sp) * sigmoid(x)
+                    // where sp = softplus(x) = log(1 + exp(x))
+                    var dx = new Tensor<T>(x.Shape.ToArray());
+                    for (int i = 0; i < x.Length; i++)
+                    {
+                        double xi = NumOps.ToDouble(x[i]);
+                        double sp = Math.Log(1.0 + Math.Exp(xi));
+                        double tanhSp = Math.Tanh(sp);
+                        double sech2Sp = 1.0 - tanhSp * tanhSp;
+                        double sig = 1.0 / (1.0 + Math.Exp(-xi));
+                        double deriv = tanhSp + xi * sech2Sp * sig;
+                        dx[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * deriv);
+                    }
+                    return [dx];
+                });
+        }
+        return result;
+    }
+
+    /// <summary>HardSigmoid: clamp((x + 3) / 6, 0, 1). Mobile-optimized activation.</summary>
+    public static Tensor<T> HardSigmoid(Tensor<T> x)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        var tape = GradientTape<T>.Current;
+        byte[]? mask = tape is not null ? new byte[x.Length] : null;
+
+        for (int i = 0; i < x.Length; i++)
+        {
+            double val = NumOps.ToDouble(x[i]);
+            double hs = Math.Max(0, Math.Min(1, (val + 3.0) / 6.0));
+            result[i] = NumOps.FromDouble(hs);
+            if (mask is not null)
+                mask[i] = (val > -3.0 && val < 3.0) ? (byte)1 : (byte)0;
+        }
+
+        if (tape is not null)
+        {
+            tape.RecordOp("HardSigmoid", [x], result,
+                grad =>
+                {
+                    var dx = new Tensor<T>(grad.Shape.ToArray());
+                    for (int i = 0; i < grad.Length; i++)
+                        dx[i] = mask![i] == 1
+                            ? NumOps.FromDouble(NumOps.ToDouble(grad[i]) / 6.0)
+                            : NumOps.Zero;
+                    return [dx];
+                });
+        }
+        return result;
+    }
+
+    /// <summary>HardSwish: x * HardSigmoid(x). Mobile-optimized activation.</summary>
+    public static Tensor<T> HardSwish(Tensor<T> x)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
+        {
+            double val = NumOps.ToDouble(x[i]);
+            double hs = Math.Max(0, Math.Min(1, (val + 3.0) / 6.0));
+            result[i] = NumOps.FromDouble(val * hs);
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("HardSwish", [x], result,
+                grad =>
+                {
+                    var dx = new Tensor<T>(x.Shape.ToArray());
+                    for (int i = 0; i < x.Length; i++)
+                    {
+                        double val = NumOps.ToDouble(x[i]);
+                        double deriv;
+                        if (val <= -3.0) deriv = 0;
+                        else if (val >= 3.0) deriv = 1;
+                        else deriv = (2.0 * val + 3.0) / 6.0;
+                        dx[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * deriv);
+                    }
+                    return [dx];
+                });
+        }
+        return result;
+    }
 }
