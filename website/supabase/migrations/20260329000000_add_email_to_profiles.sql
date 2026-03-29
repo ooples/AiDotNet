@@ -54,6 +54,13 @@ create trigger on_auth_user_email_update
   after update of email on auth.users
   for each row execute function public.handle_user_email_update();
 
+-- Close the migration window for emails changed before the trigger existed.
+update public.profiles p
+set email = u.email
+from auth.users u
+where p.id = u.id
+  and p.email is distinct from u.email;
+
 -- ============================================================================
 -- 2. Fix RLS role escalation vulnerability
 --    The existing WITH CHECK uses a subquery on profiles which runs under RLS,
