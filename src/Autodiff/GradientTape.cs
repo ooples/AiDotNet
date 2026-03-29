@@ -138,7 +138,7 @@ public sealed class GradientTape<T> : IDisposable
     {
         node.RequiresGradient = true;
         Watch(node.Value);
-        _watchedNodes_compat.Add(node);
+        lock (_opsLock) { _watchedNodes_compat.Add(node); }
     }
 
     /// <summary>
@@ -155,9 +155,9 @@ public sealed class GradientTape<T> : IDisposable
     /// </summary>
     public void RecordOperation(ComputationNode<T> node)
     {
-        // Old API — no-op in new tape. ComputationNode backward is self-contained.
-        if (!IsRecording) return;
-        _ops.Add(new TapeEntry(
+        // Old API — bridge from ComputationNode to tape.
+        if (!IsRecording || NoGradScope<T>.IsSuppressed) return;
+        lock (_opsLock) { _ops.Add(new TapeEntry(
             node.Name ?? "node",
             node.Parents.Select(p => p.Value).ToArray(),
             node.Value,
@@ -166,7 +166,7 @@ public sealed class GradientTape<T> : IDisposable
                 node.Gradient = grad;
                 node.BackwardFunction?.Invoke(grad);
                 return node.Parents.Select(p => p.Gradient ?? new Tensor<T>(p.Value.Shape.ToArray())).ToArray();
-            }));
+            })); }
     }
 
     /// <summary>
@@ -337,10 +337,14 @@ public sealed class GradientTape<T> : IDisposable
         var seed = Tensor<T>.CreateDefault(loss.Shape.ToArray(), numOps.One);
         grads[loss] = seed;
 
+        // Snapshot ops under lock (another thread may be recording concurrently)
+        TapeEntry[] opsSnapshot;
+        lock (_opsLock) { opsSnapshot = _ops.ToArray(); }
+
         // Walk tape in reverse (reverse topological order by construction)
-        for (int i = _ops.Count - 1; i >= 0; i--)
+        for (int i = opsSnapshot.Length - 1; i >= 0; i--)
         {
-            var entry = _ops[i];
+            var entry = opsSnapshot[i];
 
             // Skip if this op's output has no gradient (not on the path from loss)
             if (!grads.TryGetValue(entry.Output, out var outputGrad))
