@@ -179,6 +179,13 @@ public class WeightedRegression<T> : RegressionBase<T>
         var weightMatrix = Matrix<T>.CreateDiagonal(weights);
         var xTWx = expandedX.Transpose().Multiply(weightMatrix).Multiply(expandedX);
         var regularizedXTWx = xTWx.Add(Regularization.Regularize(xTWx));
+
+        // Add small ridge for numerical stability (prevents singularity with collinear features)
+        for (int i = 0; i < regularizedXTWx.Rows; i++)
+        {
+            regularizedXTWx[i, i] = NumOps.Add(regularizedXTWx[i, i], NumOps.FromDouble(1e-10));
+        }
+
         var xTWy = expandedX.Transpose().Multiply(weightMatrix).Multiply(y);
 
         var solution = SolveSystem(regularizedXTWx, xTWy);
