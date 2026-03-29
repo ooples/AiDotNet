@@ -175,4 +175,29 @@ public class SiTPredictor<T> : NoisePredictorBase<T>
         layer.SetParameters(new Vector<T>(p));
         return offset + count;
     }
+
+    protected override void Backpropagate(Tensor<T> lossGradient)
+    {
+        var (_, embed, blocks, final_) = EnsureInitialized();
+        var grad = final_.Backward(lossGradient);
+        for (int i = blocks.Length - 1; i >= 0; i--)
+            grad = blocks[i].Backward(grad);
+        embed.Backward(grad);
+    }
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var (_, embed, blocks, final_) = EnsureInitialized();
+        var allGrads = new List<T>();
+        AddGrads(allGrads, embed);
+        foreach (var b in blocks) AddGrads(allGrads, b);
+        AddGrads(allGrads, final_);
+        return new Vector<T>(allGrads.ToArray());
+    }
+
+    private static void AddGrads(List<T> list, DenseLayer<T> layer)
+    {
+        var g = layer.GetParameterGradients();
+        for (int i = 0; i < g.Length; i++) list.Add(g[i]);
+    }
 }

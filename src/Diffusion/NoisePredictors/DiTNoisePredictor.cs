@@ -1134,6 +1134,82 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
+    protected override void Backpropagate(Tensor<T> lossGradient)
+    {
+        EnsureLayersInitialized();
+        var grad = lossGradient;
+
+        // Final layers backward
+        if (_outputProj != null) grad = _outputProj.Backward(grad);
+        if (_adaln_modulation != null) _adaln_modulation.Backward(grad);
+        if (_finalNorm != null) grad = _finalNorm.Backward(grad);
+
+        // Transformer blocks backward (reverse order)
+        for (int i = _blocks.Count - 1; i >= 0; i--)
+        {
+            var block = _blocks[i];
+            // Cross-attention backward
+            if (block.CrossAttnOut != null) grad = block.CrossAttnOut.Backward(grad);
+            if (block.CrossAttnV != null) block.CrossAttnV.Backward(grad);
+            if (block.CrossAttnK != null) block.CrossAttnK.Backward(grad);
+            if (block.CrossAttnQ != null) grad = block.CrossAttnQ.Backward(grad);
+            if (block.CrossAttnNorm != null) grad = block.CrossAttnNorm.Backward(grad);
+            // MLP backward
+            if (block.AdaLNModulation != null) block.AdaLNModulation.Backward(grad);
+            if (block.MLP2 != null) grad = block.MLP2.Backward(grad);
+            if (block.MLP1 != null) grad = block.MLP1.Backward(grad);
+            if (block.Norm2 != null) grad = block.Norm2.Backward(grad);
+            // Attention backward
+            if (block.Attention != null) grad = block.Attention.Backward(grad);
+            if (block.Norm1 != null) grad = block.Norm1.Backward(grad);
+        }
+
+        // Embedding layers backward
+        if (_labelEmbed != null) _labelEmbed.Backward(grad);
+        if (_timeEmbed2 != null) _timeEmbed2.Backward(grad);
+        if (_timeEmbed1 != null) _timeEmbed1.Backward(grad);
+        if (_patchEmbed != null) _patchEmbed.Backward(grad);
+    }
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        EnsureLayersInitialized();
+        var allGrads = new List<T>();
+
+        AddLayerGrads(allGrads, _patchEmbed);
+        AddLayerGrads(allGrads, _timeEmbed1);
+        AddLayerGrads(allGrads, _timeEmbed2);
+        AddLayerGrads(allGrads, _labelEmbed);
+
+        foreach (var block in _blocks)
+        {
+            AddLayerGrads(allGrads, block.Norm1);
+            AddLayerGrads(allGrads, block.Attention);
+            AddLayerGrads(allGrads, block.Norm2);
+            AddLayerGrads(allGrads, block.MLP1);
+            AddLayerGrads(allGrads, block.MLP2);
+            AddLayerGrads(allGrads, block.AdaLNModulation);
+            AddLayerGrads(allGrads, block.CrossAttnNorm);
+            AddLayerGrads(allGrads, block.CrossAttnQ);
+            AddLayerGrads(allGrads, block.CrossAttnK);
+            AddLayerGrads(allGrads, block.CrossAttnV);
+            AddLayerGrads(allGrads, block.CrossAttnOut);
+        }
+
+        AddLayerGrads(allGrads, _finalNorm);
+        AddLayerGrads(allGrads, _adaln_modulation);
+        AddLayerGrads(allGrads, _outputProj);
+
+        return new Vector<T>(allGrads.ToArray());
+    }
+
+    private static void AddLayerGrads(List<T> list, ILayer<T>? layer)
+    {
+        if (layer == null) return;
+        var g = layer.GetParameterGradients();
+        for (int i = 0; i < g.Length; i++) list.Add(g[i]);
+    }
+
     /// <summary>
     /// Block structure for DiT transformer layers containing attention, MLP, and conditioning layers.
     /// </summary>
