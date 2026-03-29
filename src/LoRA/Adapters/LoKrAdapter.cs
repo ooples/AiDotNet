@@ -462,35 +462,29 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
     private Matrix<T> KroneckerGradientA(Matrix<T> input, Matrix<T> outputGrad, Matrix<T> matrixB)
     {
         int batchSize = input.Rows;
-        Matrix<T> gradA = new Matrix<T>(_dimsA.m, _dimsA.n);
 
-        // Reshape output gradient into blocks and compute gradient for A
-        // This uses the property that ∂(A ⊗ B)/∂A can be computed efficiently
+        // Compute full outer product: G = outputGrad^T @ input via Engine.TensorMatMul
+        // G has shape [outputSize, inputSize] = [mA*pB, nA*qB]
+        var gradT = Tensor<T>.FromMatrix(outputGrad).Transpose(new[] { 1, 0 });
+        var inputT = Tensor<T>.FromMatrix(input);
+        var fullGrad = Engine.TensorMatMul(gradT, inputT); // [mA*pB, nA*qB]
+
+        // Contract with B to get gradA: gradA[i,j] = sum_p,q(fullGrad[i*pB+p, j*qB+q] * B[p,q])
+        Matrix<T> gradA = new Matrix<T>(_dimsA.m, _dimsA.n);
         for (int i = 0; i < _dimsA.m; i++)
         {
             for (int j = 0; j < _dimsA.n; j++)
             {
                 T sum = NumOps.Zero;
-
-                for (int batch = 0; batch < batchSize; batch++)
+                for (int p = 0; p < _dimsB.p; p++)
                 {
-                    // Extract the corresponding block from output gradient
-                    for (int p = 0; p < _dimsB.p; p++)
+                    for (int q = 0; q < _dimsB.q; q++)
                     {
-                        for (int q = 0; q < _dimsB.q; q++)
-                        {
-                            int outRow = i * _dimsB.p + p;
-                            int inCol = j * _dimsB.q + q;
-
-                            T grad = outputGrad[batch, outRow];
-                            T inp = input[batch, inCol];
-                            T b = matrixB[p, q];
-
-                            sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(grad, inp), b));
-                        }
+                        int outIdx = i * _dimsB.p + p;
+                        int inIdx = j * _dimsB.q + q;
+                        sum = NumOps.Add(sum, NumOps.Multiply(fullGrad[outIdx, inIdx], matrixB[p, q]));
                     }
                 }
-
                 gradA[i, j] = sum;
             }
         }
@@ -510,35 +504,28 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     private Matrix<T> KroneckerGradientB(Matrix<T> input, Matrix<T> outputGrad, Matrix<T> matrixA)
     {
-        int batchSize = input.Rows;
-        Matrix<T> gradB = new Matrix<T>(_dimsB.p, _dimsB.q);
+        // Compute full outer product: G = outputGrad^T @ input via Engine.TensorMatMul
+        // G has shape [outputSize, inputSize] = [mA*pB, nA*qB]
+        var gradT = Tensor<T>.FromMatrix(outputGrad).Transpose(new[] { 1, 0 });
+        var inputT = Tensor<T>.FromMatrix(input);
+        var fullGrad = Engine.TensorMatMul(gradT, inputT); // [mA*pB, nA*qB]
 
-        // Compute gradient for B using Kronecker product properties
+        // Contract with A to get gradB: gradB[p,q] = sum_i,j(fullGrad[i*pB+p, j*qB+q] * A[i,j])
+        Matrix<T> gradB = new Matrix<T>(_dimsB.p, _dimsB.q);
         for (int p = 0; p < _dimsB.p; p++)
         {
             for (int q = 0; q < _dimsB.q; q++)
             {
                 T sum = NumOps.Zero;
-
-                for (int batch = 0; batch < batchSize; batch++)
+                for (int i = 0; i < _dimsA.m; i++)
                 {
-                    // Extract the corresponding elements using Kronecker structure
-                    for (int i = 0; i < _dimsA.m; i++)
+                    for (int j = 0; j < _dimsA.n; j++)
                     {
-                        for (int j = 0; j < _dimsA.n; j++)
-                        {
-                            int outRow = i * _dimsB.p + p;
-                            int inCol = j * _dimsB.q + q;
-
-                            T grad = outputGrad[batch, outRow];
-                            T inp = input[batch, inCol];
-                            T a = matrixA[i, j];
-
-                            sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(grad, inp), a));
-                        }
+                        int outIdx = i * _dimsB.p + p;
+                        int inIdx = j * _dimsB.q + q;
+                        sum = NumOps.Add(sum, NumOps.Multiply(fullGrad[outIdx, inIdx], matrixA[i, j]));
                     }
                 }
-
                 gradB[p, q] = sum;
             }
         }

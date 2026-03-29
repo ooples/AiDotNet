@@ -465,66 +465,76 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Discriminator weights not initialized.");
         }
 
-        // Gradient through output layer - compute gradient using ORIGINAL weights before updating
-        var dH2 = new Vector<T>(_hiddenDim);
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            // Capture original weight for gradient computation
-            T origW3 = discW3[i, 0];
-            dH2[i] = NumOps.Multiply(origW3, NumOps.FromDouble(dOut));
-            // Now update the weight
-            T grad = NumOps.Multiply(h2[i], NumOps.FromDouble(dOut));
-            discW3[i, 0] = NumOps.Subtract(discW3[i, 0], NumOps.FromDouble(lr * NumOps.ToDouble(grad)));
-        }
-        discB3[0] = NumOps.Subtract(discB3[0], NumOps.FromDouble(lr * dOut));
+        T lrT = NumOps.FromDouble(lr);
+        T dOutT = NumOps.FromDouble(dOut);
+        T leakySlope = NumOps.FromDouble(0.2);
+
+        // === Phase 1: Compute ALL gradients using original weights ===
+
+        // Layer 3 gradient: dH2 = W3 @ dOut (W3 is [hiddenDim, 1], dOut is scalar)
+        // dH2[i] = W3[i,0] * dOut — vectorized: column of W3 * scalar
+        var w3Col = new Vector<T>(_hiddenDim);
+        for (int i = 0; i < _hiddenDim; i++) w3Col[i] = discW3[i, 0];
+        var dH2 = (Vector<T>)Engine.Multiply(w3Col, dOutT);
 
         // LeakyReLU derivative for h2
         for (int i = 0; i < _hiddenDim; i++)
         {
             if (NumOps.LessThan(h2[i], NumOps.Zero))
-                dH2[i] = NumOps.Multiply(dH2[i], NumOps.FromDouble(0.2));
+                dH2[i] = NumOps.Multiply(dH2[i], leakySlope);
         }
 
-        // Gradient through layer 2 - compute gradient using ORIGINAL weights before updating
-        var dH1 = new Vector<T>(_hiddenDim);
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            dH1[i] = NumOps.Zero;
-            for (int j = 0; j < _hiddenDim; j++)
-            {
-                // Capture original weight for gradient computation
-                T origW2 = discW2[i, j];
-                dH1[i] = NumOps.Add(dH1[i], NumOps.Multiply(origW2, dH2[j]));
-                // Now update the weight
-                T grad = NumOps.Multiply(h1[i], dH2[j]);
-                discW2[i, j] = NumOps.Subtract(discW2[i, j], NumOps.FromDouble(lr * NumOps.ToDouble(grad)));
-            }
-        }
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            discB2[j] = NumOps.Subtract(discB2[j], NumOps.FromDouble(lr * NumOps.ToDouble(dH2[j])));
-        }
+        // Layer 2 gradient: dH1 = W2^T @ dH2 — vectorized matmul
+        var w2Tensor = Tensor<T>.FromMatrix(discW2);
+        var dH2Tensor = Tensor<T>.FromVector(dH2).Reshape(_hiddenDim, 1);
+        var dH1Tensor = Engine.TensorMatMul(w2Tensor, dH2Tensor).Reshape(_hiddenDim);
+        var dH1 = dH1Tensor.ToVector();
 
         // LeakyReLU derivative for h1
         for (int i = 0; i < _hiddenDim; i++)
         {
             if (NumOps.LessThan(h1[i], NumOps.Zero))
-                dH1[i] = NumOps.Multiply(dH1[i], NumOps.FromDouble(0.2));
+                dH1[i] = NumOps.Multiply(dH1[i], leakySlope);
         }
 
-        // Gradient through layer 1
-        for (int i = 0; i < _inputDim; i++)
-        {
+        // === Phase 2: Compute weight gradients and apply updates ===
+
+        // Layer 3 weight gradient: dW3 = h2 * dOut, then W3 -= lr * dW3
+        var dW3 = (Vector<T>)Engine.Multiply(h2, dOutT);
+        for (int i = 0; i < _hiddenDim; i++)
+            discW3[i, 0] = NumOps.Subtract(discW3[i, 0], NumOps.Multiply(lrT, dW3[i]));
+        discB3[0] = NumOps.Subtract(discB3[0], NumOps.Multiply(lrT, dOutT));
+
+        // Layer 2 weight gradient: dW2 = h1 @ dH2^T (outer product), then W2 -= lr * dW2
+        var h1Tensor = Tensor<T>.FromVector(h1).Reshape(_hiddenDim, 1);
+        var dH2Row = Tensor<T>.FromVector(dH2).Reshape(1, _hiddenDim);
+        var dW2 = Engine.TensorMatMul(h1Tensor, dH2Row);
+        var w2Update = Engine.TensorMultiplyScalar(dW2, lrT);
+        var updatedW2 = Engine.TensorSubtract(w2Tensor, w2Update);
+        for (int i = 0; i < _hiddenDim; i++)
             for (int j = 0; j < _hiddenDim; j++)
-            {
-                T grad = NumOps.Multiply(x[i], dH1[j]);
-                discW1[i, j] = NumOps.Subtract(discW1[i, j], NumOps.FromDouble(lr * NumOps.ToDouble(grad)));
-            }
-        }
+                discW2[i, j] = updatedW2[i, j];
+
+        // Layer 2 bias gradient: dB2 = dH2, then B2 -= lr * dB2
+        var scaledDH2 = (Vector<T>)Engine.Multiply(dH2, lrT);
         for (int j = 0; j < _hiddenDim; j++)
-        {
-            discB1[j] = NumOps.Subtract(discB1[j], NumOps.FromDouble(lr * NumOps.ToDouble(dH1[j])));
-        }
+            discB2[j] = NumOps.Subtract(discB2[j], scaledDH2[j]);
+
+        // Layer 1 weight gradient: dW1 = x @ dH1^T (outer product), then W1 -= lr * dW1
+        var xTensor = Tensor<T>.FromVector(x).Reshape(_inputDim, 1);
+        var dH1Row = Tensor<T>.FromVector(dH1).Reshape(1, _hiddenDim);
+        var dW1 = Engine.TensorMatMul(xTensor, dH1Row);
+        var w1Tensor = Tensor<T>.FromMatrix(discW1);
+        var w1Update = Engine.TensorMultiplyScalar(dW1, lrT);
+        var updatedW1 = Engine.TensorSubtract(w1Tensor, w1Update);
+        for (int i = 0; i < _inputDim; i++)
+            for (int j = 0; j < _hiddenDim; j++)
+                discW1[i, j] = updatedW1[i, j];
+
+        // Layer 1 bias gradient: dB1 = dH1, then B1 -= lr * dB1
+        var scaledDH1 = (Vector<T>)Engine.Multiply(dH1, lrT);
+        for (int j = 0; j < _hiddenDim; j++)
+            discB1[j] = NumOps.Subtract(discB1[j], scaledDH1[j]);
     }
 
     private void UpdateGenerator(Vector<T> z)
@@ -607,54 +617,47 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Discriminator weights not initialized.");
         }
 
-        // Gradient through output layer
-        var dH2 = new Vector<T>(_hiddenDim);
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            dH2[i] = NumOps.Multiply(discW3[i, 0], NumOps.FromDouble(dOut));
-        }
+        T leakySlope = NumOps.FromDouble(0.2);
+
+        // Gradient through output layer: dH2 = W3[:,0] * dOut — vectorized
+        var w3ColVec = new Vector<T>(_hiddenDim);
+        for (int i = 0; i < _hiddenDim; i++) w3ColVec[i] = discW3[i, 0];
+        var dH2 = (Vector<T>)Engine.Multiply(w3ColVec, NumOps.FromDouble(dOut));
 
         // LeakyReLU derivative for h2
         for (int i = 0; i < _hiddenDim; i++)
         {
             if (NumOps.LessThan(h2[i], NumOps.Zero))
-                dH2[i] = NumOps.Multiply(dH2[i], NumOps.FromDouble(0.2));
+                dH2[i] = NumOps.Multiply(dH2[i], leakySlope);
         }
 
-        // Recompute h1
+        // Recompute h1: h1 = LeakyReLU(x @ W1 + b1) — vectorized matmul
+        var xTensor = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
+        var w1Tensor = Tensor<T>.FromMatrix(discW1);
+        var h1Pre = Engine.TensorMatMul(xTensor, w1Tensor).Reshape(_hiddenDim);
+        var h1PreVec = h1Pre.ToVector();
         var h1 = new Vector<T>(_hiddenDim);
         for (int j = 0; j < _hiddenDim; j++)
         {
-            T sum = discB1[j];
-            { var wCol_10 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_10[ii] = discW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_10)); }
-            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
-            h1[j] = NumOps.FromDouble(leakyVal);
+            T val = NumOps.Add(h1PreVec[j], discB1[j]);
+            h1[j] = NumOps.FromDouble(LeakyReLU(NumOps.ToDouble(val)));
         }
 
-        // Gradient through layer 2 using Engine.DotProduct
-        var dH1 = new Vector<T>(_hiddenDim);
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            var wRow = new Vector<T>(_hiddenDim);
-            for (int j = 0; j < _hiddenDim; j++) wRow[j] = discW2[i, j];
-            dH1[i] = Engine.DotProduct(wRow, dH2);
-        }
+        // Gradient through layer 2: dH1 = W2 @ dH2 — vectorized matmul
+        var w2Tensor = Tensor<T>.FromMatrix(discW2);
+        var dH2Col = Tensor<T>.FromVector(dH2).Reshape(_hiddenDim, 1);
+        var dH1 = Engine.TensorMatMul(w2Tensor, dH2Col).Reshape(_hiddenDim).ToVector();
 
         // LeakyReLU derivative for h1
         for (int i = 0; i < _hiddenDim; i++)
         {
             if (NumOps.LessThan(h1[i], NumOps.Zero))
-                dH1[i] = NumOps.Multiply(dH1[i], NumOps.FromDouble(0.2));
+                dH1[i] = NumOps.Multiply(dH1[i], leakySlope);
         }
 
-        // Gradient through layer 1 to input using Engine.DotProduct
-        var dX = new Vector<T>(_inputDim);
-        for (int i = 0; i < _inputDim; i++)
-        {
-            var wRow1 = new Vector<T>(_hiddenDim);
-            for (int j = 0; j < _hiddenDim; j++) wRow1[j] = discW1[i, j];
-            dX[i] = Engine.DotProduct(wRow1, dH1);
-        }
+        // Gradient through layer 1 to input: dX = W1 @ dH1 — vectorized matmul
+        var dH1Col = Tensor<T>.FromVector(dH1).Reshape(_hiddenDim, 1);
+        var dX = Engine.TensorMatMul(w1Tensor, dH1Col).Reshape(_inputDim).ToVector();
 
         return dX;
     }
@@ -674,92 +677,87 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Generator weights not initialized.");
         }
 
-        // Recompute output layer values for tanh derivative
-        var output = new Vector<T>(_inputDim);
-        for (int j = 0; j < _inputDim; j++)
-        {
-            T sum = genB3[j];
-            { var wCol_11 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_11[ii] = genW3[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h2, wCol_11)); }
-            double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
-            output[j] = NumOps.FromDouble(tanhVal);
-        }
+        T lrT = NumOps.FromDouble(lr);
+        T leakySlope = NumOps.FromDouble(0.2);
 
-        // Apply tanh derivative
+        // Recompute output layer: output = tanh(h2 @ W3 + b3) — vectorized matmul
+        var h2Tensor = Tensor<T>.FromVector(h2).Reshape(1, _hiddenDim);
+        var w3Tensor = Tensor<T>.FromMatrix(genW3);
+        var outputPre = Engine.TensorMatMul(h2Tensor, w3Tensor).Reshape(_inputDim);
+        var output = new Vector<T>(_inputDim);
         var dOutputPre = new Vector<T>(_inputDim);
         for (int j = 0; j < _inputDim; j++)
         {
-            double outVal = NumOps.ToDouble(output[j]);
-            double tanhDeriv = 1 - outVal * outVal;
+            T pre = NumOps.Add(outputPre[j], genB3[j]);
+            double tanhVal = Math.Tanh(NumOps.ToDouble(pre));
+            output[j] = NumOps.FromDouble(tanhVal);
+            double tanhDeriv = 1 - tanhVal * tanhVal;
             dOutputPre[j] = NumOps.Multiply(dOutput[j], NumOps.FromDouble(tanhDeriv));
         }
 
-        // Gradient through output layer - compute gradient using ORIGINAL weights before updating
-        var dH2 = new Vector<T>(_hiddenDim);
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            dH2[i] = NumOps.Zero;
-            for (int j = 0; j < _inputDim; j++)
-            {
-                // Capture original weight for gradient computation
-                T origW3 = genW3[i, j];
-                dH2[i] = NumOps.Add(dH2[i], NumOps.Multiply(origW3, dOutputPre[j]));
-                // Now update the weight
-                T grad = NumOps.Multiply(h2[i], dOutputPre[j]);
-                genW3[i, j] = NumOps.Subtract(genW3[i, j], NumOps.FromDouble(lr * NumOps.ToDouble(grad)));
-            }
-        }
-        for (int j = 0; j < _inputDim; j++)
-        {
-            genB3[j] = NumOps.Subtract(genB3[j], NumOps.FromDouble(lr * NumOps.ToDouble(dOutputPre[j])));
-        }
+        // === Phase 1: Compute ALL gradients using original weights ===
+
+        // Layer 3 gradient: dH2 = W3 @ dOutputPre — vectorized matmul
+        var dOutPreCol = Tensor<T>.FromVector(dOutputPre).Reshape(_inputDim, 1);
+        var dH2 = Engine.TensorMatMul(w3Tensor, dOutPreCol).Reshape(_hiddenDim).ToVector();
 
         // LeakyReLU derivative for h2
         for (int i = 0; i < _hiddenDim; i++)
         {
             if (NumOps.LessThan(h2[i], NumOps.Zero))
-                dH2[i] = NumOps.Multiply(dH2[i], NumOps.FromDouble(0.2));
+                dH2[i] = NumOps.Multiply(dH2[i], leakySlope);
         }
 
-        // Gradient through layer 2 - compute gradient using ORIGINAL weights before updating
-        var dH1 = new Vector<T>(_hiddenDim);
-        for (int i = 0; i < _hiddenDim; i++)
-        {
-            dH1[i] = NumOps.Zero;
-            for (int j = 0; j < _hiddenDim; j++)
-            {
-                // Capture original weight for gradient computation
-                T origW2 = genW2[i, j];
-                dH1[i] = NumOps.Add(dH1[i], NumOps.Multiply(origW2, dH2[j]));
-                // Now update the weight
-                T grad = NumOps.Multiply(h1[i], dH2[j]);
-                genW2[i, j] = NumOps.Subtract(genW2[i, j], NumOps.FromDouble(lr * NumOps.ToDouble(grad)));
-            }
-        }
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            genB2[j] = NumOps.Subtract(genB2[j], NumOps.FromDouble(lr * NumOps.ToDouble(dH2[j])));
-        }
+        // Layer 2 gradient: dH1 = W2 @ dH2 — vectorized matmul
+        var w2Tensor = Tensor<T>.FromMatrix(genW2);
+        var dH2Col = Tensor<T>.FromVector(dH2).Reshape(_hiddenDim, 1);
+        var dH1 = Engine.TensorMatMul(w2Tensor, dH2Col).Reshape(_hiddenDim).ToVector();
 
         // LeakyReLU derivative for h1
         for (int i = 0; i < _hiddenDim; i++)
         {
             if (NumOps.LessThan(h1[i], NumOps.Zero))
-                dH1[i] = NumOps.Multiply(dH1[i], NumOps.FromDouble(0.2));
+                dH1[i] = NumOps.Multiply(dH1[i], leakySlope);
         }
 
-        // Gradient through layer 1
-        for (int i = 0; i < _latentDim; i++)
-        {
+        // === Phase 2: Compute weight gradients and apply updates ===
+
+        // Layer 3: dW3 = h2 @ dOutputPre^T, W3 -= lr * dW3
+        var h2Col = Tensor<T>.FromVector(h2).Reshape(_hiddenDim, 1);
+        var dOutPreRow = Tensor<T>.FromVector(dOutputPre).Reshape(1, _inputDim);
+        var dW3 = Engine.TensorMatMul(h2Col, dOutPreRow);
+        var updatedW3 = Engine.TensorSubtract(w3Tensor, Engine.TensorMultiplyScalar(dW3, lrT));
+        for (int i = 0; i < _hiddenDim; i++)
+            for (int j = 0; j < _inputDim; j++)
+                genW3[i, j] = updatedW3[i, j];
+        var scaledDOutPre = (Vector<T>)Engine.Multiply(dOutputPre, lrT);
+        for (int j = 0; j < _inputDim; j++)
+            genB3[j] = NumOps.Subtract(genB3[j], scaledDOutPre[j]);
+
+        // Layer 2: dW2 = h1 @ dH2^T, W2 -= lr * dW2
+        var h1Col = Tensor<T>.FromVector(h1).Reshape(_hiddenDim, 1);
+        var dH2Row = Tensor<T>.FromVector(dH2).Reshape(1, _hiddenDim);
+        var dW2 = Engine.TensorMatMul(h1Col, dH2Row);
+        var updatedW2 = Engine.TensorSubtract(w2Tensor, Engine.TensorMultiplyScalar(dW2, lrT));
+        for (int i = 0; i < _hiddenDim; i++)
             for (int j = 0; j < _hiddenDim; j++)
-            {
-                T grad = NumOps.Multiply(z[i], dH1[j]);
-                genW1[i, j] = NumOps.Subtract(genW1[i, j], NumOps.FromDouble(lr * NumOps.ToDouble(grad)));
-            }
-        }
+                genW2[i, j] = updatedW2[i, j];
+        var scaledDH2 = (Vector<T>)Engine.Multiply(dH2, lrT);
         for (int j = 0; j < _hiddenDim; j++)
-        {
-            genB1[j] = NumOps.Subtract(genB1[j], NumOps.FromDouble(lr * NumOps.ToDouble(dH1[j])));
-        }
+            genB2[j] = NumOps.Subtract(genB2[j], scaledDH2[j]);
+
+        // Layer 1: dW1 = z @ dH1^T, W1 -= lr * dW1
+        var zCol = Tensor<T>.FromVector(z).Reshape(_latentDim, 1);
+        var dH1Row = Tensor<T>.FromVector(dH1).Reshape(1, _hiddenDim);
+        var dW1 = Engine.TensorMatMul(zCol, dH1Row);
+        var w1Tensor = Tensor<T>.FromMatrix(genW1);
+        var updatedW1 = Engine.TensorSubtract(w1Tensor, Engine.TensorMultiplyScalar(dW1, lrT));
+        for (int i = 0; i < _latentDim; i++)
+            for (int j = 0; j < _hiddenDim; j++)
+                genW1[i, j] = updatedW1[i, j];
+        var scaledDH1 = (Vector<T>)Engine.Multiply(dH1, lrT);
+        for (int j = 0; j < _hiddenDim; j++)
+            genB1[j] = NumOps.Subtract(genB1[j], scaledDH1[j]);
     }
 
     private static double LeakyReLU(double x, double alpha = 0.2)
