@@ -921,18 +921,18 @@ public class GatedDeltaProductLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_betaWeightsGradient!.ToArray()),
-            new Vector<T>(_betaBiasGradient!.ToArray()),
-            new Vector<T>(_alphaWeightsGradient!.ToArray()),
-            new Vector<T>(_alphaBiasGradient!.ToArray()),
-            new Vector<T>(_householderWeightsGradient!.ToArray()),
-            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
-            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
-            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
-            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
+            _queryWeightsGradient!.ToVector(),
+            _keyWeightsGradient!.ToVector(),
+            _valueWeightsGradient!.ToVector(),
+            _betaWeightsGradient!.ToVector(),
+            _betaBiasGradient!.ToVector(),
+            _alphaWeightsGradient!.ToVector(),
+            _alphaBiasGradient!.ToVector(),
+            _householderWeightsGradient!.ToVector(),
+            _outputGateWeightsGradient is not null ? _outputGateWeightsGradient.ToVector() : new Vector<T>(_outputGateWeights.Length),
+            _outputGateBiasGradient is not null ? _outputGateBiasGradient.ToVector() : new Vector<T>(_outputGateBias.Length),
+            _outputProjectionWeightsGradient is not null ? _outputProjectionWeightsGradient.ToVector() : new Vector<T>(_outputProjectionWeights.Length),
+            _outputProjectionBiasGradient is not null ? _outputProjectionBiasGradient.ToVector() : new Vector<T>(_outputProjectionBias.Length));
     }
 
     public override void ClearGradients()

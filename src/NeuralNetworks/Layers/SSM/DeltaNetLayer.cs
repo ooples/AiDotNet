@@ -712,16 +712,16 @@ public class DeltaNetLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_queryBiasGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_keyBiasGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_valueBiasGradient!.ToArray()),
-            new Vector<T>(_betaWeightsGradient!.ToArray()),
-            new Vector<T>(_betaBiasGradient!.ToArray()),
-            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
-            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
+            _queryWeightsGradient!.ToVector(),
+            _queryBiasGradient!.ToVector(),
+            _keyWeightsGradient!.ToVector(),
+            _keyBiasGradient!.ToVector(),
+            _valueWeightsGradient!.ToVector(),
+            _valueBiasGradient!.ToVector(),
+            _betaWeightsGradient!.ToVector(),
+            _betaBiasGradient!.ToVector(),
+            _outputProjectionWeightsGradient is not null ? _outputProjectionWeightsGradient.ToVector() : new Vector<T>(_outputProjectionWeights.Length),
+            _outputProjectionBiasGradient is not null ? _outputProjectionBiasGradient.ToVector() : new Vector<T>(_outputProjectionBias.Length));
     }
 
     public override void ClearGradients()

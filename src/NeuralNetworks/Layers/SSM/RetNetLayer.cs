@@ -857,15 +857,15 @@ public class RetNetLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_queryBiasGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_keyBiasGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_valueBiasGradient!.ToArray()),
-            new Vector<T>(_gammasGradient!.ToArray()),
-            new Vector<T>(_groupNormScaleGradient!.ToArray()),
-            new Vector<T>(_groupNormBiasGradient!.ToArray()));
+            _queryWeightsGradient!.ToVector(),
+            _queryBiasGradient!.ToVector(),
+            _keyWeightsGradient!.ToVector(),
+            _keyBiasGradient!.ToVector(),
+            _valueWeightsGradient!.ToVector(),
+            _valueBiasGradient!.ToVector(),
+            _gammasGradient!.ToVector(),
+            _groupNormScaleGradient!.ToVector(),
+            _groupNormBiasGradient!.ToVector());
     }
 
     public override void ClearGradients()

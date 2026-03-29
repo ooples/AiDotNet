@@ -766,17 +766,17 @@ public class LinearRecurrentUnitLayer<T> : LayerBase<T>
     {
         if (_nuGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_nuGradient!.ToArray()),
-            new Vector<T>(_thetaGradient!.ToArray()),
-            new Vector<T>(_bRealGradient!.ToArray()),
-            new Vector<T>(_bImagGradient!.ToArray()),
-            new Vector<T>(_cRealGradient!.ToArray()),
-            new Vector<T>(_cImagGradient!.ToArray()),
-            new Vector<T>(_dParamGradient!.ToArray()),
-            new Vector<T>(_inputProjectionWeightsGradient?.ToArray() ?? new T[_inputProjectionWeights.Length]),
-            new Vector<T>(_inputProjectionBiasGradient?.ToArray() ?? new T[_inputProjectionBias.Length]),
-            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
-            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
+            _nuGradient!.ToVector(),
+            _thetaGradient!.ToVector(),
+            _bRealGradient!.ToVector(),
+            _bImagGradient!.ToVector(),
+            _cRealGradient!.ToVector(),
+            _cImagGradient!.ToVector(),
+            _dParamGradient!.ToVector(),
+            _inputProjectionWeightsGradient is not null ? _inputProjectionWeightsGradient.ToVector() : new Vector<T>(_inputProjectionWeights.Length),
+            _inputProjectionBiasGradient is not null ? _inputProjectionBiasGradient.ToVector() : new Vector<T>(_inputProjectionBias.Length),
+            _outputProjectionWeightsGradient is not null ? _outputProjectionWeightsGradient.ToVector() : new Vector<T>(_outputProjectionWeights.Length),
+            _outputProjectionBiasGradient is not null ? _outputProjectionBiasGradient.ToVector() : new Vector<T>(_outputProjectionBias.Length));
     }
 
     public override void ClearGradients()

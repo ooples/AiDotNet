@@ -544,14 +544,14 @@ public class MinGRULayer<T> : LayerBase<T>
     {
         if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
-            new Vector<T>(_gateWeightsGradient!.ToArray()),
-            new Vector<T>(_gateBiasGradient!.ToArray()),
-            new Vector<T>(_candidateWeightsGradient!.ToArray()),
-            new Vector<T>(_candidateBiasGradient!.ToArray()),
-            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
+            _inputProjectionWeightsGradient!.ToVector(),
+            _inputProjectionBiasGradient!.ToVector(),
+            _gateWeightsGradient!.ToVector(),
+            _gateBiasGradient!.ToVector(),
+            _candidateWeightsGradient!.ToVector(),
+            _candidateBiasGradient!.ToVector(),
+            _outputProjectionWeightsGradient!.ToVector(),
+            _outputProjectionBiasGradient!.ToVector());
     }
 
     public override void ClearGradients()

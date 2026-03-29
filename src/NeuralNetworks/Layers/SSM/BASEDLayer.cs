@@ -1158,17 +1158,17 @@ public class BASEDLayer<T> : LayerBase<T>
     {
         if (_linearQueryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_linearQueryWeightsGradient!.ToArray()),
-            new Vector<T>(_linearKeyWeightsGradient!.ToArray()),
-            new Vector<T>(_linearValueWeightsGradient!.ToArray()),
-            new Vector<T>(_windowQueryWeightsGradient!.ToArray()),
-            new Vector<T>(_windowKeyWeightsGradient!.ToArray()),
-            new Vector<T>(_windowValueWeightsGradient!.ToArray()),
-            new Vector<T>(_featureMapScaleGradient!.ToArray()),
-            new Vector<T>(_mixingGateWeightsGradient!.ToArray()),
-            new Vector<T>(_mixingGateBiasGradient!.ToArray()),
-            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
-            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
+            _linearQueryWeightsGradient!.ToVector(),
+            _linearKeyWeightsGradient!.ToVector(),
+            _linearValueWeightsGradient!.ToVector(),
+            _windowQueryWeightsGradient!.ToVector(),
+            _windowKeyWeightsGradient!.ToVector(),
+            _windowValueWeightsGradient!.ToVector(),
+            _featureMapScaleGradient!.ToVector(),
+            _mixingGateWeightsGradient!.ToVector(),
+            _mixingGateBiasGradient!.ToVector(),
+            _outputProjectionWeightsGradient is not null ? _outputProjectionWeightsGradient.ToVector() : new Vector<T>(_outputProjectionWeights.Length),
+            _outputProjectionBiasGradient is not null ? _outputProjectionBiasGradient.ToVector() : new Vector<T>(_outputProjectionBias.Length));
     }
 
     public override void ClearGradients()
