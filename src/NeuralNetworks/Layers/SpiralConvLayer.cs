@@ -91,6 +91,11 @@ public class SpiralConvLayer<T> : LayerBase<T>
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    /// <value><c>true</c> if weights are initialized and activation can be JIT compiled.</value>
+    public override bool SupportsJitCompilation => _weights != null && _biases != null && CanActivationBeJitted();
 
     #endregion
 
@@ -1159,6 +1164,38 @@ public class SpiralConvLayer<T> : LayerBase<T>
 
     #region JIT Compilation
 
+    /// <summary>
+    /// Exports the layer as a computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input nodes.</param>
+    /// <returns>The output computation node.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when layer is not initialized.</exception>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_weights == null || _biases == null)
+            throw new InvalidOperationException("Layer weights not initialized.");
+
+        var symbolicInput = new Tensor<T>(InputShape);
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "spiral_conv_input");
+        inputNodes.Add(inputNode);
+
+        var weightNode = TensorOperations<T>.Constant(_weights, "spiral_conv_weights");
+        var biasNode = TensorOperations<T>.Constant(_biases, "spiral_conv_bias");
+
+        var transposedWeights = TensorOperations<T>.Transpose(weightNode);
+        var matmulNode = TensorOperations<T>.MatrixMultiply(inputNode, transposedWeights);
+        var biasedNode = TensorOperations<T>.Add(matmulNode, biasNode);
+
+        var activatedOutput = ApplyActivationToGraph(biasedNode);
+        return activatedOutput;
+    }
 
     #endregion
 }

@@ -1642,5 +1642,51 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         return diagnostics;
     }
 
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_weights == null || _bias == null)
+            throw new InvalidOperationException("Layer not initialized. Call Initialize() first.");
+
+        if (_adjacencyMatrix == null)
+            throw new InvalidOperationException("Adjacency matrix not set. Call SetAdjacencyMatrix() first.");
+
+        // Create symbolic input [numNodes, inputFeatures]
+        var symbolicInput = new Tensor<T>([1, .. InputShape]);
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Convert adjacency matrix to constant node
+        var adjNode = TensorOperations<T>.Constant(_adjacencyMatrix, "adjacency");
+
+        // Weights are already Tensor<T>, use them directly
+        var weightsNode = TensorOperations<T>.Constant(_weights, "weights");
+
+        // Use GraphConv operation: output = adjacency @ input @ weights
+        var convOutput = TensorOperations<T>.GraphConv(inputNode, adjNode, weightsNode);
+
+        // Bias is already Tensor<T>, use directly
+        var biasNode = TensorOperations<T>.Constant(_bias, "bias");
+        var output = TensorOperations<T>.Add(convOutput, biasNode);
+
+        // Apply activation if present
+        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
+        {
+            output = ScalarActivation.ApplyToGraph(output);
+        }
+        else if (VectorActivation != null && VectorActivation.SupportsJitCompilation)
+        {
+            output = VectorActivation.ApplyToGraph(output);
+        }
+
+        return output;
+    }
+
+    public override bool SupportsJitCompilation => _weights != null && _bias != null && _adjacencyMatrix != null;
 
 }

@@ -107,6 +107,10 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     /// </summary>
     public override bool SupportsGpuTraining => true;
 
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    public override bool SupportsJitCompilation => _weights != null && _biases != null && CanActivationBeJitted();
 
     #endregion
 
@@ -2334,6 +2338,34 @@ public class DiffusionConvLayer<T> : LayerBase<T>
 
     #region JIT Compilation
 
+    /// <summary>
+    /// Exports the layer as a computation graph for JIT compilation.
+    /// </summary>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_weights == null || _biases == null)
+            throw new InvalidOperationException("Layer weights not initialized.");
+
+        var symbolicInput = new Tensor<T>(InputShape);
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "diffusion_conv_input");
+        inputNodes.Add(inputNode);
+
+        var weightNode = TensorOperations<T>.Constant(_weights, "diffusion_conv_weights");
+        var biasNode = TensorOperations<T>.Constant(_biases, "diffusion_conv_bias");
+
+        var transposedWeights = TensorOperations<T>.Transpose(weightNode);
+        var matmulNode = TensorOperations<T>.MatrixMultiply(inputNode, transposedWeights);
+        var biasedNode = TensorOperations<T>.Add(matmulNode, biasNode);
+
+        var activatedOutput = ApplyActivationToGraph(biasedNode);
+        return activatedOutput;
+    }
 
     #endregion
 }

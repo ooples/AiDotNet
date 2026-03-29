@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -123,6 +123,11 @@ public class Conv3DLayer<T> : LayerBase<T>
         return metadata;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation for accelerated execution.
+    /// </summary>
+    /// <value><c>true</c> if kernels and biases are initialized and activation can be JIT compiled.</value>
+    public override bool SupportsJitCompilation => _kernels != null && _biases != null && CanActivationBeJitted();
 
     #endregion
 
@@ -1016,6 +1021,45 @@ public class Conv3DLayer<T> : LayerBase<T>
 
     #region JIT Compilation
 
+    /// <summary>
+    /// Exports the layer as a computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input nodes.</param>
+    /// <returns>The output computation node.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when layer is not properly initialized.</exception>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_kernels == null || _biases == null)
+            throw new InvalidOperationException("Layer weights not initialized.");
+
+        // Create input node with batch dimension
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "conv3d_input");
+        inputNodes.Add(inputNode);
+
+        // Create constant nodes for kernels and biases
+        var kernelNode = TensorOperations<T>.Constant(_kernels, "conv3d_kernel");
+        var biasNode = TensorOperations<T>.Constant(_biases, "conv3d_bias");
+
+        // Build the actual convolution graph: Conv3D(input, kernel) + bias -> activation
+        var convNode = TensorOperations<T>.Conv3D(
+            inputNode,
+            kernelNode,
+            biasNode,
+            new int[] { Stride, Stride, Stride },
+            new int[] { Padding, Padding, Padding });
+
+        // Apply activation function to the convolution result
+        var activatedOutput = ApplyActivationToGraph(convNode);
+        return activatedOutput;
+    }
 
     #endregion
 

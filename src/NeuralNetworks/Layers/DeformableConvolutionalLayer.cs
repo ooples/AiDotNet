@@ -1060,6 +1060,9 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
     public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation =>
+        _weights != null && _bias != null && _offsetWeights != null && _offsetBias != null;
 
     #endregion
 
@@ -1078,6 +1081,14 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
         return [_outputChannels, outH, outW];
     }
 
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null || inputNodes.Count == 0)
+            throw new ArgumentException("Input nodes cannot be null or empty.", nameof(inputNodes));
+
+        return BuildComputationGraph(inputNodes[0], "");
+    }
 
     /// <inheritdoc/>
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)

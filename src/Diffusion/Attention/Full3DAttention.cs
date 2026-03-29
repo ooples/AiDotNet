@@ -142,5 +142,12 @@ public class Full3DAttention<T> : LayerBase<T>
         _fullAttention.ResetState();
     }
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
 
+    /// <inheritdoc />
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        return _fullAttention.ExportComputationGraph(inputNodes);
+    }
 }

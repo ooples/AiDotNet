@@ -1803,6 +1803,95 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         return copy;
     }
 
+    /// <summary>
+    /// Exports the dense layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes (input data, weights, biases).</param>
+    /// <returns>The output computation node representing the layer's prediction.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph that mirrors the layer's forward pass logic.
+    /// The graph uses TensorOperations which now integrates with IEngine for GPU acceleration
+    /// where supported (e.g., Add operations use IEngine.TensorAdd).
+    /// </para>
+    /// <para>
+    /// Current IEngine integration status:
+    /// - Addition operations: Fully GPU-accelerated via IEngine.TensorAdd
+    /// - Matrix multiplication: Uses Tensor.MatrixMultiply (pending IEngine integration)
+    /// - Transpose operations: Uses Tensor.Transpose (pending IEngine integration)
+    /// </para>
+    /// <para>
+    /// The computation graph enables:
+    /// - JIT compilation for optimized inference
+    /// - Operation fusion and dead code elimination
+    /// - Automatic differentiation via backpropagation
+    /// - Deferred execution with GPU acceleration
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        // Validate parameters
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        // Ensure weights and biases are initialized (supports lazy initialization)
+        EnsureInitialized();
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (!CanActivationBeJitted())
+        {
+            var activationType = ScalarActivation?.GetType().Name ?? VectorActivation?.GetType().Name ?? "unknown";
+            throw new NotSupportedException(
+                $"Activation function '{activationType}' is not supported for JIT compilation yet. " +
+                "Supported activations: ReLU, Sigmoid, Tanh, Softmax");
+        }
+
+        // Input shape: [batchSize, inputSize]
+        // Weights are [inputSize, outputSize] in industry standard convention
+        int inputSize = _weights.Shape[0];
+
+        // Create placeholder for input data
+        // Note: Using batch size 1 for placeholder; actual batch size is determined at runtime
+        var inputPlaceholder = new Tensor<T>(new int[] { 1, inputSize });
+        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
+
+        // Create constant nodes for weights and biases
+        // Weights shape: [inputSize, outputSize] (industry standard - no transpose needed)
+        var weightsNode = TensorOperations<T>.Variable(_weights, "weights");
+
+        // Biases shape: [outputSize]
+        var biasesNode = TensorOperations<T>.Variable(_biases, "biases");
+
+        // Add input nodes in order: input, weights, biases
+        inputNodes.Add(inputNode);
+        inputNodes.Add(weightsNode);
+        inputNodes.Add(biasesNode);
+
+        // Build computation graph: output = (input x weights) + biases
+        // Industry standard: no transpose needed with [inputSize, outputSize] weights
+
+        // Step 1: Matrix multiply: input x weights
+        var matmulResult = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
+
+        // Step 2: Add biases (uses IEngine.TensorAdd for GPU acceleration!)
+        var outputNode = TensorOperations<T>.Add(matmulResult, biasesNode);
+
+        // Step 3: Apply activation function
+        var activatedOutput = ApplyActivationToGraph(outputNode);
+
+        return activatedOutput;
+    }
+
+    /// <summary>
+    /// Gets whether this layer currently supports JIT compilation.
+    /// </summary>
+    /// <value>
+    /// True if the layer's activation function is supported for JIT compilation.
+    /// Supported activations: ReLU, Sigmoid, Tanh, Softmax, Identity.
+    /// </value>
+    public override bool SupportsJitCompilation => CanActivationBeJitted();
 
     /// <summary>
     /// Releases resources used by this layer, including GPU tensor handles.

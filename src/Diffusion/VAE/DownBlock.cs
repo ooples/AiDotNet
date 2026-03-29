@@ -368,6 +368,16 @@ public class DownBlock<T> : LayerBase<T>
         _downsample.ResetState();
     }
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc />
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "DownBlock JIT compilation is not yet implemented. " +
+            "Use the layer in interpreted mode.");
+    }
 
     /// <summary>
     /// Saves the block's state to a binary writer.

@@ -985,5 +985,30 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         };
     }
 
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
 
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_projectionWeights == null || _projectionBias == null)
+            throw new InvalidOperationException("Layer weights not initialized.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Weights and biases are already Tensor<T>
+        var weightsNode = TensorOperations<T>.Constant(_projectionWeights, "weights");
+        var biasNode = TensorOperations<T>.Constant(_projectionBias, "bias");
+
+        var output = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
+        return TensorOperations<T>.Add(output, biasNode);
+    }
+
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation => _projectionWeights != null && _projectionBias != null;
 }

@@ -220,5 +220,12 @@ public class MotionModule<T> : LayerBase<T>
         _norm2.ResetState();
     }
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
 
+    /// <inheritdoc />
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException("MotionModule does not support JIT compilation.");
+    }
 }

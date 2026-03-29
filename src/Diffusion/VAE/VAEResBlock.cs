@@ -414,6 +414,16 @@ public class VAEResBlock<T> : LayerBase<T>
         _skipConv?.ResetState();
     }
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc />
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            "VAEResBlock JIT compilation is not yet implemented. " +
+            "Use the layer in interpreted mode by setting SupportsJitCompilation = false.");
+    }
 
     /// <summary>
     /// Saves the block's state to a binary writer.

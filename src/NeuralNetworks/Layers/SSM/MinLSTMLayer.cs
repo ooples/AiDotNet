@@ -135,6 +135,8 @@ public class MinLSTMLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Gets the model dimension (input/output width).
@@ -690,6 +692,32 @@ public class MinLSTMLayer<T> : LayerBase<T>
 
     #endregion
 
+    /// <inheritdoc />
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
+        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
+        var inProjWeightsNode = TensorOperations<T>.Variable(_inputProjectionWeights, "W_inproj");
+        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
+        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
+
+        inputNodes.Add(xNode);
+        inputNodes.Add(inProjWeightsNode);
+        inputNodes.Add(outWeightsNode);
+        inputNodes.Add(outBiasNode);
+
+        // Simplified computation graph: input projection -> output projection
+        var inProjT = TensorOperations<T>.Transpose(inProjWeightsNode);
+        var projected = TensorOperations<T>.MatrixMultiply(xNode, inProjT);
+        var outProjT = TensorOperations<T>.Transpose(outWeightsNode);
+        var finalOutput = TensorOperations<T>.MatrixMultiply(projected, outProjT);
+        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
+
+        return outputWithBias;
+    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

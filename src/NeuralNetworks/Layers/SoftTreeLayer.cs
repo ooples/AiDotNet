@@ -64,6 +64,8 @@ public class SoftTreeLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation => false;  // Complex tree structure not easily JIT-compiled
 
     /// <inheritdoc/>
     private Tensor<T>? _cachedRightProbs;
@@ -472,6 +474,14 @@ public class SoftTreeLayer<T> : LayerBase<T>
         Engine.InvalidatePersistentTensor(_leafValues);
     }
 
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        // Soft tree structure is complex and not easily represented as a static computation graph
+        // For JIT compilation, we would need to unroll the tree structure
+        throw new NotSupportedException(
+            "SoftTreeLayer does not support JIT compilation. Use standard Forward() for inference.");
+    }
 
     /// <summary>
     /// Gets feature importance based on split weight magnitudes.

@@ -549,6 +549,14 @@ public class VAEDecoder<T> : LayerBase<T>
         _outputConv.ResetState();
     }
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
+
+    /// <inheritdoc />
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException("VAEDecoder JIT compilation is not yet implemented.");
+    }
 
     /// <summary>
     /// Saves the decoder's state to a binary writer.

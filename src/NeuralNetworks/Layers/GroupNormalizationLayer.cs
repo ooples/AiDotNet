@@ -472,6 +472,50 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         _addedBatchDimension = false;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether this layer supports JIT compilation.
+    /// </summary>
+    public override bool SupportsJitCompilation => true;
+
+    /// <summary>
+    /// Exports the computation graph for JIT compilation.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node representing the GroupNormalization operation.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph representing the GroupNormalization layer.
+    /// The graph divides channels into groups and normalizes within each group,
+    /// then applies learned scale (gamma) and shift (beta) parameters per channel.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes is null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape is null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create symbolic input node with batch dimension
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Create gamma and beta parameter nodes
+        var gammaNode = TensorOperations<T>.Constant(_gamma, "gamma");
+        var betaNode = TensorOperations<T>.Constant(_beta, "beta");
+
+        // Apply GroupNorm operation
+        var outputNode = TensorOperations<T>.GroupNorm(
+            inputNode,
+            _numGroups,
+            gammaNode,
+            betaNode,
+            NumOps.ToDouble(_epsilon));
+
+        return outputNode;
+    }
 
     /// <summary>
     /// GPU-resident backward pass for group normalization layer.

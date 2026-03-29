@@ -988,5 +988,37 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         _gpuGateOutput = null;
     }
 
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
 
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_linearWeights == null || _gateWeights == null)
+            throw new InvalidOperationException("Layer weights not initialized.");
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Create constant nodes for weights and biases (already Tensor<T>)
+        var linearWeightsNode = TensorOperations<T>.Constant(_linearWeights, "linear_weights");
+        var gateWeightsNode = TensorOperations<T>.Constant(_gateWeights, "gate_weights");
+        var linearBiasNode = TensorOperations<T>.Constant(_linearBias, "linear_bias");
+        var gateBiasNode = TensorOperations<T>.Constant(_gateBias, "gate_bias");
+
+        // Transpose weights for proper matrix multiply
+        var linearWeightsT = TensorOperations<T>.Transpose(linearWeightsNode);
+        var gateWeightsT = TensorOperations<T>.Transpose(gateWeightsNode);
+
+        var linearOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(inputNode, linearWeightsT), linearBiasNode);
+        var gateOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(inputNode, gateWeightsT), gateBiasNode);
+        var sigmoid = TensorOperations<T>.Sigmoid(gateOutput);
+
+        return TensorOperations<T>.ElementwiseMultiply(linearOutput, sigmoid);
+    }
+
+    public override bool SupportsJitCompilation => _linearWeights != null && _gateWeights != null && _linearBias != null && _gateBias != null;
 }

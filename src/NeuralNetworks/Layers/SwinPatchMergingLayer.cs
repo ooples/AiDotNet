@@ -294,5 +294,37 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
         _reduction.UpdateParameters(learningRate);
     }
 
+    /// <inheritdoc/>
+    public override bool SupportsJitCompilation =>
+        _norm != null && _norm.SupportsJitCompilation &&
+        _reduction != null && _reduction.SupportsJitCompilation;
 
+    /// <inheritdoc/>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        // Create symbolic input node: [batch, seqLen, dim]
+        // seqLen = H*W, after merging becomes (H/2)*(W/2) = seqLen/4
+        var symbolicInput = new Tensor<T>([1, 4, _inputDim]); // Minimum 2x2 spatial
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "swin_merge_input");
+        inputNodes.Add(inputNode);
+
+        // The patch merging operation (concatenate 2x2 patches) would be represented
+        // as a reshape/concat operation in the computation graph
+        // For JIT, we represent this as: reshape -> concat -> norm -> reduction
+        var mergedShape = new Tensor<T>([1, 1, _inputDim * 4]); // 4 patches concatenated
+        var mergedNode = TensorOperations<T>.Reshape(inputNode, [1, 1, _inputDim * 4]);
+
+        // Export norm graph
+        var normNodes = new List<ComputationNode<T>> { mergedNode };
+        var normedNode = _norm.ExportComputationGraph(normNodes);
+
+        // Export reduction graph
+        var reductionNodes = new List<ComputationNode<T>> { normedNode };
+        var outputNode = _reduction.ExportComputationGraph(reductionNodes);
+
+        return outputNode;
+    }
 }

@@ -275,5 +275,12 @@ public class STDiTBlock<T> : LayerBase<T>
         _ffnNorm.ResetState();
     }
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
 
+    /// <inheritdoc />
+    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException("STDiTBlock does not support JIT compilation.");
+    }
 }

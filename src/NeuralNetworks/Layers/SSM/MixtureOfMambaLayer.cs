@@ -125,6 +125,8 @@ public class MixtureOfMambaLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
 
     /// <summary>Gets the model dimension.</summary>
     public int ModelDimension => _modelDimension;
@@ -812,6 +814,27 @@ public class MixtureOfMambaLayer<T> : LayerBase<T>
 
     #endregion
 
+    /// <inheritdoc />
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
+        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
+        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
+        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
+
+        inputNodes.Add(xNode);
+        inputNodes.Add(outWeightsNode);
+        inputNodes.Add(outBiasNode);
+
+        var outT = TensorOperations<T>.Transpose(outWeightsNode);
+        var finalOutput = TensorOperations<T>.MatrixMultiply(xNode, outT);
+        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
+
+        return outputWithBias;
+    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

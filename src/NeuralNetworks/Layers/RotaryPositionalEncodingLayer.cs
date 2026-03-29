@@ -374,5 +374,20 @@ internal class RotaryPositionalEncodingLayer<T> : LayerBase<T>
         // Cache is stateless across sequences
     }
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => false;
 
+    /// <inheritdoc />
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // RoPE is a unary transform; for graph export, treat as identity placeholder
+        return inputNode;
+    }
 }
