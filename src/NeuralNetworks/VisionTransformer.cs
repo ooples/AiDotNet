@@ -441,15 +441,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        SetTrainingMode(true);
-
-        var prediction = ForwardWithMemory(input);
-
-        LastLoss = LossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        var lossGradient = LossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-
-        Backpropagate(Tensor<T>.FromVector(lossGradient));
+        StandardTrainStep(input, expectedOutput);
     }
 
     /// <summary>

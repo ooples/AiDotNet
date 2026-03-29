@@ -161,14 +161,12 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
             }
         }
 
-        _sampledBias = new Vector<T>(_outputSize);
+        // Vectorized reparameterization trick: bias = mean + sqrt(exp(logvar)) * epsilon
+        var biasStd = (Vector<T>)Engine.Sqrt(Engine.Exp(_biasLogVar));
+        var biasEpsilon = new Vector<T>(_outputSize);
         for (int i = 0; i < _outputSize; i++)
-        {
-            var mean = _biasMean[i];
-            var std = NumOps.Sqrt(NumOps.Exp(_biasLogVar[i]));
-            var epsilon = NumOps.FromDouble(NextGaussian());
-            _sampledBias[i] = NumOps.Add(mean, NumOps.Multiply(std, epsilon));
-        }
+            biasEpsilon[i] = NumOps.FromDouble(NextGaussian());
+        _sampledBias = (Vector<T>)Engine.Add(_biasMean, Engine.Multiply(biasStd, biasEpsilon));
     }
 
     /// <summary>
@@ -444,18 +442,9 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
             }
         }
 
-        // Update biases
-        for (int i = 0; i < _outputSize; i++)
-        {
-            _biasMean[i] = NumOps.Subtract(
-                _biasMean[i],
-                NumOps.Multiply(learningRate, _biasMeanGradient[i])
-            );
-            _biasLogVar[i] = NumOps.Subtract(
-                _biasLogVar[i],
-                NumOps.Multiply(learningRate, _biasLogVarGradient[i])
-            );
-        }
+        // Update biases (vectorized SGD)
+        _biasMean = (Vector<T>)Engine.Subtract(_biasMean, Engine.Multiply(_biasMeanGradient, learningRate));
+        _biasLogVar = (Vector<T>)Engine.Subtract(_biasLogVar, Engine.Multiply(_biasLogVarGradient, learningRate));
 
         // Clear gradients after update
         ClearGradients();

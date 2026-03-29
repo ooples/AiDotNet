@@ -966,13 +966,13 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
     public override Vector<T> GetParameters()
     {
         // Use ToArray() for production-grade parameter extraction
-        var embeddingParams = new Vector<T>(_embeddingTensor.ToArray());
+        var embeddingParams = Vector<T>.FromMemory(_embeddingTensor.Data);
         if (_projectionWeights == null)
         {
             return embeddingParams;
         }
 
-        var projectionParams = new Vector<T>(_projectionWeights.ToArray());
+        var projectionParams = Vector<T>.FromMemory(_projectionWeights.Data);
         return Vector<T>.Concatenate(embeddingParams, projectionParams);
     }
 
@@ -1216,7 +1216,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
         {
             // Return zeros for embedding params + actual projection gradients
             var embZeros = new Vector<T>(embeddingParamCount);
-            var projGrad = new Vector<T>(_projectionWeightsGradient.ToArray());
+            var projGrad = (_projectionWeightsGradient is not null ? Vector<T>.FromMemory(_projectionWeightsGradient.Data) : new Vector<T>(0));
             return Vector<T>.Concatenate(embZeros, projGrad);
         }
 
@@ -1225,10 +1225,10 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
             return new Vector<T>(ParameterCount);
 
         // Discrete embedding mode: return embedding gradients (+ projection if present)
-        var embGrad = new Vector<T>(_embeddingGradient.ToArray());
+        var embGrad = (_embeddingGradient is not null ? Vector<T>.FromMemory(_embeddingGradient.Data) : new Vector<T>(0));
         if (_projectionWeightsGradient == null || _projectionWeights == null)
             return embGrad;
-        return Vector<T>.Concatenate(embGrad, new Vector<T>(_projectionWeightsGradient.ToArray()));
+        return Vector<T>.Concatenate(embGrad, (_projectionWeightsGradient is not null ? Vector<T>.FromMemory(_projectionWeightsGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()

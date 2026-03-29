@@ -103,9 +103,9 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
 
     public int NumGroups => _numGroups;
     public int NumChannels => _numChannels;
-    public Vector<T> GetGamma() => _gamma.ToVector();
+    public Vector<T> GetGamma() => Vector<T>.FromMemory(_gamma.Data);
     public Tensor<T> GetGammaTensor() => _gamma;
-    public Vector<T> GetBeta() => _beta.ToVector();
+    public Vector<T> GetBeta() => Vector<T>.FromMemory(_beta.Data);
     public Tensor<T> GetBetaTensor() => _beta;
     public T GetEpsilon() => _epsilon;
 
@@ -433,7 +433,7 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameters()
     {
-        return Vector<T>.Concatenate(_gamma.ToVector(), _beta.ToVector());
+        return Vector<T>.Concatenate(Vector<T>.FromMemory(_gamma.Data), Vector<T>.FromMemory(_beta.Data));
     }
 
     public override void SetParameters(Vector<T> parameters)
@@ -457,7 +457,7 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_gammaGradient == null || _betaGradient == null) return new Vector<T>(ParameterCount);
-        return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
+        return Vector<T>.Concatenate((_gammaGradient is not null ? Vector<T>.FromMemory(_gammaGradient.Data) : new Vector<T>(0)), (_betaGradient is not null ? Vector<T>.FromMemory(_betaGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }

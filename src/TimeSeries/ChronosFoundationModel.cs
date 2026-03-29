@@ -1248,10 +1248,7 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
         // Combine residual gradients
         for (int t = 0; t < dResidual1.Count; t++)
         {
-            for (int i = 0; i < _embeddingDim; i++)
-            {
-                dResidual1[t][i] = NumOps.Add(dResidual1[t][i], dResidual1FromNorm[t][i]);
-            }
+            dResidual1[t] = Engine.TensorAdd(dResidual1[t], dResidual1FromNorm[t]);
         }
 
         // Backprop through attention residual
@@ -1268,13 +1265,10 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
         gradients["layerNorm1Gamma"] = dGamma1;
         gradients["layerNorm1Beta"] = dBeta1;
 
-        // Combine input gradients
+        // Combine input gradients (vectorized)
         for (int t = 0; t < dInput.Count; t++)
         {
-            for (int i = 0; i < _embeddingDim; i++)
-            {
-                dInput[t][i] = NumOps.Add(dInput[t][i], dInputFromNorm[t][i]);
-            }
+            dInput[t] = Engine.TensorAdd(dInput[t], dInputFromNorm[t]);
         }
 
         return (dInput, gradients);
@@ -1394,21 +1388,26 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
             var dAttnWeights = new double[q + 1];
             for (int k = 0; k <= q; k++)
             {
+                // Build dv vector for all dimensions at once
+                var dvVec = new Tensor<T>(new[] { _embeddingDim });
                 for (int d = 0; d < _embeddingDim; d++)
                 {
-                    // Gradient to values: d(weighted_value)/d(attn_weight) = value
-                    var dv = NumOps.Multiply(NumOps.FromDouble(attnWeights[k]), dWeightedValue[d]);
-                    // Accumulate to value projection gradients
-                    for (int i = 0; i < _embeddingDim; i++)
-                    {
-                        dValueProj[d, i] = NumOps.Add(dValueProj[d, i],
-                            NumOps.Multiply(dv, input[k][i]));
-                        dInput[k][i] = NumOps.Add(dInput[k][i],
-                            NumOps.Multiply(_valueProj[d, i], dv));
-                    }
-                    // Gradient w.r.t. attention weights from this value dimension
+                    dvVec[d] = NumOps.Multiply(NumOps.FromDouble(attnWeights[k]), dWeightedValue[d]);
                     dAttnWeights[k] += Convert.ToDouble(NumOps.Multiply(dWeightedValue[d], values[k][d]));
                 }
+
+                // dValueProj += outer(dv, input[k]): dValueProj[d,i] += dv[d] * input[k][i]
+                for (int d = 0; d < _embeddingDim; d++)
+                {
+                    var scaled = Engine.TensorMultiplyScalar<T>(input[k], dvVec[d]);
+                    for (int i = 0; i < _embeddingDim; i++)
+                        dValueProj[d, i] = NumOps.Add(dValueProj[d, i], scaled[i]);
+                }
+
+                // dInput[k] += _valueProj^T @ dv (vectorized matmul)
+                var dvCol = dvVec.Reshape(_embeddingDim, 1);
+                var dInputContrib = Engine.TensorMatMul(_valueProj.Transpose([1, 0]), dvCol);
+                dInput[k] = Engine.TensorAdd(dInput[k], dInputContrib.Reshape(_embeddingDim));
             }
 
             // Backprop through softmax: d(softmax)/d(score) = softmax * (delta - softmax)
@@ -1434,33 +1433,33 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
             {
                 T dScoreScaled = NumOps.FromDouble(dScores[k] * scale);
 
-                // Gradient to query at position q
+                // Vectorized query gradient: dQ_vec = dScoreScaled * keys[k]
+                var dQVec = Engine.TensorMultiplyScalar<T>(keys[k], dScoreScaled);
+                // dQueryProj += outer(dQ, input[q])
                 for (int d = 0; d < _embeddingDim; d++)
                 {
-                    T dQ = NumOps.Multiply(dScoreScaled, keys[k][d]);
-                    // Accumulate to query projection gradients
+                    var scaled = Engine.TensorMultiplyScalar<T>(input[q], dQVec[d]);
                     for (int i = 0; i < _embeddingDim; i++)
-                    {
-                        dQueryProj[d, i] = NumOps.Add(dQueryProj[d, i],
-                            NumOps.Multiply(dQ, input[q][i]));
-                        dInput[q][i] = NumOps.Add(dInput[q][i],
-                            NumOps.Multiply(_queryProj[d, i], dQ));
-                    }
+                        dQueryProj[d, i] = NumOps.Add(dQueryProj[d, i], scaled[i]);
                 }
+                // dInput[q] += _queryProj^T @ dQ (vectorized matmul)
+                var dQCol = dQVec.Reshape(_embeddingDim, 1);
+                var dInputQ = Engine.TensorMatMul(_queryProj.Transpose([1, 0]), dQCol);
+                dInput[q] = Engine.TensorAdd(dInput[q], dInputQ.Reshape(_embeddingDim));
 
-                // Gradient to key at position k
+                // Vectorized key gradient: dK_vec = dScoreScaled * queries[q]
+                var dKVec = Engine.TensorMultiplyScalar<T>(queries[q], dScoreScaled);
+                // dKeyProj += outer(dK, input[k])
                 for (int d = 0; d < _embeddingDim; d++)
                 {
-                    T dK = NumOps.Multiply(dScoreScaled, queries[q][d]);
-                    // Accumulate to key projection gradients
+                    var scaledK = Engine.TensorMultiplyScalar<T>(input[k], dKVec[d]);
                     for (int i = 0; i < _embeddingDim; i++)
-                    {
-                        dKeyProj[d, i] = NumOps.Add(dKeyProj[d, i],
-                            NumOps.Multiply(dK, input[k][i]));
-                        dInput[k][i] = NumOps.Add(dInput[k][i],
-                            NumOps.Multiply(_keyProj[d, i], dK));
-                    }
+                        dKeyProj[d, i] = NumOps.Add(dKeyProj[d, i], scaledK[i]);
                 }
+                // dInput[k] += _keyProj^T @ dK (vectorized matmul)
+                var dKCol = dKVec.Reshape(_embeddingDim, 1);
+                var dInputK = Engine.TensorMatMul(_keyProj.Transpose([1, 0]), dKCol);
+                dInput[k] = Engine.TensorAdd(dInput[k], dInputK.Reshape(_embeddingDim));
             }
         }
 
@@ -1491,14 +1490,12 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
             variance /= vec.Length;
 
             double stddev = Math.Sqrt(variance + 1e-6);
-            var normalized = new Tensor<T>(new[] { vec.Length });
-            for (int i = 0; i < vec.Length && i < gamma.Length; i++)
-            {
-                double norm = (Convert.ToDouble(vec[i]) - mean) / stddev;
-                normalized[i] = NumOps.Add(
-                    NumOps.Multiply(gamma[i], NumOps.FromDouble(norm)),
-                    beta[i]);
-            }
+            // Vectorized LayerNorm: normalized = gamma * ((vec - mean) / std) + beta
+            var meanTensor = Tensor<T>.CreateDefault(new[] { vec.Length }, NumOps.FromDouble(mean));
+            var centered = Engine.TensorSubtract(vec, meanTensor);
+            var normTensor = Engine.TensorMultiplyScalar<T>(centered, NumOps.FromDouble(1.0 / stddev));
+            var scaled = Engine.TensorMultiply(normTensor, gamma);
+            var normalized = Engine.TensorAdd(scaled, beta);
             output.Add(normalized);
         }
         return output;
@@ -1529,19 +1526,19 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
             variance /= n;
             double stddev = Math.Sqrt(variance + 1e-6);
 
-            var dInp = new Tensor<T>(new[] { n });
-            for (int i = 0; i < n && i < gamma.Length; i++)
-            {
-                double x = Convert.ToDouble(inp[i]);
-                double norm = (x - mean) / stddev;
-                double dout = Convert.ToDouble(dOut[i]);
+            // Vectorized LayerNorm backward
+            var meanT = Tensor<T>.CreateDefault(new[] { n }, NumOps.FromDouble(mean));
+            var normTensor = Engine.TensorMultiplyScalar<T>(
+                Engine.TensorSubtract(inp, meanT), NumOps.FromDouble(1.0 / stddev));
 
-                dGamma[i] = NumOps.Add(dGamma[i], NumOps.FromDouble(dout * norm));
-                dBeta[i] = NumOps.Add(dBeta[i], NumOps.FromDouble(dout));
+            // dGamma += dOut * normalized, dBeta += dOut
+            var dOutNorm = Engine.TensorMultiply(dOut, normTensor);
+            dGamma = Engine.TensorAdd(dGamma, dOutNorm);
+            dBeta = Engine.TensorAdd(dBeta, dOut);
 
-                double dNorm = dout * Convert.ToDouble(gamma[i]);
-                dInp[i] = NumOps.FromDouble(dNorm / stddev);
-            }
+            // dInput = (dOut * gamma) / stddev
+            var dNormTensor = Engine.TensorMultiply(dOut, gamma);
+            var dInp = Engine.TensorMultiplyScalar<T>(dNormTensor, NumOps.FromDouble(1.0 / stddev));
             dInput.Add(dInp);
         }
 
@@ -1556,16 +1553,12 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
         foreach (var vec in input)
         {
             var hidden = MatVecMul(_ffn1, vec);
-            for (int i = 0; i < hidden.Length; i++)
-            {
-                hidden[i] = NumOps.Add(hidden[i], _ffn1Bias[i]);
-                hidden[i] = GELU(hidden[i]);
-            }
+            hidden = Engine.TensorAdd(hidden, _ffn1Bias);
+            hidden = Engine.GELU(hidden);
             _cachedFfnHidden.Add(hidden);
 
             var result = MatVecMul(_ffn2, hidden);
-            for (int i = 0; i < result.Length; i++)
-                result[i] = NumOps.Add(result[i], _ffn2Bias[i]);
+            result = Engine.TensorAdd(result, _ffn2Bias);
             output.Add(result);
         }
         return output;
@@ -1591,9 +1584,10 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
             var inp = input[t];
 
             // Backprop through second linear
+            // Vectorized FFN2 bias gradient
+            dFfn2Bias = Engine.TensorAdd(dFfn2Bias, dOut);
             for (int i = 0; i < _embeddingDim; i++)
             {
-                dFfn2Bias[i] = NumOps.Add(dFfn2Bias[i], dOut[i]);
                 for (int j = 0; j < ffnDim; j++)
                 {
                     dFfn2[i, j] = NumOps.Add(dFfn2[i, j],
@@ -1603,42 +1597,13 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
 
             var dHidden = MatVecMulTranspose(_ffn2, dOut);
 
-            // Backprop through GELU using the proper derivative
-            // GELU(x) ≈ 0.5 * x * (1 + tanh(sqrt(2/π) * (x + 0.044715 * x^3)))
-            // Let k = sqrt(2/π) ≈ 0.7978845608, c = 0.044715
-            // d/dx GELU(x) = 0.5 * (1 + tanh(y)) + 0.5 * x * sech^2(y) * k * (1 + 3*c*x^2)
-            // where y = k * (x + c * x^3)
-            const double k = 0.7978845608028654;  // sqrt(2/π)
-            const double c = 0.044715;
+            // Vectorized GELU backward using Engine
+            dHidden = Engine.GeluBackward(dHidden, hidden);
+
+            // Vectorized FFN1 bias gradient + weight gradient
+            dFfn1Bias = Engine.TensorAdd(dFfn1Bias, dHidden);
             for (int i = 0; i < ffnDim; i++)
             {
-                // Get the pre-activation value (before GELU was applied)
-                // We need to recover x from GELU(x), but we stored the post-activation hidden
-                // For numerical stability, we'll approximate using the stored hidden value
-                // In practice, we should store pre-activation values, but for now compute gradient
-                // using a more accurate approximation
-                double h = Convert.ToDouble(hidden[i]);
-
-                // Approximate inverse: if GELU(x) ≈ x for x > 2, else solve numerically
-                // For simplicity, use the stored value directly with a better gradient approximation
-                double x = h; // Use hidden as approximation (works reasonably for positive values)
-                double y = k * (x + c * x * x * x);
-                double tanhY = Math.Tanh(y);
-                double sech2Y = 1.0 - tanhY * tanhY;
-
-                // d/dx GELU(x) = 0.5 * (1 + tanh(y)) + 0.5 * x * sech^2(y) * k * (1 + 3*c*x^2)
-                double geluGrad = 0.5 * (1.0 + tanhY) + 0.5 * x * sech2Y * k * (1.0 + 3.0 * c * x * x);
-
-                // Clamp gradient for numerical stability
-                geluGrad = Math.Max(-10.0, Math.Min(10.0, geluGrad));
-
-                dHidden[i] = NumOps.Multiply(dHidden[i], NumOps.FromDouble(geluGrad));
-            }
-
-            // Backprop through first linear
-            for (int i = 0; i < ffnDim; i++)
-            {
-                dFfn1Bias[i] = NumOps.Add(dFfn1Bias[i], dHidden[i]);
                 for (int j = 0; j < _embeddingDim; j++)
                 {
                     dFfn1[i, j] = NumOps.Add(dFfn1[i, j],
@@ -1670,58 +1635,29 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
         var output = new List<Tensor<T>>();
         for (int t = 0; t < input.Count; t++)
         {
-            var vec = new Tensor<T>(new[] { input[t].Length });
-            for (int i = 0; i < input[t].Length && i < residual[t].Length; i++)
-                vec[i] = NumOps.Add(input[t][i], residual[t][i]);
-            output.Add(vec);
+            output.Add(Engine.TensorAdd(input[t], residual[t]));
         }
         return output;
     }
 
     private Tensor<T> MatVecMul(Tensor<T> matrix, Tensor<T> vec)
     {
+        // Direct tensor matmul: matrix [rows, cols] @ vec [cols, 1] -> [rows, 1] -> [rows]
         int rows = matrix.Shape[0];
-        int cols = matrix.Shape[1];
-
-        // Engine-accelerated matrix-vector multiply using BLAS
-        var mat = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                mat[i, j] = matrix[i, j];
-
-        var colMat = new Matrix<T>(Math.Min(cols, vec.Length), 1);
-        for (int j = 0; j < colMat.Rows; j++)
-            colMat[j, 0] = vec[j];
-
-        var resultMat = (Matrix<T>)Engine.MatrixMultiply(mat, colMat);
-
-        var result = new Tensor<T>(new[] { rows });
-        for (int i = 0; i < rows; i++)
-            result[i] = resultMat[i, 0];
-        return result;
+        var vecCol = vec.Reshape(vec.Length, 1);
+        var result = Engine.TensorMatMul(matrix, vecCol);
+        return result.Reshape(rows);
     }
 
     private Tensor<T> MatVecMulTranspose(Tensor<T> matrix, Tensor<T> vec)
     {
-        int rows = matrix.Shape[0];
         int cols = matrix.Shape[1];
 
-        // Engine-accelerated transpose matrix-vector multiply: result = M^T * v
-        var matT = new Matrix<T>(cols, rows);
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                matT[j, i] = matrix[i, j];
-
-        var colMat = new Matrix<T>(Math.Min(rows, vec.Length), 1);
-        for (int i = 0; i < colMat.Rows; i++)
-            colMat[i, 0] = vec[i];
-
-        var resultMat = (Matrix<T>)Engine.MatrixMultiply(matT, colMat);
-
-        var result = new Tensor<T>(new[] { cols });
-        for (int j = 0; j < cols; j++)
-            result[j] = resultMat[j, 0];
-        return result;
+        // Direct: M^T @ v using tensor transpose + matmul
+        var matT = matrix.Transpose([1, 0]);
+        var vecCol = vec.Reshape(vec.Length, 1);
+        var result = Engine.TensorMatMul(matT, vecCol);
+        return result.Reshape(cols);
     }
 
     private T DotProduct(Tensor<T> a, Tensor<T> b)

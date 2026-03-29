@@ -181,26 +181,7 @@ public class RWKV4LanguageModel<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        SetTrainingMode(true);
-
-        // Forward pass
-        var predictions = Predict(input);
-
-        // Calculate loss
-        var flatPredictions = predictions.ToVector();
-        var flatExpected = expectedOutput.ToVector();
-        LastLoss = LossFunction.CalculateLoss(flatPredictions, flatExpected);
-
-        // Backward pass through all layers in reverse
-        var outputGradients = LossFunction.CalculateDerivative(flatPredictions, flatExpected);
-        Backpropagate(Tensor<T>.FromVector(outputGradients));
-
-        // Get parameter gradients and update
-        var parameterGradients = GetParameterGradients();
-        parameterGradients = ClipGradient(parameterGradients);
-        UpdateParameters(parameterGradients);
-
-        SetTrainingMode(false);
+        StandardTrainStep(input, expectedOutput);
     }
 
     /// <inheritdoc />

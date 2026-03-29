@@ -493,7 +493,7 @@ public class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnlineClass
 
         _knownClasses.Add(label);
         NumClasses = _knownClasses.Count;
-        ClassLabels = new Vector<T>(_knownClasses.ToArray());
+        ClassLabels = Vector<T>.Wrap(_knownClasses.ToArray());
         return _knownClasses.Count - 1;
     }
 

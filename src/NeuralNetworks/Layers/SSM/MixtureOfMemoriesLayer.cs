@@ -860,22 +860,22 @@ public class MixtureOfMemoriesLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient!.ToArray()),
-            new Vector<T>(_queryBiasGradient!.ToArray()),
-            new Vector<T>(_keyWeightsGradient!.ToArray()),
-            new Vector<T>(_keyBiasGradient!.ToArray()),
-            new Vector<T>(_valueWeightsGradient!.ToArray()),
-            new Vector<T>(_valueBiasGradient!.ToArray()),
-            new Vector<T>(_writeRouterWeightsGradient!.ToArray()),
-            new Vector<T>(_writeRouterBiasGradient!.ToArray()),
-            new Vector<T>(_readRouterWeightsGradient!.ToArray()),
-            new Vector<T>(_readRouterBiasGradient!.ToArray()),
-            new Vector<T>(_gateRouterWeightsGradient!.ToArray()),
-            new Vector<T>(_gateRouterBiasGradient!.ToArray()),
-            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
-            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
-            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
-            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
+            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
+            (_queryBiasGradient is not null ? Vector<T>.FromMemory(_queryBiasGradient.Data) : new Vector<T>(0)),
+            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
+            (_keyBiasGradient is not null ? Vector<T>.FromMemory(_keyBiasGradient.Data) : new Vector<T>(0)),
+            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
+            (_valueBiasGradient is not null ? Vector<T>.FromMemory(_valueBiasGradient.Data) : new Vector<T>(0)),
+            (_writeRouterWeightsGradient is not null ? Vector<T>.FromMemory(_writeRouterWeightsGradient.Data) : new Vector<T>(0)),
+            (_writeRouterBiasGradient is not null ? Vector<T>.FromMemory(_writeRouterBiasGradient.Data) : new Vector<T>(0)),
+            (_readRouterWeightsGradient is not null ? Vector<T>.FromMemory(_readRouterWeightsGradient.Data) : new Vector<T>(0)),
+            (_readRouterBiasGradient is not null ? Vector<T>.FromMemory(_readRouterBiasGradient.Data) : new Vector<T>(0)),
+            (_gateRouterWeightsGradient is not null ? Vector<T>.FromMemory(_gateRouterWeightsGradient.Data) : new Vector<T>(0)),
+            (_gateRouterBiasGradient is not null ? Vector<T>.FromMemory(_gateRouterBiasGradient.Data) : new Vector<T>(0)),
+            _outputGateWeightsGradient?.ToVector() ?? new Vector<T>(_outputGateWeights.Length),
+            _outputGateBiasGradient?.ToVector() ?? new Vector<T>(_outputGateBias.Length),
+            _outputProjectionWeightsGradient?.ToVector() ?? new Vector<T>(_outputProjectionWeights.Length),
+            _outputProjectionBiasGradient?.ToVector() ?? new Vector<T>(_outputProjectionBias.Length));
     }
 
     public override void ClearGradients()

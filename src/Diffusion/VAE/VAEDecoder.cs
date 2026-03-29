@@ -329,30 +329,12 @@ public class VAEDecoder<T> : LayerBase<T>
 
     private Tensor<T> ApplySiLU(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
-        var inputSpan = input.AsSpan();
-        var outputSpan = output.AsWritableSpan();
-
-        for (int i = 0; i < inputSpan.Length; i++)
-        {
-            outputSpan[i] = _silu.Activate(inputSpan[i]);
-        }
-
-        return output;
+        return Engine.Swish(input);
     }
 
     private Tensor<T> ApplyTanh(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
-        var inputSpan = input.AsSpan();
-        var outputSpan = output.AsWritableSpan();
-
-        for (int i = 0; i < inputSpan.Length; i++)
-        {
-            outputSpan[i] = _tanh.Activate(inputSpan[i]);
-        }
-
-        return output;
+        return Engine.Tanh(input);
     }
 
     /// <summary>

@@ -976,8 +976,8 @@ public class SpiralConvLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            new Vector<T>(_weights.ToArray()),
-            new Vector<T>(_biases.ToArray()));
+            Vector<T>.FromMemory(_weights.Data),
+            Vector<T>.FromMemory(_biases.Data));
     }
 
     /// <summary>

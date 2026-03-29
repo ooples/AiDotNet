@@ -13,6 +13,7 @@ using AiDotNet.PhysicsInformed.NeuralOperators;
 using AiDotNet.PhysicsInformed.PDEs;
 using AiDotNet.PhysicsInformed.PINNs;
 using AiDotNet.PhysicsInformed.ScientificML;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using Xunit;
 
@@ -61,10 +62,10 @@ public class PhysicsInformedIntegrationTests
     public void PhysicsInformedLoss_ComputePhysicsLoss_DataLossOnly()
     {
         var loss = new PhysicsInformedLoss<double>();
-        var predictions = new double[] { 1.0, 2.0, 3.0 };
-        var targets = new double[] { 1.0, 2.0, 3.0 };
+        var predictions = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
+        var targets = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
         var derivatives = CreateEmptyDerivatives(1, 1);
-        var inputs = new double[] { 0.5 };
+        var inputs = new Vector<double>(new double[] { 0.5 });
 
         var lossValue = loss.ComputePhysicsLoss(predictions, targets, derivatives, inputs);
 
@@ -78,8 +79,8 @@ public class PhysicsInformedIntegrationTests
         var pde = new HeatEquation<double>(thermalDiffusivity: 1.0);
         var loss = new PhysicsInformedLoss<double>(pde, pdeWeight: 1.0);
 
-        var predictions = new double[] { 1.0 };
-        var inputs = new double[] { 0.5, 0.1 }; // x, t
+        var predictions = new Vector<double>(new double[] { 1.0 });
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 }); // x, t
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { 0.1, 0.05 } }, // First derivatives
             new[, ,] { { { 0.05, 0.0 }, { 0.0, 0.0 } } }); // Second derivatives
@@ -95,9 +96,9 @@ public class PhysicsInformedIntegrationTests
     public void PhysicsInformedLoss_ComputePhysicsLoss_NullTargets()
     {
         var loss = new PhysicsInformedLoss<double>();
-        var predictions = new double[] { 1.0 };
+        var predictions = new Vector<double>(new double[] { 1.0 });
         var derivatives = CreateEmptyDerivatives(1, 1);
-        var inputs = new double[] { 0.5 };
+        var inputs = new Vector<double>(new double[] { 0.5 });
 
         // Should not throw with null targets
         var lossValue = loss.ComputePhysicsLoss(predictions, null, derivatives, inputs);
@@ -110,7 +111,7 @@ public class PhysicsInformedIntegrationTests
     {
         var loss = new PhysicsInformedLoss<double>();
         var derivatives = CreateEmptyDerivatives(1, 1);
-        var inputs = new double[] { 0.5 };
+        var inputs = new Vector<double>(new double[] { 0.5 });
 
         Assert.Throws<ArgumentNullException>(() =>
             loss.ComputePhysicsLossGradients(null!, null, derivatives, inputs));
@@ -120,7 +121,7 @@ public class PhysicsInformedIntegrationTests
     public void PhysicsInformedLoss_ComputePhysicsLossGradients_NullInputs_ThrowsArgumentNull()
     {
         var loss = new PhysicsInformedLoss<double>();
-        var predictions = new double[] { 1.0 };
+        var predictions = new Vector<double>(new double[] { 1.0 });
         var derivatives = CreateEmptyDerivatives(1, 1);
 
         Assert.Throws<ArgumentNullException>(() =>
@@ -131,10 +132,10 @@ public class PhysicsInformedIntegrationTests
     public void PhysicsInformedLoss_ComputePhysicsLossGradients_MismatchedLengths_ThrowsArgument()
     {
         var loss = new PhysicsInformedLoss<double>();
-        var predictions = new double[] { 1.0, 2.0 };
-        var targets = new double[] { 1.0 }; // Mismatched length
+        var predictions = new Vector<double>(new double[] { 1.0, 2.0 });
+        var targets = new Vector<double>(new double[] { 1.0 }); // Mismatched length
         var derivatives = CreateEmptyDerivatives(2, 1);
-        var inputs = new double[] { 0.5 };
+        var inputs = new Vector<double>(new double[] { 0.5 });
 
         Assert.Throws<ArgumentException>(() =>
             loss.ComputePhysicsLossGradients(predictions, targets, derivatives, inputs));
@@ -317,8 +318,8 @@ public class PhysicsInformedIntegrationTests
         double dudt = -alpha * k * k * expFactor * Math.Sin(k * x);
         double d2udx2 = -k * k * expFactor * Math.Sin(k * x);
 
-        var inputs = new[] { x, t };
-        var outputs = new[] { u };
+        var inputs = new Vector<double>(new double[] { x, t });
+        var outputs = new Vector<double>(new double[] { u });
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { k * expFactor * Math.Cos(k * x), dudt } },
             new[, ,] { { { d2udx2, 0 }, { 0, 0 } } });
@@ -333,8 +334,8 @@ public class PhysicsInformedIntegrationTests
     public void HeatEquation_ComputeResidual_NullDerivatives_ThrowsArgument()
     {
         var pde = new HeatEquation<double>(1.0);
-        var inputs = new[] { 0.5, 0.1 };
-        var outputs = new[] { 1.0 };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 1.0 });
         var derivatives = new PDEDerivatives<double>(); // Null first/second derivatives
 
         Assert.Throws<ArgumentException>(() => pde.ComputeResidual(inputs, outputs, derivatives));
@@ -346,8 +347,8 @@ public class PhysicsInformedIntegrationTests
         double alpha = 1.5;
         var pde = new HeatEquation<double>(alpha);
 
-        var inputs = new[] { 0.5, 0.1 };
-        var outputs = new[] { 1.0 };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 1.0 });
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { 0.5, 0.3 } },
             new[, ,] { { { 0.2, 0.0 }, { 0.0, 0.0 } } });
@@ -395,8 +396,8 @@ public class PhysicsInformedIntegrationTests
         double d2udx2 = -k * k * Math.Sin(k * x) * Math.Cos(c * k * t);
         double d2udt2 = -c * c * k * k * Math.Sin(k * x) * Math.Cos(c * k * t);
 
-        var inputs = new[] { x, t };
-        var outputs = new[] { u };
+        var inputs = new Vector<double>(new double[] { x, t });
+        var outputs = new Vector<double>(new double[] { u });
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { k * Math.Cos(k * x) * Math.Cos(c * k * t), -c * k * Math.Sin(k * x) * Math.Sin(c * k * t) } },
             new[, ,] { { { d2udx2, 0 }, { 0, d2udt2 } } });
@@ -433,8 +434,8 @@ public class PhysicsInformedIntegrationTests
         double u = x * x;
         double d2udx2 = 2.0;
 
-        var inputs = new[] { x };
-        var outputs = new[] { u };
+        var inputs = new Vector<double>(new double[] { x });
+        var outputs = new Vector<double>(new double[] { u });
         var derivatives = CreateDerivatives(1, 1,
             new[,] { { 2 * x } },
             new[, ,] { { { d2udx2 } } });
@@ -471,8 +472,8 @@ public class PhysicsInformedIntegrationTests
         var pde = new BurgersEquation<double>(viscosity: 0.1);
 
         // Constant solution: all derivatives are zero
-        var inputs = new[] { 0.5, 0.1 };
-        var outputs = new[] { 1.0 };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 1.0 });
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { 0.0, 0.0 } },
             new[, ,] { { { 0.0, 0.0 }, { 0.0, 0.0 } } });
@@ -505,8 +506,8 @@ public class PhysicsInformedIntegrationTests
     {
         var pde = new AllenCahnEquation<double>(epsilon: 1.0);
 
-        var inputs = new[] { 0.5, 0.1 };
-        var outputs = new[] { u0 };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { u0 });
         var derivatives = CreateDerivatives(1, 2,
             new[,] { { 0.0, 0.0 } },
             new[, ,] { { { 0.0, 0.0 }, { 0.0, 0.0 } } });
@@ -536,8 +537,8 @@ public class PhysicsInformedIntegrationTests
     {
         var pde = new KortewegDeVriesEquation<double>();
 
-        var inputs = new[] { 0.5, 0.1 };
-        var outputs = new[] { 1.0 };
+        var inputs = new Vector<double>(new double[] { 0.5, 0.1 });
+        var outputs = new Vector<double>(new double[] { 1.0 });
         var derivatives = new PDEDerivatives<double>
         {
             FirstDerivatives = new double[,] { { 0.0, 0.0 } },
@@ -718,7 +719,7 @@ public class PhysicsInformedIntegrationTests
     /// </summary>
     private sealed class LinearResidualPde : IPDESpecification<double>, IPDEResidualGradient<double>
     {
-        public double ComputeResidual(double[] inputs, double[] outputs, PDEDerivatives<double> derivatives)
+        public double ComputeResidual(Vector<double> inputs, Vector<double> outputs, PDEDerivatives<double> derivatives)
         {
             return outputs[0] - inputs[0];
         }
@@ -728,8 +729,8 @@ public class PhysicsInformedIntegrationTests
         public string Name => "LinearResidualTest";
 
         public PDEResidualGradient<double> ComputeResidualGradient(
-            double[] inputs,
-            double[] outputs,
+            Vector<double> inputs,
+            Vector<double> outputs,
             PDEDerivatives<double> derivatives)
         {
             var gradient = new PDEResidualGradient<double>(OutputDimension, InputDimension);
@@ -1330,10 +1331,10 @@ public class PhysicsInformedIntegrationTests
     public void PhysicsInformedLoss_VerySmallValues_NoNaN()
     {
         var loss = new PhysicsInformedLoss<double>();
-        var predictions = new double[] { 1e-300, 1e-300 };
-        var targets = new double[] { 1e-300, 1e-300 };
+        var predictions = new Vector<double>(new double[] { 1e-300, 1e-300 });
+        var targets = new Vector<double>(new double[] { 1e-300, 1e-300 });
         var derivatives = CreateEmptyDerivatives(2, 1);
-        var inputs = new double[] { 0.5 };
+        var inputs = new Vector<double>(new double[] { 0.5 });
 
         var lossValue = loss.ComputePhysicsLoss(predictions, targets, derivatives, inputs);
 
@@ -1345,10 +1346,10 @@ public class PhysicsInformedIntegrationTests
     public void PhysicsInformedLoss_LargeValues_NoInfinity()
     {
         var loss = new PhysicsInformedLoss<double>();
-        var predictions = new double[] { 1e150 };
-        var targets = new double[] { 1e150 };
+        var predictions = new Vector<double>(new double[] { 1e150 });
+        var targets = new Vector<double>(new double[] { 1e150 });
         var derivatives = CreateEmptyDerivatives(1, 1);
-        var inputs = new double[] { 0.5 };
+        var inputs = new Vector<double>(new double[] { 0.5 });
 
         var lossValue = loss.ComputePhysicsLoss(predictions, targets, derivatives, inputs);
 
@@ -1621,9 +1622,9 @@ public class PhysicsInformedIntegrationTests
 internal class DirichletBoundaryCondition : IBoundaryCondition<double>
 {
     private readonly double _boundaryValue;
-    private readonly Func<double[], bool> _boundaryCheck;
+    private readonly Func<Vector<double>, bool> _boundaryCheck;
 
-    public DirichletBoundaryCondition(double boundaryValue, Func<double[], bool> boundaryCheck)
+    public DirichletBoundaryCondition(double boundaryValue, Func<Vector<double>, bool> boundaryCheck)
     {
         _boundaryValue = boundaryValue;
         _boundaryCheck = boundaryCheck ?? throw new ArgumentNullException(nameof(boundaryCheck));
@@ -1631,12 +1632,12 @@ internal class DirichletBoundaryCondition : IBoundaryCondition<double>
 
     public string Name => "Dirichlet";
 
-    public bool IsOnBoundary(double[] inputs)
+    public bool IsOnBoundary(Vector<double> inputs)
     {
         return _boundaryCheck(inputs);
     }
 
-    public double ComputeBoundaryResidual(double[] inputs, double[] outputs, PDEDerivatives<double> derivatives)
+    public double ComputeBoundaryResidual(Vector<double> inputs, Vector<double> outputs, PDEDerivatives<double> derivatives)
     {
         return outputs[0] - _boundaryValue;
     }
@@ -1656,16 +1657,18 @@ internal class SineInitialCondition : IInitialCondition<double>
 
     public string Name => "Sine Initial Condition";
 
-    public bool IsAtInitialTime(double[] inputs)
+    public bool IsAtInitialTime(Vector<double> inputs)
     {
         // Assume last input is time
         return Math.Abs(inputs[inputs.Length - 1] - _initialTime) < 1e-10;
     }
 
-    public double[] ComputeInitialValue(double[] spatialInputs)
+    public Vector<double> ComputeInitialValue(Vector<double> spatialInputs)
     {
         // u(x, 0) = sin(π*x)
-        return new[] { Math.Sin(Math.PI * spatialInputs[0]) };
+        var result = new Vector<double>(1);
+        result[0] = Math.Sin(Math.PI * spatialInputs[0]);
+        return result;
     }
 }
 

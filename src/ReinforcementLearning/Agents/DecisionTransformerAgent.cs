@@ -287,13 +287,11 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
             var gradientTensor = Tensor<T>.FromVector(gradient);
             _transformerNetwork.Backpropagate(gradientTensor);
 
+            // Vectorized SGD using parameter gradients from backprop
             var parameters = _transformerNetwork.GetParameters();
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                var update = NumOps.Multiply(LearningRate, gradient[i % gradient.Length]);
-                parameters[i] = NumOps.Subtract(parameters[i], update);
-            }
-            _transformerNetwork.UpdateParameters(parameters);
+            var paramGrads = _transformerNetwork.GetParameterGradients();
+            var updated = (Vector<T>)Engine.Subtract(parameters, Engine.Multiply(paramGrads, LearningRate));
+            _transformerNetwork.UpdateParameters(updated);
         }
 
         _updateCount++;

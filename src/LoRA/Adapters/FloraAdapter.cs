@@ -200,52 +200,25 @@ public class FloraAdapter<T> : LoRAAdapterBase<T>
 
     private Matrix<T> ComputeTransferMatrix(Matrix<T> oldA, Matrix<T> newA)
     {
-        Matrix<T> result = new Matrix<T>(_rank, _rank);
-        int inputSize = GetInputShape()[0];
-
-        for (int i = 0; i < _rank; i++)
-        {
-            for (int j = 0; j < _rank; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < inputSize; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(oldA[k, i], newA[k, j]));
-                }
-                result[i, j] = sum;
-            }
-        }
-
-        return result;
+        // Transfer matrix = oldA^T @ newA — vectorized via Engine.TensorMatMul
+        var oldATensor = Tensor<T>.FromMatrix(oldA).Transpose(new[] { 1, 0 });
+        var newATensor = Tensor<T>.FromMatrix(newA);
+        var resultTensor = Engine.TensorMatMul(oldATensor, newATensor);
+        return resultTensor.ToMatrix();
     }
 
     private Matrix<T> MultiplyMatrices(Matrix<T> a, Matrix<T> b)
     {
-        int m = a.Rows;
-        int n = a.Columns;
-        int p = b.Columns;
-
-        if (n != b.Rows)
+        if (a.Columns != b.Rows)
         {
-            throw new ArgumentException($"Matrix dimensions incompatible for multiplication: ({m}×{n}) × ({b.Rows}×{p})");
+            throw new ArgumentException($"Matrix dimensions incompatible for multiplication: ({a.Rows}×{a.Columns}) × ({b.Rows}×{b.Columns})");
         }
 
-        Matrix<T> result = new Matrix<T>(m, p);
-
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < n; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(a[i, k], b[k, j]));
-                }
-                result[i, j] = sum;
-            }
-        }
-
-        return result;
+        // a @ b — vectorized via Engine.TensorMatMul
+        var aTensor = Tensor<T>.FromMatrix(a);
+        var bTensor = Tensor<T>.FromMatrix(b);
+        var resultTensor = Engine.TensorMatMul(aTensor, bTensor);
+        return resultTensor.ToMatrix();
     }
 
     public override ILayer<T> MergeToOriginalLayer()

@@ -249,16 +249,7 @@ public class VAEResBlock<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ApplySiLU(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
-        var inputSpan = input.AsSpan();
-        var outputSpan = output.AsWritableSpan();
-
-        for (int i = 0; i < inputSpan.Length; i++)
-        {
-            outputSpan[i] = _silu.Activate(inputSpan[i]);
-        }
-
-        return output;
+        return Engine.Swish(input);
     }
 
     /// <summary>
