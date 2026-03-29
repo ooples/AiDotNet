@@ -1085,8 +1085,8 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         // Use Vector.Concatenate for production-grade parameter extraction
         return Vector<T>.Concatenate(
-            _transformationMatrix.ToVector(),
-            _bias.ToVector()
+            Vector<T>.FromMemory(_transformationMatrix.Data),
+            Vector<T>.FromMemory(_bias.Data)
         );
     }
 
@@ -1119,10 +1119,10 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Vector<T> GetParameterGradients()
     {
         var matGrad = _transformationMatrixGradient != null
-            ? _transformationMatrixGradient.ToVector()
+            ? (_transformationMatrixGradient is not null ? Vector<T>.FromMemory(_transformationMatrixGradient.Data) : new Vector<T>(0))
             : new Vector<T>(_transformationMatrix.Length);
         var biasGrad = _biasGradient != null
-            ? _biasGradient.ToVector()
+            ? (_biasGradient is not null ? Vector<T>.FromMemory(_biasGradient.Data) : new Vector<T>(0))
             : new Vector<T>(_bias.Length);
         return Vector<T>.Concatenate(matGrad, biasGrad);
     }
@@ -1200,7 +1200,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Create weight tensor as constant node
         var transformTensor = new Tensor<T>(
             new[] { _transformationMatrix.Shape[0], _transformationMatrix.Shape[1], _transformationMatrix.Shape[2] },
-            _transformationMatrix.ToVector());
+            Vector<T>.FromMemory(_transformationMatrix.Data));
         var transformationMatrixNode = TensorOperations<T>.Constant(transformTensor, "CapsuleTransformMatrix");
 
         // Bias is already a Tensor<T>, use directly

@@ -816,18 +816,18 @@ public class LogLinearAttentionLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            _queryWeightsGradient!.ToVector(),
-            _queryBiasGradient!.ToVector(),
-            _keyWeightsGradient!.ToVector(),
-            _keyBiasGradient!.ToVector(),
-            _valueWeightsGradient!.ToVector(),
-            _valueBiasGradient!.ToVector(),
-            _levelMixWeightsGradient!.ToVector(),
-            _compressionWeightsGradient!.ToVector(),
-            _outputGateWeightsGradient!.ToVector(),
-            _outputGateBiasGradient!.ToVector(),
-            _outputProjectionWeightsGradient!.ToVector(),
-            _outputProjectionBiasGradient!.ToVector());
+            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
+            (_queryBiasGradient is not null ? Vector<T>.FromMemory(_queryBiasGradient.Data) : new Vector<T>(0)),
+            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
+            (_keyBiasGradient is not null ? Vector<T>.FromMemory(_keyBiasGradient.Data) : new Vector<T>(0)),
+            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
+            (_valueBiasGradient is not null ? Vector<T>.FromMemory(_valueBiasGradient.Data) : new Vector<T>(0)),
+            (_levelMixWeightsGradient is not null ? Vector<T>.FromMemory(_levelMixWeightsGradient.Data) : new Vector<T>(0)),
+            (_compressionWeightsGradient is not null ? Vector<T>.FromMemory(_compressionWeightsGradient.Data) : new Vector<T>(0)),
+            (_outputGateWeightsGradient is not null ? Vector<T>.FromMemory(_outputGateWeightsGradient.Data) : new Vector<T>(0)),
+            (_outputGateBiasGradient is not null ? Vector<T>.FromMemory(_outputGateBiasGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()

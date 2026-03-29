@@ -1048,9 +1048,9 @@ public class RBMLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            _weights.ToVector(),
-            _visibleBiases.ToVector(),
-            _hiddenBiases.ToVector()
+            Vector<T>.FromMemory(_weights.Data),
+            Vector<T>.FromMemory(_visibleBiases.Data),
+            Vector<T>.FromMemory(_hiddenBiases.Data)
         );
     }
 
@@ -1095,9 +1095,9 @@ public class RBMLayer<T> : LayerBase<T>
         if (_weightsGradient == null || _visibleBiasesGradient == null || _hiddenBiasesGradient == null)
             return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            _weightsGradient.ToVector(),
-            _visibleBiasesGradient.ToVector(),
-            _hiddenBiasesGradient.ToVector());
+            (_weightsGradient is not null ? Vector<T>.FromMemory(_weightsGradient.Data) : new Vector<T>(0)),
+            (_visibleBiasesGradient is not null ? Vector<T>.FromMemory(_visibleBiasesGradient.Data) : new Vector<T>(0)),
+            (_hiddenBiasesGradient is not null ? Vector<T>.FromMemory(_hiddenBiasesGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()

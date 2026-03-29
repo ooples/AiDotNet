@@ -1320,10 +1320,10 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Vector<T> GetParameters()
     {
         // Use Vector<T>.Concatenate for efficient parameter collection
-        var flatW1 = _localizationWeights1.ToVector();
-        var flatB1 = _localizationBias1.ToVector();
-        var flatW2 = _localizationWeights2.ToVector();
-        var flatB2 = _localizationBias2.ToVector();
+        var flatW1 = Vector<T>.FromMemory(_localizationWeights1.Data);
+        var flatB1 = Vector<T>.FromMemory(_localizationBias1.Data);
+        var flatW2 = Vector<T>.FromMemory(_localizationWeights2.Data);
+        var flatB2 = Vector<T>.FromMemory(_localizationBias2.Data);
 
         return Vector<T>.Concatenate(
             Vector<T>.Concatenate(flatW1, flatB1),
@@ -1360,16 +1360,16 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Vector<T> GetParameterGradients()
     {
         var gW1 = _localizationWeights1Gradient != null
-            ? _localizationWeights1Gradient.ToVector()
+            ? (_localizationWeights1Gradient is not null ? Vector<T>.FromMemory(_localizationWeights1Gradient.Data) : new Vector<T>(0))
             : new Vector<T>(_localizationWeights1.Length);
         var gB1 = _localizationBias1Gradient != null
-            ? _localizationBias1Gradient.ToVector()
+            ? (_localizationBias1Gradient is not null ? Vector<T>.FromMemory(_localizationBias1Gradient.Data) : new Vector<T>(0))
             : new Vector<T>(_localizationBias1.Length);
         var gW2 = _localizationWeights2Gradient != null
-            ? _localizationWeights2Gradient.ToVector()
+            ? (_localizationWeights2Gradient is not null ? Vector<T>.FromMemory(_localizationWeights2Gradient.Data) : new Vector<T>(0))
             : new Vector<T>(_localizationWeights2.Length);
         var gB2 = _localizationBias2Gradient != null
-            ? _localizationBias2Gradient.ToVector()
+            ? (_localizationBias2Gradient is not null ? Vector<T>.FromMemory(_localizationBias2Gradient.Data) : new Vector<T>(0))
             : new Vector<T>(_localizationBias2.Length);
 
         return Vector<T>.Concatenate(

@@ -798,14 +798,14 @@ public class DeltaProductLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            _queryWeightsGradient!.ToVector(),
-            _keyWeightsGradient!.ToVector(),
-            _valueWeightsGradient!.ToVector(),
-            _betaWeightsGradient!.ToVector(),
-            _betaBiasGradient!.ToVector(),
-            _householderWeightsGradient!.ToVector(),
-            _outputProjectionWeightsGradient is not null ? _outputProjectionWeightsGradient.ToVector() : new Vector<T>(_outputProjectionWeights.Length),
-            _outputProjectionBiasGradient is not null ? _outputProjectionBiasGradient.ToVector() : new Vector<T>(_outputProjectionBias.Length));
+            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
+            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
+            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
+            (_betaWeightsGradient is not null ? Vector<T>.FromMemory(_betaWeightsGradient.Data) : new Vector<T>(0)),
+            (_betaBiasGradient is not null ? Vector<T>.FromMemory(_betaBiasGradient.Data) : new Vector<T>(0)),
+            (_householderWeightsGradient is not null ? Vector<T>.FromMemory(_householderWeightsGradient.Data) : new Vector<T>(0)),
+            _outputProjectionWeightsGradient is not null ? (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionWeights.Length),
+            _outputProjectionBiasGradient is not null ? (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionBias.Length));
     }
 
     public override void ClearGradients()

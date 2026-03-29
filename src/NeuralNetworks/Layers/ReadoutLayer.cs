@@ -871,8 +871,8 @@ public class ReadoutLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Use Vector<T>.Concatenate for efficient parameter collection
-        var flatWeights = _weights.ToVector();
-        var flatBias = _bias.ToVector();
+        var flatWeights = Vector<T>.FromMemory(_weights.Data);
+        var flatBias = Vector<T>.FromMemory(_bias.Data);
         return Vector<T>.Concatenate(flatWeights, flatBias);
     }
 
@@ -904,8 +904,8 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameterGradients()
     {
-        var flatWeightGrads = _weightGradients.ToVector();
-        var flatBiasGrads = _biasGradients.ToVector();
+        var flatWeightGrads = Vector<T>.FromMemory(_weightGradients.Data);
+        var flatBiasGrads = Vector<T>.FromMemory(_biasGradients.Data);
         return Vector<T>.Concatenate(flatWeightGrads, flatBiasGrads);
     }
 

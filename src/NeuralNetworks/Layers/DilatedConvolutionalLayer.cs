@@ -346,7 +346,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_kernelGradients == null || _biasGradients == null) return new Vector<T>(ParameterCount);
-        return Vector<T>.Concatenate(_kernelGradients.ToVector(), _biasGradients.ToVector());
+        return Vector<T>.Concatenate(Vector<T>.FromMemory(_kernelGradients.Data), Vector<T>.FromMemory(_biasGradients.Data));
     }
 
     public override void ClearGradients() { base.ClearGradients(); _kernelGradients = null; _biasGradients = null; }
@@ -1202,7 +1202,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        return Vector<T>.Concatenate(_kernels.ToVector(), _biases.ToVector());
+        return Vector<T>.Concatenate(Vector<T>.FromMemory(_kernels.Data), Vector<T>.FromMemory(_biases.Data));
     }
 
     /// <summary>

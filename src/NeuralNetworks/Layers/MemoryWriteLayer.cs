@@ -994,11 +994,11 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         // Use Vector.Concatenate to efficiently combine all parameters
         return Vector<T>.Concatenate(
-            _queryWeights.ToVector(),
-            _keyWeights.ToVector(),
-            _valueWeights.ToVector(),
-            _outputWeights.ToVector(),
-            _outputBias.ToVector()
+            Vector<T>.FromMemory(_queryWeights.Data),
+            Vector<T>.FromMemory(_keyWeights.Data),
+            Vector<T>.FromMemory(_valueWeights.Data),
+            Vector<T>.FromMemory(_outputWeights.Data),
+            Vector<T>.FromMemory(_outputBias.Data)
         );
     }
 
@@ -1109,11 +1109,11 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _outputWeightsGradient == null || _outputBiasGradient == null)
             return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            _queryWeightsGradient.ToVector(),
-            _keyWeightsGradient.ToVector(),
-            _valueWeightsGradient.ToVector(),
-            _outputWeightsGradient.ToVector(),
-            _outputBiasGradient.ToVector());
+            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
+            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
+            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
+            (_outputWeightsGradient is not null ? Vector<T>.FromMemory(_outputWeightsGradient.Data) : new Vector<T>(0)),
+            (_outputBiasGradient is not null ? Vector<T>.FromMemory(_outputBiasGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()

@@ -1090,22 +1090,22 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
-        var gMsgWeights1 = _messageWeights1Gradient != null ? _messageWeights1Gradient.ToVector() : new Vector<T>(_messageWeights1.Length);
-        var gMsgWeights2 = _messageWeights2Gradient != null ? _messageWeights2Gradient.ToVector() : new Vector<T>(_messageWeights2.Length);
-        var gMsgBias1 = _messageBias1Gradient != null ? _messageBias1Gradient.ToVector() : new Vector<T>(_messageBias1.Length);
-        var gMsgBias2 = _messageBias2Gradient != null ? _messageBias2Gradient.ToVector() : new Vector<T>(_messageBias2.Length);
-        var gUpdateWeights = _updateWeightsGradient != null ? _updateWeightsGradient.ToVector() : new Vector<T>(_updateWeights.Length);
-        var gUpdateMsgWeights = _updateMessageWeightsGradient != null ? _updateMessageWeightsGradient.ToVector() : new Vector<T>(_updateMessageWeights.Length);
-        var gUpdateBias = _updateBiasGradient != null ? _updateBiasGradient.ToVector() : new Vector<T>(_updateBias.Length);
-        var gResetWeights = _resetWeightsGradient != null ? _resetWeightsGradient.ToVector() : new Vector<T>(_resetWeights.Length);
-        var gResetMsgWeights = _resetMessageWeightsGradient != null ? _resetMessageWeightsGradient.ToVector() : new Vector<T>(_resetMessageWeights.Length);
-        var gResetBias = _resetBiasGradient != null ? _resetBiasGradient.ToVector() : new Vector<T>(_resetBias.Length);
+        var gMsgWeights1 = _messageWeights1Gradient != null ? (_messageWeights1Gradient is not null ? Vector<T>.FromMemory(_messageWeights1Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_messageWeights1.Length);
+        var gMsgWeights2 = _messageWeights2Gradient != null ? (_messageWeights2Gradient is not null ? Vector<T>.FromMemory(_messageWeights2Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_messageWeights2.Length);
+        var gMsgBias1 = _messageBias1Gradient != null ? (_messageBias1Gradient is not null ? Vector<T>.FromMemory(_messageBias1Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_messageBias1.Length);
+        var gMsgBias2 = _messageBias2Gradient != null ? (_messageBias2Gradient is not null ? Vector<T>.FromMemory(_messageBias2Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_messageBias2.Length);
+        var gUpdateWeights = _updateWeightsGradient != null ? (_updateWeightsGradient is not null ? Vector<T>.FromMemory(_updateWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_updateWeights.Length);
+        var gUpdateMsgWeights = _updateMessageWeightsGradient != null ? (_updateMessageWeightsGradient is not null ? Vector<T>.FromMemory(_updateMessageWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_updateMessageWeights.Length);
+        var gUpdateBias = _updateBiasGradient != null ? (_updateBiasGradient is not null ? Vector<T>.FromMemory(_updateBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_updateBias.Length);
+        var gResetWeights = _resetWeightsGradient != null ? (_resetWeightsGradient is not null ? Vector<T>.FromMemory(_resetWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_resetWeights.Length);
+        var gResetMsgWeights = _resetMessageWeightsGradient != null ? (_resetMessageWeightsGradient is not null ? Vector<T>.FromMemory(_resetMessageWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_resetMessageWeights.Length);
+        var gResetBias = _resetBiasGradient != null ? (_resetBiasGradient is not null ? Vector<T>.FromMemory(_resetBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_resetBias.Length);
 
         var parts = new List<Vector<T>> { gMsgWeights1, gMsgWeights2, gMsgBias1, gMsgBias2, gUpdateWeights, gUpdateMsgWeights, gUpdateBias, gResetWeights, gResetMsgWeights, gResetBias };
 
         if (_edgeWeights != null)
         {
-            parts.Add(_edgeWeightsGradient != null ? _edgeWeightsGradient.ToVector() : new Vector<T>(_edgeWeights.Length));
+            parts.Add(_edgeWeightsGradient != null ? (_edgeWeightsGradient is not null ? Vector<T>.FromMemory(_edgeWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_edgeWeights.Length));
         }
 
         return Vector<T>.Concatenate(parts.ToArray());

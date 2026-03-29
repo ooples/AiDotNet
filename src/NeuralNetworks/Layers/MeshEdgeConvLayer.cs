@@ -721,8 +721,8 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            _weights.ToVector(),
-            _biases.ToVector());
+            Vector<T>.FromMemory(_weights.Data),
+            Vector<T>.FromMemory(_biases.Data));
     }
 
     /// <summary>

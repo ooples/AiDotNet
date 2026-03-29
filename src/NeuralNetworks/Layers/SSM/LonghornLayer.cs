@@ -829,18 +829,18 @@ public class LonghornLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            _queryWeightsGradient!.ToVector(),
-            _queryBiasGradient!.ToVector(),
-            _keyWeightsGradient!.ToVector(),
-            _keyBiasGradient!.ToVector(),
-            _valueWeightsGradient!.ToVector(),
-            _valueBiasGradient!.ToVector(),
-            _alphaWeightsGradient!.ToVector(),
-            _alphaBiasGradient!.ToVector(),
-            _groupNormGammaGradient!.ToVector(),
-            _groupNormBetaGradient!.ToVector(),
-            _outputProjectionWeightsGradient is not null ? _outputProjectionWeightsGradient.ToVector() : new Vector<T>(_outputProjectionWeights.Length),
-            _outputProjectionBiasGradient is not null ? _outputProjectionBiasGradient.ToVector() : new Vector<T>(_outputProjectionBias.Length));
+            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
+            (_queryBiasGradient is not null ? Vector<T>.FromMemory(_queryBiasGradient.Data) : new Vector<T>(0)),
+            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
+            (_keyBiasGradient is not null ? Vector<T>.FromMemory(_keyBiasGradient.Data) : new Vector<T>(0)),
+            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
+            (_valueBiasGradient is not null ? Vector<T>.FromMemory(_valueBiasGradient.Data) : new Vector<T>(0)),
+            (_alphaWeightsGradient is not null ? Vector<T>.FromMemory(_alphaWeightsGradient.Data) : new Vector<T>(0)),
+            (_alphaBiasGradient is not null ? Vector<T>.FromMemory(_alphaBiasGradient.Data) : new Vector<T>(0)),
+            (_groupNormGammaGradient is not null ? Vector<T>.FromMemory(_groupNormGammaGradient.Data) : new Vector<T>(0)),
+            (_groupNormBetaGradient is not null ? Vector<T>.FromMemory(_groupNormBetaGradient.Data) : new Vector<T>(0)),
+            _outputProjectionWeightsGradient is not null ? (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionWeights.Length),
+            _outputProjectionBiasGradient is not null ? (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionBias.Length));
     }
 
     public override void ClearGradients()

@@ -1362,13 +1362,13 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     public override Vector<T> GetParameterGradients()
     {
         var weightsGrad = _weightsGradient != null
-            ? _weightsGradient.ToVector()
+            ? (_weightsGradient is not null ? Vector<T>.FromMemory(_weightsGradient.Data) : new Vector<T>(0))
             : new Vector<T>(_weights.Length);
         var attnGrad = _attentionWeightsGradient != null
-            ? _attentionWeightsGradient.ToVector()
+            ? (_attentionWeightsGradient is not null ? Vector<T>.FromMemory(_attentionWeightsGradient.Data) : new Vector<T>(0))
             : new Vector<T>(_attentionWeights.Length);
         var biasGrad = _biasGradient != null
-            ? _biasGradient.ToVector()
+            ? (_biasGradient is not null ? Vector<T>.FromMemory(_biasGradient.Data) : new Vector<T>(0))
             : new Vector<T>(_bias.Length);
 
         return Vector<T>.Concatenate(weightsGrad, attnGrad, biasGrad);
@@ -1378,9 +1378,9 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            _weights.ToVector(),
-            _attentionWeights.ToVector(),
-            _bias.ToVector()
+            Vector<T>.FromMemory(_weights.Data),
+            Vector<T>.FromMemory(_attentionWeights.Data),
+            Vector<T>.FromMemory(_bias.Data)
         );
     }
 

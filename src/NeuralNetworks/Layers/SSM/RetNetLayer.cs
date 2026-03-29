@@ -857,15 +857,15 @@ public class RetNetLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            _queryWeightsGradient!.ToVector(),
-            _queryBiasGradient!.ToVector(),
-            _keyWeightsGradient!.ToVector(),
-            _keyBiasGradient!.ToVector(),
-            _valueWeightsGradient!.ToVector(),
-            _valueBiasGradient!.ToVector(),
-            _gammasGradient!.ToVector(),
-            _groupNormScaleGradient!.ToVector(),
-            _groupNormBiasGradient!.ToVector());
+            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
+            (_queryBiasGradient is not null ? Vector<T>.FromMemory(_queryBiasGradient.Data) : new Vector<T>(0)),
+            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
+            (_keyBiasGradient is not null ? Vector<T>.FromMemory(_keyBiasGradient.Data) : new Vector<T>(0)),
+            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
+            (_valueBiasGradient is not null ? Vector<T>.FromMemory(_valueBiasGradient.Data) : new Vector<T>(0)),
+            (_gammasGradient is not null ? Vector<T>.FromMemory(_gammasGradient.Data) : new Vector<T>(0)),
+            (_groupNormScaleGradient is not null ? Vector<T>.FromMemory(_groupNormScaleGradient.Data) : new Vector<T>(0)),
+            (_groupNormBiasGradient is not null ? Vector<T>.FromMemory(_groupNormBiasGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()

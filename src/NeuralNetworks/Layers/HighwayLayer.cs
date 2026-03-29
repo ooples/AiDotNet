@@ -1170,10 +1170,10 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            _transformWeights.ToVector(),
-            _transformBias.ToVector(),
-            _gateWeights.ToVector(),
-            _gateBias.ToVector());
+            Vector<T>.FromMemory(_transformWeights.Data),
+            Vector<T>.FromMemory(_transformBias.Data),
+            Vector<T>.FromMemory(_gateWeights.Data),
+            Vector<T>.FromMemory(_gateBias.Data));
     }
 
     /// <summary>
@@ -1264,10 +1264,10 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _gateWeightsGradient == null || _gateBiasGradient == null)
             return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            _transformWeightsGradient.ToVector(),
-            _transformBiasGradient.ToVector(),
-            _gateWeightsGradient.ToVector(),
-            _gateBiasGradient.ToVector());
+            (_transformWeightsGradient is not null ? Vector<T>.FromMemory(_transformWeightsGradient.Data) : new Vector<T>(0)),
+            (_transformBiasGradient is not null ? Vector<T>.FromMemory(_transformBiasGradient.Data) : new Vector<T>(0)),
+            (_gateWeightsGradient is not null ? Vector<T>.FromMemory(_gateWeightsGradient.Data) : new Vector<T>(0)),
+            (_gateBiasGradient is not null ? Vector<T>.FromMemory(_gateBiasGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()

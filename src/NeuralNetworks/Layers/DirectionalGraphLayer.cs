@@ -1292,21 +1292,21 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
-        var gIncomingWeights = _incomingWeightsGradient != null ? _incomingWeightsGradient.ToVector() : new Vector<T>(_incomingWeights.Length);
-        var gOutgoingWeights = _outgoingWeightsGradient != null ? _outgoingWeightsGradient.ToVector() : new Vector<T>(_outgoingWeights.Length);
-        var gSelfWeights = _selfWeightsGradient != null ? _selfWeightsGradient.ToVector() : new Vector<T>(_selfWeights.Length);
-        var gCombinationWeights = _combinationWeightsGradient != null ? _combinationWeightsGradient.ToVector() : new Vector<T>(_combinationWeights.Length);
-        var gIncomingBias = _incomingBiasGradient != null ? _incomingBiasGradient.ToVector() : new Vector<T>(_incomingBias.Length);
-        var gOutgoingBias = _outgoingBiasGradient != null ? _outgoingBiasGradient.ToVector() : new Vector<T>(_outgoingBias.Length);
-        var gSelfBias = _selfBiasGradient != null ? _selfBiasGradient.ToVector() : new Vector<T>(_selfBias.Length);
-        var gCombinationBias = _combinationBiasGradient != null ? _combinationBiasGradient.ToVector() : new Vector<T>(_combinationBias.Length);
+        var gIncomingWeights = _incomingWeightsGradient != null ? (_incomingWeightsGradient is not null ? Vector<T>.FromMemory(_incomingWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_incomingWeights.Length);
+        var gOutgoingWeights = _outgoingWeightsGradient != null ? (_outgoingWeightsGradient is not null ? Vector<T>.FromMemory(_outgoingWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outgoingWeights.Length);
+        var gSelfWeights = _selfWeightsGradient != null ? (_selfWeightsGradient is not null ? Vector<T>.FromMemory(_selfWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_selfWeights.Length);
+        var gCombinationWeights = _combinationWeightsGradient != null ? (_combinationWeightsGradient is not null ? Vector<T>.FromMemory(_combinationWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_combinationWeights.Length);
+        var gIncomingBias = _incomingBiasGradient != null ? (_incomingBiasGradient is not null ? Vector<T>.FromMemory(_incomingBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_incomingBias.Length);
+        var gOutgoingBias = _outgoingBiasGradient != null ? (_outgoingBiasGradient is not null ? Vector<T>.FromMemory(_outgoingBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outgoingBias.Length);
+        var gSelfBias = _selfBiasGradient != null ? (_selfBiasGradient is not null ? Vector<T>.FromMemory(_selfBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_selfBias.Length);
+        var gCombinationBias = _combinationBiasGradient != null ? (_combinationBiasGradient is not null ? Vector<T>.FromMemory(_combinationBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_combinationBias.Length);
 
         var parts = new List<Vector<T>> { gIncomingWeights, gOutgoingWeights, gSelfWeights, gCombinationWeights, gIncomingBias, gOutgoingBias, gSelfBias, gCombinationBias };
 
         if (_useGating && _gateWeights != null && _gateBias != null)
         {
-            parts.Add(_gateWeightsGradient != null ? _gateWeightsGradient.ToVector() : new Vector<T>(_gateWeights.Length));
-            parts.Add(_gateBiasGradient != null ? _gateBiasGradient.ToVector() : new Vector<T>(_gateBias.Length));
+            parts.Add(_gateWeightsGradient != null ? (_gateWeightsGradient is not null ? Vector<T>.FromMemory(_gateWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_gateWeights.Length));
+            parts.Add(_gateBiasGradient != null ? (_gateBiasGradient is not null ? Vector<T>.FromMemory(_gateBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_gateBias.Length));
         }
 
         return Vector<T>.Concatenate(parts.ToArray());

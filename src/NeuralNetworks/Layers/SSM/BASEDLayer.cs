@@ -1158,17 +1158,17 @@ public class BASEDLayer<T> : LayerBase<T>
     {
         if (_linearQueryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            _linearQueryWeightsGradient!.ToVector(),
-            _linearKeyWeightsGradient!.ToVector(),
-            _linearValueWeightsGradient!.ToVector(),
-            _windowQueryWeightsGradient!.ToVector(),
-            _windowKeyWeightsGradient!.ToVector(),
-            _windowValueWeightsGradient!.ToVector(),
-            _featureMapScaleGradient!.ToVector(),
-            _mixingGateWeightsGradient!.ToVector(),
-            _mixingGateBiasGradient!.ToVector(),
-            _outputProjectionWeightsGradient is not null ? _outputProjectionWeightsGradient.ToVector() : new Vector<T>(_outputProjectionWeights.Length),
-            _outputProjectionBiasGradient is not null ? _outputProjectionBiasGradient.ToVector() : new Vector<T>(_outputProjectionBias.Length));
+            (_linearQueryWeightsGradient is not null ? Vector<T>.FromMemory(_linearQueryWeightsGradient.Data) : new Vector<T>(0)),
+            (_linearKeyWeightsGradient is not null ? Vector<T>.FromMemory(_linearKeyWeightsGradient.Data) : new Vector<T>(0)),
+            (_linearValueWeightsGradient is not null ? Vector<T>.FromMemory(_linearValueWeightsGradient.Data) : new Vector<T>(0)),
+            (_windowQueryWeightsGradient is not null ? Vector<T>.FromMemory(_windowQueryWeightsGradient.Data) : new Vector<T>(0)),
+            (_windowKeyWeightsGradient is not null ? Vector<T>.FromMemory(_windowKeyWeightsGradient.Data) : new Vector<T>(0)),
+            (_windowValueWeightsGradient is not null ? Vector<T>.FromMemory(_windowValueWeightsGradient.Data) : new Vector<T>(0)),
+            (_featureMapScaleGradient is not null ? Vector<T>.FromMemory(_featureMapScaleGradient.Data) : new Vector<T>(0)),
+            (_mixingGateWeightsGradient is not null ? Vector<T>.FromMemory(_mixingGateWeightsGradient.Data) : new Vector<T>(0)),
+            (_mixingGateBiasGradient is not null ? Vector<T>.FromMemory(_mixingGateBiasGradient.Data) : new Vector<T>(0)),
+            _outputProjectionWeightsGradient is not null ? (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionWeights.Length),
+            _outputProjectionBiasGradient is not null ? (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionBias.Length));
     }
 
     public override void ClearGradients()

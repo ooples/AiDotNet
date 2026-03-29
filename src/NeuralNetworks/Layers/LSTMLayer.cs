@@ -2647,18 +2647,18 @@ public class LSTMLayer<T> : LayerBase<T>
     {
         // Use Vector.Concatenate for production-grade parameter extraction
         return Vector<T>.Concatenate(
-            _weightsFi.ToVector(),
-            _weightsIi.ToVector(),
-            _weightsCi.ToVector(),
-            _weightsOi.ToVector(),
-            _weightsFh.ToVector(),
-            _weightsIh.ToVector(),
-            _weightsCh.ToVector(),
-            _weightsOh.ToVector(),
-            _biasF.ToVector(),
-            _biasI.ToVector(),
-            _biasC.ToVector(),
-            _biasO.ToVector()
+            Vector<T>.FromMemory(_weightsFi.Data),
+            Vector<T>.FromMemory(_weightsIi.Data),
+            Vector<T>.FromMemory(_weightsCi.Data),
+            Vector<T>.FromMemory(_weightsOi.Data),
+            Vector<T>.FromMemory(_weightsFh.Data),
+            Vector<T>.FromMemory(_weightsIh.Data),
+            Vector<T>.FromMemory(_weightsCh.Data),
+            Vector<T>.FromMemory(_weightsOh.Data),
+            Vector<T>.FromMemory(_biasF.Data),
+            Vector<T>.FromMemory(_biasI.Data),
+            Vector<T>.FromMemory(_biasC.Data),
+            Vector<T>.FromMemory(_biasO.Data)
         );
     }
 

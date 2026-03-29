@@ -949,16 +949,16 @@ public class TTTLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            _queryWeightsGradient!.ToVector(),
-            _queryBiasGradient!.ToVector(),
-            _keyWeightsGradient!.ToVector(),
-            _keyBiasGradient!.ToVector(),
-            _valueWeightsGradient!.ToVector(),
-            _valueBiasGradient!.ToVector(),
-            _innerWeightsInitGradient!.ToVector(),
-            _etaScaleGradient!.ToVector(),
-            _lnGammaGradient!.ToVector(),
-            _lnBetaGradient!.ToVector());
+            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
+            (_queryBiasGradient is not null ? Vector<T>.FromMemory(_queryBiasGradient.Data) : new Vector<T>(0)),
+            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
+            (_keyBiasGradient is not null ? Vector<T>.FromMemory(_keyBiasGradient.Data) : new Vector<T>(0)),
+            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
+            (_valueBiasGradient is not null ? Vector<T>.FromMemory(_valueBiasGradient.Data) : new Vector<T>(0)),
+            (_innerWeightsInitGradient is not null ? Vector<T>.FromMemory(_innerWeightsInitGradient.Data) : new Vector<T>(0)),
+            (_etaScaleGradient is not null ? Vector<T>.FromMemory(_etaScaleGradient.Data) : new Vector<T>(0)),
+            (_lnGammaGradient is not null ? Vector<T>.FromMemory(_lnGammaGradient.Data) : new Vector<T>(0)),
+            (_lnBetaGradient is not null ? Vector<T>.FromMemory(_lnBetaGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()

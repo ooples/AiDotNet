@@ -544,14 +544,14 @@ public class MinGRULayer<T> : LayerBase<T>
     {
         if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            _inputProjectionWeightsGradient!.ToVector(),
-            _inputProjectionBiasGradient!.ToVector(),
-            _gateWeightsGradient!.ToVector(),
-            _gateBiasGradient!.ToVector(),
-            _candidateWeightsGradient!.ToVector(),
-            _candidateBiasGradient!.ToVector(),
-            _outputProjectionWeightsGradient!.ToVector(),
-            _outputProjectionBiasGradient!.ToVector());
+            (_inputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_inputProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_inputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_inputProjectionBiasGradient.Data) : new Vector<T>(0)),
+            (_gateWeightsGradient is not null ? Vector<T>.FromMemory(_gateWeightsGradient.Data) : new Vector<T>(0)),
+            (_gateBiasGradient is not null ? Vector<T>.FromMemory(_gateBiasGradient.Data) : new Vector<T>(0)),
+            (_candidateWeightsGradient is not null ? Vector<T>.FromMemory(_candidateWeightsGradient.Data) : new Vector<T>(0)),
+            (_candidateBiasGradient is not null ? Vector<T>.FromMemory(_candidateBiasGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()

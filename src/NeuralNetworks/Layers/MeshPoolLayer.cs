@@ -759,7 +759,7 @@ public class MeshPoolLayer<T> : LayerBase<T>
     /// <returns>Vector containing importance weights.</returns>
     public override Vector<T> GetParameters()
     {
-        return _importanceWeights.ToVector();
+        return Vector<T>.FromMemory(_importanceWeights.Data);
     }
 
     /// <summary>

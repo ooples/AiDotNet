@@ -120,8 +120,8 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
     {
         if (_linear1WeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            _linear1WeightsGradient.ToVector(), _linear1BiasGradient!.ToVector(),
-            _linear2WeightsGradient!.ToVector(), _linear2BiasGradient!.ToVector());
+            (_linear1WeightsGradient is not null ? Vector<T>.FromMemory(_linear1WeightsGradient.Data) : new Vector<T>(0)), (_linear1BiasGradient is not null ? Vector<T>.FromMemory(_linear1BiasGradient.Data) : new Vector<T>(0)),
+            (_linear2WeightsGradient is not null ? Vector<T>.FromMemory(_linear2WeightsGradient.Data) : new Vector<T>(0)), (_linear2BiasGradient is not null ? Vector<T>.FromMemory(_linear2BiasGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()
@@ -509,10 +509,10 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
     {
         var parts = new Vector<T>[]
         {
-            _linear1Weights.ToVector(),
-            _linear1Bias.ToVector(),
-            _linear2Weights.ToVector(),
-            _linear2Bias.ToVector()
+            Vector<T>.FromMemory(_linear1Weights.Data),
+            Vector<T>.FromMemory(_linear1Bias.Data),
+            Vector<T>.FromMemory(_linear2Weights.Data),
+            Vector<T>.FromMemory(_linear2Bias.Data)
         };
         return Vector<T>.Concatenate(parts);
     }

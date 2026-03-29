@@ -1498,11 +1498,11 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            _queryWeights.ToVector(),
-            _keyWeights.ToVector(),
-            _valueWeights.ToVector(),
-            _outputWeights.ToVector(),
-            _outputBias.ToVector());
+            Vector<T>.FromMemory(_queryWeights.Data),
+            Vector<T>.FromMemory(_keyWeights.Data),
+            Vector<T>.FromMemory(_valueWeights.Data),
+            Vector<T>.FromMemory(_outputWeights.Data),
+            Vector<T>.FromMemory(_outputBias.Data));
     }
 
     /// <summary>
@@ -1591,11 +1591,11 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null)
             return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            _queryWeightsGradient.ToVector(),
-            _keyWeightsGradient.ToVector(),
-            _valueWeightsGradient.ToVector(),
-            _outputWeightsGradient is not null ? _outputWeightsGradient.ToVector() : new Vector<T>(_outputWeights.Length),
-            _outputBiasGradient is not null ? _outputBiasGradient.ToVector() : new Vector<T>(_outputBias.Length));
+            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
+            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
+            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
+            _outputWeightsGradient is not null ? (_outputWeightsGradient is not null ? Vector<T>.FromMemory(_outputWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputWeights.Length),
+            _outputBiasGradient is not null ? (_outputBiasGradient is not null ? Vector<T>.FromMemory(_outputBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputBias.Length));
     }
 
     public override void ClearGradients()

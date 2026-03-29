@@ -1224,18 +1224,18 @@ public class S4DLayer<T> : LayerBase<T>
     {
         if (_aRealGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            _aRealGradient!.ToVector(),
-            _aImagGradient!.ToVector(),
-            _bRealGradient!.ToVector(),
-            _bImagGradient!.ToVector(),
-            _cRealGradient!.ToVector(),
-            _cImagGradient!.ToVector(),
-            _dParamGradient!.ToVector(),
-            _inputProjectionWeightsGradient != null ? _inputProjectionWeightsGradient.ToVector() : new Vector<T>(_inputProjectionWeights.Length),
-            _inputProjectionBiasGradient != null ? _inputProjectionBiasGradient.ToVector() : new Vector<T>(_inputProjectionBias.Length),
-            _outputProjectionWeightsGradient != null ? _outputProjectionWeightsGradient.ToVector() : new Vector<T>(_outputProjectionWeights.Length),
-            _outputProjectionBiasGradient != null ? _outputProjectionBiasGradient.ToVector() : new Vector<T>(_outputProjectionBias.Length),
-            _logDeltaGradient != null ? _logDeltaGradient.ToVector() : new Vector<T>(_logDelta.Length));
+            (_aRealGradient is not null ? Vector<T>.FromMemory(_aRealGradient.Data) : new Vector<T>(0)),
+            (_aImagGradient is not null ? Vector<T>.FromMemory(_aImagGradient.Data) : new Vector<T>(0)),
+            (_bRealGradient is not null ? Vector<T>.FromMemory(_bRealGradient.Data) : new Vector<T>(0)),
+            (_bImagGradient is not null ? Vector<T>.FromMemory(_bImagGradient.Data) : new Vector<T>(0)),
+            (_cRealGradient is not null ? Vector<T>.FromMemory(_cRealGradient.Data) : new Vector<T>(0)),
+            (_cImagGradient is not null ? Vector<T>.FromMemory(_cImagGradient.Data) : new Vector<T>(0)),
+            (_dParamGradient is not null ? Vector<T>.FromMemory(_dParamGradient.Data) : new Vector<T>(0)),
+            _inputProjectionWeightsGradient != null ? (_inputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_inputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_inputProjectionWeights.Length),
+            _inputProjectionBiasGradient != null ? (_inputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_inputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_inputProjectionBias.Length),
+            _outputProjectionWeightsGradient != null ? (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionWeights.Length),
+            _outputProjectionBiasGradient != null ? (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionBias.Length),
+            _logDeltaGradient != null ? (_logDeltaGradient is not null ? Vector<T>.FromMemory(_logDeltaGradient.Data) : new Vector<T>(0)) : new Vector<T>(_logDelta.Length));
     }
 
     public override void ClearGradients()

@@ -1468,28 +1468,28 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            _preTransformWeights.ToVector(),
-            _preTransformBias.ToVector(),
-            _postAggregationWeights1.ToVector(),
-            _postAggregationBias1.ToVector(),
-            _postAggregationWeights2.ToVector(),
-            _postAggregationBias2.ToVector(),
-            _selfWeights.ToVector(),
-            _bias.ToVector()
+            Vector<T>.FromMemory(_preTransformWeights.Data),
+            Vector<T>.FromMemory(_preTransformBias.Data),
+            Vector<T>.FromMemory(_postAggregationWeights1.Data),
+            Vector<T>.FromMemory(_postAggregationBias1.Data),
+            Vector<T>.FromMemory(_postAggregationWeights2.Data),
+            Vector<T>.FromMemory(_postAggregationBias2.Data),
+            Vector<T>.FromMemory(_selfWeights.Data),
+            Vector<T>.FromMemory(_bias.Data)
         );
     }
 
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
-        var gPreTransformWeights = _preTransformWeightsGradient != null ? _preTransformWeightsGradient.ToVector() : new Vector<T>(_preTransformWeights.Length);
-        var gPreTransformBias = _preTransformBiasGradient != null ? _preTransformBiasGradient.ToVector() : new Vector<T>(_preTransformBias.Length);
-        var gPostWeights1 = _postAggregationWeights1Gradient != null ? _postAggregationWeights1Gradient.ToVector() : new Vector<T>(_postAggregationWeights1.Length);
-        var gPostBias1 = _postAggregationBias1Gradient != null ? _postAggregationBias1Gradient.ToVector() : new Vector<T>(_postAggregationBias1.Length);
-        var gPostWeights2 = _postAggregationWeights2Gradient != null ? _postAggregationWeights2Gradient.ToVector() : new Vector<T>(_postAggregationWeights2.Length);
-        var gPostBias2 = _postAggregationBias2Gradient != null ? _postAggregationBias2Gradient.ToVector() : new Vector<T>(_postAggregationBias2.Length);
-        var gSelfWeights = _selfWeightsGradient != null ? _selfWeightsGradient.ToVector() : new Vector<T>(_selfWeights.Length);
-        var gBias = _biasGradient != null ? _biasGradient.ToVector() : new Vector<T>(_bias.Length);
+        var gPreTransformWeights = _preTransformWeightsGradient != null ? (_preTransformWeightsGradient is not null ? Vector<T>.FromMemory(_preTransformWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_preTransformWeights.Length);
+        var gPreTransformBias = _preTransformBiasGradient != null ? (_preTransformBiasGradient is not null ? Vector<T>.FromMemory(_preTransformBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_preTransformBias.Length);
+        var gPostWeights1 = _postAggregationWeights1Gradient != null ? (_postAggregationWeights1Gradient is not null ? Vector<T>.FromMemory(_postAggregationWeights1Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_postAggregationWeights1.Length);
+        var gPostBias1 = _postAggregationBias1Gradient != null ? (_postAggregationBias1Gradient is not null ? Vector<T>.FromMemory(_postAggregationBias1Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_postAggregationBias1.Length);
+        var gPostWeights2 = _postAggregationWeights2Gradient != null ? (_postAggregationWeights2Gradient is not null ? Vector<T>.FromMemory(_postAggregationWeights2Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_postAggregationWeights2.Length);
+        var gPostBias2 = _postAggregationBias2Gradient != null ? (_postAggregationBias2Gradient is not null ? Vector<T>.FromMemory(_postAggregationBias2Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_postAggregationBias2.Length);
+        var gSelfWeights = _selfWeightsGradient != null ? (_selfWeightsGradient is not null ? Vector<T>.FromMemory(_selfWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_selfWeights.Length);
+        var gBias = _biasGradient != null ? (_biasGradient is not null ? Vector<T>.FromMemory(_biasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_bias.Length);
 
         return Vector<T>.Concatenate(gPreTransformWeights, gPreTransformBias, gPostWeights1, gPostBias1, gPostWeights2, gPostBias2, gSelfWeights, gBias);
     }

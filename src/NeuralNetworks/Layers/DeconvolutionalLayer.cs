@@ -1001,7 +1001,7 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        return Vector<T>.Concatenate(_kernels.ToVector(), _biases.ToVector());
+        return Vector<T>.Concatenate(Vector<T>.FromMemory(_kernels.Data), Vector<T>.FromMemory(_biases.Data));
     }
 
     /// <summary>
@@ -1030,8 +1030,8 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameterGradients()
     {
-        var kGrad = _kernelsGradient != null ? _kernelsGradient.ToVector() : new Vector<T>(_kernels.Length);
-        var bGrad = _biasesGradient != null ? _biasesGradient.ToVector() : new Vector<T>(_biases.Length);
+        var kGrad = _kernelsGradient != null ? (_kernelsGradient is not null ? Vector<T>.FromMemory(_kernelsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_kernels.Length);
+        var bGrad = _biasesGradient != null ? (_biasesGradient is not null ? Vector<T>.FromMemory(_biasesGradient.Data) : new Vector<T>(0)) : new Vector<T>(_biases.Length);
         return Vector<T>.Concatenate(kGrad, bGrad);
     }
 

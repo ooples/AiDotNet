@@ -945,8 +945,8 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     {
         // Use Vector.Concatenate for production-grade parameter extraction
         return Vector<T>.Concatenate(
-            _convWeights.ToVector(),
-            _convBias.ToVector()
+            Vector<T>.FromMemory(_convWeights.Data),
+            Vector<T>.FromMemory(_convBias.Data)
         );
     }
 
@@ -979,8 +979,8 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameterGradients()
     {
-        var wGrad = _convWeightsGradient != null ? _convWeightsGradient.ToVector() : new Vector<T>(_convWeights.Length);
-        var bGrad = _convBiasGradient != null ? _convBiasGradient.ToVector() : new Vector<T>(_convBias.Length);
+        var wGrad = _convWeightsGradient != null ? (_convWeightsGradient is not null ? Vector<T>.FromMemory(_convWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_convWeights.Length);
+        var bGrad = _convBiasGradient != null ? (_convBiasGradient is not null ? Vector<T>.FromMemory(_convBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_convBias.Length);
         return Vector<T>.Concatenate(wGrad, bGrad);
     }
 
