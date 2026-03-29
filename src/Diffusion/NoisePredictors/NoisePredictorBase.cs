@@ -414,50 +414,52 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
 
         var effectiveLossFunction = lossFunction ?? LossFunction;
 
-        // Automatic differentiation via GradientTape — same approach as PyTorch autograd.
-        // 1. Build computation graph through ExportComputationGraph (records all ops)
-        // 2. Compute loss as a graph node
-        // 3. Backpropagate through the graph to get exact gradients in O(1) backward passes
-        using var tape = new GradientTape<T>();
+        // Layer-level backpropagation: forward through layers, compute loss gradient,
+        // then backpropagate through the layer chain for exact gradients.
+        // Forward pass
+        var predicted = Forward(input);
 
-        // Create input variable node
-        var inputNode = TensorOperations<T>.Variable(input, "input", requiresGradient: false);
+        // Compute loss gradient: d(loss)/d(predicted)
+        var lossGrad = effectiveLossFunction.CalculateDerivative(
+            predicted.ToVector(), target.ToVector());
+        var lossGradTensor = new Tensor<T>(predicted.Shape.ToArray(), lossGrad);
 
-        // Build the forward computation graph through the noise predictor's layers
-        var outputNode = ExportComputationGraph([inputNode]);
-        tape.Watch(outputNode);
+        // Backpropagate through all layers
+        Backpropagate(lossGradTensor);
 
-        // Compute MSE loss as a graph node: loss = mean((output - target)^2)
-        var targetNode = TensorOperations<T>.Variable(target, "target", requiresGradient: false);
-        var diffNode = TensorOperations<T>.Subtract(outputNode, targetNode);
-        var squaredNode = TensorOperations<T>.ElementwiseMultiply(diffNode, diffNode);
-        var lossNode = TensorOperations<T>.Mean(squaredNode);
+        // Extract parameter gradients from layers
+        return GetParameterGradients();
+    }
 
-        // Backward pass: compute gradients for all watched nodes
-        var gradientMap = tape.Gradient(lossNode);
+    /// <summary>
+    /// Forward pass through the noise predictor's layers.
+    /// Override to implement the actual forward computation.
+    /// </summary>
+    protected virtual Tensor<T> Forward(Tensor<T> input)
+    {
+        return PredictNoise(input, 0);
+    }
 
-        // Extract parameter gradients from the computation graph
-        // Each layer's parameter nodes accumulated gradients during backprop
-        var parameters = GetParameters();
-        var gradients = new Vector<T>(parameters.Length);
+    /// <summary>
+    /// Backpropagates the loss gradient through the noise predictor's layers.
+    /// Override in derived classes to implement layer-by-layer gradient computation.
+    /// </summary>
+    /// <param name="lossGradient">Gradient of the loss w.r.t. the output.</param>
+    protected virtual void Backpropagate(Tensor<T> lossGradient)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement Backpropagate. " +
+            "Override this method to enable layer-level gradient computation.");
+    }
 
-        // Collect gradients from all parameter nodes in the graph
-        int offset = 0;
-        foreach (var node in gradientMap)
-        {
-            if (node.Key.RequiresGradient && node.Value is not null)
-            {
-                var grad = node.Value;
-                int copyLen = Math.Min(grad.Length, parameters.Length - offset);
-                for (int i = 0; i < copyLen; i++)
-                {
-                    gradients[offset + i] = grad[i];
-                }
-                offset += copyLen;
-            }
-        }
-
-        return gradients;
+    /// <summary>
+    /// Extracts accumulated parameter gradients from all layers after backpropagation.
+    /// </summary>
+    protected virtual Vector<T> GetParameterGradients()
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement GetParameterGradients. " +
+            "Override this method to extract layer-level gradients.");
     }
 
     /// <inheritdoc />

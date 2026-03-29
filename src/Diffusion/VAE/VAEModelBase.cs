@@ -464,36 +464,21 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
             throw new ArgumentNullException(nameof(target));
 
         var effectiveLossFunction = lossFunction ?? LossFunction;
-        var parameters = GetParameters();
-        var gradients = new Vector<T>(parameters.Length);
 
-        // Autodiff via GradientTape — build computation graph, compute loss, backprop
+        // Primary path: layer-level backpropagation for exact gradients.
+        // Forward through encoder/decoder layers, compute loss gradient,
+        // then backpropagate through the layer chain.
         try
         {
-            using var tape = new GradientTape<T>();
+            var predicted = Predict(input);
 
-            var inputNode = TensorOperations<T>.Variable(input, "vae_input", requiresGradient: false);
-            var outputNode = ExportComputationGraph([inputNode]);
+            var lossGrad = effectiveLossFunction.CalculateDerivative(
+                predicted.ToVector(), target.ToVector());
+            var lossGradTensor = new Tensor<T>(predicted.Shape.ToArray(), lossGrad);
 
-            var targetNode = TensorOperations<T>.Variable(target, "vae_target", requiresGradient: false);
-            var diffNode = TensorOperations<T>.Subtract(outputNode, targetNode);
-            var squaredNode = TensorOperations<T>.ElementwiseMultiply(diffNode, diffNode);
-            var lossNode = TensorOperations<T>.Mean(squaredNode);
+            BackpropagateVAE(lossGradTensor);
 
-            var gradientDict = tape.Gradient(lossNode);
-
-            int offset = 0;
-            foreach (var kvp in gradientDict)
-            {
-                if (kvp.Key.RequiresGradient && kvp.Value is not null)
-                {
-                    var grad = kvp.Value;
-                    int copyLen = Math.Min(grad.Length, parameters.Length - offset);
-                    for (int i = 0; i < copyLen; i++)
-                        gradients[offset + i] = grad[i];
-                    offset += copyLen;
-                }
-            }
+            var gradients = GetParameterGradients();
 
             bool hasValidGradients = false;
             for (int i = 0; i < Math.Min(gradients.Length, 100); i++)
@@ -510,11 +495,13 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         }
         catch (Exception ex)
         {
-            // Fall through to SPSA when autodiff graph construction fails
-            System.Diagnostics.Trace.TraceWarning($"VAE autodiff gradient failed, falling back to SPSA: {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning(
+                $"VAE layer backpropagation failed, falling back to SPSA: {ex.Message}");
         }
 
         // Fallback: SPSA (6 forward passes total vs 2N for finite differences)
+        var parameters = GetParameters();
+        var gradients_spsa = new Vector<T>(parameters.Length);
         var epsilon = NumOps.FromDouble(1e-3);
         var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
         var rng = RandomGenerator;
@@ -534,13 +521,35 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
 
             var lossDiff = NumOps.Subtract(lossPlus, lossMinus);
             var scaledDelta = Engine.Multiply(delta, twoEpsilon);
-            gradients = Engine.Add(gradients, Engine.Divide(
+            gradients_spsa = Engine.Add(gradients_spsa, Engine.Divide(
                 Engine.Fill(parameters.Length, lossDiff), scaledDelta));
         }
 
-        gradients = Engine.Multiply(gradients, NumOps.FromDouble(1.0 / 3.0));
+        gradients_spsa = Engine.Multiply(gradients_spsa, NumOps.FromDouble(1.0 / 3.0));
         SetParameters(parameters);
-        return gradients;
+        return gradients_spsa;
+    }
+
+    /// <summary>
+    /// Backpropagates the loss gradient through the VAE's encoder/decoder layers.
+    /// Override in derived classes to implement layer-by-layer gradient computation.
+    /// </summary>
+    /// <param name="lossGradient">Gradient of the loss w.r.t. the VAE output.</param>
+    protected virtual void BackpropagateVAE(Tensor<T> lossGradient)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement BackpropagateVAE. " +
+            "Override this method to enable layer-level gradient computation.");
+    }
+
+    /// <summary>
+    /// Extracts accumulated parameter gradients from all layers after backpropagation.
+    /// </summary>
+    protected virtual Vector<T> GetParameterGradients()
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement GetParameterGradients. " +
+            "Override this method to extract layer-level gradients.");
     }
 
     /// <inheritdoc />
