@@ -780,8 +780,17 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
             // Backpropagate
             Backpropagate(Tensor<T>.FromVector(outputGrad));
 
-            // Update parameters
-            _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            // Update parameters using Adam with the DBM's configured learning rate
+            // (default 0.0001 per Salakhutdinov & Hinton 2009 — lower than Adam's default 0.001
+            // to prevent oscillation in deep sigmoid networks)
+            if (_trainOptimizer == null)
+            {
+                var adamOptions = new Models.Options.AdamOptimizerOptions
+                {
+                    InitialLearningRate = NumOps.ToDouble(_learningRate)
+                };
+                _trainOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOptions);
+            }
             foreach (var layer in Layers)
             {
                 if (layer.SupportsTraining && layer.ParameterCount > 0)
@@ -929,6 +938,20 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
+        // Return parameters from the actual Layers (RBMLayer, DenseLayer) used during training,
+        // not the disconnected _layerWeights/_layerBiases which are only used for CD pretraining.
+        if (Layers.Count > 0)
+        {
+            var parts = new List<Vector<T>>();
+            foreach (var layer in Layers)
+            {
+                if (layer.ParameterCount > 0)
+                    parts.Add(layer.GetParameters());
+            }
+            return Vector<T>.Concatenate(parts.ToArray());
+        }
+
+        // Fallback: use internal CD parameters
         var parameters = new Vector<T>(ParameterCount);
         int index = 0;
         for (int i = 0; i < _layerWeights.Count; i++)

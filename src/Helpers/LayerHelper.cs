@@ -762,9 +762,8 @@ public static class LayerHelper<T>
         int hidden1 = Math.Min(DefaultDbmHiddenCap, inputSize * DefaultDbmHiddenMultiplier);
         int hidden2 = hidden1;
 
-        // Encoder RBM layers
+        // RBM layers per Salakhutdinov & Hinton 2009 (no BatchNorm — DBMs use CD pretraining, not BN)
         yield return new RBMLayer<T>(inputSize, hidden1, new SigmoidActivation<T>() as IActivationFunction<T>);
-        yield return new BatchNormalizationLayer<T>(hidden1);
         yield return new RBMLayer<T>(hidden1, hidden2, new SigmoidActivation<T>() as IActivationFunction<T>);
 
         // Output projection: maps from last hidden to output size
