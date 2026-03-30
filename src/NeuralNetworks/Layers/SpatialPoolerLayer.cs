@@ -447,7 +447,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     {
         var colSums = Engine.ReduceSum(Connections, new[] { 0 }, keepDims: true);
         var safeSums = Engine.TensorMax(colSums, NumOps.FromDouble(1e-12));
-        Connections = Engine.TensorDivide(Connections, safeSums);
+        Connections = Engine.TensorBroadcastDivide(Connections, safeSums);
     }
 
     /// <summary>
