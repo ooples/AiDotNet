@@ -91,6 +91,21 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         public static Tensor<T> HardSwish(Tensor<T> x) => DifferentiableOps<T>.HardSwish(x);
         public static Tensor<T> Permute(Tensor<T> a, int[] axes) => DifferentiableOps<T>.Permute(a, axes);
         public static Tensor<T> Where(Tensor<T> condition, Tensor<T> x, Tensor<T> y) => DifferentiableOps<T>.Where(condition, x, y);
+        public static Tensor<T> SumAxis(Tensor<T> a, int[] axes, bool keepDims = false) => DifferentiableOps<T>.SumAxis(a, axes, keepDims);
+        public static Tensor<T> MeanAxis(Tensor<T> a, int[] axes, bool keepDims = false) => DifferentiableOps<T>.MeanAxis(a, axes, keepDims);
+        public static Tensor<T> Var(Tensor<T> a, int[] axes, bool keepDims = false) => DifferentiableOps<T>.Var(a, axes, keepDims);
+        public static Tensor<T> Std(Tensor<T> a, int[] axes, bool keepDims = false) => DifferentiableOps<T>.Std(a, axes, keepDims);
+        public static Tensor<T> Bmm(Tensor<T> a, Tensor<T> b) => DifferentiableOps<T>.Bmm(a, b);
+        public static Tensor<T> Min(Tensor<T> a, Tensor<T> b) => DifferentiableOps<T>.Min(a, b);
+        public static Tensor<T> Max(Tensor<T> a, Tensor<T> b) => DifferentiableOps<T>.Max(a, b);
+        public static Tensor<T> Sign(Tensor<T> x) => DifferentiableOps<T>.Sign(x);
+        public static Tensor<T> Square(Tensor<T> x) => DifferentiableOps<T>.Square(x);
+        public static Tensor<T> Reciprocal(Tensor<T> x) => DifferentiableOps<T>.Reciprocal(x);
+        public static Tensor<T> Squeeze(Tensor<T> a, int? dim = null) => DifferentiableOps<T>.Squeeze(a, dim);
+        public static Tensor<T> Unsqueeze(Tensor<T> a, int dim) => DifferentiableOps<T>.Unsqueeze(a, dim);
+        public static Tensor<T> Stack(Tensor<T>[] tensors, int axis = 0) => DifferentiableOps<T>.Stack(tensors, axis);
+        public static Tensor<T> Flatten(Tensor<T> a) => DifferentiableOps<T>.Flatten(a);
+        public static Tensor<T> ReLU6(Tensor<T> x) => DifferentiableOps<T>.ReLU6(x);
     }
 
     /// <summary>

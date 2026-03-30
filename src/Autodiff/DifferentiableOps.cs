@@ -1741,4 +1741,435 @@ public static class DifferentiableOps<T>
         }
         return result;
     }
+
+    // ─── Axis-specific reductions (289 uses in codebase) ────────────
+
+    /// <summary>Sum along specified axes. Like torch.sum(x, dim).</summary>
+    public static Tensor<T> SumAxis(Tensor<T> a, int[] axes, bool keepDims = false)
+    {
+        var result = Engine.ReduceSum(a, axes, keepDims);
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            var origShape = a.Shape.ToArray();
+            tape.RecordOp("SumAxis", [a], result,
+                grad =>
+                {
+                    // Expand grad back to original shape by broadcasting along reduced axes
+                    var expanded = keepDims ? grad : ExpandDims(grad, origShape, axes);
+                    return [BroadcastTo(expanded, origShape)];
+                });
+        }
+        return result;
+    }
+
+    /// <summary>Mean along specified axes. Like torch.mean(x, dim).</summary>
+    public static Tensor<T> MeanAxis(Tensor<T> a, int[] axes, bool keepDims = false)
+    {
+        int count = 1;
+        foreach (int ax in axes) count *= a.Shape[ax];
+
+        var result = Engine.ReduceSum(a, axes, keepDims);
+        T scale = NumOps.FromDouble(1.0 / count);
+        for (int i = 0; i < result.Length; i++)
+            result[i] = NumOps.Multiply(result[i], scale);
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            var origShape = a.Shape.ToArray();
+            tape.RecordOp("MeanAxis", [a], result,
+                grad =>
+                {
+                    var expanded = keepDims ? grad : ExpandDims(grad, origShape, axes);
+                    var broadcast = BroadcastTo(expanded, origShape);
+                    for (int i = 0; i < broadcast.Length; i++)
+                        broadcast[i] = NumOps.Multiply(broadcast[i], scale);
+                    return [broadcast];
+                });
+        }
+        return result;
+    }
+
+    // ─── Variance / Standard Deviation (65 uses) ────────────────────
+
+    /// <summary>Variance along specified axes. Like torch.var(x, dim).</summary>
+    public static Tensor<T> Var(Tensor<T> a, int[] axes, bool keepDims = false, bool unbiased = true)
+    {
+        int count = 1;
+        foreach (int ax in axes) count *= a.Shape[ax];
+
+        var mean = MeanAxis(a, axes, keepDims: true);
+        var centered = Subtract(a, BroadcastTo(mean, a.Shape.ToArray()));
+        var squared = Multiply(centered, centered);
+        var sumSq = SumAxis(squared, axes, keepDims);
+
+        T divisor = NumOps.FromDouble(unbiased ? Math.Max(count - 1, 1) : count);
+        for (int i = 0; i < sumSq.Length; i++)
+            sumSq[i] = NumOps.Divide(sumSq[i], divisor);
+
+        return sumSq; // Already on tape via composed ops
+    }
+
+    /// <summary>Standard deviation along specified axes. Like torch.std(x, dim).</summary>
+    public static Tensor<T> Std(Tensor<T> a, int[] axes, bool keepDims = false, bool unbiased = true)
+    {
+        var variance = Var(a, axes, keepDims, unbiased);
+        return Sqrt(variance); // Sqrt is already tape-aware
+    }
+
+    // ─── Batched Matrix Multiply (22 uses) ──────────────────────────
+
+    /// <summary>Batched matrix multiply: C[b] = A[b] @ B[b]. Like torch.bmm.</summary>
+    public static Tensor<T> Bmm(Tensor<T> a, Tensor<T> b)
+    {
+        // a: [batch, M, K], b: [batch, K, N] -> result: [batch, M, N]
+        var result = Engine.TensorMatMul(a, b); // Engine handles batched matmul
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("Bmm", [a, b], result,
+                grad =>
+                {
+                    // dA = grad @ B^T, dB = A^T @ grad (per batch)
+                    var bT = Transpose(b);
+                    var gradA = MatMul(grad, bT);
+                    var aT = Transpose(a);
+                    var gradB = MatMul(aT, grad);
+                    return [gradA, gradB];
+                });
+        }
+        return result;
+    }
+
+    // ─── Elementwise min/max, sign, square, reciprocal ──────────────
+
+    /// <summary>Elementwise minimum: out[i] = min(a[i], b[i]).</summary>
+    public static Tensor<T> Min(Tensor<T> a, Tensor<T> b)
+    {
+        var result = new Tensor<T>(a.Shape.ToArray());
+        for (int i = 0; i < a.Length; i++)
+        {
+            bool aIsMin = NumOps.ToDouble(a[i]) <= NumOps.ToDouble(b[i]);
+            result[i] = aIsMin ? a[i] : b[i];
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("Min", [a, b], result,
+                grad =>
+                {
+                    var gradA = new Tensor<T>(a.Shape.ToArray());
+                    var gradB = new Tensor<T>(b.Shape.ToArray());
+                    for (int i = 0; i < grad.Length; i++)
+                    {
+                        bool aIsMinB = NumOps.ToDouble(a[i]) <= NumOps.ToDouble(b[i]);
+                        gradA[i] = aIsMinB ? grad[i] : NumOps.Zero;
+                        gradB[i] = aIsMinB ? NumOps.Zero : grad[i];
+                    }
+                    return [gradA, gradB];
+                });
+        }
+        return result;
+    }
+
+    /// <summary>Elementwise maximum: out[i] = max(a[i], b[i]).</summary>
+    public static Tensor<T> Max(Tensor<T> a, Tensor<T> b)
+    {
+        var result = new Tensor<T>(a.Shape.ToArray());
+        for (int i = 0; i < a.Length; i++)
+        {
+            bool aIsMax = NumOps.ToDouble(a[i]) >= NumOps.ToDouble(b[i]);
+            result[i] = aIsMax ? a[i] : b[i];
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("Max", [a, b], result,
+                grad =>
+                {
+                    var gradA = new Tensor<T>(a.Shape.ToArray());
+                    var gradB = new Tensor<T>(b.Shape.ToArray());
+                    for (int i = 0; i < grad.Length; i++)
+                    {
+                        bool aIsMaxB = NumOps.ToDouble(a[i]) >= NumOps.ToDouble(b[i]);
+                        gradA[i] = aIsMaxB ? grad[i] : NumOps.Zero;
+                        gradB[i] = aIsMaxB ? NumOps.Zero : grad[i];
+                    }
+                    return [gradA, gradB];
+                });
+        }
+        return result;
+    }
+
+    /// <summary>Elementwise sign: -1, 0, or +1.</summary>
+    public static Tensor<T> Sign(Tensor<T> x)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
+        {
+            double val = NumOps.ToDouble(x[i]);
+            result[i] = NumOps.FromDouble(val > 0 ? 1.0 : (val < 0 ? -1.0 : 0.0));
+        }
+        // Sign has zero gradient everywhere (piecewise constant)
+        GradientTape<T>.Current?.RecordOp("Sign", [x], result,
+            grad =>
+            {
+                var zero = new Tensor<T>(grad.Shape.ToArray());
+                return [zero];
+            });
+        return result;
+    }
+
+    /// <summary>Elementwise square: x^2 (optimized, avoids Pow overhead).</summary>
+    public static Tensor<T> Square(Tensor<T> x)
+    {
+        return Multiply(x, x); // Already tape-aware, gradient = 2x via product rule
+    }
+
+    /// <summary>Elementwise reciprocal: 1/x.</summary>
+    public static Tensor<T> Reciprocal(Tensor<T> x)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
+            result[i] = NumOps.FromDouble(1.0 / Math.Max(Math.Abs(NumOps.ToDouble(x[i])), 1e-12)
+                * Math.Sign(NumOps.ToDouble(x[i])));
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("Reciprocal", [x], result,
+                grad =>
+                {
+                    // d(1/x)/dx = -1/x^2
+                    var dx = new Tensor<T>(x.Shape.ToArray());
+                    for (int i = 0; i < x.Length; i++)
+                    {
+                        double ri = NumOps.ToDouble(result[i]);
+                        dx[i] = NumOps.FromDouble(-NumOps.ToDouble(grad[i]) * ri * ri);
+                    }
+                    return [dx];
+                });
+        }
+        return result;
+    }
+
+    // ─── Loss functions (12 uses) ───────────────────────────────────
+
+    /// <summary>Mean squared error loss: mean((pred - target)^2).</summary>
+    public static Tensor<T> MSELoss(Tensor<T> pred, Tensor<T> target)
+    {
+        var diff = Subtract(pred, target);
+        var sq = Multiply(diff, diff);
+        return Mean(sq); // Composed from tape-aware ops
+    }
+
+    /// <summary>L1 loss: mean(|pred - target|).</summary>
+    public static Tensor<T> L1Loss(Tensor<T> pred, Tensor<T> target)
+    {
+        var diff = Subtract(pred, target);
+        var absDiff = Abs(diff);
+        return Mean(absDiff); // Composed from tape-aware ops
+    }
+
+    /// <summary>Binary cross-entropy loss with logits: -mean(target*log(σ(x)) + (1-target)*log(1-σ(x))).</summary>
+    public static Tensor<T> BCEWithLogitsLoss(Tensor<T> logits, Tensor<T> targets)
+    {
+        // Numerically stable: max(x, 0) - x*t + log(1 + exp(-|x|))
+        var result = new Tensor<T>([1]);
+        double loss = 0;
+        for (int i = 0; i < logits.Length; i++)
+        {
+            double x = NumOps.ToDouble(logits[i]);
+            double t = NumOps.ToDouble(targets[i]);
+            loss += Math.Max(x, 0) - x * t + Math.Log(1 + Math.Exp(-Math.Abs(x)));
+        }
+        result[0] = NumOps.FromDouble(loss / logits.Length);
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            int n = logits.Length;
+            tape.RecordOp("BCEWithLogitsLoss", [logits], result,
+                grad =>
+                {
+                    var dx = new Tensor<T>(logits.Shape.ToArray());
+                    double scale = NumOps.ToDouble(grad[0]) / n;
+                    for (int i = 0; i < n; i++)
+                    {
+                        double x = NumOps.ToDouble(logits[i]);
+                        double t = NumOps.ToDouble(targets[i]);
+                        double sig = 1.0 / (1.0 + Math.Exp(-x));
+                        dx[i] = NumOps.FromDouble((sig - t) * scale);
+                    }
+                    return [dx];
+                });
+        }
+        return result;
+    }
+
+    /// <summary>Huber loss: smooth L1, quadratic for small errors, linear for large.</summary>
+    public static Tensor<T> HuberLoss(Tensor<T> pred, Tensor<T> target, double delta = 1.0)
+    {
+        var diff = Subtract(pred, target);
+        var result = new Tensor<T>([1]);
+        double loss = 0;
+        for (int i = 0; i < diff.Length; i++)
+        {
+            double d = Math.Abs(NumOps.ToDouble(diff[i]));
+            loss += d <= delta ? 0.5 * d * d : delta * (d - 0.5 * delta);
+        }
+        result[0] = NumOps.FromDouble(loss / diff.Length);
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            int n = diff.Length;
+            tape.RecordOp("HuberLoss", [pred], result,
+                grad =>
+                {
+                    var dx = new Tensor<T>(pred.Shape.ToArray());
+                    double scale = NumOps.ToDouble(grad[0]) / n;
+                    for (int i = 0; i < n; i++)
+                    {
+                        double d = NumOps.ToDouble(diff[i]);
+                        double g = Math.Abs(d) <= delta ? d : delta * Math.Sign(d);
+                        dx[i] = NumOps.FromDouble(g * scale);
+                    }
+                    return [dx];
+                });
+        }
+        return result;
+    }
+
+    /// <summary>KL divergence: sum(p * log(p/q)). Input is log-probabilities.</summary>
+    public static Tensor<T> KLDivLoss(Tensor<T> logP, Tensor<T> target)
+    {
+        // KL(target || exp(logP)) = sum(target * (log(target) - logP))
+        var result = new Tensor<T>([1]);
+        double loss = 0;
+        for (int i = 0; i < logP.Length; i++)
+        {
+            double t = NumOps.ToDouble(target[i]);
+            if (t > 0)
+            {
+                double lp = NumOps.ToDouble(logP[i]);
+                loss += t * (Math.Log(t) - lp);
+            }
+        }
+        result[0] = NumOps.FromDouble(loss / logP.Length);
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            int n = logP.Length;
+            tape.RecordOp("KLDivLoss", [logP], result,
+                grad =>
+                {
+                    var dx = new Tensor<T>(logP.Shape.ToArray());
+                    double scale = NumOps.ToDouble(grad[0]) / n;
+                    for (int i = 0; i < n; i++)
+                    {
+                        double t = NumOps.ToDouble(target[i]);
+                        dx[i] = NumOps.FromDouble(-t * scale);
+                    }
+                    return [dx];
+                });
+        }
+        return result;
+    }
+
+    // ─── Shape ops (squeeze, unsqueeze, stack, flatten, pad) ────────
+
+    /// <summary>Remove dimensions of size 1. Like torch.squeeze.</summary>
+    public static Tensor<T> Squeeze(Tensor<T> a, int? dim = null)
+    {
+        var origShape = a.Shape.ToArray();
+        var newShape = dim.HasValue
+            ? origShape.Where((s, i) => !(i == dim.Value && s == 1)).ToArray()
+            : origShape.Where(s => s != 1).ToArray();
+        if (newShape.Length == 0) newShape = [1];
+        return Reshape(a, newShape); // Reshape is already tape-aware
+    }
+
+    /// <summary>Insert a dimension of size 1. Like torch.unsqueeze.</summary>
+    public static Tensor<T> Unsqueeze(Tensor<T> a, int dim)
+    {
+        var origShape = a.Shape.ToArray();
+        var newShape = new int[origShape.Length + 1];
+        for (int i = 0; i < dim; i++) newShape[i] = origShape[i];
+        newShape[dim] = 1;
+        for (int i = dim; i < origShape.Length; i++) newShape[i + 1] = origShape[i];
+        return Reshape(a, newShape); // Reshape is already tape-aware
+    }
+
+    /// <summary>Stack tensors along a new dimension. Like torch.stack.</summary>
+    public static Tensor<T> Stack(Tensor<T>[] tensors, int axis = 0)
+    {
+        // Unsqueeze each tensor at the given axis, then concatenate
+        var unsqueezed = new Tensor<T>[tensors.Length];
+        for (int i = 0; i < tensors.Length; i++)
+            unsqueezed[i] = Unsqueeze(tensors[i], axis);
+        return Concatenate(unsqueezed, axis); // Already tape-aware
+    }
+
+    /// <summary>Flatten to 1D. Like torch.flatten.</summary>
+    public static Tensor<T> Flatten(Tensor<T> a)
+    {
+        return Reshape(a, [a.Length]); // Already tape-aware
+    }
+
+    /// <summary>ReLU6: min(max(x, 0), 6). Mobile-optimized.</summary>
+    public static Tensor<T> ReLU6(Tensor<T> x)
+    {
+        return Clamp(ReLU(x), 0, 6); // Composed from tape-aware ops
+    }
+
+    // ─── Helpers for axis-specific reductions ───────────────────────
+
+    /// <summary>Expand dimensions that were removed by reduction back to size 1.</summary>
+    private static Tensor<T> ExpandDims(Tensor<T> a, int[] targetShape, int[] reducedAxes)
+    {
+        var expandedShape = new int[targetShape.Length];
+        Array.Copy(targetShape, expandedShape, targetShape.Length);
+        foreach (int ax in reducedAxes) expandedShape[ax] = 1;
+        return a.Reshape(expandedShape);
+    }
+
+    /// <summary>Broadcast tensor to target shape by repeating along dimensions of size 1.</summary>
+    private static Tensor<T> BroadcastTo(Tensor<T> a, int[] targetShape)
+    {
+        if (a.Shape.ToArray().SequenceEqual(targetShape)) return a;
+
+        var result = new Tensor<T>(targetShape);
+        int resultLen = 1;
+        foreach (int d in targetShape) resultLen *= d;
+
+        var aShape = a.Shape.ToArray();
+        // Pad aShape with leading 1s if needed
+        while (aShape.Length < targetShape.Length)
+            aShape = new[] { 1 }.Concat(aShape).ToArray();
+
+        // Compute strides for source
+        for (int i = 0; i < resultLen; i++)
+        {
+            // Convert flat index to multi-index in target shape
+            int remaining = i;
+            int srcIdx = 0;
+            int srcStride = 1;
+            for (int d = targetShape.Length - 1; d >= 0; d--)
+            {
+                int coord = remaining % targetShape[d];
+                remaining /= targetShape[d];
+                int srcCoord = aShape[d] == 1 ? 0 : coord;
+                srcIdx += srcCoord * srcStride;
+                srcStride *= aShape[d];
+            }
+            result[i] = a[Math.Min(srcIdx, a.Length - 1)];
+        }
+        return result;
+    }
 }
