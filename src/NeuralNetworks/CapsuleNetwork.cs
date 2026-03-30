@@ -415,8 +415,9 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         _lastInput = input;
         _lastExpectedOutput = expectedOutput;
 
-        // Forward pass
-        var prediction = Predict(input);
+        // Forward pass in training mode (sets IsTrainingMode so layers cache state for backward)
+        SetTrainingMode(true);
+        var prediction = ForwardWithMemory(input);
         _lastCapsuleOutputs = prediction;
 
         // Calculate margin loss (primary loss)
@@ -435,11 +436,15 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         var totalLoss = NumOps.Add(marginLoss, auxiliaryLoss);
         LastLoss = totalLoss;
 
-        // Backward pass
-        var gradient = CalculateGradient(totalLoss);
+        // Backward pass (sets parameter gradients on each layer)
+        CalculateGradient(totalLoss);
 
-        // Update parameters
-        UpdateParameters(gradient);
+        // Update parameters using SGD with configurable learning rate
+        T lr = NumOps.FromDouble(_options.LearningRate);
+        foreach (var layer in Layers)
+        {
+            layer.UpdateParameters(lr);
+        }
     }
 
     /// <summary>
@@ -536,17 +541,22 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             _lastCapsuleOutputs.Shape.ToArray(),
             lossDerivative);
 
-        List<Tensor<T>> gradients = new List<Tensor<T>>();
-
-        // Backward pass through all layers
+        // Backward pass through all layers (propagates gradient and sets parameter gradients)
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
             currentGradient = Layers[i].Backward(currentGradient);
-            gradients.Insert(0, currentGradient);
         }
 
-        // Flatten all gradients into a single vector
-        return new Vector<T>([.. gradients.SelectMany(g => g.ToVector())]);
+        // Collect parameter gradients (not input gradients) from each layer
+        var paramGradients = new List<T>();
+        foreach (var layer in Layers)
+        {
+            var layerGrads = layer.GetParameterGradients();
+            for (int j = 0; j < layerGrads.Length; j++)
+                paramGradients.Add(layerGrads[j]);
+        }
+
+        return new Vector<T>([.. paramGradients]);
     }
 
     /// <summary>
