@@ -2404,7 +2404,13 @@ public static class LayerHelper<T>
 
         // Output Layer
         yield return new DenseLayer<T>(columnCount * cellsPerColumn, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
-        yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
+
+        // Only add Softmax for classification tasks with multiple classes.
+        // Softmax on a single output always returns 1.0, destroying input sensitivity.
+        if (outputSize > 1 && (architecture.TaskType == Enums.NeuralNetworkTaskType.BinaryClassification || architecture.TaskType == Enums.NeuralNetworkTaskType.MultiClassClassification || architecture.TaskType == Enums.NeuralNetworkTaskType.ImageClassification))
+        {
+            yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
+        }
     }
 
     /// <summary>

@@ -277,7 +277,18 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
 
         // Backpropagate with gradient clipping to prevent explosion in deep conv networks
-        Backpropagate(new Tensor<T>(prediction.Shape.ToArray(), outputGradient));
+        var gradTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
+
+        // Clip gradient norm to prevent explosion in deep networks (Huang et al. 2017)
+        T gradNorm = NumOps.Sqrt(Engine.DotProduct(outputGradient, outputGradient));
+        double gradNormVal = NumOps.ToDouble(gradNorm);
+        if (gradNormVal > 1.0)
+        {
+            T scale = NumOps.FromDouble(1.0 / gradNormVal);
+            gradTensor = Engine.TensorMultiplyScalar(gradTensor, scale);
+        }
+
+        Backpropagate(gradTensor);
 
         // Update parameters with Adam optimizer
         T lr = NumOps.FromDouble(0.0001); // Lower LR per Huang et al. 2017 for stability
