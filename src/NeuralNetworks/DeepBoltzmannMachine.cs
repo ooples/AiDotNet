@@ -785,7 +785,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
             // to prevent oscillation in deep sigmoid networks)
             if (_trainOptimizer == null)
             {
-                var adamOptions = new Models.Options.AdamOptimizerOptions
+                var adamOptions = new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
                 {
                     InitialLearningRate = NumOps.ToDouble(_learningRate)
                 };

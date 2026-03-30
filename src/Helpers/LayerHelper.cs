@@ -31139,6 +31139,7 @@ public static class LayerHelper<T>
     /// Creates layers for the AudioVisualEventLocalizationNetwork.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateAudioVisualEventLocalizationLayers(
+        int inputSize = 512,
         int embeddingDimension = 256,
         int numEncoderLayers = 4,
         int numCategories = 35)
@@ -31146,8 +31147,8 @@ public static class LayerHelper<T>
         IActivationFunction<T>? nullActivation = null;
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
-        // Audio encoder: input projection + (attention + FFN1 + FFN2) × numEncoderLayers + output projection
-        yield return new DenseLayer<T>(128, embeddingDimension, nullActivation); // SPECTROGRAM_BINS=128
+        // Audio encoder: input projection + (attention) × numEncoderLayers + output projection
+        yield return new DenseLayer<T>(inputSize, embeddingDimension, nullActivation);
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, 8, geluActivation);
@@ -31155,7 +31156,8 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, nullActivation);
 
         // Visual encoder: input projection + attention × numEncoderLayers + output projection
-        yield return new DenseLayer<T>(768, embeddingDimension, nullActivation);
+        // Uses embeddingDimension as input (visual features come from audio encoder in sequential mode)
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, nullActivation);
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, 8, geluActivation);
@@ -31169,17 +31171,17 @@ public static class LayerHelper<T>
         }
         yield return new DenseLayer<T>(embeddingDimension, 2, nullActivation); // temporal proposal head
 
-        // Cross-modal fusion: 4 attention layers
+        // Cross-modal fusion: 4 attention layers (using consistent embeddingDimension)
         for (int i = 0; i < 4; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension * 2, 8, geluActivation);
+            yield return new MultiHeadAttentionLayer<T>(1, 2, 1, geluActivation); // match temporal output dim
         }
 
-        // Task-specific heads
-        yield return new DenseLayer<T>(embeddingDimension * 2, numCategories, nullActivation); // event classification
-        yield return new DenseLayer<T>(embeddingDimension * 2, 3, nullActivation); // temporal boundary
-        yield return new DenseLayer<T>(embeddingDimension * 2, 4, nullActivation); // spatial localization
-        yield return new DenseLayer<T>(embeddingDimension * 2, 1, nullActivation); // anomaly detection
+        // Task-specific heads (match cross-modal output dimension = 2)
+        yield return new DenseLayer<T>(2, numCategories, nullActivation); // event classification
+        yield return new DenseLayer<T>(numCategories, 3, nullActivation); // temporal boundary
+        yield return new DenseLayer<T>(3, 4, nullActivation); // spatial localization
+        yield return new DenseLayer<T>(4, 1, nullActivation); // anomaly detection
     }
 
     /// <summary>
