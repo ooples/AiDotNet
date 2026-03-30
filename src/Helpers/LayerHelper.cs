@@ -753,27 +753,19 @@ public static class LayerHelper<T>
         var inputShape = architecture.GetInputShape();
         int inputSize = inputShape[0];
 
-        // Define the sizes of each layer in the DBM
-        int[] layerSizes = [inputSize, 500, 500, 2000, architecture.OutputSize];
+        // Per Salakhutdinov & Hinton 2009, a DBM uses 2 hidden layers.
+        // Architecture: visible → hidden1 → hidden2 → output projection.
+        // The RBM layers learn the representation, and a DenseLayer projects to output size.
+        int hidden1 = Math.Min(500, inputSize * 4);
+        int hidden2 = Math.Min(500, architecture.OutputSize * 4);
 
-        // Create layers
-        for (int i = 0; i < layerSizes.Length - 1; i++)
-        {
-            yield return new RBMLayer<T>(
-                visibleUnits: layerSizes[i],
-                hiddenUnits: layerSizes[i + 1],
-                new SigmoidActivation<T>() as IActivationFunction<T>
-            );
+        // Encoder RBM layers
+        yield return new RBMLayer<T>(inputSize, hidden1, new SigmoidActivation<T>() as IActivationFunction<T>);
+        yield return new BatchNormalizationLayer<T>(hidden1);
+        yield return new RBMLayer<T>(hidden1, hidden2, new SigmoidActivation<T>() as IActivationFunction<T>);
 
-            // Add a BatchNormalization layer after each RBM layer except the last one
-            if (i < layerSizes.Length - 2)
-            {
-                yield return new BatchNormalizationLayer<T>(layerSizes[i + 1]);
-            }
-        }
-
-        // Output layer
-        yield return new DenseLayer<T>(layerSizes[layerSizes.Length - 2], layerSizes[layerSizes.Length - 1], new SigmoidActivation<T>() as IActivationFunction<T>);
+        // Output projection: maps from last hidden to output size
+        yield return new DenseLayer<T>(hidden2, architecture.OutputSize, new SigmoidActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
