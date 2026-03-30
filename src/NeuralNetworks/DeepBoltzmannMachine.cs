@@ -245,7 +245,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
             inputSize: 128,
-            outputSize: 1),
+            outputSize: 128),
             epochs: 10, learningRate: MathHelper.GetNumericOperations<T>().FromDouble(0.0001),
             activationFunction: (IActivationFunction<T>?)null)
     {

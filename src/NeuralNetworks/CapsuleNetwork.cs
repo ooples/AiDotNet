@@ -55,6 +55,7 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// Stores the last capsule outputs for reconstruction loss computation.
     /// </summary>
     private Tensor<T>? _lastCapsuleOutputs;
+    private Tensor<T>? _lastExpectedOutput;
 
     /// <summary>
     /// Stores the last input for reconstruction loss computation.
@@ -412,6 +413,7 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         // Store input for reconstruction loss
         _lastInput = input;
+        _lastExpectedOutput = expectedOutput;
 
         // Forward pass
         var prediction = Predict(input);
@@ -522,10 +524,21 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Vector<T> CalculateGradient(T loss)
     {
+        if (_lastCapsuleOutputs == null || _lastInput == null)
+            throw new InvalidOperationException("Forward pass must be called before gradient computation.");
+
+        // Compute dL/dPrediction — the gradient of the loss w.r.t. the network output,
+        // not the scalar loss value. The scalar loss has no spatial information about
+        // which outputs to adjust.
+        var lossDerivative = _lossFunction.CalculateDerivative(
+            _lastCapsuleOutputs.ToVector(), _lastExpectedOutput!.ToVector());
+        Tensor<T> currentGradient = new Tensor<T>(
+            _lastCapsuleOutputs.Shape.ToArray(),
+            lossDerivative);
+
         List<Tensor<T>> gradients = new List<Tensor<T>>();
 
         // Backward pass through all layers
-        Tensor<T> currentGradient = new Tensor<T>([1], new Vector<T>(Enumerable.Repeat(loss, 1)));
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
             currentGradient = Layers[i].Backward(currentGradient);
