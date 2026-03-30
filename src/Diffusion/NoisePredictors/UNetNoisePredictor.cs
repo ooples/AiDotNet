@@ -541,8 +541,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // Project time embedding
         var timeEmbed = ProjectTimeEmbedding(timeEmbedding);
 
-        // Forward pass
-        var output = ForwardUNet(noisySample, timeEmbed, conditioning);
+        // Forward pass — saves skip connections for backward
+        var (output, skips) = ForwardUNetWithSkips(noisySample, timeEmbed, conditioning);
+        SaveForwardState(skips, timeEmbed);
 
         _lastOutput = output;
         return output;
@@ -565,6 +566,72 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     /// <summary>
     /// Performs the forward pass through the U-Net architecture.
+    /// </summary>
+    /// <summary>
+    /// Forward pass returning skip connections for backward pass gradient routing.
+    /// </summary>
+    private (Tensor<T> output, List<Tensor<T>> skips) ForwardUNetWithSkips(Tensor<T> x, Tensor<T> timeEmbed, Tensor<T>? conditioning)
+    {
+        if (_inputConv == null || _outputConv == null)
+            throw new InvalidOperationException("Convolutional layers not initialized.");
+
+        x = _inputConv.Forward(x);
+        var skips = new List<Tensor<T>>(_encoderBlocks.Count);
+
+        for (int i = 0; i < _encoderBlocks.Count; i++)
+        {
+            var block = _encoderBlocks[i];
+            if (block.Downsample != null)
+            {
+                x = block.Downsample.Forward(x);
+            }
+            else
+            {
+                x = ApplyResBlock(block.ResBlock, x, timeEmbed);
+                if (block.AttentionBlock != null) x = block.AttentionBlock.Forward(x);
+                if (block.CrossAttentionBlock != null && conditioning != null)
+                    x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+                skips.Add(x);
+            }
+        }
+
+        for (int i = 0; i < _middleBlocks.Count; i++)
+        {
+            var block = _middleBlocks[i];
+            x = ApplyResBlock(block.ResBlock, x, timeEmbed);
+            if (block.AttentionBlock != null) x = block.AttentionBlock.Forward(x);
+            if (block.CrossAttentionBlock != null && conditioning != null)
+                x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+        }
+
+        var skipIdx = skips.Count - 1;
+        for (int i = 0; i < _decoderBlocks.Count; i++)
+        {
+            var block = _decoderBlocks[i];
+            if (block.Upsample != null)
+            {
+                x = block.Upsample.Forward(x);
+            }
+            else
+            {
+                if (skipIdx >= 0)
+                {
+                    x = ConcatenateChannels(x, skips[skipIdx]);
+                    skipIdx--;
+                }
+                x = ApplyResBlock(block.ResBlock, x, timeEmbed);
+                if (block.AttentionBlock != null) x = block.AttentionBlock.Forward(x);
+                if (block.CrossAttentionBlock != null && conditioning != null)
+                    x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+            }
+        }
+
+        x = _outputConv.Forward(x);
+        return (x, skips);
+    }
+
+    /// <summary>
+    /// Forward pass for inference (no skip storage needed).
     /// </summary>
     private Tensor<T> ForwardUNet(Tensor<T> x, Tensor<T> timeEmbed, Tensor<T>? conditioning)
     {

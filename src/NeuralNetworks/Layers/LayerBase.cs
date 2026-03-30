@@ -140,6 +140,31 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         public static Tensor<T> Round(Tensor<T> x) => DifferentiableOps<T>.Round(x);
         public static Tensor<T> Norm(Tensor<T> x, double p = 2.0) => DifferentiableOps<T>.Norm(x, p);
         public static Tensor<T> LogSumExp(Tensor<T> x) => DifferentiableOps<T>.LogSumExp(x);
+        // Previously missing from facade
+        public static Tensor<T> DivideScalar(Tensor<T> a, T scalar) => DifferentiableOps<T>.DivideScalar(a, scalar);
+        public static Tensor<T> Softmax(Tensor<T> x) => DifferentiableOps<T>.Softmax(x);
+        public static Tensor<T> AvgPool2D(Tensor<T> x, int poolSize, int stride) => DifferentiableOps<T>.AvgPool2D(x, poolSize, stride);
+        public static Tensor<T> MaxPool2D(Tensor<T> x, int poolSize, int stride) => DifferentiableOps<T>.MaxPool2D(x, poolSize, stride);
+        public static Tensor<T> BatchNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double eps = 1e-5) => DifferentiableOps<T>.BatchNorm(input, gamma, beta, eps);
+        public static Tensor<T> LayerNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double eps = 1e-5) => DifferentiableOps<T>.LayerNorm(input, gamma, beta, eps);
+        public static Tensor<T> GroupNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, int numGroups, double eps = 1e-5) => DifferentiableOps<T>.GroupNorm(input, gamma, beta, numGroups, eps);
+        public static Tensor<T> Conv2D(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] dilation) => DifferentiableOps<T>.Conv2D(input, kernel, stride, padding, dilation);
+        public static Tensor<T> Conv3D(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] dilation) => DifferentiableOps<T>.Conv3D(input, kernel, stride, padding, dilation);
+        public static Tensor<T> Embedding(Tensor<T> table, int[] indices) => DifferentiableOps<T>.Embedding(table, indices);
+        public static Tensor<T> ScaledDotProductAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v, Tensor<T>? mask = null) => DifferentiableOps<T>.ScaledDotProductAttention(q, k, v, mask);
+        public static Tensor<T> ScatterAdd(Tensor<T> src, int[] indices, int dim, int outputSize) => DifferentiableOps<T>.ScatterAdd(src, indices, dim, outputSize);
+        public static Tensor<T> RReLU(Tensor<T> x, double lower = 0.125, double upper = 0.333, bool training = true) => DifferentiableOps<T>.RReLU(x, lower, upper, training);
+        public static Tensor<T>[] Split(Tensor<T> x, int[] splitSizes, int axis = 0) => DifferentiableOps<T>.Split(x, splitSizes, axis);
+        public static Tensor<T> CosineSimilarity(Tensor<T> a, Tensor<T> b) => DifferentiableOps<T>.CosineSimilarity(a, b);
+        public static Tensor<T> OneHot(int[] indices, int numClasses) => DifferentiableOps<T>.OneHot(indices, numClasses);
+        // Loss functions
+        public static Tensor<T> CrossEntropyLoss(Tensor<T> logits, Tensor<T> targets) => DifferentiableOps<T>.CrossEntropyLoss(logits, targets);
+        public static Tensor<T> MSELoss(Tensor<T> pred, Tensor<T> target) => DifferentiableOps<T>.MSELoss(pred, target);
+        public static Tensor<T> L1Loss(Tensor<T> pred, Tensor<T> target) => DifferentiableOps<T>.L1Loss(pred, target);
+        public static Tensor<T> BCEWithLogitsLoss(Tensor<T> logits, Tensor<T> targets) => DifferentiableOps<T>.BCEWithLogitsLoss(logits, targets);
+        public static Tensor<T> HuberLoss(Tensor<T> pred, Tensor<T> target, double delta = 1.0) => DifferentiableOps<T>.HuberLoss(pred, target, delta);
+        public static Tensor<T> KLDivLoss(Tensor<T> logP, Tensor<T> target) => DifferentiableOps<T>.KLDivLoss(logP, target);
+        public static Tensor<T> NLLLoss(Tensor<T> logProbs, int[] targets) => DifferentiableOps<T>.NLLLoss(logProbs, targets);
     }
 
     /// <summary>
@@ -1047,6 +1072,24 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
 
         throw new NotSupportedException(
             $"{GetType().Name} does not override ForwardGpu(IReadOnlyDictionary).");
+    }
+
+    /// <summary>
+    /// GPU multi-output backward pass. Default delegates to single-input BackwardGpu.
+    /// </summary>
+    public virtual IReadOnlyDictionary<string, IGpuTensor<T>> BackwardGpuMulti(
+        IReadOnlyDictionary<string, IGpuTensor<T>> outputGradients)
+    {
+        if (InputPorts.Count > 1)
+        {
+            throw new NotSupportedException(
+                $"{GetType().Name} has {InputPorts.Count} input ports but does not override " +
+                $"BackwardGpuMulti.");
+        }
+
+        var grad = outputGradients.TryGetValue("output", out var g) ? g : outputGradients.Values.First();
+        var inputGrad = BackwardGpu(grad);
+        return new Dictionary<string, IGpuTensor<T>> { ["input"] = inputGrad };
     }
 
     /// <summary>
