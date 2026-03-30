@@ -2172,4 +2172,606 @@ public static class DifferentiableOps<T>
         }
         return result;
     }
+
+    // ─── Gather / Scatter (27 uses) ─────────────────────────────────
+
+    /// <summary>Gather elements along axis using integer indices. Like torch.gather.</summary>
+    public static Tensor<T> Gather(Tensor<T> input, int[] indices, int axis = 0)
+    {
+        var indicesTensor = new Tensor<int>(indices, [indices.Length]);
+        var result = Engine.TensorGather(input, indicesTensor, axis: axis);
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            var inputShape = input.Shape.ToArray();
+            tape.RecordOp("Gather", [input], result,
+                grad =>
+                {
+                    var inputGrad = new Tensor<T>(inputShape);
+                    for (int i = 0; i < grad.Length && i < indices.Length; i++)
+                    {
+                        int idx = indices[i];
+                        if (idx >= 0 && idx < inputGrad.Length)
+                            inputGrad[idx] = NumOps.Add(inputGrad[idx], grad[i]);
+                    }
+                    return [inputGrad];
+                });
+        }
+        return result;
+    }
+
+    /// <summary>Scatter add: accumulate values at specified indices. Like torch.scatter_add.</summary>
+    public static Tensor<T> ScatterAdd(Tensor<T> src, int[] indices, int dim, int outputSize)
+    {
+        var indicesTensor = new Tensor<int>(indices, [indices.Length]);
+        var result = Engine.ScatterAdd(src, indicesTensor, dim: dim, outputSize: outputSize);
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("ScatterAdd", [src], result,
+                grad =>
+                {
+                    var srcGrad = new Tensor<T>(src.Shape.ToArray());
+                    for (int i = 0; i < src.Length && i < indices.Length; i++)
+                    {
+                        int idx = indices[i];
+                        if (idx >= 0 && idx < grad.Length)
+                            srcGrad[i] = grad[idx];
+                    }
+                    return [srcGrad];
+                });
+        }
+        return result;
+    }
+
+    // ─── Pad (6 uses) ───────────────────────────────────────────────
+
+    /// <summary>Pad tensor with constant value. Like torch.nn.functional.pad.</summary>
+    /// <param name="input">Input tensor.</param>
+    /// <param name="padding">Padding amounts: [before_dim0, after_dim0, before_dim1, after_dim1, ...].</param>
+    /// <param name="value">Constant fill value (default 0).</param>
+    public static Tensor<T> ConstantPad(Tensor<T> input, int[] padding, double value = 0)
+    {
+        var inShape = input.Shape.ToArray();
+        int rank = inShape.Length;
+        var outShape = new int[rank];
+        for (int d = 0; d < rank; d++)
+        {
+            int padBefore = d * 2 < padding.Length ? padding[d * 2] : 0;
+            int padAfter = d * 2 + 1 < padding.Length ? padding[d * 2 + 1] : 0;
+            outShape[d] = inShape[d] + padBefore + padAfter;
+        }
+
+        var result = Tensor<T>.CreateDefault(outShape, NumOps.FromDouble(value));
+
+        // Copy input into padded region
+        CopyRegion(input, result, inShape, outShape, padding);
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("ConstantPad", [input], result,
+                grad =>
+                {
+                    // Backward: extract the unpadded region from gradient
+                    var inputGrad = new Tensor<T>(inShape);
+                    CopyRegionReverse(grad, inputGrad, inShape, outShape, padding);
+                    return [inputGrad];
+                });
+        }
+        return result;
+    }
+
+    private static void CopyRegion(Tensor<T> src, Tensor<T> dst, int[] srcShape, int[] dstShape, int[] padding)
+    {
+        // Simple flat copy for 1D, loop copy for higher ranks
+        if (srcShape.Length == 1)
+        {
+            int padBefore = padding.Length > 0 ? padding[0] : 0;
+            for (int i = 0; i < srcShape[0]; i++)
+                dst[padBefore + i] = src[i];
+            return;
+        }
+        // General: iterate over all source elements
+        int totalSrc = 1;
+        foreach (int d in srcShape) totalSrc *= d;
+        for (int flat = 0; flat < totalSrc; flat++)
+        {
+            int remaining = flat;
+            int dstFlat = 0;
+            int dstStride = 1;
+            for (int d = srcShape.Length - 1; d >= 0; d--)
+            {
+                int coord = remaining % srcShape[d];
+                remaining /= srcShape[d];
+                int padBefore = d * 2 < padding.Length ? padding[d * 2] : 0;
+                dstFlat += (coord + padBefore) * dstStride;
+                dstStride *= dstShape[d];
+            }
+            // Fix: compute properly with correct stride order
+            // Recompute with forward strides
+            dstFlat = 0;
+            remaining = flat;
+            var coords = new int[srcShape.Length];
+            for (int d = srcShape.Length - 1; d >= 0; d--)
+            {
+                coords[d] = remaining % srcShape[d];
+                remaining /= srcShape[d];
+            }
+            int dstIdx = 0;
+            int stride = 1;
+            for (int d = srcShape.Length - 1; d >= 0; d--)
+            {
+                int padBefore = d * 2 < padding.Length ? padding[d * 2] : 0;
+                dstIdx += (coords[d] + padBefore) * stride;
+                stride *= dstShape[d];
+            }
+            if (dstIdx < dst.Length)
+                dst[dstIdx] = src[flat];
+        }
+    }
+
+    private static void CopyRegionReverse(Tensor<T> src, Tensor<T> dst, int[] dstShape, int[] srcShape, int[] padding)
+    {
+        int totalDst = 1;
+        foreach (int d in dstShape) totalDst *= d;
+        for (int flat = 0; flat < totalDst; flat++)
+        {
+            int remaining = flat;
+            var coords = new int[dstShape.Length];
+            for (int d = dstShape.Length - 1; d >= 0; d--)
+            {
+                coords[d] = remaining % dstShape[d];
+                remaining /= dstShape[d];
+            }
+            int srcIdx = 0;
+            int stride = 1;
+            for (int d = dstShape.Length - 1; d >= 0; d--)
+            {
+                int padBefore = d * 2 < padding.Length ? padding[d * 2] : 0;
+                srcIdx += (coords[d] + padBefore) * stride;
+                stride *= srcShape[d];
+            }
+            if (srcIdx < src.Length)
+                dst[flat] = src[srcIdx];
+        }
+    }
+
+    // ─── Interpolate / Upsample (33 uses) ───────────────────────────
+
+    /// <summary>Nearest-neighbor upsampling. Like F.interpolate(mode='nearest').</summary>
+    public static Tensor<T> UpsampleNearest(Tensor<T> input, int scaleFactor)
+    {
+        // Input: [batch, channels, H, W] -> Output: [batch, channels, H*scale, W*scale]
+        var inShape = input.Shape.ToArray();
+        if (inShape.Length < 2) return input;
+
+        int h = inShape.Length >= 3 ? inShape[^2] : 1;
+        int w = inShape[^1];
+        int newH = h * scaleFactor;
+        int newW = w * scaleFactor;
+
+        var outShape = (int[])inShape.Clone();
+        if (outShape.Length >= 3) outShape[^2] = newH;
+        outShape[^1] = newW;
+
+        var result = new Tensor<T>(outShape);
+        int batchChannels = 1;
+        for (int i = 0; i < inShape.Length - 2; i++) batchChannels *= inShape[i];
+
+        for (int bc = 0; bc < batchChannels; bc++)
+        {
+            for (int iy = 0; iy < newH; iy++)
+            {
+                int srcY = iy / scaleFactor;
+                for (int ix = 0; ix < newW; ix++)
+                {
+                    int srcX = ix / scaleFactor;
+                    result[bc * newH * newW + iy * newW + ix] =
+                        input[bc * h * w + srcY * w + srcX];
+                }
+            }
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("UpsampleNearest", [input], result,
+                grad =>
+                {
+                    // Backward: sum gradients from upsampled positions back to source
+                    var inputGrad = new Tensor<T>(inShape);
+                    for (int bc = 0; bc < batchChannels; bc++)
+                    {
+                        for (int iy = 0; iy < newH; iy++)
+                        {
+                            int srcY = iy / scaleFactor;
+                            for (int ix = 0; ix < newW; ix++)
+                            {
+                                int srcX = ix / scaleFactor;
+                                inputGrad[bc * h * w + srcY * w + srcX] = NumOps.Add(
+                                    inputGrad[bc * h * w + srcY * w + srcX],
+                                    grad[bc * newH * newW + iy * newW + ix]);
+                            }
+                        }
+                    }
+                    return [inputGrad];
+                });
+        }
+        return result;
+    }
+
+    /// <summary>Bilinear upsampling. Like F.interpolate(mode='bilinear').</summary>
+    public static Tensor<T> UpsampleBilinear(Tensor<T> input, int outputH, int outputW)
+    {
+        var inShape = input.Shape.ToArray();
+        int h = inShape.Length >= 3 ? inShape[^2] : 1;
+        int w = inShape[^1];
+
+        var outShape = (int[])inShape.Clone();
+        if (outShape.Length >= 3) outShape[^2] = outputH;
+        outShape[^1] = outputW;
+
+        var result = new Tensor<T>(outShape);
+        int batchChannels = 1;
+        for (int i = 0; i < inShape.Length - 2; i++) batchChannels *= inShape[i];
+
+        for (int bc = 0; bc < batchChannels; bc++)
+        {
+            for (int oy = 0; oy < outputH; oy++)
+            {
+                double srcY = (double)oy * (h - 1) / Math.Max(outputH - 1, 1);
+                int y0 = (int)Math.Floor(srcY);
+                int y1 = Math.Min(y0 + 1, h - 1);
+                double fy = srcY - y0;
+
+                for (int ox = 0; ox < outputW; ox++)
+                {
+                    double srcX = (double)ox * (w - 1) / Math.Max(outputW - 1, 1);
+                    int x0 = (int)Math.Floor(srcX);
+                    int x1 = Math.Min(x0 + 1, w - 1);
+                    double fx = srcX - x0;
+
+                    double v00 = NumOps.ToDouble(input[bc * h * w + y0 * w + x0]);
+                    double v01 = NumOps.ToDouble(input[bc * h * w + y0 * w + x1]);
+                    double v10 = NumOps.ToDouble(input[bc * h * w + y1 * w + x0]);
+                    double v11 = NumOps.ToDouble(input[bc * h * w + y1 * w + x1]);
+
+                    double interp = v00 * (1 - fy) * (1 - fx) + v01 * (1 - fy) * fx
+                                  + v10 * fy * (1 - fx) + v11 * fy * fx;
+                    result[bc * outputH * outputW + oy * outputW + ox] = NumOps.FromDouble(interp);
+                }
+            }
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("UpsampleBilinear", [input], result,
+                grad =>
+                {
+                    var inputGrad = new Tensor<T>(inShape);
+                    for (int bc = 0; bc < batchChannels; bc++)
+                    {
+                        for (int oy = 0; oy < outputH; oy++)
+                        {
+                            double srcY = (double)oy * (h - 1) / Math.Max(outputH - 1, 1);
+                            int y0 = (int)Math.Floor(srcY);
+                            int y1 = Math.Min(y0 + 1, h - 1);
+                            double fy = srcY - y0;
+
+                            for (int ox = 0; ox < outputW; ox++)
+                            {
+                                double srcX = (double)ox * (w - 1) / Math.Max(outputW - 1, 1);
+                                int x0 = (int)Math.Floor(srcX);
+                                int x1 = Math.Min(x0 + 1, w - 1);
+                                double fx = srcX - x0;
+
+                                double g = NumOps.ToDouble(grad[bc * outputH * outputW + oy * outputW + ox]);
+                                int baseIdx = bc * h * w;
+                                inputGrad[baseIdx + y0 * w + x0] = NumOps.Add(inputGrad[baseIdx + y0 * w + x0], NumOps.FromDouble(g * (1 - fy) * (1 - fx)));
+                                inputGrad[baseIdx + y0 * w + x1] = NumOps.Add(inputGrad[baseIdx + y0 * w + x1], NumOps.FromDouble(g * (1 - fy) * fx));
+                                inputGrad[baseIdx + y1 * w + x0] = NumOps.Add(inputGrad[baseIdx + y1 * w + x0], NumOps.FromDouble(g * fy * (1 - fx)));
+                                inputGrad[baseIdx + y1 * w + x1] = NumOps.Add(inputGrad[baseIdx + y1 * w + x1], NumOps.FromDouble(g * fy * fx));
+                            }
+                        }
+                    }
+                    return [inputGrad];
+                });
+        }
+        return result;
+    }
+
+    // ─── ConvTranspose2D (14 uses) ──────────────────────────────────
+
+    /// <summary>Transposed (deconvolution) 2D convolution. Like F.conv_transpose2d.</summary>
+    public static Tensor<T> ConvTranspose2D(Tensor<T> input, Tensor<T> kernel, int stride = 1, int padding = 0, int outputPadding = 0)
+    {
+        var strideArr = new[] { stride, stride };
+        var paddingArr = new[] { padding, padding };
+        var outputPaddingArr = new[] { outputPadding, outputPadding };
+        var result = Engine.ConvTranspose2D(input, kernel, strideArr, paddingArr, outputPaddingArr);
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("ConvTranspose2D", [input, kernel], result,
+                grad =>
+                {
+                    // Backward of ConvTranspose2D is Conv2D
+                    var strideArr = new[] { stride, stride };
+                    var paddingArr = new[] { padding, padding };
+                    var dilationArr = new[] { 1, 1 };
+                    var inputGrad = Engine.Conv2D(grad, kernel, strideArr, paddingArr, dilationArr);
+                    var kernelGrad = Engine.Conv2DBackwardKernel(grad, input, kernel.Shape.ToArray(),
+                        strideArr, paddingArr, dilationArr);
+                    return [inputGrad, kernelGrad];
+                });
+        }
+        return result;
+    }
+
+    // ─── InstanceNorm (6 uses) ──────────────────────────────────────
+
+    /// <summary>Instance normalization. Like F.instance_norm.</summary>
+    public static Tensor<T> InstanceNorm(Tensor<T> input, Tensor<T>? weight = null, Tensor<T>? bias = null, double eps = 1e-5)
+    {
+        // Input: [batch, channels, ...spatial]
+        // Normalize each (batch, channel) independently over spatial dims
+        var inShape = input.Shape.ToArray();
+        int batch = inShape[0];
+        int channels = inShape.Length > 1 ? inShape[1] : 1;
+        int spatialSize = 1;
+        for (int i = 2; i < inShape.Length; i++) spatialSize *= inShape[i];
+
+        var result = new Tensor<T>(inShape);
+        var means = new double[batch * channels];
+        var invStds = new double[batch * channels];
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                int offset = (b * channels + c) * spatialSize;
+                double sum = 0;
+                for (int s = 0; s < spatialSize; s++)
+                    sum += NumOps.ToDouble(input[offset + s]);
+                double mean = sum / spatialSize;
+
+                double varSum = 0;
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    double diff = NumOps.ToDouble(input[offset + s]) - mean;
+                    varSum += diff * diff;
+                }
+                double invStd = 1.0 / Math.Sqrt(varSum / spatialSize + eps);
+
+                means[b * channels + c] = mean;
+                invStds[b * channels + c] = invStd;
+
+                double w = weight is not null && c < weight.Length ? NumOps.ToDouble(weight[c]) : 1.0;
+                double bi = bias is not null && c < bias.Length ? NumOps.ToDouble(bias[c]) : 0.0;
+
+                for (int s = 0; s < spatialSize; s++)
+                {
+                    double normalized = (NumOps.ToDouble(input[offset + s]) - mean) * invStd;
+                    result[offset + s] = NumOps.FromDouble(normalized * w + bi);
+                }
+            }
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("InstanceNorm", [input], result,
+                grad =>
+                {
+                    var inputGrad = new Tensor<T>(inShape);
+                    for (int b = 0; b < batch; b++)
+                    {
+                        for (int c = 0; c < channels; c++)
+                        {
+                            int offset = (b * channels + c) * spatialSize;
+                            double mean = means[b * channels + c];
+                            double invStd2 = invStds[b * channels + c];
+                            double w = weight is not null && c < weight.Length ? NumOps.ToDouble(weight[c]) : 1.0;
+
+                            double sumGrad = 0, sumGradX = 0;
+                            for (int s = 0; s < spatialSize; s++)
+                            {
+                                double g = NumOps.ToDouble(grad[offset + s]) * w;
+                                sumGrad += g;
+                                sumGradX += g * (NumOps.ToDouble(input[offset + s]) - mean);
+                            }
+
+                            for (int s = 0; s < spatialSize; s++)
+                            {
+                                double g = NumOps.ToDouble(grad[offset + s]) * w;
+                                double xHat = (NumOps.ToDouble(input[offset + s]) - mean) * invStd2;
+                                inputGrad[offset + s] = NumOps.FromDouble(
+                                    invStd2 / spatialSize * (spatialSize * g - sumGrad - xHat * sumGradX * invStd2));
+                            }
+                        }
+                    }
+                    return [inputGrad];
+                });
+        }
+        return result;
+    }
+
+    // ─── RMSNorm (used in LLM layers) ───────────────────────────────
+
+    /// <summary>Root Mean Square Layer Normalization. Used in LLaMA, Gemma.</summary>
+    public static Tensor<T> RMSNorm(Tensor<T> input, Tensor<T> weight, double eps = 1e-6)
+    {
+        int lastDim = input.Shape[^1];
+        int outerSize = input.Length / lastDim;
+
+        var result = new Tensor<T>(input.Shape.ToArray());
+        var rmsValues = new double[outerSize]; // Store for backward
+
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            int offset = outer * lastDim;
+            double sumSq = 0;
+            for (int d = 0; d < lastDim; d++)
+            {
+                double v = NumOps.ToDouble(input[offset + d]);
+                sumSq += v * v;
+            }
+            double rms = Math.Sqrt(sumSq / lastDim + eps);
+            rmsValues[outer] = rms;
+
+            for (int d = 0; d < lastDim; d++)
+            {
+                double normalized = NumOps.ToDouble(input[offset + d]) / rms;
+                double w = d < weight.Length ? NumOps.ToDouble(weight[d]) : 1.0;
+                result[offset + d] = NumOps.FromDouble(normalized * w);
+            }
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            var inShape = input.Shape.ToArray();
+            tape.RecordOp("RMSNorm", [input, weight], result,
+                grad =>
+                {
+                    var inputGrad = new Tensor<T>(inShape);
+                    var weightGrad = new Tensor<T>(weight.Shape.ToArray());
+
+                    for (int outer = 0; outer < outerSize; outer++)
+                    {
+                        int offset = outer * lastDim;
+                        double rms = rmsValues[outer];
+                        double invRms = 1.0 / rms;
+
+                        double sumGradNorm = 0;
+                        for (int d = 0; d < lastDim; d++)
+                        {
+                            double w = d < weight.Length ? NumOps.ToDouble(weight[d]) : 1.0;
+                            double g = NumOps.ToDouble(grad[offset + d]) * w;
+                            double xNorm = NumOps.ToDouble(input[offset + d]) * invRms;
+                            sumGradNorm += g * xNorm;
+
+                            // Weight gradient
+                            weightGrad[d] = NumOps.Add(weightGrad[d], NumOps.FromDouble(
+                                NumOps.ToDouble(grad[offset + d]) * xNorm));
+                        }
+
+                        for (int d = 0; d < lastDim; d++)
+                        {
+                            double w = d < weight.Length ? NumOps.ToDouble(weight[d]) : 1.0;
+                            double g = NumOps.ToDouble(grad[offset + d]) * w;
+                            double x = NumOps.ToDouble(input[offset + d]);
+                            inputGrad[offset + d] = NumOps.FromDouble(
+                                invRms * (g - x * invRms * invRms * sumGradNorm / lastDim));
+                        }
+                    }
+                    return [inputGrad, weightGrad];
+                });
+        }
+        return result;
+    }
+
+    // ─── Tile / Repeat (used in attention, positional encoding) ─────
+
+    /// <summary>Repeat tensor along specified dimensions. Like torch.tile.</summary>
+    public static Tensor<T> Tile(Tensor<T> input, int[] repeats)
+    {
+        var inShape = input.Shape.ToArray();
+        var outShape = new int[inShape.Length];
+        for (int d = 0; d < inShape.Length; d++)
+            outShape[d] = inShape[d] * (d < repeats.Length ? repeats[d] : 1);
+
+        var result = new Tensor<T>(outShape);
+        int totalOut = 1;
+        foreach (int d in outShape) totalOut *= d;
+
+        for (int flat = 0; flat < totalOut; flat++)
+        {
+            int remaining = flat;
+            int srcIdx = 0;
+            int srcStride = 1;
+            for (int d = inShape.Length - 1; d >= 0; d--)
+            {
+                int coord = remaining % outShape[d];
+                remaining /= outShape[d];
+                srcIdx += (coord % inShape[d]) * srcStride;
+                srcStride *= inShape[d];
+            }
+            result[flat] = input[Math.Min(srcIdx, input.Length - 1)];
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("Tile", [input], result,
+                grad =>
+                {
+                    // Backward: sum gradient from all repeated positions back to source
+                    var inputGrad = new Tensor<T>(inShape);
+                    for (int flat = 0; flat < totalOut; flat++)
+                    {
+                        int remaining2 = flat;
+                        int srcIdx2 = 0;
+                        int srcStride2 = 1;
+                        for (int d = inShape.Length - 1; d >= 0; d--)
+                        {
+                            int coord = remaining2 % outShape[d];
+                            remaining2 /= outShape[d];
+                            srcIdx2 += (coord % inShape[d]) * srcStride2;
+                            srcStride2 *= inShape[d];
+                        }
+                        int si = Math.Min(srcIdx2, input.Length - 1);
+                        inputGrad[si] = NumOps.Add(inputGrad[si], grad[flat]);
+                    }
+                    return [inputGrad];
+                });
+        }
+        return result;
+    }
+
+    // ─── MaskedFill (attention masks) ───────────────────────────────
+
+    /// <summary>Fill positions where mask is true with a value. Like torch.masked_fill.</summary>
+    public static Tensor<T> MaskedFill(Tensor<T> input, Tensor<T> mask, double fillValue)
+    {
+        var result = new Tensor<T>(input.Shape.ToArray());
+        for (int i = 0; i < input.Length; i++)
+        {
+            bool isMasked = i < mask.Length && NumOps.ToDouble(mask[i]) != 0;
+            result[i] = isMasked ? NumOps.FromDouble(fillValue) : input[i];
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("MaskedFill", [input], result,
+                grad =>
+                {
+                    // Gradient is zero where mask is true (constant fill), passthrough elsewhere
+                    var inputGrad = new Tensor<T>(input.Shape.ToArray());
+                    for (int i = 0; i < grad.Length; i++)
+                    {
+                        bool isMasked = i < mask.Length && NumOps.ToDouble(mask[i]) != 0;
+                        inputGrad[i] = isMasked ? NumOps.Zero : grad[i];
+                    }
+                    return [inputGrad];
+                });
+        }
+        return result;
+    }
+
+    // ─── Cosine Similarity ──────────────────────────────────────────
+
+    /// <summary>Cosine similarity between two tensors along last dimension.</summary>
+    public static Tensor<T> CosineSimilarity(Tensor<T> a, Tensor<T> b, double eps = 1e-8)
+    {
+        // Composed from tape-aware ops
+        var dotProduct = Multiply(a, b);
+        var aNorm = Sqrt(AddScalar(Sum(Square(a)), NumOps.FromDouble(eps)));
+        var bNorm = Sqrt(AddScalar(Sum(Square(b)), NumOps.FromDouble(eps)));
+        var normProduct = Multiply(aNorm, bNorm);
+        return Divide(Sum(dotProduct), normProduct);
+    }
 }
