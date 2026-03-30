@@ -1331,17 +1331,35 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        var audioFeatures = EncodeAudio(input);
-        return Tensor<T>.FromVector(audioFeatures);
+        // Forward through all layers (audio encoder → visual encoder → temporal → output)
+        Tensor<T> current = input;
+        foreach (var layer in Layers)
+        {
+            current = layer.Forward(current);
+        }
+        return current;
     }
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-        var prediction = Predict(input);
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
+        var prediction = ForwardWithMemory(input);
+
+        var flatPred = prediction.ToVector();
+        var flatTarget = expectedOutput.ToVector();
+        LastLoss = _lossFunction.CalculateLoss(flatPred, flatTarget);
+        var lossGrad = _lossFunction.CalculateDerivative(flatPred, flatTarget);
+
+        // Backpropagate
+        Backpropagate(Tensor<T>.FromVector(lossGrad));
+
+        // Update parameters
+        T lr = NumOps.FromDouble(0.001);
+        foreach (var layer in Layers)
+        {
+            layer.UpdateParameters(lr);
+        }
         SetTrainingMode(false);
     }
 
