@@ -496,7 +496,8 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType });
             if (ctor is null)
                 throw new InvalidOperationException("Cannot find Conv3DLayer constructor with expected signature.");
-            instance = ctor.Invoke(new object?[] { inputChannels, outputChannels, kernelSize, inputDepthC, inputHeightC, inputWidthC, stride, padding, null });
+            var activation = TryRestoreActivation<T>(additionalParams);
+            instance = ctor.Invoke(new object?[] { inputChannels, outputChannels, kernelSize, inputDepthC, inputHeightC, inputWidthC, stride, padding, activation });
         }
         else if (genericDef == typeof(PrimaryCapsuleLayer<>))
         {

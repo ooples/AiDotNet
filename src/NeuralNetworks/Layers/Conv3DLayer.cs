@@ -106,6 +106,15 @@ public class Conv3DLayer<T> : LayerBase<T>
     /// <value>Always <c>true</c> for Conv3DLayer as it has learnable parameters.</value>
     public override bool SupportsTraining => true;
 
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["KernelSize"] = KernelSize.ToString();
+        metadata["Stride"] = Stride.ToString();
+        metadata["Padding"] = Padding.ToString();
+        return metadata;
+    }
+
     public override Vector<T> GetParameterGradients()
     {
         if (_kernelsGradient == null || _biasesGradient == null) return new Vector<T>(ParameterCount);
