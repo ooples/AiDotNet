@@ -474,11 +474,7 @@ public class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T>
         for (int j = 0; j < n; j++)
         {
             var col = Kuf.GetColumn(j);
-            // Forward-solve: Luu * x = col  =>  x = Luu^{-1} * col
-            var solved = MatrixSolutionHelper.SolveLinearSystem(_LKuu.Multiply(_LKuu.Transpose()), col, _decompositionType);
-            // Apply Luu^{-1}: since Kuu = Luu Luu^T, Kuu^{-1} col = Luu^{-T} Luu^{-1} col
-            // We need Luu^{-1} col, so solve Luu * x = col using forward substitution
-            // Approximate: use _LKuu to forward-solve
+            // Forward-solve: Luu * x = col using forward substitution (numerically stable)
             var whitened = ForwardSolve(_LKuu, col);
             for (int i = 0; i < m; i++)
             {
@@ -499,6 +495,7 @@ public class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T>
 
         // Compute S = Luu * B^{-1} * Luu^T, then take its Cholesky.
         // B^{-1} is computed by solving B * X = I column by column.
+        ForceSymmetric(B);
         AddJitter(B);
         try
         {
