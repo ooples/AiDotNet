@@ -1938,9 +1938,9 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         if (a.Length == b.Length) return Engine.TensorMultiply(a, b);
 
-        // Ensure a is the larger tensor
-        var large = a.Length >= b.Length ? a : b;
-        var small = a.Length >= b.Length ? b : a;
+        // Ensure a is the larger tensor, and make contiguous for Memory access
+        var large = (a.Length >= b.Length ? a : b).Contiguous();
+        var small = (a.Length >= b.Length ? b : a).Contiguous();
 
         var result = new Tensor<T>(large.Shape.ToArray());
         var largeSpan = large.Data.Span;
