@@ -31165,22 +31165,23 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, nullActivation);
 
         // Temporal modeling: 4 attention layers + proposal head
+        // Keep embeddingDimension throughout to avoid information bottleneck
         for (int i = 0; i < 4; i++)
         {
             yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, 8, geluActivation);
         }
-        yield return new DenseLayer<T>(embeddingDimension, 2, nullActivation); // temporal proposal head
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, geluActivation); // temporal features
 
-        // Cross-modal fusion: 4 attention layers (using consistent embeddingDimension)
+        // Cross-modal fusion: 4 attention layers
         for (int i = 0; i < 4; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(1, 2, 1, geluActivation); // match temporal output dim
+            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, 8, geluActivation);
         }
 
-        // Task-specific heads (match cross-modal output dimension = 2)
-        yield return new DenseLayer<T>(2, numCategories, nullActivation); // event classification
-        yield return new DenseLayer<T>(numCategories, 3, nullActivation); // temporal boundary
-        yield return new DenseLayer<T>(3, 4, nullActivation); // spatial localization
+        // Task-specific output heads (4 heads, chained sequentially)
+        yield return new DenseLayer<T>(embeddingDimension, numCategories, geluActivation); // event classification
+        yield return new DenseLayer<T>(numCategories, 3, geluActivation); // temporal boundary
+        yield return new DenseLayer<T>(3, 4, geluActivation); // spatial localization
         yield return new DenseLayer<T>(4, 1, nullActivation); // anomaly detection
     }
 
