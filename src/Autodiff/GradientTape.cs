@@ -401,6 +401,14 @@ public sealed class GradientTape<T> : IDisposable
                 }
             }
 
+            // Release backward closure to free captured forward tensors early.
+            // For large models, this prevents holding all forward activations
+            // simultaneously during the backward pass.
+            if (!Persistent)
+            {
+                opsSnapshot[i] = default;
+            }
+
             // Accumulate gradients for each input (in-place when possible)
             for (int j = 0; j < entry.Inputs.Length; j++)
             {
