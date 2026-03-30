@@ -31197,8 +31197,8 @@ public static class LayerHelper<T>
         IActivationFunction<T>? nullActivation = null;
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
 
-        // Audio encoder: input projection
-        yield return new DenseLayer<T>(128, embeddingDimension, nullActivation); // SPECTROGRAM_BINS=128
+        // Audio encoder: input projection (use embeddingDimension as input for sequential compatibility)
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, nullActivation);
 
         // Audio encoder: (attention + FFN1 + FFN2) × numEncoderLayers
         for (int i = 0; i < numEncoderLayers; i++)
@@ -31211,8 +31211,8 @@ public static class LayerHelper<T>
         // Audio output projection
         yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, nullActivation);
 
-        // Visual encoder: input projection
-        yield return new DenseLayer<T>(768, embeddingDimension, nullActivation);
+        // Visual encoder: input projection (uses embeddingDimension in sequential mode)
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, nullActivation);
 
         // Visual encoder: (attention + FFN1 + FFN2) × numEncoderLayers
         for (int i = 0; i < numEncoderLayers; i++)
@@ -31231,11 +31231,11 @@ public static class LayerHelper<T>
             yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, numAttentionHeads, geluActivation);
         }
 
-        // Task heads
+        // Task heads (chained sequentially with compatible dimensions)
         yield return new DenseLayer<T>(embeddingDimension, 1, nullActivation); // localization
-        yield return new DenseLayer<T>(embeddingDimension * 2, 1, nullActivation); // sync
-        yield return new DenseLayer<T>(embeddingDimension * 2, 256, nullActivation); // scene classification
-        yield return new DenseLayer<T>(embeddingDimension * 2, 128, nullActivation); // separation mask (SPECTROGRAM_BINS=128)
+        yield return new DenseLayer<T>(1, 1, nullActivation); // sync
+        yield return new DenseLayer<T>(1, 256, nullActivation); // scene classification
+        yield return new DenseLayer<T>(256, 128, nullActivation); // separation mask
     }
 
     /// <summary>

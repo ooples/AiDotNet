@@ -1047,8 +1047,13 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        var embedding = GetAudioEmbedding(input, _audioSampleRate);
-        return Tensor<T>.FromVector(embedding);
+        // Forward through all layers (audio encoder → projection)
+        Tensor<T> current = input;
+        foreach (var layer in Layers)
+        {
+            current = layer.Forward(current);
+        }
+        return current;
     }
 
     /// <inheritdoc/>
@@ -1058,8 +1063,8 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
         try
         {
-            // Forward pass: compute audio embedding from input
-            var prediction = Predict(input);
+            // Forward pass with memory for backpropagation
+            var prediction = ForwardWithMemory(input);
 
             // Calculate loss
             var predictionVec = prediction.ToVector();
@@ -1067,15 +1072,14 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             var loss = _lossFunction.CalculateLoss(predictionVec, expectedVec);
             LastLoss = loss;
 
-            // Backward pass: compute gradients
+            // Backward pass
             var outputGradient = _lossFunction.CalculateDerivative(predictionVec, expectedVec);
+            Backpropagate(new Tensor<T>(prediction.Shape.ToArray(), outputGradient));
 
-            // Convert gradient to tensor and backpropagate through audio encoder
-            var gradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-            BackpropagateAudioEncoder(gradientTensor);
-
-            // Update parameters using the optimizer
-            _optimizer.UpdateParameters(Layers);
+            // Update parameters
+            T lr = NumOps.FromDouble(0.001);
+            foreach (var layer in Layers)
+                layer.UpdateParameters(lr);
         }
         finally
         {
