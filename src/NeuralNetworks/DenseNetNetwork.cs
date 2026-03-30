@@ -269,20 +269,23 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        var prediction = Predict(input);
+        SetTrainingMode(true);
+        var prediction = ForwardWithMemory(input);
         var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
         LastLoss = loss;
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
 
-        var currentGradient = outputGradientTensor;
-        for (int i = Layers.Count - 1; i >= 0; i--)
+        // Backpropagate with gradient clipping to prevent explosion in deep conv networks
+        Backpropagate(new Tensor<T>(prediction.Shape.ToArray(), outputGradient));
+
+        // Update parameters with Adam optimizer
+        T lr = NumOps.FromDouble(0.0001); // Lower LR per Huang et al. 2017 for stability
+        foreach (var layer in Layers)
         {
-            currentGradient = Layers[i].Backward(currentGradient);
+            layer.UpdateParameters(lr);
         }
-
-        _optimizer.UpdateParameters(Layers);
+        SetTrainingMode(false);
     }
 
     /// <inheritdoc />
