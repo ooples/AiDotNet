@@ -439,6 +439,84 @@ public class AutoformerModel<T> : TimeSeriesModelBase<T>
         ModelParameters[0] = _numOps.FromDouble(y.Length);
     }
 
+    /// <summary>
+    /// Uses the Autoformer's built-in autodiff gradient computation instead of SPSA.
+    /// Constructs a lookback window from input and computes exact gradients
+    /// through the computation graph.
+    /// </summary>
+    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        int lookback = _options.LookbackWindow;
+        int forecastHorizon = _options.ForecastHorizon;
+
+        // Build input vector from last row of input matrix
+        var inputVec = input.Rows >= lookback
+            ? new Vector<T>(lookback)
+            : new Vector<T>(input.Rows);
+        int vecLen = inputVec.Length;
+        for (int i = 0; i < vecLen; i++)
+            inputVec[i] = input[Math.Max(0, input.Rows - vecLen + i), 0];
+
+        // Use target directly (or truncate to forecast horizon)
+        var targetVec = target.Length >= forecastHorizon
+            ? target.SubVector(0, forecastHorizon)
+            : target;
+
+        ResetGradientAccumulators();
+        var gradients = ComputeGradientsMultiStep(inputVec, targetVec);
+        AccumulateGradients(gradients);
+
+        // Convert gradient accumulators to flat vector matching GetParameters order
+        return GetGradientVector();
+    }
+
+    /// <summary>
+    /// Extracts gradient accumulators as a flat vector.
+    /// Maps gradient dict keys to the same parameter ordering as GetParameters.
+    /// </summary>
+    private Vector<T> GetGradientVector()
+    {
+        var g = new List<T>();
+
+        // Outer model parameters (same order as inner layers' GetParameters)
+        foreach (var layer in _encoderLayers)
+        {
+            var p = layer.GetParameters();
+            // Gradients stored in dict with "enc{i}_" prefix
+            int layerIdx = _encoderLayers.IndexOf(layer);
+            string prefix = $"enc{layerIdx}_";
+            ExtractGradientsForLayer(g, p.Length, prefix,
+                ["queryProj", "keyProj", "valueProj", "outputProj",
+                 "ff1Weight", "ff1Bias", "ff2Weight", "ff2Bias",
+                 "ln1Gamma", "ln1Beta", "ln2Gamma", "ln2Beta"]);
+        }
+        foreach (var layer in _decoderLayers)
+        {
+            var p = layer.GetParameters();
+            int layerIdx = _decoderLayers.IndexOf(layer);
+            string prefix = $"dec{layerIdx}_";
+            ExtractGradientsForLayer(g, p.Length, prefix,
+                ["selfQueryProj", "selfKeyProj", "selfValueProj", "selfOutputProj",
+                 "crossQueryProj", "crossKeyProj", "crossValueProj", "crossOutputProj",
+                 "ff1Weight", "ff1Bias", "ff2Weight", "ff2Bias",
+                 "ln1Gamma", "ln1Beta", "ln2Gamma", "ln2Beta", "ln3Gamma", "ln3Beta"]);
+        }
+        return new Vector<T>(g.ToArray());
+    }
+
+    private void ExtractGradientsForLayer(List<T> output, int expectedLen, string prefix, string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            if (_gradientAccumulators.TryGetValue(prefix + key, out var grad))
+            {
+                for (int i = 0; i < grad.Length; i++) output.Add(grad[i]);
+            }
+        }
+        // Pad with zeros if gradient dict didn't have all keys
+        while (output.Count < expectedLen) output.Add(_numOps.Zero);
+    }
+
     private void ResetGradientAccumulators()
     {
         foreach (var tensor in _gradientAccumulators.Values)

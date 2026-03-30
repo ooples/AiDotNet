@@ -344,6 +344,35 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         return predictions;
     }
 
+    /// <summary>
+    /// Uses the Informer's built-in autodiff gradient computation instead of SPSA.
+    /// </summary>
+    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        int lookback = _options.LookbackWindow;
+
+        var inputVec = input.Rows >= lookback
+            ? new Vector<T>(lookback)
+            : new Vector<T>(input.Rows);
+        int vecLen = inputVec.Length;
+        for (int i = 0; i < vecLen; i++)
+            inputVec[i] = input[Math.Max(0, input.Rows - vecLen + i), 0];
+
+        T targetVal = target.Length > 0 ? target[0] : _numOps.Zero;
+
+        ResetGradientAccumulators();
+        var (gradients, _) = ComputeGradients(inputVec, targetVal);
+        AccumulateGradients(gradients);
+
+        // Extract gradients matching GetParameters order
+        var g = new List<T>();
+        foreach (var kvp in _gradientAccumulators)
+        {
+            for (int i = 0; i < kvp.Value.Length; i++) g.Add(kvp.Value[i]);
+        }
+        return new Vector<T>(g.ToArray());
+    }
+
     private void ResetGradientAccumulators()
     {
         foreach (var tensor in _gradientAccumulators.Values)

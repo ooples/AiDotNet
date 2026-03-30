@@ -368,6 +368,45 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
     }
 
     public override int ParameterCount => _encoder.ParameterCount + _decoder.ParameterCount;
+
+    public override Vector<T> GetParameters()
+    {
+        var encoderParams = _encoder.GetParameters();
+        var decoderParams = _decoder.GetParameters();
+        var combined = new Vector<T>(encoderParams.Length + decoderParams.Length);
+        for (int i = 0; i < encoderParams.Length; i++) combined[i] = encoderParams[i];
+        for (int i = 0; i < decoderParams.Length; i++) combined[encoderParams.Length + i] = decoderParams[i];
+        return combined;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        var encoderLen = _encoder.ParameterCount;
+        var encoderParams = new Vector<T>(encoderLen);
+        for (int i = 0; i < encoderLen && i < parameters.Length; i++) encoderParams[i] = parameters[i];
+        _encoder.SetParameters(encoderParams);
+
+        var decoderLen = _decoder.ParameterCount;
+        var decoderParams = new Vector<T>(decoderLen);
+        for (int i = 0; i < decoderLen && encoderLen + i < parameters.Length; i++) decoderParams[i] = parameters[encoderLen + i];
+        _decoder.SetParameters(decoderParams);
+    }
+
+    protected override void BackpropagateLayers(Tensor<T> lossGradient)
+    {
+        var decoderGrad = _decoder.Backward(lossGradient);
+        _encoder.Backward(decoderGrad);
+    }
+
+    protected override Vector<T> GetLayerParameterGradients()
+    {
+        var encoderGrads = _encoder.GetParameterGradients();
+        var decoderGrads = _decoder.GetParameterGradients();
+        var combined = new Vector<T>(encoderGrads.Length + decoderGrads.Length);
+        for (int i = 0; i < encoderGrads.Length; i++) combined[i] = encoderGrads[i];
+        for (int i = 0; i < decoderGrads.Length; i++) combined[encoderGrads.Length + i] = decoderGrads[i];
+        return combined;
+    }
 }
 
 /// <summary>
@@ -716,6 +755,24 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             writer.Write(NumOps.ToDouble(tensor[i]));
     }
 
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+        foreach (var t in new[] { _weights, _bias, _meanWeights, _meanBias, _logVarWeights, _logVarBias })
+        {
+            for (int i = 0; i < t.Length && offset < parameters.Length; i++)
+                t[i] = parameters[offset++];
+        }
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        var g = new List<T>();
+        foreach (var t in new[] { _weightsGrad, _biasGrad, _meanWeightsGrad, _meanBiasGrad, _logVarWeightsGrad, _logVarBiasGrad })
+            for (int i = 0; i < t.Length; i++) g.Add(t[i]);
+        return new Vector<T>(g.ToArray());
+    }
+
     private Tensor<T> ReadTensor(BinaryReader reader)
     {
         int rank = reader.ReadInt32();
@@ -724,7 +781,6 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             shape[i] = reader.ReadInt32();
         int length = reader.ReadInt32();
         var tensor = new Tensor<T>(shape);
-        // Clamp by tensor length but consume all serialized values to keep stream aligned
         for (int i = 0; i < length; i++)
         {
             double v = reader.ReadDouble();
@@ -1010,7 +1066,6 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             shape[i] = reader.ReadInt32();
         int length = reader.ReadInt32();
         var tensor = new Tensor<T>(shape);
-        // Clamp by tensor length but consume all serialized values to keep stream aligned
         for (int i = 0; i < length; i++)
         {
             double v = reader.ReadDouble();
@@ -1018,5 +1073,23 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
                 tensor[i] = NumOps.FromDouble(v);
         }
         return tensor;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+        foreach (var t in new[] { _weights, _bias, _outputWeights, _outputBias })
+        {
+            for (int i = 0; i < t.Length && offset < parameters.Length; i++)
+                t[i] = parameters[offset++];
+        }
+    }
+
+    public override Vector<T> GetParameterGradients()
+    {
+        var g = new List<T>();
+        foreach (var t in new[] { _weightsGrad, _biasGrad, _outputWeightsGrad, _outputBiasGrad })
+            for (int i = 0; i < t.Length; i++) g.Add(t[i]);
+        return new Vector<T>(g.ToArray());
     }
 }
