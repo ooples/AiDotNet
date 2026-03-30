@@ -490,24 +490,31 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // Standard forward pass through all layers (SP -> TM -> Dense -> Softmax)
-        // This matches the standard neural network architecture pattern and ensures
-        // different inputs produce different outputs via the Dense layer's learned weights.
-        bool originalTrainingMode = IsTrainingMode;
-        SetTrainingMode(false);
-        try
+        // Ensure the input is a vector or can be converted to one
+        Vector<T> inputVector;
+        if (input.Rank == 1)
         {
-            Tensor<T> output = input;
-            foreach (var layer in Layers)
+            inputVector = input.ToVector();
+        }
+        else if (input.Rank == 2 && input.Shape[0] == 1)
+        {
+            // Handle single-row batch
+            inputVector = new Vector<T>(input.Shape[1]);
+            for (int i = 0; i < input.Shape[1]; i++)
             {
-                output = layer.Forward(output);
+                inputVector[i] = input[0, i];
             }
-            return output;
         }
-        finally
+        else
         {
-            SetTrainingMode(originalTrainingMode);
+            throw new ArgumentException("Input tensor must be a vector or a single-row batch.");
         }
+
+        // Use the vector prediction method
+        var predictionVector = Predict(inputVector);
+
+        // Convert back to tensor
+        return Tensor<T>.FromVector(predictionVector);
     }
 
     /// <summary>
@@ -582,43 +589,6 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         if (processedInputs > 0)
         {
             LastLoss = NumOps.Divide(totalAnomalyScore, NumOps.FromDouble(processedInputs));
-        }
-
-        // Supervised readout training: update the Dense output layer via backpropagation.
-        // The SP and TM learn via Hebbian/temporal rules above. The readout layers
-        // (Dense + optional Softmax) learn via gradient descent on the supervised loss.
-        // This follows the modern HTM + supervised readout pattern (Ahmad & Hawkins 2015).
-        SetTrainingMode(true);
-        try
-        {
-            var prediction = ForwardWithMemory(input);
-            var loss = LossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-            LastLoss = loss;
-
-            var outputGradient = LossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-
-            // Clip gradient norm to prevent explosion
-            T gradNorm = NumOps.Sqrt(Engine.DotProduct(outputGradient, outputGradient));
-            double gradNormVal = NumOps.ToDouble(gradNorm);
-            if (gradNormVal > 1.0)
-            {
-                T scale = NumOps.FromDouble(1.0 / gradNormVal);
-                for (int i = 0; i < outputGradient.Length; i++)
-                    outputGradient[i] = NumOps.Multiply(outputGradient[i], scale);
-            }
-
-            Backpropagate(new Tensor<T>(prediction.Shape.ToArray(), outputGradient));
-
-            // Only update readout layers (Dense + Softmax), not SP or TM which learn via Hebbian rules
-            T lr = NumOps.FromDouble(0.01);
-            for (int i = 2; i < Layers.Count; i++)
-            {
-                Layers[i].UpdateParameters(lr);
-            }
-        }
-        finally
-        {
-            SetTrainingMode(false);
         }
     }
 

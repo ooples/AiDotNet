@@ -302,34 +302,16 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
             ? input
             : input.Reshape([input.Length]);
 
-        // Compute overlap scores: activations = Connections^T @ input (Hawkins & Ahmad 2016)
+        // Use Engine tensor operations: output = Connections^T @ input
         var inputTensor = LastInput.Reshape([InputSize, 1]);
+
         var connectionsT = Engine.TensorTranspose(Connections);
         var activations = Engine.TensorMatMul(connectionsT, inputTensor);
-        var flatActivations = activations.Reshape([ColumnCount]);
 
-        // Top-k inhibition per Hawkins & Ahmad 2016: select the k columns with
-        // highest overlap scores, where k = SparsityThreshold * ColumnCount.
-        // This ensures exactly the target sparsity level regardless of input magnitude.
-        int numActiveColumns = Math.Max(1, (int)(SparsityThreshold * ColumnCount));
-
-        // Find the k-th largest activation value to use as the inhibition threshold
-        var activationValues = new double[ColumnCount];
-        for (int i = 0; i < ColumnCount; i++)
-            activationValues[i] = NumOps.ToDouble(flatActivations[i]);
-
-        // Partial sort to find the k-th largest value
-        Array.Sort(activationValues);
-        double kthValue = activationValues[ColumnCount - numActiveColumns];
-
-        // Activate top-k columns and preserve their overlap magnitudes.
-        // Instead of binary {0,1} output, we output the overlap score for active columns
-        // and zero for inactive columns. This preserves input magnitude sensitivity
-        // while maintaining sparsity, matching the "soft" SP variant used in modern
-        // HTM implementations (Cui et al., "The HTM Spatial Pooler", 2017).
-        T inhibitionThreshold = NumOps.FromDouble(kthValue);
-        var mask = Engine.TensorGreaterThan(flatActivations, inhibitionThreshold);
-        var output = Engine.TensorMultiply(flatActivations, mask).Reshape([ColumnCount]);
+        // Apply threshold to get sparse binary output
+        T threshold = NumOps.FromDouble(SparsityThreshold);
+        var outputMask = Engine.TensorGreaterThan(activations, threshold);
+        var output = outputMask.Reshape([ColumnCount]);
 
         LastOutput = output;
         return output;
@@ -368,20 +350,11 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         // Matrix multiply: [1, InputSize] @ [InputSize, ColumnCount] = [1, ColumnCount]
         var activations = gpuEngine.BatchedMatMulGpu(inputReshaped, Connections);
 
-        // Top-k inhibition requires finding k-th largest value.
-        // Download activations to CPU, compute top-k threshold, then apply on GPU.
-        int numActive = Math.Max(1, (int)(SparsityThreshold * ColumnCount));
-        var actFlat = gpuEngine.ReshapeGpu(activations, [1, ColumnCount]);
+        // Apply threshold to get sparse binary output
+        var thresholdFloat = (float)SparsityThreshold;
+        var outputMask = gpuEngine.GreaterThanScalarGpu(activations, thresholdFloat);
 
-        // Download to host for top-k computation
-        var actTensor = actFlat.ToTensor();
-        var actValues = new double[ColumnCount];
-        for (int i = 0; i < ColumnCount; i++)
-            actValues[i] = NumOps.ToDouble(actTensor[i]);
-        Array.Sort(actValues);
-        float kthValue = (float)actValues[ColumnCount - numActive];
-
-        var outputMask = gpuEngine.GreaterThanScalarGpu(actFlat, kthValue);
+        // Reshape to [ColumnCount]
         var output = gpuEngine.ReshapeGpu(outputMask, [ColumnCount]);
 
         // Dispose intermediates (except output)
@@ -389,7 +362,6 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
             flatInput.Dispose();
         inputReshaped.Dispose();
         activations.Dispose();
-        actFlat.Dispose();
         outputMask.Dispose();
 
         return output;
@@ -434,10 +406,8 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         T lr = NumOps.FromDouble(LearningRate);
         T bf = NumOps.FromDouble(BoostFactor);
 
-        // Create binary active mask for learning (1 where column is active, 0 otherwise)
-        // LastOutput contains continuous overlap values for active columns, so threshold at > 0
-        T zero = NumOps.Zero;
-        var activeMask = Engine.TensorGreaterThan(LastOutput, zero).Reshape([1, ColumnCount]);
+        // Strengthen active columns: Connections += lr * (input - Connections) * activeMask
+        var activeMask = LastOutput.Reshape([1, ColumnCount]);
         var inputRow = LastInput.Reshape([InputSize, 1]);
         var onesCol = new Tensor<T>([1, ColumnCount]);
         onesCol.Fill(NumOps.One);
