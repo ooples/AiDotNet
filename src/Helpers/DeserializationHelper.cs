@@ -108,6 +108,29 @@ public static class DeserializationHelper
         {
             instance = CreateDenseLayer<T>(type, inputShape, outputShape, additionalParams);
         }
+        else if (genericDef == typeof(NeuralNetworks.Layers.GlobalPoolingLayer<>))
+        {
+            // GlobalPoolingLayer(int[] inputShape, PoolingType poolingType, IActivationFunction<T>?)
+            var poolingTypeStr = additionalParams != null && additionalParams.TryGetValue("PoolingType", out var ptVal)
+                ? ptVal as string : null;
+            var poolingType = !string.IsNullOrEmpty(poolingTypeStr) && Enum.TryParse<Enums.PoolingType>(poolingTypeStr, out var pt)
+                ? pt : Enums.PoolingType.Average;
+
+            // Restore activation from metadata
+            object? activation = TryRestoreActivation<T>(additionalParams);
+
+            var ctor = type.GetConstructors()
+                .FirstOrDefault(c => c.GetParameters().Length >= 2 &&
+                    c.GetParameters()[0].ParameterType == typeof(int[]) &&
+                    c.GetParameters()[1].ParameterType == typeof(Enums.PoolingType));
+            if (ctor is null)
+                throw new InvalidOperationException("Cannot find GlobalPoolingLayer constructor.");
+            var args = new object?[ctor.GetParameters().Length];
+            args[0] = inputShape;
+            args[1] = poolingType;
+            if (args.Length > 2) args[2] = activation;
+            instance = ctor.Invoke(args);
+        }
         else if (genericDef == typeof(InputLayer<>))
         {
             // InputLayer(int inputSize)
@@ -1207,6 +1230,28 @@ public static class DeserializationHelper
         }
 
         return original;
+    }
+
+    /// <summary>
+    /// Tries to restore an activation function from serialized metadata.
+    /// </summary>
+    private static object? TryRestoreActivation<T>(Dictionary<string, object>? additionalParams)
+    {
+        if (additionalParams == null) return null;
+
+        string? typeName = null;
+        if (additionalParams.TryGetValue("ScalarActivationType", out var atVal))
+            typeName = atVal as string;
+
+        if (string.IsNullOrEmpty(typeName)) return null;
+
+        var activationType = Type.GetType(typeName);
+        if (activationType == null) return null;
+
+        if (activationType.IsGenericTypeDefinition)
+            activationType = activationType.MakeGenericType(typeof(T));
+
+        return Activator.CreateInstance(activationType);
     }
 
     private static int? TryGetInt(Dictionary<string, object>? parameters, string key)
