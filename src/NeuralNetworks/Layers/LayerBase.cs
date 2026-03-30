@@ -106,6 +106,40 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         public static Tensor<T> Stack(Tensor<T>[] tensors, int axis = 0) => DifferentiableOps<T>.Stack(tensors, axis);
         public static Tensor<T> Flatten(Tensor<T> a) => DifferentiableOps<T>.Flatten(a);
         public static Tensor<T> ReLU6(Tensor<T> x) => DifferentiableOps<T>.ReLU6(x);
+        // Gather/Scatter/Pad/Interpolation
+        public static Tensor<T> Gather(Tensor<T> input, int[] indices, int axis = 0) => DifferentiableOps<T>.Gather(input, indices, axis);
+        public static Tensor<T> ConstantPad(Tensor<T> input, int[] padding, double value = 0) => DifferentiableOps<T>.ConstantPad(input, padding, value);
+        public static Tensor<T> UpsampleNearest(Tensor<T> input, int scaleFactor) => DifferentiableOps<T>.UpsampleNearest(input, scaleFactor);
+        public static Tensor<T> UpsampleBilinear(Tensor<T> input, int outputH, int outputW) => DifferentiableOps<T>.UpsampleBilinear(input, outputH, outputW);
+        // Conv
+        public static Tensor<T> ConvTranspose2D(Tensor<T> input, Tensor<T> kernel, int stride = 1, int padding = 0) => DifferentiableOps<T>.ConvTranspose2D(input, kernel, stride, padding);
+        public static Tensor<T> Conv1D(Tensor<T> input, Tensor<T> kernel, int stride = 1, int padding = 0) => DifferentiableOps<T>.Conv1D(input, kernel, stride, padding);
+        // Normalization
+        public static Tensor<T> InstanceNorm(Tensor<T> input, Tensor<T>? weight = null, Tensor<T>? bias = null) => DifferentiableOps<T>.InstanceNorm(input, weight, bias);
+        public static Tensor<T> RMSNorm(Tensor<T> input, Tensor<T> weight) => DifferentiableOps<T>.RMSNorm(input, weight);
+        // Pooling
+        public static Tensor<T> AdaptiveAvgPool2D(Tensor<T> input, int outputH, int outputW) => DifferentiableOps<T>.AdaptiveAvgPool2D(input, outputH, outputW);
+        public static Tensor<T> AdaptiveMaxPool2D(Tensor<T> input, int outputH, int outputW) => DifferentiableOps<T>.AdaptiveMaxPool2D(input, outputH, outputW);
+        public static Tensor<T> AvgPool1D(Tensor<T> input, int kernelSize, int stride = -1) => DifferentiableOps<T>.AvgPool1D(input, kernelSize, stride);
+        public static Tensor<T> MaxPool1D(Tensor<T> input, int kernelSize, int stride = -1) => DifferentiableOps<T>.MaxPool1D(input, kernelSize, stride);
+        // Activation
+        public static Tensor<T> PReLU(Tensor<T> x, Tensor<T> alpha) => DifferentiableOps<T>.PReLU(x, alpha);
+        public static Tensor<T> Threshold(Tensor<T> x, double threshold, double value) => DifferentiableOps<T>.Threshold(x, threshold, value);
+        // Shape/Indexing
+        public static Tensor<T> Tile(Tensor<T> input, int[] repeats) => DifferentiableOps<T>.Tile(input, repeats);
+        public static Tensor<T> MaskedFill(Tensor<T> input, Tensor<T> mask, double fillValue) => DifferentiableOps<T>.MaskedFill(input, mask, fillValue);
+        public static Tensor<T> Expand(Tensor<T> a, int[] targetShape) => DifferentiableOps<T>.Expand(a, targetShape);
+        public static Tensor<T> IndexSelect(Tensor<T> input, int dim, int[] indices) => DifferentiableOps<T>.IndexSelect(input, dim, indices);
+        public static Tensor<T> Narrow(Tensor<T> input, int dim, int start, int length) => DifferentiableOps<T>.Narrow(input, dim, start, length);
+        // Math
+        public static Tensor<T> Pow(Tensor<T> x, double n) => DifferentiableOps<T>.Pow(x, n);
+        public static Tensor<T> Abs(Tensor<T> x) => DifferentiableOps<T>.Abs(x);
+        public static Tensor<T> Clamp(Tensor<T> x, double min, double max) => DifferentiableOps<T>.Clamp(x, min, max);
+        public static Tensor<T> Floor(Tensor<T> x) => DifferentiableOps<T>.Floor(x);
+        public static Tensor<T> Ceil(Tensor<T> x) => DifferentiableOps<T>.Ceil(x);
+        public static Tensor<T> Round(Tensor<T> x) => DifferentiableOps<T>.Round(x);
+        public static Tensor<T> Norm(Tensor<T> x, double p = 2.0) => DifferentiableOps<T>.Norm(x, p);
+        public static Tensor<T> LogSumExp(Tensor<T> x) => DifferentiableOps<T>.LogSumExp(x);
     }
 
     /// <summary>
