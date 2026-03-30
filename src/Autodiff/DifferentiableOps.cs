@@ -2774,4 +2774,117 @@ public static class DifferentiableOps<T>
         var normProduct = Multiply(aNorm, bNorm);
         return Divide(Sum(dotProduct), normProduct);
     }
+
+    // ─── OneHot (149 uses) ──────────────────────────────────────────
+
+    /// <summary>Creates one-hot encoded tensor. Not differentiable (discrete).</summary>
+    public static Tensor<T> OneHot(int[] indices, int numClasses)
+    {
+        int n = indices.Length;
+        var result = new Tensor<T>([n, numClasses]);
+        for (int i = 0; i < n; i++)
+        {
+            if (indices[i] >= 0 && indices[i] < numClasses)
+                result[i * numClasses + indices[i]] = NumOps.One;
+        }
+        // No gradient — one-hot is not differentiable
+        return result;
+    }
+
+    // ─── Lp Norm ────────────────────────────────────────────────────
+
+    /// <summary>Lp norm along last dimension. Like torch.norm(x, p, dim).</summary>
+    public static Tensor<T> Norm(Tensor<T> x, double p = 2.0)
+    {
+        // Composed from tape-aware ops: (sum(|x|^p))^(1/p)
+        var absx = Abs(x);
+        var powered = Pow(absx, p);
+        var summed = Sum(powered);
+        return Pow(summed, 1.0 / p);
+    }
+
+    // ─── Threshold ──────────────────────────────────────────────────
+
+    /// <summary>Threshold activation: x if x > threshold, else value.</summary>
+    public static Tensor<T> Threshold(Tensor<T> x, double threshold, double value)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        var tape = GradientTape<T>.Current;
+        byte[]? mask = tape is not null ? new byte[x.Length] : null;
+
+        for (int i = 0; i < x.Length; i++)
+        {
+            double val = NumOps.ToDouble(x[i]);
+            result[i] = val > threshold ? x[i] : NumOps.FromDouble(value);
+            if (mask is not null) mask[i] = val > threshold ? (byte)1 : (byte)0;
+        }
+
+        if (tape is not null)
+        {
+            tape.RecordOp("Threshold", [x], result,
+                grad =>
+                {
+                    var dx = new Tensor<T>(grad.Shape.ToArray());
+                    for (int i = 0; i < grad.Length; i++)
+                        dx[i] = mask![i] == 1 ? grad[i] : NumOps.Zero;
+                    return [dx];
+                });
+        }
+        return result;
+    }
+
+    // ─── Floor / Ceil / Round (piecewise constant — zero gradient) ──
+
+    /// <summary>Elementwise floor. Gradient is zero (piecewise constant).</summary>
+    public static Tensor<T> Floor(Tensor<T> x)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
+            result[i] = NumOps.FromDouble(Math.Floor(NumOps.ToDouble(x[i])));
+        // STE (straight-through estimator): pass gradient through unchanged
+        GradientTape<T>.Current?.RecordOp("Floor", [x], result,
+            grad => [grad]);
+        return result;
+    }
+
+    /// <summary>Elementwise ceil. Gradient is zero (piecewise constant).</summary>
+    public static Tensor<T> Ceil(Tensor<T> x)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
+            result[i] = NumOps.FromDouble(Math.Ceiling(NumOps.ToDouble(x[i])));
+        GradientTape<T>.Current?.RecordOp("Ceil", [x], result,
+            grad => [grad]);
+        return result;
+    }
+
+    /// <summary>Elementwise round. Gradient uses straight-through estimator.</summary>
+    public static Tensor<T> Round(Tensor<T> x)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
+            result[i] = NumOps.FromDouble(Math.Round(NumOps.ToDouble(x[i])));
+        GradientTape<T>.Current?.RecordOp("Round", [x], result,
+            grad => [grad]);
+        return result;
+    }
+
+    // ─── LogSumExp (numerically stable) ─────────────────────────────
+
+    /// <summary>Log-sum-exp: log(sum(exp(x))). Numerically stable via max subtraction.</summary>
+    public static Tensor<T> LogSumExp(Tensor<T> x)
+    {
+        // Composed from tape-aware ops for automatic gradient
+        double maxVal = double.NegativeInfinity;
+        for (int i = 0; i < x.Length; i++)
+        {
+            double v = NumOps.ToDouble(x[i]);
+            if (v > maxVal) maxVal = v;
+        }
+        var shifted = AddScalar(x, NumOps.FromDouble(-maxVal));
+        var expShifted = Exp(shifted);
+        var sumExp = Sum(expShifted);
+        var logSum = Log(sumExp);
+        return AddScalar(logSum, NumOps.FromDouble(maxVal));
+    }
 }
