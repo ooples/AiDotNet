@@ -2887,4 +2887,311 @@ public static class DifferentiableOps<T>
         var logSum = Log(sumExp);
         return AddScalar(logSum, NumOps.FromDouble(maxVal));
     }
+
+    // ─── Conv3D (Engine-supported) ──────────────────────────────────
+
+    /// <summary>3D convolution. Like F.conv3d.</summary>
+    public static Tensor<T> Conv3D(
+        Tensor<T> input, Tensor<T> kernel,
+        int[] stride, int[] padding, int[] dilation)
+    {
+        var result = Engine.Conv3D(input, kernel, stride, padding, dilation);
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("Conv3D", [input, kernel], result,
+                grad =>
+                {
+                    var inputGrad = Engine.Conv3DBackwardInput(grad, kernel,
+                        input.Shape.ToArray(), stride, padding, dilation);
+                    var kernelGrad = Engine.Conv3DBackwardKernel(grad, input,
+                        kernel.Shape.ToArray(), stride, padding, dilation);
+                    return [inputGrad, kernelGrad];
+                });
+        }
+        return result;
+    }
+
+    // ─── Conv1D (via Conv2D with H=1) ───────────────────────────────
+
+    /// <summary>1D convolution. Like F.conv1d. Implemented via Conv2D with height=1.</summary>
+    public static Tensor<T> Conv1D(
+        Tensor<T> input, Tensor<T> kernel,
+        int stride = 1, int padding = 0, int dilation = 1)
+    {
+        // Input: [batch, channels, length] -> reshape to [batch, channels, 1, length]
+        var inShape = input.Shape.ToArray();
+        int batch = inShape[0];
+        int inChannels = inShape[1];
+        int length = inShape[2];
+
+        var input4D = Reshape(input, [batch, inChannels, 1, length]);
+
+        // Kernel: [outChannels, inChannels, kernelSize] -> [outChannels, inChannels, 1, kernelSize]
+        var kShape = kernel.Shape.ToArray();
+        var kernel4D = Reshape(kernel, [kShape[0], kShape[1], 1, kShape[2]]);
+
+        var result4D = Conv2D(input4D, kernel4D, [1, stride], [0, padding], [1, dilation]);
+
+        // Reshape back to 3D: [batch, outChannels, outLength]
+        var outShape = result4D.Shape.ToArray();
+        return Reshape(result4D, [outShape[0], outShape[1], outShape[3]]);
+    }
+
+    // ─── Adaptive Average Pooling (5 uses) ──────────────────────────
+
+    /// <summary>Adaptive average pooling. Output size is fixed regardless of input size.</summary>
+    public static Tensor<T> AdaptiveAvgPool2D(Tensor<T> input, int outputH, int outputW)
+    {
+        var inShape = input.Shape.ToArray();
+        int batch = inShape[0];
+        int channels = inShape.Length > 1 ? inShape[1] : 1;
+        int inH = inShape.Length > 2 ? inShape[2] : 1;
+        int inW = inShape.Length > 3 ? inShape[3] : 1;
+
+        var outShape = new[] { batch, channels, outputH, outputW };
+        var result = new Tensor<T>(outShape);
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int oh = 0; oh < outputH; oh++)
+                {
+                    int hStart = (int)Math.Floor((double)oh * inH / outputH);
+                    int hEnd = (int)Math.Ceiling((double)(oh + 1) * inH / outputH);
+                    for (int ow = 0; ow < outputW; ow++)
+                    {
+                        int wStart = (int)Math.Floor((double)ow * inW / outputW);
+                        int wEnd = (int)Math.Ceiling((double)(ow + 1) * inW / outputW);
+
+                        double sum = 0;
+                        int count = 0;
+                        for (int ih = hStart; ih < hEnd; ih++)
+                        {
+                            for (int iw = wStart; iw < wEnd; iw++)
+                            {
+                                sum += NumOps.ToDouble(input[((b * channels + c) * inH + ih) * inW + iw]);
+                                count++;
+                            }
+                        }
+                        result[((b * channels + c) * outputH + oh) * outputW + ow] =
+                            NumOps.FromDouble(count > 0 ? sum / count : 0);
+                    }
+                }
+            }
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("AdaptiveAvgPool2D", [input], result,
+                grad =>
+                {
+                    var inputGrad = new Tensor<T>(inShape);
+                    for (int b2 = 0; b2 < batch; b2++)
+                    {
+                        for (int c2 = 0; c2 < channels; c2++)
+                        {
+                            for (int oh = 0; oh < outputH; oh++)
+                            {
+                                int hStart2 = (int)Math.Floor((double)oh * inH / outputH);
+                                int hEnd2 = (int)Math.Ceiling((double)(oh + 1) * inH / outputH);
+                                for (int ow = 0; ow < outputW; ow++)
+                                {
+                                    int wStart2 = (int)Math.Floor((double)ow * inW / outputW);
+                                    int wEnd2 = (int)Math.Ceiling((double)(ow + 1) * inW / outputW);
+                                    int count = (hEnd2 - hStart2) * (wEnd2 - wStart2);
+                                    double g = NumOps.ToDouble(grad[((b2 * channels + c2) * outputH + oh) * outputW + ow]);
+                                    double distributed = count > 0 ? g / count : 0;
+                                    for (int ih = hStart2; ih < hEnd2; ih++)
+                                    {
+                                        for (int iw = wStart2; iw < wEnd2; iw++)
+                                        {
+                                            int idx = ((b2 * channels + c2) * inH + ih) * inW + iw;
+                                            inputGrad[idx] = NumOps.Add(inputGrad[idx], NumOps.FromDouble(distributed));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return [inputGrad];
+                });
+        }
+        return result;
+    }
+
+    // ─── PReLU (learnable negative slope) ───────────────────────────
+
+    /// <summary>Parametric ReLU: max(0,x) + alpha*min(0,x) where alpha is learnable.</summary>
+    public static Tensor<T> PReLU(Tensor<T> x, Tensor<T> alpha)
+    {
+        var result = new Tensor<T>(x.Shape.ToArray());
+        for (int i = 0; i < x.Length; i++)
+        {
+            double val = NumOps.ToDouble(x[i]);
+            int alphaIdx = alpha.Length == 1 ? 0 : Math.Min(i, alpha.Length - 1);
+            double a = NumOps.ToDouble(alpha[alphaIdx]);
+            result[i] = val >= 0 ? x[i] : NumOps.FromDouble(val * a);
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("PReLU", [x, alpha], result,
+                grad =>
+                {
+                    var xGrad = new Tensor<T>(x.Shape.ToArray());
+                    var alphaGrad = new Tensor<T>(alpha.Shape.ToArray());
+                    for (int i = 0; i < x.Length; i++)
+                    {
+                        double val = NumOps.ToDouble(x[i]);
+                        int alphaIdx2 = alpha.Length == 1 ? 0 : Math.Min(i, alpha.Length - 1);
+                        double a = NumOps.ToDouble(alpha[alphaIdx2]);
+                        double g = NumOps.ToDouble(grad[i]);
+
+                        // dx = grad if x >= 0, alpha * grad if x < 0
+                        xGrad[i] = val >= 0 ? grad[i] : NumOps.FromDouble(a * g);
+                        // dalpha = x * grad where x < 0
+                        if (val < 0)
+                            alphaGrad[alphaIdx2] = NumOps.Add(alphaGrad[alphaIdx2], NumOps.FromDouble(val * g));
+                    }
+                    return [xGrad, alphaGrad];
+                });
+        }
+        return result;
+    }
+
+    // ─── AvgPool1D / MaxPool1D ──────────────────────────────────────
+
+    /// <summary>1D average pooling. Like F.avg_pool1d.</summary>
+    public static Tensor<T> AvgPool1D(Tensor<T> input, int kernelSize, int stride = -1)
+    {
+        if (stride < 0) stride = kernelSize;
+        var inShape = input.Shape.ToArray();
+        int batch = inShape[0];
+        int channels = inShape[1];
+        int length = inShape[2];
+        int outLength = (length - kernelSize) / stride + 1;
+
+        var result = new Tensor<T>([batch, channels, outLength]);
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int o = 0; o < outLength; o++)
+                {
+                    double sum = 0;
+                    int start = o * stride;
+                    for (int k = 0; k < kernelSize; k++)
+                        sum += NumOps.ToDouble(input[(b * channels + c) * length + start + k]);
+                    result[(b * channels + c) * outLength + o] = NumOps.FromDouble(sum / kernelSize);
+                }
+            }
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("AvgPool1D", [input], result,
+                grad =>
+                {
+                    var inputGrad = new Tensor<T>(inShape);
+                    for (int b2 = 0; b2 < batch; b2++)
+                    {
+                        for (int c2 = 0; c2 < channels; c2++)
+                        {
+                            for (int o = 0; o < outLength; o++)
+                            {
+                                double g = NumOps.ToDouble(grad[(b2 * channels + c2) * outLength + o]) / kernelSize;
+                                int start = o * stride;
+                                for (int k = 0; k < kernelSize; k++)
+                                    inputGrad[(b2 * channels + c2) * length + start + k] = NumOps.Add(
+                                        inputGrad[(b2 * channels + c2) * length + start + k],
+                                        NumOps.FromDouble(g));
+                            }
+                        }
+                    }
+                    return [inputGrad];
+                });
+        }
+        return result;
+    }
+
+    /// <summary>1D max pooling. Like F.max_pool1d.</summary>
+    public static Tensor<T> MaxPool1D(Tensor<T> input, int kernelSize, int stride = -1)
+    {
+        if (stride < 0) stride = kernelSize;
+        var inShape = input.Shape.ToArray();
+        int batch = inShape[0];
+        int channels = inShape[1];
+        int length = inShape[2];
+        int outLength = (length - kernelSize) / stride + 1;
+
+        var result = new Tensor<T>([batch, channels, outLength]);
+        var tape = GradientTape<T>.Current;
+        int[]? argmax = tape is not null ? new int[batch * channels * outLength] : null;
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int o = 0; o < outLength; o++)
+                {
+                    int start = o * stride;
+                    double maxVal = double.NegativeInfinity;
+                    int maxIdx = start;
+                    for (int k = 0; k < kernelSize; k++)
+                    {
+                        double val = NumOps.ToDouble(input[(b * channels + c) * length + start + k]);
+                        if (val > maxVal) { maxVal = val; maxIdx = start + k; }
+                    }
+                    result[(b * channels + c) * outLength + o] = NumOps.FromDouble(maxVal);
+                    if (argmax is not null)
+                        argmax[(b * channels + c) * outLength + o] = maxIdx;
+                }
+            }
+        }
+
+        if (tape is not null)
+        {
+            tape.RecordOp("MaxPool1D", [input], result,
+                grad =>
+                {
+                    var inputGrad = new Tensor<T>(inShape);
+                    for (int b2 = 0; b2 < batch; b2++)
+                    {
+                        for (int c2 = 0; c2 < channels; c2++)
+                        {
+                            for (int o = 0; o < outLength; o++)
+                            {
+                                int idx = argmax![(b2 * channels + c2) * outLength + o];
+                                inputGrad[(b2 * channels + c2) * length + idx] = NumOps.Add(
+                                    inputGrad[(b2 * channels + c2) * length + idx],
+                                    grad[(b2 * channels + c2) * outLength + o]);
+                            }
+                        }
+                    }
+                    return [inputGrad];
+                });
+        }
+        return result;
+    }
+
+    // ─── Expand / BroadcastTo (public) ──────────────────────────────
+
+    /// <summary>Expand tensor to target shape by broadcasting. Like torch.expand.</summary>
+    public static Tensor<T> Expand(Tensor<T> a, int[] targetShape)
+    {
+        var result = BroadcastTo(a, targetShape);
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            var origShape = a.Shape.ToArray();
+            tape.RecordOp("Expand", [a], result,
+                grad => [ReduceBroadcastGrad(grad, origShape)]);
+        }
+        return result;
+    }
 }
