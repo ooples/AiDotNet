@@ -445,6 +445,9 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         {
             layer.UpdateParameters(lr);
         }
+
+        // Restore inference mode after training step
+        SetTrainingMode(false);
     }
 
     /// <summary>
@@ -529,7 +532,7 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void CalculateGradient()
     {
-        if (_lastCapsuleOutputs == null || _lastInput == null)
+        if (_lastCapsuleOutputs == null || _lastInput == null || _lastExpectedOutput == null)
             throw new InvalidOperationException("Forward pass must be called before gradient computation.");
 
         // Compute dL/dPrediction — the gradient of the margin loss w.r.t. the network output
