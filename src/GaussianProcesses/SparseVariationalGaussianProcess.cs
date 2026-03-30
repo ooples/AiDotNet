@@ -276,6 +276,9 @@ public class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T>
 
         // Compute kernel matrix between inducing points
         _Kuu = CalculateKernelMatrix(_inducingPoints, _inducingPoints);
+        // Force symmetry: K = (K + K^T) / 2 to eliminate floating-point asymmetries
+        // (standard practice in GP implementations — GPy, GPflow, scikit-learn all do this)
+        ForceSymmetric(_Kuu);
         AddJitter(_Kuu);
 
         // Cholesky decomposition of Kuu for efficient computation
@@ -513,6 +516,7 @@ public class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T>
             var S = LuuBInv.Multiply(_LKuu.Transpose());
 
             // Take Cholesky of S
+            ForceSymmetric(S);
             AddJitter(S);
             var choleskyS = new CholeskyDecomposition<T>(S);
             _variationalCovCholesky = choleskyS.L;
@@ -815,6 +819,26 @@ public class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T>
         for (int i = 0; i < K.Rows; i++)
         {
             K[i, i] = _numOps.Add(K[i, i], jitter);
+        }
+    }
+
+    /// <summary>
+    /// Forces a matrix to be exactly symmetric: K = (K + K^T) / 2.
+    /// Eliminates floating-point asymmetries from kernel computations that would
+    /// cause Cholesky decomposition to reject the matrix as non-symmetric.
+    /// Standard practice in GP implementations (GPy, GPflow, scikit-learn).
+    /// </summary>
+    private void ForceSymmetric(Matrix<T> K)
+    {
+        var half = _numOps.FromDouble(0.5);
+        for (int i = 0; i < K.Rows; i++)
+        {
+            for (int j = i + 1; j < K.Columns; j++)
+            {
+                var avg = _numOps.Multiply(half, _numOps.Add(K[i, j], K[j, i]));
+                K[i, j] = avg;
+                K[j, i] = avg;
+            }
         }
     }
 }
