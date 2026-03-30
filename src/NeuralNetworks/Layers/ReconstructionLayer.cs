@@ -126,6 +126,15 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// </remarks>
     public override bool SupportsTraining => true;
 
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["Hidden1Dim"] = _fc1.GetOutputShape()[0].ToString();
+        metadata["Hidden2Dim"] = _fc2.GetOutputShape()[0].ToString();
+        metadata["UseVectorActivation"] = _useVectorActivation.ToString();
+        return metadata;
+    }
+
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>

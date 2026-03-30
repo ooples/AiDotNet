@@ -108,6 +108,28 @@ public static class DeserializationHelper
         {
             instance = CreateDenseLayer<T>(type, inputShape, outputShape, additionalParams);
         }
+        else if (genericDef == typeof(NeuralNetworks.Layers.ReconstructionLayer<>))
+        {
+            // ReconstructionLayer(int inputDim, int hidden1Dim, int hidden2Dim, int outputDim, ...)
+            int inputDim = inputShape[^1];
+            int outputDim = outputShape[^1];
+            int hidden1 = TryGetInt(additionalParams, "Hidden1Dim") ?? 512;
+            int hidden2 = TryGetInt(additionalParams, "Hidden2Dim") ?? 1024;
+
+            var ctor = type.GetConstructors()
+                .FirstOrDefault(c => c.GetParameters().Length >= 4 &&
+                    c.GetParameters().Take(4).All(p => p.ParameterType == typeof(int)));
+            if (ctor is null)
+                throw new InvalidOperationException("Cannot find ReconstructionLayer constructor.");
+            var args = new object?[ctor.GetParameters().Length];
+            args[0] = inputDim;
+            args[1] = hidden1;
+            args[2] = hidden2;
+            args[3] = outputDim;
+            for (int pi = 4; pi < args.Length; pi++)
+                args[pi] = ctor.GetParameters()[pi].HasDefaultValue ? ctor.GetParameters()[pi].DefaultValue : null;
+            instance = ctor.Invoke(args);
+        }
         else if (genericDef == typeof(NeuralNetworks.Layers.GlobalPoolingLayer<>))
         {
             // GlobalPoolingLayer(int[] inputShape, PoolingType poolingType, IActivationFunction<T>?)
