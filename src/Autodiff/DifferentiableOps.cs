@@ -3194,4 +3194,253 @@ public static class DifferentiableOps<T>
         }
         return result;
     }
+
+    // ─── AdaptiveMaxPool2D ──────────────────────────────────────────
+
+    /// <summary>Adaptive max pooling with argmax for gradient routing.</summary>
+    public static Tensor<T> AdaptiveMaxPool2D(Tensor<T> input, int outputH, int outputW)
+    {
+        var inShape = input.Shape.ToArray();
+        int batch = inShape[0];
+        int channels = inShape.Length > 1 ? inShape[1] : 1;
+        int inH = inShape.Length > 2 ? inShape[2] : 1;
+        int inW = inShape.Length > 3 ? inShape[3] : 1;
+
+        var outShape = new[] { batch, channels, outputH, outputW };
+        var result = new Tensor<T>(outShape);
+        var tape = GradientTape<T>.Current;
+        int[]? argmax = tape is not null ? new int[batch * channels * outputH * outputW] : null;
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int oh = 0; oh < outputH; oh++)
+                {
+                    int hStart = (int)Math.Floor((double)oh * inH / outputH);
+                    int hEnd = (int)Math.Ceiling((double)(oh + 1) * inH / outputH);
+                    for (int ow = 0; ow < outputW; ow++)
+                    {
+                        int wStart = (int)Math.Floor((double)ow * inW / outputW);
+                        int wEnd = (int)Math.Ceiling((double)(ow + 1) * inW / outputW);
+
+                        double maxVal = double.NegativeInfinity;
+                        int maxFlatIdx = 0;
+                        for (int ih = hStart; ih < hEnd; ih++)
+                        {
+                            for (int iw = wStart; iw < wEnd; iw++)
+                            {
+                                int flatIdx = ((b * channels + c) * inH + ih) * inW + iw;
+                                double val = NumOps.ToDouble(input[flatIdx]);
+                                if (val > maxVal) { maxVal = val; maxFlatIdx = flatIdx; }
+                            }
+                        }
+                        int outIdx = ((b * channels + c) * outputH + oh) * outputW + ow;
+                        result[outIdx] = NumOps.FromDouble(maxVal);
+                        if (argmax is not null) argmax[outIdx] = maxFlatIdx;
+                    }
+                }
+            }
+        }
+
+        if (tape is not null)
+        {
+            tape.RecordOp("AdaptiveMaxPool2D", [input], result,
+                grad =>
+                {
+                    var inputGrad = new Tensor<T>(inShape);
+                    for (int i = 0; i < grad.Length; i++)
+                    {
+                        int srcIdx = argmax![i];
+                        inputGrad[srcIdx] = NumOps.Add(inputGrad[srcIdx], grad[i]);
+                    }
+                    return [inputGrad];
+                });
+        }
+        return result;
+    }
+
+    // ─── RReLU (Randomized Leaky ReLU) ──────────────────────────────
+
+    /// <summary>Randomized leaky ReLU: uniform random negative slope in [lower, upper].</summary>
+    public static Tensor<T> RReLU(Tensor<T> x, double lower = 0.125, double upper = 0.333, bool training = true, Random? rng = null)
+    {
+        rng ??= new Random();
+        var result = new Tensor<T>(x.Shape.ToArray());
+        var tape = GradientTape<T>.Current;
+        double[]? slopes = tape is not null ? new double[x.Length] : null;
+
+        for (int i = 0; i < x.Length; i++)
+        {
+            double val = NumOps.ToDouble(x[i]);
+            double slope = training ? lower + rng.NextDouble() * (upper - lower) : (lower + upper) / 2.0;
+            result[i] = val >= 0 ? x[i] : NumOps.FromDouble(val * slope);
+            if (slopes is not null) slopes[i] = val >= 0 ? 1.0 : slope;
+        }
+
+        if (tape is not null)
+        {
+            tape.RecordOp("RReLU", [x], result,
+                grad =>
+                {
+                    var dx = new Tensor<T>(x.Shape.ToArray());
+                    for (int i = 0; i < grad.Length; i++)
+                        dx[i] = NumOps.FromDouble(NumOps.ToDouble(grad[i]) * slopes![i]);
+                    return [dx];
+                });
+        }
+        return result;
+    }
+
+    // ─── NLLLoss (Negative Log Likelihood) ──────────────────────────
+
+    /// <summary>Negative log likelihood loss. Input is log-probabilities, targets are class indices.</summary>
+    public static Tensor<T> NLLLoss(Tensor<T> logProbs, int[] targets)
+    {
+        // logProbs: [batch, numClasses], targets: [batch] (class indices)
+        int batch = logProbs.Shape[0];
+        int numClasses = logProbs.Shape.Length > 1 ? logProbs.Shape[1] : logProbs.Length;
+
+        double loss = 0;
+        for (int b = 0; b < batch; b++)
+        {
+            int target = targets[b];
+            if (target >= 0 && target < numClasses)
+                loss -= NumOps.ToDouble(logProbs[b * numClasses + target]);
+        }
+
+        var result = new Tensor<T>([1]);
+        result[0] = NumOps.FromDouble(loss / batch);
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("NLLLoss", [logProbs], result,
+                grad =>
+                {
+                    var dx = new Tensor<T>(logProbs.Shape.ToArray());
+                    double scale = NumOps.ToDouble(grad[0]) / batch;
+                    for (int b2 = 0; b2 < batch; b2++)
+                    {
+                        int target = targets[b2];
+                        if (target >= 0 && target < numClasses)
+                            dx[b2 * numClasses + target] = NumOps.FromDouble(-scale);
+                    }
+                    return [dx];
+                });
+        }
+        return result;
+    }
+
+    // ─── IndexSelect ────────────────────────────────────────────────
+
+    /// <summary>Select elements along a dimension by index. Like torch.index_select.</summary>
+    public static Tensor<T> IndexSelect(Tensor<T> input, int dim, int[] indices)
+    {
+        var inShape = input.Shape.ToArray();
+        var outShape = (int[])inShape.Clone();
+        outShape[dim] = indices.Length;
+
+        var result = new Tensor<T>(outShape);
+        int outerSize = 1, innerSize = 1;
+        for (int i = 0; i < dim; i++) outerSize *= inShape[i];
+        for (int i = dim + 1; i < inShape.Length; i++) innerSize *= inShape[i];
+        int dimSize = inShape[dim];
+
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int idx = 0; idx < indices.Length; idx++)
+            {
+                int srcDimIdx = indices[idx];
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int srcFlat = (outer * dimSize + srcDimIdx) * innerSize + inner;
+                    int dstFlat = (outer * indices.Length + idx) * innerSize + inner;
+                    if (srcFlat < input.Length && dstFlat < result.Length)
+                        result[dstFlat] = input[srcFlat];
+                }
+            }
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("IndexSelect", [input], result,
+                grad =>
+                {
+                    var inputGrad = new Tensor<T>(inShape);
+                    for (int outer = 0; outer < outerSize; outer++)
+                    {
+                        for (int idx = 0; idx < indices.Length; idx++)
+                        {
+                            int srcDimIdx2 = indices[idx];
+                            for (int inner = 0; inner < innerSize; inner++)
+                            {
+                                int srcFlat = (outer * dimSize + srcDimIdx2) * innerSize + inner;
+                                int gradFlat = (outer * indices.Length + idx) * innerSize + inner;
+                                if (srcFlat < inputGrad.Length && gradFlat < grad.Length)
+                                    inputGrad[srcFlat] = NumOps.Add(inputGrad[srcFlat], grad[gradFlat]);
+                            }
+                        }
+                    }
+                    return [inputGrad];
+                });
+        }
+        return result;
+    }
+
+    // ─── Narrow (slice along dimension) ─────────────────────────────
+
+    /// <summary>Narrow/slice tensor along a dimension. Like torch.narrow.</summary>
+    public static Tensor<T> Narrow(Tensor<T> input, int dim, int start, int length)
+    {
+        var inShape = input.Shape.ToArray();
+        var outShape = (int[])inShape.Clone();
+        outShape[dim] = length;
+
+        var result = new Tensor<T>(outShape);
+        int outerSize = 1, innerSize = 1;
+        for (int i = 0; i < dim; i++) outerSize *= inShape[i];
+        for (int i = dim + 1; i < inShape.Length; i++) innerSize *= inShape[i];
+        int dimSize = inShape[dim];
+
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            for (int d = 0; d < length; d++)
+            {
+                for (int inner = 0; inner < innerSize; inner++)
+                {
+                    int srcFlat = (outer * dimSize + (start + d)) * innerSize + inner;
+                    int dstFlat = (outer * length + d) * innerSize + inner;
+                    if (srcFlat < input.Length && dstFlat < result.Length)
+                        result[dstFlat] = input[srcFlat];
+                }
+            }
+        }
+
+        var tape = GradientTape<T>.Current;
+        if (tape is not null)
+        {
+            tape.RecordOp("Narrow", [input], result,
+                grad =>
+                {
+                    var inputGrad = new Tensor<T>(inShape);
+                    for (int outer = 0; outer < outerSize; outer++)
+                    {
+                        for (int d = 0; d < length; d++)
+                        {
+                            for (int inner = 0; inner < innerSize; inner++)
+                            {
+                                int srcFlat = (outer * dimSize + (start + d)) * innerSize + inner;
+                                int gradFlat = (outer * length + d) * innerSize + inner;
+                                if (srcFlat < inputGrad.Length && gradFlat < grad.Length)
+                                    inputGrad[srcFlat] = grad[gradFlat];
+                            }
+                        }
+                    }
+                    return [inputGrad];
+                });
+        }
+        return result;
+    }
 }
