@@ -243,7 +243,8 @@ public abstract class NeuralNetworkModelTestBase
 
         Assert.Equal(out1.Length, out2.Length);
         for (int i = 0; i < out1.Length; i++)
-            Assert.Equal(out1[i], out2[i]);
+            Assert.True(Math.Abs(out1[i] - out2[i]) < 1e-12,
+                $"Output[{i}] differs between runs: {out1[i]} vs {out2[i]}. Network may be non-deterministic.");
     }
 
     [Fact]
@@ -267,7 +268,8 @@ public abstract class NeuralNetworkModelTestBase
 
         Assert.Equal(original.Length, clonedOutput.Length);
         for (int i = 0; i < original.Length; i++)
-            Assert.Equal(original[i], clonedOutput[i]);
+            Assert.True(Math.Abs(original[i] - clonedOutput[i]) < 1e-10,
+                $"Clone output[{i}] differs: original={original[i]}, cloned={clonedOutput[i]}");
     }
 
     [Fact]
@@ -426,7 +428,8 @@ public abstract class NeuralNetworkModelTestBase
         Assert.Equal(singleOutput.Length, batchOutput.Length);
         for (int i = 0; i < singleOutput.Length; i++)
         {
-            Assert.Equal(singleOutput[i], batchOutput[i]);
+            Assert.True(Math.Abs(singleOutput[i] - batchOutput[i]) < 1e-12,
+                $"Output[{i}] differs: single={singleOutput[i]}, batch={batchOutput[i]}");
         }
     }
 

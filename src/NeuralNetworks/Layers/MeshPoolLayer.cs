@@ -61,6 +61,13 @@ public class MeshPoolLayer<T> : LayerBase<T>
     /// </summary>
     public int InputChannels { get; private set; }
 
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["TargetEdges"] = TargetEdges.ToString();
+        return metadata;
+    }
+
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>

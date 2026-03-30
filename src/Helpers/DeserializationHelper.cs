@@ -499,6 +499,32 @@ public static class DeserializationHelper
             var activation = TryRestoreActivation<T>(additionalParams);
             instance = ctor.Invoke(new object?[] { inputChannels, outputChannels, kernelSize, inputDepthC, inputHeightC, inputWidthC, stride, padding, activation });
         }
+        else if (genericDef == typeof(NeuralNetworks.Layers.MeshPoolLayer<>))
+        {
+            // MeshPoolLayer(int inputChannels, int targetEdges, int numNeighbors)
+            int inputChannels = inputShape[^1];
+            int targetEdges = TryGetInt(additionalParams, "TargetEdges") ?? inputChannels;
+            int numNeighbors = TryGetInt(additionalParams, "NumNeighbors") ?? 4;
+
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int) });
+            if (ctor is null)
+                throw new InvalidOperationException("Cannot find MeshPoolLayer constructor.");
+            instance = ctor.Invoke(new object[] { inputChannels, targetEdges, numNeighbors });
+        }
+        else if (genericDef == typeof(NeuralNetworks.Layers.MeshEdgeConvLayer<>))
+        {
+            // MeshEdgeConvLayer(int inputChannels, int outputChannels, int numNeighbors, IActivationFunction?)
+            int inputChannels = inputShape[^1];
+            int outputChannels = outputShape[^1];
+            int numNeighbors = TryGetInt(additionalParams, "NumNeighbors") ?? 4;
+            var activation = TryRestoreActivation<T>(additionalParams);
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType });
+            if (ctor is null)
+                throw new InvalidOperationException("Cannot find MeshEdgeConvLayer constructor.");
+            instance = ctor.Invoke(new object?[] { inputChannels, outputChannels, numNeighbors, activation });
+        }
         else if (genericDef == typeof(PrimaryCapsuleLayer<>))
         {
             // PrimaryCapsuleLayer(int inputChannels, int capsuleChannels, int capsuleDimension, int kernelSize, int stride, IActivationFunction<T>?)
