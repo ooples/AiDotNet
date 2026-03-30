@@ -310,29 +310,49 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
         foreach (var layer in Layers)
         {
             layer.SetTrainingMode(true);
-            layer.ResetState(); // Reset hidden state for clean gradient computation
+            layer.ResetState();
         }
 
-        // Forward pass with memory for backpropagation
-        var output = ForwardWithMemory(input);
+        try
+        {
+            // Forward pass with memory for backpropagation
+            var output = ForwardWithMemory(input);
 
-        // Calculate loss
-        var outputVector = output.ToVector();
-        var expectedVector = expectedOutput.ToVector();
-        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
+            // Calculate loss
+            var outputVector = output.ToVector();
+            var expectedVector = expectedOutput.ToVector();
+            LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
 
-        // Compute loss gradient
-        var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
+            // Compute loss gradient
+            var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
 
-        // Backpropagate error through time
-        BackpropagateError(Tensor<T>.FromVector(lossGrad));
+            // Reshape gradient to match output tensor shape for proper BPTT
+            var gradTensor = Tensor<T>.FromVector(lossGrad);
+            if (gradTensor.Rank < output.Rank)
+                gradTensor = gradTensor.Reshape(output.Shape.ToArray());
 
-        // Update parameters using Adam optimizer
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        var paramGrads = GetParameterGradients();
-        var currentParams = GetParameters();
-        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
-        UpdateParameters(updatedParams);
+            // Clip loss gradient before backprop (Pascanu et al. 2013 — essential for RNNs)
+            var clippedLossGrad = ClipGradient(gradTensor);
+
+            // Backpropagate error through time
+            BackpropagateError(clippedLossGrad);
+
+            // Use _learningRate but cap for Adam stability (default SGD LR of 0.01 is too high for Adam)
+            double effectiveLR = Math.Min(NumOps.ToDouble(_learningRate), 0.001);
+            _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = effectiveLR });
+            var paramGrads = GetParameterGradients();
+            var currentParams = GetParameters();
+            var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
+            UpdateParameters(updatedParams);
+        }
+        finally
+        {
+            // Restore inference mode (per PyTorch model.train()/model.eval() pattern)
+            SetTrainingMode(false);
+            foreach (var layer in Layers)
+                layer.SetTrainingMode(false);
+        }
     }
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
@@ -388,18 +408,6 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
     /// you make small adjustments to each part (the parameters) to improve the overall performance.
     /// </para>
     /// </remarks>
-    private void UpdateNetworkParameters()
-    {
-        foreach (var layer in Layers)
-        {
-            if (layer.GetParameterGradients() != null)
-            {
-                Vector<T> updates = layer.GetParameterGradients().Multiply(_learningRate);
-                layer.UpdateParameters(updates);
-            }
-        }
-    }
-
     /// <summary>
     /// Gets metadata about the Recurrent Neural Network model.
     /// </summary>

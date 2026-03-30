@@ -1618,7 +1618,13 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
                 var grad = frameGrad;
                 for (int i = _frameEncoderLayers.Count - 1; i >= 0; i--)
                     grad = _frameEncoderLayers[i].Backward(grad);
-                _patchEmbedding.Backward(grad);
+
+                // Strip CLS token row (row 0) — patch embedding only has numPatches rows
+                var patchGrad = new Tensor<T>([numPatches, _visionHiddenDim]);
+                for (int p = 0; p < numPatches; p++)
+                    for (int d = 0; d < _visionHiddenDim; d++)
+                        patchGrad[p, d] = grad[p + 1, d];
+                _patchEmbedding.Backward(patchGrad);
             }
         }
 
