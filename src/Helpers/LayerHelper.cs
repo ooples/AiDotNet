@@ -756,8 +756,11 @@ public static class LayerHelper<T>
         // Per Salakhutdinov & Hinton 2009, a DBM uses 2 hidden layers.
         // Architecture: visible → hidden1 → hidden2 → output projection.
         // The RBM layers learn the representation, and a DenseLayer projects to output size.
-        int hidden1 = Math.Min(500, inputSize * 4);
-        int hidden2 = Math.Min(500, architecture.OutputSize * 4);
+        // hidden2 derives from hidden1 (latent capacity), NOT from OutputSize (projection head).
+        const int DefaultDbmHiddenCap = 500;
+        const int DefaultDbmHiddenMultiplier = 4;
+        int hidden1 = Math.Min(DefaultDbmHiddenCap, inputSize * DefaultDbmHiddenMultiplier);
+        int hidden2 = hidden1;
 
         // Encoder RBM layers
         yield return new RBMLayer<T>(inputSize, hidden1, new SigmoidActivation<T>() as IActivationFunction<T>);

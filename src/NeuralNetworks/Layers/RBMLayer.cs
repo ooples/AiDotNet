@@ -347,12 +347,15 @@ public class RBMLayer<T> : LayerBase<T>
         // Xavier/Glorot initialization: σ = sqrt(2 / (fan_in + fan_out))
         // per Glorot & Bengio 2010 "Understanding the difficulty of training deep feedforward neural networks".
         // This keeps sigmoid activations in the linear regime while preserving gradient flow.
-        double sigma = Math.Sqrt(2.0 / (_visibleUnits + _hiddenUnits));
+        // Xavier/Glorot uniform initialization (Glorot & Bengio, 2010):
+        // U(-a, a) where a = sqrt(6 / (fan_in + fan_out))
+        // This ensures Var(W) = 2 / (fan_in + fan_out) for uniform distributions.
+        double a = Math.Sqrt(6.0 / (_visibleUnits + _hiddenUnits));
         var randomTensor = Tensor<T>.CreateRandom(_hiddenUnits, _visibleUnits);
-        // Map [0,1] uniform to [-sigma, sigma]
-        var scaledTensor = Engine.TensorMultiplyScalar(randomTensor, NumOps.FromDouble(2.0 * sigma));
+        // Map [0,1] uniform to [-a, a]
+        var scaledTensor = Engine.TensorMultiplyScalar(randomTensor, NumOps.FromDouble(2.0 * a));
         var shiftTensor = new Tensor<T>([_hiddenUnits, _visibleUnits]);
-        shiftTensor.Fill(NumOps.FromDouble(sigma));
+        shiftTensor.Fill(NumOps.FromDouble(a));
         _weights = Engine.TensorSubtract(scaledTensor, shiftTensor);
     }
 

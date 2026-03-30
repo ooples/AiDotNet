@@ -437,7 +437,7 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         LastLoss = totalLoss;
 
         // Backward pass (sets parameter gradients on each layer)
-        CalculateGradient(totalLoss);
+        CalculateGradient();
 
         // Update parameters using SGD with configurable learning rate
         T lr = NumOps.FromDouble(_options.LearningRate);
@@ -527,16 +527,29 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// In a neural network, this process helps determine how to adjust each parameter to reduce the loss.
     /// </para>
     /// </remarks>
-    private Vector<T> CalculateGradient(T loss)
+    private void CalculateGradient()
     {
         if (_lastCapsuleOutputs == null || _lastInput == null)
             throw new InvalidOperationException("Forward pass must be called before gradient computation.");
 
-        // Compute dL/dPrediction — the gradient of the loss w.r.t. the network output,
-        // not the scalar loss value. The scalar loss has no spatial information about
-        // which outputs to adjust.
+        // Compute dL/dPrediction — the gradient of the margin loss w.r.t. the network output
         var lossDerivative = _lossFunction.CalculateDerivative(
             _lastCapsuleOutputs.ToVector(), _lastExpectedOutput!.ToVector());
+
+        // Add auxiliary loss gradient when enabled (reconstruction loss = MSE)
+        // d(reconstruction)/d(capsuleOutput) = 2*(capsuleOutput - input) / N, weighted by AuxiliaryLossWeight
+        if (UseAuxiliaryLoss)
+        {
+            int minLength = Math.Min(_lastCapsuleOutputs.Length, _lastInput.Length);
+            T scale = NumOps.Multiply(AuxiliaryLossWeight, NumOps.FromDouble(2.0 / minLength));
+            for (int i = 0; i < Math.Min(lossDerivative.Length, minLength); i++)
+            {
+                T auxGrad = NumOps.Multiply(
+                    NumOps.Subtract(_lastCapsuleOutputs[i], _lastInput[i]), scale);
+                lossDerivative[i] = NumOps.Add(lossDerivative[i], auxGrad);
+            }
+        }
+
         Tensor<T> currentGradient = new Tensor<T>(
             _lastCapsuleOutputs.Shape.ToArray(),
             lossDerivative);
@@ -546,17 +559,6 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         {
             currentGradient = Layers[i].Backward(currentGradient);
         }
-
-        // Collect parameter gradients (not input gradients) from each layer
-        var paramGradients = new List<T>();
-        foreach (var layer in Layers)
-        {
-            var layerGrads = layer.GetParameterGradients();
-            for (int j = 0; j < layerGrads.Length; j++)
-                paramGradients.Add(layerGrads[j]);
-        }
-
-        return new Vector<T>([.. paramGradients]);
     }
 
     /// <summary>
