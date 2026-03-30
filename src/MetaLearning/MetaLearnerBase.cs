@@ -624,39 +624,39 @@ public abstract class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T, TInput,
 
         T baseLoss = LossFunction.CalculateLoss(predVector, expectedVector);
 
-        // Use finite differences for gradient approximation
-        // This is expensive O(n) but works for any differentiable model
-        T epsilon = NumOps.FromDouble(1e-7);
+        // SPSA gradient approximation: estimates ALL N gradients with just 2 forward passes
+        // per sample (vs N forward passes for per-parameter finite differences).
+        // Reference: Spall, J.C., IEEE TAC, 1992.
+        T epsilon = NumOps.FromDouble(1e-3);
+        T twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
+        var delta = new Vector<T>(parameters.Length);
+        int numSamples = 3;
 
-        for (int i = 0; i < parameters.Length; i++)
+        for (int s = 0; s < numSamples; s++)
         {
-            // Perturb parameter positively
-            var perturbedParams = new Vector<T>(parameters.Length);
-            for (int j = 0; j < parameters.Length; j++)
-            {
-                perturbedParams[j] = j == i
-                    ? NumOps.Add(parameters[j], epsilon)
-                    : parameters[j];
-            }
+            for (int i = 0; i < parameters.Length; i++)
+                delta[i] = RandomGenerator.NextDouble() < 0.5 ? NumOps.FromDouble(-1.0) : NumOps.FromDouble(1.0);
 
-            // Compute perturbed loss
-            model.SetParameters(perturbedParams);
-            var perturbedPredictions = model.Predict(input);
-            var perturbedVector = ConvertToVector(perturbedPredictions);
+            var eDelta = Engine.Multiply(delta, epsilon);
+            model.SetParameters(Engine.Add(parameters, eDelta));
+            var predPlus = ConvertToVector(model.Predict(input));
+            T lossPlus = predPlus is not null
+                ? LossFunction.CalculateLoss(predPlus, expectedVector)
+                : baseLoss;
 
-            if (perturbedVector == null)
-            {
-                gradients[i] = NumOps.Zero;
-                continue;
-            }
+            model.SetParameters(Engine.Subtract(parameters, eDelta));
+            var predMinus = ConvertToVector(model.Predict(input));
+            T lossMinus = predMinus is not null
+                ? LossFunction.CalculateLoss(predMinus, expectedVector)
+                : baseLoss;
 
-            T perturbedLoss = LossFunction.CalculateLoss(perturbedVector, expectedVector);
-
-            // Compute gradient using finite difference: (f(x+h) - f(x)) / h
-            gradients[i] = NumOps.Divide(
-                NumOps.Subtract(perturbedLoss, baseLoss),
-                epsilon);
+            T lossDiff = NumOps.Subtract(lossPlus, lossMinus);
+            var scaledDelta = Engine.Multiply(delta, twoEpsilon);
+            gradients = Engine.Add(gradients, Engine.Divide(
+                Engine.Fill(parameters.Length, lossDiff), scaledDelta));
         }
+
+        gradients = Engine.Multiply(gradients, NumOps.FromDouble(1.0 / numSamples));
 
         // Restore original parameters
         model.SetParameters(parameters);

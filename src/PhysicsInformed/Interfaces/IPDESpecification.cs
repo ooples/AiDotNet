@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.PhysicsInformed.Interfaces
 {
@@ -24,7 +25,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
         /// <param name="outputs">The predicted solution values at those coordinates.</param>
         /// <param name="derivatives">The derivatives of the solution (gradient, Hessian, etc.).</param>
         /// <returns>The PDE residual value (should be zero for a perfect solution).</returns>
-        T ComputeResidual(T[] inputs, T[] outputs, PDEDerivatives<T> derivatives);
+        T ComputeResidual(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives);
 
         /// <summary>
         /// Gets the dimension of the input space (e.g., 2 for 2D spatial problems, 3 for 2D space + time).
@@ -56,7 +57,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
         /// <param name="outputs">The predicted solution values.</param>
         /// <param name="derivatives">The derivatives of the solution.</param>
         /// <returns>Residual gradients for outputs and derivatives.</returns>
-        PDEResidualGradient<T> ComputeResidualGradient(T[] inputs, T[] outputs, PDEDerivatives<T> derivatives);
+        PDEResidualGradient<T> ComputeResidualGradient(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives);
     }
 
     /// <summary>
@@ -73,7 +74,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
         /// <param name="outputs">The predicted solution values.</param>
         /// <param name="derivatives">The derivatives of the solution.</param>
         /// <returns>Residual gradients for outputs and derivatives.</returns>
-        PDEResidualGradient<T> ComputeBoundaryResidualGradient(T[] inputs, T[] outputs, PDEDerivatives<T> derivatives);
+        PDEResidualGradient<T> ComputeBoundaryResidualGradient(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives);
     }
 
     /// <summary>
@@ -89,7 +90,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
         /// <param name="inputDimension">The input dimension.</param>
         public PDEResidualGradient(int outputDimension, int inputDimension)
         {
-            OutputGradients = new T[outputDimension];
+            OutputGradients = new Vector<T>(outputDimension);
             FirstDerivatives = new T[outputDimension, inputDimension];
             SecondDerivatives = new T[outputDimension, inputDimension, inputDimension];
             ThirdDerivatives = new T[outputDimension, inputDimension, inputDimension, inputDimension];
@@ -98,7 +99,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
         /// <summary>
         /// Gradient of residual with respect to outputs.
         /// </summary>
-        public T[] OutputGradients { get; }
+        public Vector<T> OutputGradients { get; }
 
         /// <summary>
         /// Gradient of residual with respect to first derivatives.
@@ -176,7 +177,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
         /// </summary>
         /// <param name="inputs">The coordinates to check.</param>
         /// <returns>True if the point is on the boundary.</returns>
-        bool IsOnBoundary(T[] inputs);
+        bool IsOnBoundary(Vector<T> inputs);
 
         /// <summary>
         /// Computes the boundary condition residual.
@@ -186,7 +187,7 @@ namespace AiDotNet.PhysicsInformed.Interfaces
         /// <param name="outputs">The predicted solution at the boundary.</param>
         /// <param name="derivatives">The derivatives at the boundary (needed for Neumann/Robin conditions).</param>
         /// <returns>The boundary residual (should be zero for a perfect solution).</returns>
-        T ComputeBoundaryResidual(T[] inputs, T[] outputs, PDEDerivatives<T> derivatives);
+        T ComputeBoundaryResidual(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives);
 
         /// <summary>
         /// Gets the name of the boundary (e.g., "Left Wall", "Top Edge").
@@ -211,14 +212,14 @@ namespace AiDotNet.PhysicsInformed.Interfaces
         /// </summary>
         /// <param name="inputs">The coordinates to check (typically the last dimension is time).</param>
         /// <returns>True if the point is at t=0.</returns>
-        bool IsAtInitialTime(T[] inputs);
+        bool IsAtInitialTime(Vector<T> inputs);
 
         /// <summary>
         /// Computes the initial condition value at the given spatial location.
         /// </summary>
         /// <param name="spatialInputs">The spatial coordinates (excluding time).</param>
         /// <returns>The initial value at that location.</returns>
-        T[] ComputeInitialValue(T[] spatialInputs);
+        Vector<T> ComputeInitialValue(Vector<T> spatialInputs);
 
         /// <summary>
         /// Gets the name of the initial condition.

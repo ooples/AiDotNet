@@ -865,10 +865,10 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            new Vector<T>(_linearWeights.ToArray()),
-            new Vector<T>(_gateWeights.ToArray()),
-            new Vector<T>(_linearBias.ToArray()),
-            new Vector<T>(_gateBias.ToArray()));
+            Vector<T>.FromMemory(_linearWeights.Data),
+            Vector<T>.FromMemory(_gateWeights.Data),
+            Vector<T>.FromMemory(_linearBias.Data),
+            Vector<T>.FromMemory(_gateBias.Data));
     }
 
     /// <summary>
@@ -958,10 +958,10 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
             _linearBiasGradient == null || _gateBiasGradient == null)
             return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_linearWeightsGradient.ToArray()),
-            new Vector<T>(_gateWeightsGradient.ToArray()),
-            new Vector<T>(_linearBiasGradient.ToArray()),
-            new Vector<T>(_gateBiasGradient.ToArray()));
+            (_linearWeightsGradient is not null ? Vector<T>.FromMemory(_linearWeightsGradient.Data) : new Vector<T>(0)),
+            (_gateWeightsGradient is not null ? Vector<T>.FromMemory(_gateWeightsGradient.Data) : new Vector<T>(0)),
+            (_linearBiasGradient is not null ? Vector<T>.FromMemory(_linearBiasGradient.Data) : new Vector<T>(0)),
+            (_gateBiasGradient is not null ? Vector<T>.FromMemory(_gateBiasGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()

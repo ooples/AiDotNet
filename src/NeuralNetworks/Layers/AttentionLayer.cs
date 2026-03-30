@@ -1496,19 +1496,19 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         // === Vectorized Parameter Extraction (Phase B: US-GPU-015) ===
         // Flatten each tensor to vector and concatenate
-        var wqVec = _Wq.ToVector();
-        var wkVec = _Wk.ToVector();
-        var wvVec = _Wv.ToVector();
+        var wqVec = Vector<T>.FromMemory(_Wq.Data);
+        var wkVec = Vector<T>.FromMemory(_Wk.Data);
+        var wvVec = Vector<T>.FromMemory(_Wv.Data);
 
-        var woVec = _Wo.ToVector();
+        var woVec = Vector<T>.FromMemory(_Wo.Data);
         return Vector<T>.Concatenate(Vector<T>.Concatenate(wqVec, wkVec), Vector<T>.Concatenate(wvVec, woVec));
     }
 
     public override Vector<T> GetParameterGradients()
     {
-        var gQ = _dWq != null ? _dWq.ToVector() : new Vector<T>(_Wq.Length);
-        var gK = _dWk != null ? _dWk.ToVector() : new Vector<T>(_Wk.Length);
-        var gV = _dWv != null ? _dWv.ToVector() : new Vector<T>(_Wv.Length);
+        var gQ = _dWq != null ? Vector<T>.FromMemory(_dWq.Data) : new Vector<T>(_Wq.Length);
+        var gK = _dWk != null ? Vector<T>.FromMemory(_dWk.Data) : new Vector<T>(_Wk.Length);
+        var gV = _dWv != null ? Vector<T>.FromMemory(_dWv.Data) : new Vector<T>(_Wv.Length);
         var gO = new Vector<T>(_Wo.Length); // Wo gradient not tracked separately yet
         return Vector<T>.Concatenate(Vector<T>.Concatenate(gQ, gK), Vector<T>.Concatenate(gV, gO));
     }

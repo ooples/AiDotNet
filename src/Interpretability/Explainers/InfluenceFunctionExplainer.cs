@@ -1,6 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability.Helpers;
+using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
@@ -48,6 +49,7 @@ namespace AiDotNet.Interpretability.Explainers;
 public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly INeuralNetwork<T>? _network;
     private readonly Func<Vector<T>, Vector<T>> _predictFunction;
@@ -233,19 +235,15 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         // Step 3: Compute training gradients (cached if available)
         EnsureTrainingGradientsComputed();
 
-        // Step 4: Compute influence scores: influence[i] = -train_gradient[i] dot ihvp
+        // Step 4: Compute influence scores: influences = -(cachedGradients @ ihvp) — vectorized matmul
         var cachedGradients = _cachedTrainingGradients
             ?? throw new InvalidOperationException("Training gradients have not been cached. Call EnsureTrainingGradientsComputed() first.");
-        var influences = new T[_trainingData.Rows];
-        for (int i = 0; i < _trainingData.Rows; i++)
-        {
-            double dot = 0;
-            for (int j = 0; j < ihvp.Length && j < cachedGradients.Columns; j++)
-            {
-                dot += NumOps.ToDouble(cachedGradients[i, j]) * NumOps.ToDouble(ihvp[j]);
-            }
-            influences[i] = NumOps.FromDouble(-dot);
-        }
+        // Matrix-vector product: [N x D] @ [D x 1] = [N x 1]
+        var gradTensor = Tensor<T>.FromMatrix(cachedGradients);
+        var ihvpTensor = Tensor<T>.FromVector(ihvp).Reshape(ihvp.Length, 1);
+        var influencesTensor = Engine.TensorMatMul(gradTensor, ihvpTensor).Reshape(cachedGradients.Rows);
+        // Negate: influence = -dot product
+        var influencesVec = (Vector<T>)Engine.Multiply(influencesTensor.ToVector(), NumOps.Negate(NumOps.One));
 
         // Get prediction and loss
         var prediction = _predictFunction(testInput);
@@ -254,7 +252,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         return new InfluenceFunctionResult<T>(
             testInput: testInput,
             testLabel: testLabel,
-            influences: new Vector<T>(influences),
+            influences: influencesVec,
             prediction: prediction,
             loss: loss);
     }
@@ -305,13 +303,8 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
             // Compute inverse Hessian-vector product
             var ihvp = ComputeInverseHessianVectorProduct(trainGradient);
 
-            // Self-influence = -gradient dot ihvp
-            double selfInfluence = 0;
-            for (int j = 0; j < ihvp.Length && j < trainGradient.Length; j++)
-            {
-                selfInfluence += NumOps.ToDouble(trainGradient[j]) * NumOps.ToDouble(ihvp[j]);
-            }
-            selfInfluences[i] = NumOps.FromDouble(-selfInfluence);
+            // Self-influence = -gradient dot ihvp — vectorized
+            selfInfluences[i] = NumOps.Negate(VectorHelper.DotProduct(trainGradient, ihvp));
         }
 
         return new SelfInfluenceResult<T>(
@@ -407,21 +400,11 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
             var prediction = output.ToVector();
             var lossValue = _lossFunction(prediction, target);
 
-            // Create output gradient (derivative of loss w.r.t. output)
-            // For MSE: gradient = 2 * (pred - target)
-            var outputGrad = new T[prediction.Length];
-            for (int i = 0; i < prediction.Length && i < target.Length; i++)
-            {
-                outputGrad[i] = NumOps.Multiply(
-                    NumOps.FromDouble(2.0),
-                    NumOps.Subtract(prediction[i], target[i]));
-            }
+            // MSE gradient: 2 * (pred - target) — vectorized
+            var outputGradVec = (Vector<T>)Engine.Multiply(
+                Engine.Subtract(prediction, target), NumOps.FromDouble(2.0));
 
-            var outputGradTensor = new Tensor<T>(new[] { 1, outputGrad.Length });
-            for (int i = 0; i < outputGrad.Length; i++)
-            {
-                outputGradTensor[0, i] = outputGrad[i];
-            }
+            var outputGradTensor = Tensor<T>.FromVector(outputGradVec).Reshape(1, outputGradVec.Length);
 
             // Backpropagate
             _network.Backpropagate(outputGradTensor);
@@ -524,15 +507,10 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
             // Compute Hessian-vector product for this sample
             var hvp = ComputeHessianVectorProduct(input, new Vector<T>(new[] { label }), estimate);
 
-            // Update: estimate = vector + (1 - damping) * estimate - hvp / scale
-            for (int i = 0; i < n && i < hvp.Length; i++)
-            {
-                double v = NumOps.ToDouble(vector[i]);
-                double e = NumOps.ToDouble(estimate[i]);
-                double h = NumOps.ToDouble(hvp[i]);
-
-                estimate[i] = NumOps.FromDouble(v + (1 - _damping) * e - h / _scale);
-            }
+            // Update: estimate = vector + (1 - damping) * estimate - hvp / scale — vectorized
+            var scaledEstimate = Engine.Multiply(estimate, NumOps.FromDouble(1 - _damping));
+            var scaledHvp = Engine.Divide(hvp, NumOps.FromDouble(_scale));
+            estimate = (Vector<T>)Engine.Subtract(Engine.Add(vector, scaledEstimate), scaledHvp);
         }
 
         return estimate;
@@ -543,8 +521,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
     /// </summary>
     private Vector<T> ComputeIHVP_ConjugateGradient(Vector<T> vector)
     {
-        int n = vector.Length;
-        var x = new Vector<T>(n); // Initial guess
+        var x = new Vector<T>(vector.Length); // Initial guess
         var r = vector.Clone(); // Residual
         var p = r.Clone(); // Search direction
 
@@ -553,11 +530,8 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
             // Compute average Hessian-vector product over training data
             var Ap = ComputeAverageHessianVectorProduct(p);
 
-            // Add damping: Ap = Ap + damping * p
-            for (int i = 0; i < n && i < Ap.Length; i++)
-            {
-                Ap[i] = NumOps.Add(Ap[i], NumOps.Multiply(NumOps.FromDouble(_damping), p[i]));
-            }
+            // Add damping: Ap = Ap + damping * p — vectorized
+            Ap = (Vector<T>)Engine.Add(Ap, Engine.Multiply(p, NumOps.FromDouble(_damping)));
 
             // Compute step size
             double rDotR = NumOps.ToDouble(VectorHelper.DotProduct(r, r));
@@ -567,28 +541,18 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
 
             double alpha = rDotR / pDotAp;
 
-            // Update solution: x = x + alpha * p
-            for (int i = 0; i < n; i++)
-            {
-                x[i] = NumOps.Add(x[i], NumOps.Multiply(NumOps.FromDouble(alpha), p[i]));
-            }
+            // Update solution: x = x + alpha * p — vectorized
+            x = (Vector<T>)Engine.Add(x, Engine.Multiply(p, NumOps.FromDouble(alpha)));
 
-            // Update residual: r = r - alpha * Ap
-            var rNew = new Vector<T>(n);
-            for (int i = 0; i < n && i < Ap.Length; i++)
-            {
-                rNew[i] = NumOps.Subtract(r[i], NumOps.Multiply(NumOps.FromDouble(alpha), Ap[i]));
-            }
+            // Update residual: r_new = r - alpha * Ap — vectorized
+            var rNew = (Vector<T>)Engine.Subtract(r, Engine.Multiply(Ap, NumOps.FromDouble(alpha)));
 
             double rNewDotRNew = NumOps.ToDouble(VectorHelper.DotProduct(rNew, rNew));
             if (rNewDotRNew < 1e-10) break;
 
-            // Update search direction
+            // Update search direction: p = r_new + beta * p — vectorized
             double beta = rNewDotRNew / rDotR;
-            for (int i = 0; i < n; i++)
-            {
-                p[i] = NumOps.Add(rNew[i], NumOps.Multiply(NumOps.FromDouble(beta), p[i]));
-            }
+            p = (Vector<T>)Engine.Add(rNew, Engine.Multiply(p, NumOps.FromDouble(beta)));
 
             r = rNew;
         }
@@ -690,17 +654,11 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
 
             var hvp = ComputeHessianVectorProduct(input, new Vector<T>(new[] { label }), vector);
 
-            for (int i = 0; i < n && i < hvp.Length; i++)
-            {
-                avgHvp[i] = NumOps.Add(avgHvp[i], hvp[i]);
-            }
+            avgHvp = (Vector<T>)Engine.Add(avgHvp, hvp);
         }
 
-        // Average
-        for (int i = 0; i < n; i++)
-        {
-            avgHvp[i] = NumOps.Divide(avgHvp[i], NumOps.FromDouble(numSamples));
-        }
+        // Average — vectorized
+        avgHvp = (Vector<T>)Engine.Divide(avgHvp, NumOps.FromDouble(numSamples));
 
         return avgHvp;
     }

@@ -6,6 +6,7 @@ using AiDotNet.PhysicsInformed;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.PDEs;
 using AiDotNet.PhysicsInformed.PINNs;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.PhysicsInformed;
@@ -35,12 +36,12 @@ public class MultiFidelityAndDomainDecompositionTests
 
         public string Name => $"Boundary at dim {_dimension} = {_location}";
 
-        public bool IsOnBoundary(double[] inputs)
+        public bool IsOnBoundary(Vector<double> inputs)
         {
             return Math.Abs(inputs[_dimension] - _location) < 1e-10;
         }
 
-        public double ComputeBoundaryResidual(double[] inputs, double[] outputs, PDEDerivatives<double> derivatives)
+        public double ComputeBoundaryResidual(Vector<double> inputs, Vector<double> outputs, PDEDerivatives<double> derivatives)
         {
             return outputs[0] - _boundaryValue;
         }

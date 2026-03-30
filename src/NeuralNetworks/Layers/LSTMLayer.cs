@@ -2002,14 +2002,17 @@ public class LSTMLayer<T> : LayerBase<T>
         var dNextH = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
         var dNextC = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
 
+        // Pre-allocate zero tensors for t=0 to avoid per-iteration allocation
+        var zerosHidden = new Tensor<T>(new int[] { batchSize, _hiddenSize });
+
         for (int t = timeSteps - 1; t >= 0; t--)
         {
             // Slice along time dimension (dim 1) for all 3D tensors
             var dh = outGrad3D.GetSliceAlongDimension(t, 1).Add(dNextH);
             var xt = _lastInput.GetSliceAlongDimension(t, 1);
-            // Use cached states - slice along time dimension
-            var prevH = t > 0 ? _cachedHiddenStates.GetSliceAlongDimension(t - 1, 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
-            var prevC = t > 0 ? _cachedCellStates.GetSliceAlongDimension(t - 1, 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
+            // Use cached states - slice along time dimension, pre-allocated zeros for t=0
+            var prevH = t > 0 ? _cachedHiddenStates.GetSliceAlongDimension(t - 1, 1) : zerosHidden;
+            var prevC = t > 0 ? _cachedCellStates.GetSliceAlongDimension(t - 1, 1) : zerosHidden;
 
             var (dxt, dprevH, dprevC, dWfi, dWii, dWci, dWoi, dWfh, dWih, dWch, dWoh, dbf, dbi, dbc, dbo) =
                 BackwardStep(dh, dNextC, xt, prevH, prevC);
@@ -2112,14 +2115,17 @@ public class LSTMLayer<T> : LayerBase<T>
 
         var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
 
+        // Pre-allocate zero tensor for t=0 to avoid per-iteration allocation
+        var zerosHiddenAD = new Tensor<T>(new int[] { batchSize, _hiddenSize });
+
         // Process each time step using autodiff
         for (int t = timeSteps - 1; t >= 0; t--)
         {
             // Get input and states for this time step - slice along time dimension (dim 1)
             var xt = _lastInput.GetSliceAlongDimension(t, 1);
-            // Use cached states for previous time step (they are 3D: [batch, time, hidden])
-            var prevH = t > 0 ? _cachedHiddenStates.GetSliceAlongDimension(t - 1, 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
-            var prevC = t > 0 ? _cachedCellStates.GetSliceAlongDimension(t - 1, 1) : new Tensor<T>(new int[] { batchSize, _hiddenSize });
+            // Use cached states for previous time step, pre-allocated zeros for t=0
+            var prevH = t > 0 ? _cachedHiddenStates.GetSliceAlongDimension(t - 1, 1) : zerosHiddenAD;
+            var prevC = t > 0 ? _cachedCellStates.GetSliceAlongDimension(t - 1, 1) : zerosHiddenAD;
             var gradSlice = outGrad3D.GetSliceAlongDimension(t, 1);
 
             // Convert parameters to computation nodes with gradient tracking
@@ -2641,18 +2647,18 @@ public class LSTMLayer<T> : LayerBase<T>
     {
         // Use Vector.Concatenate for production-grade parameter extraction
         return Vector<T>.Concatenate(
-            new Vector<T>(_weightsFi.ToArray()),
-            new Vector<T>(_weightsIi.ToArray()),
-            new Vector<T>(_weightsCi.ToArray()),
-            new Vector<T>(_weightsOi.ToArray()),
-            new Vector<T>(_weightsFh.ToArray()),
-            new Vector<T>(_weightsIh.ToArray()),
-            new Vector<T>(_weightsCh.ToArray()),
-            new Vector<T>(_weightsOh.ToArray()),
-            new Vector<T>(_biasF.ToArray()),
-            new Vector<T>(_biasI.ToArray()),
-            new Vector<T>(_biasC.ToArray()),
-            new Vector<T>(_biasO.ToArray())
+            Vector<T>.FromMemory(_weightsFi.Data),
+            Vector<T>.FromMemory(_weightsIi.Data),
+            Vector<T>.FromMemory(_weightsCi.Data),
+            Vector<T>.FromMemory(_weightsOi.Data),
+            Vector<T>.FromMemory(_weightsFh.Data),
+            Vector<T>.FromMemory(_weightsIh.Data),
+            Vector<T>.FromMemory(_weightsCh.Data),
+            Vector<T>.FromMemory(_weightsOh.Data),
+            Vector<T>.FromMemory(_biasF.Data),
+            Vector<T>.FromMemory(_biasI.Data),
+            Vector<T>.FromMemory(_biasC.Data),
+            Vector<T>.FromMemory(_biasO.Data)
         );
     }
 
@@ -2664,18 +2670,18 @@ public class LSTMLayer<T> : LayerBase<T>
         Tensor<T> Get(string key) => Gradients.TryGetValue(key, out var t) ? t : new Tensor<T>([0]);
 
         return Vector<T>.Concatenate(
-            new Vector<T>(Get("weightsFi").ToArray()),
-            new Vector<T>(Get("weightsIi").ToArray()),
-            new Vector<T>(Get("weightsCi").ToArray()),
-            new Vector<T>(Get("weightsOi").ToArray()),
-            new Vector<T>(Get("weightsFh").ToArray()),
-            new Vector<T>(Get("weightsIh").ToArray()),
-            new Vector<T>(Get("weightsCh").ToArray()),
-            new Vector<T>(Get("weightsOh").ToArray()),
-            new Vector<T>(Get("biasF").ToArray()),
-            new Vector<T>(Get("biasI").ToArray()),
-            new Vector<T>(Get("biasC").ToArray()),
-            new Vector<T>(Get("biasO").ToArray())
+            Get("weightsFi").ToVector(),
+            Get("weightsIi").ToVector(),
+            Get("weightsCi").ToVector(),
+            Get("weightsOi").ToVector(),
+            Get("weightsFh").ToVector(),
+            Get("weightsIh").ToVector(),
+            Get("weightsCh").ToVector(),
+            Get("weightsOh").ToVector(),
+            Get("biasF").ToVector(),
+            Get("biasI").ToVector(),
+            Get("biasC").ToVector(),
+            Get("biasO").ToVector()
         );
     }
 

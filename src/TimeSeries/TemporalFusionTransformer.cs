@@ -335,35 +335,18 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
 
     private Tensor<T> ForwardLinear(Tensor<T> input, Tensor<T> weight, Tensor<T> bias)
     {
+        // output = weight @ input + bias — vectorized Engine.TensorMatMul
         int outSize = weight.Shape[0];
         int inSize = weight.Shape[1];
-        var output = new Tensor<T>([outSize]);
-
-        for (int i = 0; i < outSize; i++)
-        {
-            T sum = bias[i];
-            for (int j = 0; j < Math.Min(input.Length, inSize); j++)
-            {
-                int wIdx = i * inSize + j;
-                if (wIdx < weight.Length)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(weight[wIdx], input[j]));
-                }
-            }
-            output[i] = sum;
-        }
-
-        return output;
+        var inputCol = input.Reshape(Math.Min(input.Length, inSize), 1);
+        var weightMat = weight.Reshape(outSize, inSize);
+        var result = Engine.TensorMatMul(weightMat, inputCol).Reshape(outSize);
+        return Engine.TensorAdd(result, bias.Reshape(outSize));
     }
 
     private Tensor<T> ApplyReLU(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
-        for (int i = 0; i < input.Length; i++)
-        {
-            output[i] = NumOps.GreaterThan(input[i], NumOps.Zero) ? input[i] : NumOps.Zero;
-        }
-        return output;
+        return Engine.ReLU(input);
     }
 
     /// <summary>
@@ -402,32 +385,14 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
             }
         }
 
-        // Compute Q, K, V projections for each position in sequence
-        var queries = new Tensor<T>([seqLen, hiddenSize]);
-        var keys = new Tensor<T>([seqLen, hiddenSize]);
-        var values = new Tensor<T>([seqLen, hiddenSize]);
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            // Extract position t's hidden state
-            var posInput = new Tensor<T>([hiddenSize]);
-            for (int d = 0; d < hiddenSize; d++)
-            {
-                posInput[d] = reshapedInput[t * hiddenSize + d];
-            }
-
-            // Project to Q, K, V
-            var q = ForwardLinear(posInput, _queryWeight, new Tensor<T>([hiddenSize]));
-            var k = ForwardLinear(posInput, _keyWeight, new Tensor<T>([hiddenSize]));
-            var v = ForwardLinear(posInput, _valueWeight, new Tensor<T>([hiddenSize]));
-
-            for (int d = 0; d < hiddenSize; d++)
-            {
-                queries[t * hiddenSize + d] = q[d];
-                keys[t * hiddenSize + d] = k[d];
-                values[t * hiddenSize + d] = v[d];
-            }
-        }
+        // Batch Q, K, V projections: [seqLen, hiddenSize] @ W^T = [seqLen, hiddenSize]
+        var inputMat = reshapedInput.Reshape(seqLen, hiddenSize);
+        var qwT = _queryWeight.Reshape(hiddenSize, hiddenSize).Transpose(new[] { 1, 0 });
+        var kwT = _keyWeight.Reshape(hiddenSize, hiddenSize).Transpose(new[] { 1, 0 });
+        var vwT = _valueWeight.Reshape(hiddenSize, hiddenSize).Transpose(new[] { 1, 0 });
+        var queries = Engine.TensorMatMul(inputMat, qwT);
+        var keys = Engine.TensorMatMul(inputMat, kwT);
+        var values = Engine.TensorMatMul(inputMat, vwT);
 
         // Multi-head attention with softmax over positions
         var attentionOutput = new Tensor<T>([seqLen, hiddenSize]);
@@ -494,12 +459,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
                 : d];
         }
 
-        for (int i = 0; i < hiddenSize; i++)
-        {
-            output[i] = NumOps.Add(output[i], residualInput[i]);
-        }
-
-        return output;
+        return Engine.TensorAdd(output, residualInput);
     }
 
     /// <summary>
@@ -551,44 +511,19 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         int outSize = weight.Shape[0];
         int inSize = weight.Shape[1];
 
-        // Weight gradients
-        var dWeight = new Tensor<T>(weight.Shape.ToArray());
-        for (int i = 0; i < outSize && i < dOutput.Length; i++)
-        {
-            for (int j = 0; j < inSize && j < input.Length; j++)
-            {
-                int wIdx = i * inSize + j;
-                if (wIdx < dWeight.Length)
-                {
-                    dWeight[wIdx] = NumOps.Multiply(dOutput[i], input[j]);
-                }
-            }
-        }
+        // Weight gradients: dWeight = dOutput @ input^T — vectorized outer product
+        var dOutCol = dOutput.Reshape(outSize, 1);
+        var inputRow = input.Reshape(1, inSize);
+        var dWeight = Engine.TensorMatMul(dOutCol, inputRow).Reshape(weight.Shape.ToArray());
         gradients[$"layer_{layerIdx}_weight"] = dWeight;
 
-        // Bias gradients
-        var dBias = new Tensor<T>([outSize]);
-        for (int i = 0; i < outSize && i < dOutput.Length; i++)
-        {
-            dBias[i] = dOutput[i];
-        }
-        gradients[$"layer_{layerIdx}_bias"] = dBias;
+        // Bias gradients: dBias = dOutput
+        gradients[$"layer_{layerIdx}_bias"] = dOutput.Reshape(outSize);
 
-        // Input gradients
-        var dInput = new Tensor<T>([inSize]);
-        for (int j = 0; j < inSize; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < outSize && i < dOutput.Length; i++)
-            {
-                int wIdx = i * inSize + j;
-                if (wIdx < weight.Length)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(dOutput[i], weight[wIdx]));
-                }
-            }
-            dInput[j] = sum;
-        }
+        // Input gradients: dInput = weight^T @ dOutput — vectorized matmul
+        var weightMat = weight.Reshape(outSize, inSize);
+        var weightT = weightMat.Transpose(new[] { 1, 0 });
+        var dInput = Engine.TensorMatMul(weightT, dOutCol).Reshape(inSize);
 
         return dInput;
     }
@@ -618,30 +553,14 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
             reshapedInput[i] = input[i];
         }
 
-        // Recompute Q, K, V for all positions (needed for backprop)
-        var queries = new Tensor<T>([seqLen * hiddenSize]);
-        var keys = new Tensor<T>([seqLen * hiddenSize]);
-        var values = new Tensor<T>([seqLen * hiddenSize]);
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            var posInput = new Tensor<T>([hiddenSize]);
-            for (int d = 0; d < hiddenSize; d++)
-            {
-                posInput[d] = reshapedInput[t * hiddenSize + d];
-            }
-
-            var q = ForwardLinear(posInput, _queryWeight, new Tensor<T>([hiddenSize]));
-            var k = ForwardLinear(posInput, _keyWeight, new Tensor<T>([hiddenSize]));
-            var v = ForwardLinear(posInput, _valueWeight, new Tensor<T>([hiddenSize]));
-
-            for (int d = 0; d < hiddenSize; d++)
-            {
-                queries[t * hiddenSize + d] = q[d];
-                keys[t * hiddenSize + d] = k[d];
-                values[t * hiddenSize + d] = v[d];
-            }
-        }
+        // Batch Q, K, V recomputation: [seqLen, hidden] @ W^T — vectorized
+        var inputMat = reshapedInput.Reshape(seqLen, hiddenSize);
+        var qwT = _queryWeight.Reshape(hiddenSize, hiddenSize).Transpose(new[] { 1, 0 });
+        var kwT = _keyWeight.Reshape(hiddenSize, hiddenSize).Transpose(new[] { 1, 0 });
+        var vwT = _valueWeight.Reshape(hiddenSize, hiddenSize).Transpose(new[] { 1, 0 });
+        var queries = Engine.TensorMatMul(inputMat, qwT).Reshape(seqLen * hiddenSize);
+        var keys = Engine.TensorMatMul(inputMat, kwT).Reshape(seqLen * hiddenSize);
+        var values = Engine.TensorMatMul(inputMat, vwT).Reshape(seqLen * hiddenSize);
 
         // Recompute attention output and weights for backprop
         var attentionOutput = new Tensor<T>([seqLen * hiddenSize]);
@@ -846,32 +765,18 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
             dInput[lastPos + i] = NumOps.Add(dInput[lastPos + i], dOutput[i]);
         }
 
-        // Backprop through Q, K, V projections: dInput = W^T * dProjected
-        for (int t = 0; t < seqLen; t++)
-        {
-            int tOffset = t * hiddenSize;
-            for (int j = 0; j < hiddenSize; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < hiddenSize; i++)
-                {
-                    int wIdx = i * hiddenSize + j;
-                    if (wIdx < _queryWeight.Length)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(dQueries[tOffset + i], _queryWeight[wIdx]));
-                    }
-                    if (wIdx < _keyWeight.Length)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(dKeys[tOffset + i], _keyWeight[wIdx]));
-                    }
-                    if (wIdx < _valueWeight.Length)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(dValues[tOffset + i], _valueWeight[wIdx]));
-                    }
-                }
-                dInput[tOffset + j] = NumOps.Add(dInput[tOffset + j], sum);
-            }
-        }
+        // Backprop through Q, K, V projections: dInput += dQ @ Wq^T + dK @ Wk^T + dV @ Wv^T
+        var dQMat = dQueries.Reshape(seqLen, hiddenSize);
+        var dKMat = dKeys.Reshape(seqLen, hiddenSize);
+        var dVMat = dValues.Reshape(seqLen, hiddenSize);
+        var wqT = _queryWeight.Reshape(hiddenSize, hiddenSize).Transpose(new[] { 1, 0 });
+        var wkT = _keyWeight.Reshape(hiddenSize, hiddenSize).Transpose(new[] { 1, 0 });
+        var wvT = _valueWeight.Reshape(hiddenSize, hiddenSize).Transpose(new[] { 1, 0 });
+        var dFromQ = Engine.TensorMatMul(dQMat, wqT);
+        var dFromK = Engine.TensorMatMul(dKMat, wkT);
+        var dFromV = Engine.TensorMatMul(dVMat, wvT);
+        var dProjInput = Engine.TensorAdd(Engine.TensorAdd(dFromQ, dFromK), dFromV).Reshape(seqLen * hiddenSize);
+        dInput = Engine.TensorAdd(dInput, dProjInput);
 
         // Return gradient matching input shape
         if (dInput.Length == hiddenSize || input.Length == hiddenSize)

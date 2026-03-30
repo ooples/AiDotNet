@@ -1071,9 +1071,9 @@ public class RecurrentLayer<T> : LayerBase<T>
     {
         // VECTORIZED: Concatenate tensor data using Vector.Concatenate
         return Vector<T>.Concatenate(
-            _inputWeights.ToVector(),
-            _hiddenWeights.ToVector(),
-            _biases.ToVector()
+            Vector<T>.FromMemory(_inputWeights.Data),
+            Vector<T>.FromMemory(_hiddenWeights.Data),
+            Vector<T>.FromMemory(_biases.Data)
         );
     }
 
@@ -1091,9 +1091,9 @@ public class RecurrentLayer<T> : LayerBase<T>
 
         // VECTORIZED: Concatenate gradient data using Vector.Concatenate
         return Vector<T>.Concatenate(
-            _inputWeightsGradient.ToVector(),
-            _hiddenWeightsGradient.ToVector(),
-            _biasesGradient.ToVector()
+            (_inputWeightsGradient is not null ? Vector<T>.FromMemory(_inputWeightsGradient.Data) : new Vector<T>(0)),
+            (_hiddenWeightsGradient is not null ? Vector<T>.FromMemory(_hiddenWeightsGradient.Data) : new Vector<T>(0)),
+            (_biasesGradient is not null ? Vector<T>.FromMemory(_biasesGradient.Data) : new Vector<T>(0))
         );
     }
 

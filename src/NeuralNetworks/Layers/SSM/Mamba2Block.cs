@@ -1150,20 +1150,20 @@ public class Mamba2Block<T> : LayerBase<T>
     {
         if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
-            new Vector<T>(_convWeightsGradient!.ToArray()),
-            new Vector<T>(_convBiasGradient!.ToArray()),
-            new Vector<T>(_bProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_cProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_aLogGradient!.ToArray()),
-            new Vector<T>(_dtProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_dtProjectionBiasGradient!.ToArray()),
-            new Vector<T>(_dParamGradient!.ToArray()),
-            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_outputProjectionBiasGradient!.ToArray()),
-            new Vector<T>(_normGammaGradient!.ToArray()),
-            new Vector<T>(_normBetaGradient!.ToArray()));
+            (_inputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_inputProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_inputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_inputProjectionBiasGradient.Data) : new Vector<T>(0)),
+            (_convWeightsGradient is not null ? Vector<T>.FromMemory(_convWeightsGradient.Data) : new Vector<T>(0)),
+            (_convBiasGradient is not null ? Vector<T>.FromMemory(_convBiasGradient.Data) : new Vector<T>(0)),
+            (_bProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_bProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_cProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_cProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_aLogGradient is not null ? Vector<T>.FromMemory(_aLogGradient.Data) : new Vector<T>(0)),
+            (_dtProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_dtProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_dtProjectionBiasGradient is not null ? Vector<T>.FromMemory(_dtProjectionBiasGradient.Data) : new Vector<T>(0)),
+            (_dParamGradient is not null ? Vector<T>.FromMemory(_dParamGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)),
+            (_normGammaGradient is not null ? Vector<T>.FromMemory(_normGammaGradient.Data) : new Vector<T>(0)),
+            (_normBetaGradient is not null ? Vector<T>.FromMemory(_normBetaGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()

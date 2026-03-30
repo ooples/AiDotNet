@@ -767,16 +767,16 @@ public class MixtureOfMambaLayer<T> : LayerBase<T>
     {
         if (_routerWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_routerWeightsGradient!.ToArray()),
-            new Vector<T>(_routerBiasGradient!.ToArray()),
-            new Vector<T>(_expertAGradient!.ToArray()),
-            new Vector<T>(_expertBGradient!.ToArray()),
-            new Vector<T>(_expertCGradient!.ToArray()),
-            new Vector<T>(_expertDGradient!.ToArray()),
-            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
-            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
-            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
-            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
+            (_routerWeightsGradient is not null ? Vector<T>.FromMemory(_routerWeightsGradient.Data) : new Vector<T>(0)),
+            (_routerBiasGradient is not null ? Vector<T>.FromMemory(_routerBiasGradient.Data) : new Vector<T>(0)),
+            (_expertAGradient is not null ? Vector<T>.FromMemory(_expertAGradient.Data) : new Vector<T>(0)),
+            (_expertBGradient is not null ? Vector<T>.FromMemory(_expertBGradient.Data) : new Vector<T>(0)),
+            (_expertCGradient is not null ? Vector<T>.FromMemory(_expertCGradient.Data) : new Vector<T>(0)),
+            (_expertDGradient is not null ? Vector<T>.FromMemory(_expertDGradient.Data) : new Vector<T>(0)),
+            _outputGateWeightsGradient is not null ? (_outputGateWeightsGradient is not null ? Vector<T>.FromMemory(_outputGateWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateWeights.Length),
+            _outputGateBiasGradient is not null ? (_outputGateBiasGradient is not null ? Vector<T>.FromMemory(_outputGateBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateBias.Length),
+            _outputProjectionWeightsGradient is not null ? (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionWeights.Length),
+            _outputProjectionBiasGradient is not null ? (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionBias.Length));
     }
 
     public override void ClearGradients()

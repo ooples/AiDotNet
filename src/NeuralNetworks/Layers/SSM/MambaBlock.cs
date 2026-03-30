@@ -564,11 +564,13 @@ internal class MambaBlock<T> : LayerBase<T>
                 .Reshape(1, _innerDimension);
         }
 
+        // Pre-allocate zeros tensor for bias broadcast (reused each timestep)
+        var zerosBatch = new Tensor<T>(new[] { batchSize, _innerDimension });
+
         for (int t = 0; t < seqLen; t++)
         {
             // Start with bias: broadcast [1, innerDim] to [batch, innerDim]
-            var result_t = Engine.TensorBroadcastAdd(
-                new Tensor<T>(new[] { batchSize, _innerDimension }), bias2D);
+            var result_t = Engine.TensorBroadcastAdd(zerosBatch, bias2D);
 
             for (int k = 0; k < _convKernelSize; k++)
             {
@@ -804,17 +806,17 @@ internal class MambaBlock<T> : LayerBase<T>
     {
         if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
-            new Vector<T>(_convWeightsGradient!.ToArray()),
-            new Vector<T>(_convBiasGradient!.ToArray()),
-            new Vector<T>(_xProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_dtProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_dtProjectionBiasGradient!.ToArray()),
-            new Vector<T>(_aLogGradient!.ToArray()),
-            new Vector<T>(_dParamGradient!.ToArray()),
-            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
-            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
+            (_inputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_inputProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_inputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_inputProjectionBiasGradient.Data) : new Vector<T>(0)),
+            (_convWeightsGradient is not null ? Vector<T>.FromMemory(_convWeightsGradient.Data) : new Vector<T>(0)),
+            (_convBiasGradient is not null ? Vector<T>.FromMemory(_convBiasGradient.Data) : new Vector<T>(0)),
+            (_xProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_xProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_dtProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_dtProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_dtProjectionBiasGradient is not null ? Vector<T>.FromMemory(_dtProjectionBiasGradient.Data) : new Vector<T>(0)),
+            (_aLogGradient is not null ? Vector<T>.FromMemory(_aLogGradient.Data) : new Vector<T>(0)),
+            (_dParamGradient is not null ? Vector<T>.FromMemory(_dParamGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)),
+            (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()

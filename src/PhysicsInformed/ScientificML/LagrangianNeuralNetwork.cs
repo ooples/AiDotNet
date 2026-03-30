@@ -8,6 +8,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -199,11 +200,9 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 coriolis[i] = sum;
             }
 
-            T[] rhs = new T[_configurationDim];
-            for (int i = 0; i < _configurationDim; i++)
-            {
-                rhs[i] = NumOps.Subtract(dLdq[i], coriolis[i]);
-            }
+            // Vectorized: rhs = dLdq - coriolis
+            var rhsVec = (Vector<T>)Engine.Subtract(new Vector<T>(dLdq), new Vector<T>(coriolis));
+            T[] rhs = rhsVec.ToArray();
 
             var regularization = NumOps.FromDouble(1e-6);
             for (int i = 0; i < _configurationDim; i++)

@@ -360,12 +360,8 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
         var params_ = _policyNetwork.GetParameters();
         var grads = _policyNetwork.GetParameterGradients();
 
-        for (int i = 0; i < params_.Length; i++)
-        {
-            var update = NumOps.Multiply(LearningRate, grads[i]);
-            params_[i] = NumOps.Subtract(params_[i], update);
-        }
-
+        // Vectorized SGD
+        params_ = (Vector<T>)Engine.Subtract(params_, Engine.Multiply(grads, LearningRate));
         _policyNetwork.UpdateParameters(params_);
     }
 

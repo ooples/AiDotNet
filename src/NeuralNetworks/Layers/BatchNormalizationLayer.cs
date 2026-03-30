@@ -969,7 +969,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Production-grade: Use Vector.Concatenate instead of manual loops
-        return Vector<T>.Concatenate(_gamma.ToVector(), _beta.ToVector());
+        return Vector<T>.Concatenate(Vector<T>.FromMemory(_gamma.Data), Vector<T>.FromMemory(_beta.Data));
     }
 
     /// <summary>
@@ -1147,7 +1147,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     {
         if (_gammaGradient == null || _betaGradient == null)
             return new Vector<T>(ParameterCount);
-        return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
+        return Vector<T>.Concatenate((_gammaGradient is not null ? Vector<T>.FromMemory(_gammaGradient.Data) : new Vector<T>(0)), (_betaGradient is not null ? Vector<T>.FromMemory(_betaGradient.Data) : new Vector<T>(0)));
     }
 
     public override void ClearGradients()

@@ -326,51 +326,24 @@ public class InteractingLayer<T> : LayerBase<T>
                 : NumOps.Zero;
         }
 
-        // Residual backward
+        // Residual backward — vectorized with Engine.TensorMatMul
         if (_useResidual)
         {
             if (_residualWeights != null && _residualWeightsGrad != null)
             {
-                for (int b = 0; b < batchSize; b++)
-                {
-                    for (int f = 0; f < numFeatures; f++)
-                    {
-                        for (int o = 0; o < embDim; o++)
-                        {
-                            int outIdx = b * numFeatures * embDim + f * embDim + o;
-                            var gradVal = gradPreActivation[outIdx];
-                            for (int i = 0; i < embDim; i++)
-                            {
-                                int wIdx = i * embDim + o;
-                                int inIdx = b * numFeatures * embDim + f * embDim + i;
-                                _residualWeightsGrad[wIdx] = NumOps.Add(
-                                    _residualWeightsGrad[wIdx],
-                                    NumOps.Multiply(_inputCache[inIdx], gradVal));
-                            }
-                        }
-                    }
-                }
+                // Flatten to 2D for matmul: [batchSize*numFeatures, embDim]
+                var inputFlat = _inputCache.Reshape(batchSize * numFeatures, embDim);
+                var gradFlat = gradPreActivation.Reshape(batchSize * numFeatures, embDim);
 
-                for (int b = 0; b < batchSize; b++)
-                {
-                    for (int f = 0; f < numFeatures; f++)
-                    {
-                        for (int i = 0; i < embDim; i++)
-                        {
-                            var sum = NumOps.Zero;
-                            for (int o = 0; o < embDim; o++)
-                            {
-                                int outIdx = b * numFeatures * embDim + f * embDim + o;
-                                int wIdx = i * embDim + o;
-                                sum = NumOps.Add(sum, NumOps.Multiply(
-                                    gradPreActivation[outIdx],
-                                    _residualWeights[wIdx]));
-                            }
-                            int inIdx = b * numFeatures * embDim + f * embDim + i;
-                            inputGrad[inIdx] = NumOps.Add(inputGrad[inIdx], sum);
-                        }
-                    }
-                }
+                // dW_residual = input^T @ grad: [embDim, BN] x [BN, embDim] = [embDim, embDim]
+                var inputFlatT = inputFlat.Transpose(new[] { 1, 0 });
+                _residualWeightsGrad = Engine.TensorMatMul(inputFlatT, gradFlat);
+
+                // dInput += grad @ W_residual^T: [BN, embDim] x [embDim, embDim] = [BN, embDim]
+                var residualWT = _residualWeights.Transpose(new[] { 1, 0 });
+                var dResInput = Engine.TensorMatMul(gradFlat, residualWT)
+                    .Reshape(batchSize, numFeatures, embDim);
+                inputGrad = Engine.TensorAdd(inputGrad, dResInput);
             }
             else
             {

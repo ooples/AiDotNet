@@ -1,3 +1,4 @@
+using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -466,39 +467,79 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         var parameters = GetParameters();
         var gradients = new Vector<T>(parameters.Length);
 
-        // Numerical gradient computation using finite differences
-        var epsilon = NumOps.FromDouble(1e-5);
-        var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
-
-        for (int i = 0; i < parameters.Length; i++)
+        // Autodiff via GradientTape — build computation graph, compute loss, backprop
+        try
         {
-            // Compute f(x + epsilon)
-            var paramsPlus = new Vector<T>(parameters.Length);
-            for (int j = 0; j < parameters.Length; j++)
-            {
-                paramsPlus[j] = j == i ? NumOps.Add(parameters[j], epsilon) : parameters[j];
-            }
-            SetParameters(paramsPlus);
-            var outputPlus = Predict(input);
-            var lossPlus = effectiveLossFunction.CalculateLoss(outputPlus.ToVector(), target.ToVector());
+            using var tape = new GradientTape<T>();
 
-            // Compute f(x - epsilon)
-            var paramsMinus = new Vector<T>(parameters.Length);
-            for (int j = 0; j < parameters.Length; j++)
-            {
-                paramsMinus[j] = j == i ? NumOps.Subtract(parameters[j], epsilon) : parameters[j];
-            }
-            SetParameters(paramsMinus);
-            var outputMinus = Predict(input);
-            var lossMinus = effectiveLossFunction.CalculateLoss(outputMinus.ToVector(), target.ToVector());
+            var inputNode = TensorOperations<T>.Variable(input, "vae_input", requiresGradient: false);
+            var outputNode = ExportComputationGraph([inputNode]);
 
-            // Gradient = (f(x+eps) - f(x-eps)) / (2*eps)
-            gradients[i] = NumOps.Divide(NumOps.Subtract(lossPlus, lossMinus), twoEpsilon);
+            var targetNode = TensorOperations<T>.Variable(target, "vae_target", requiresGradient: false);
+            var diffNode = TensorOperations<T>.Subtract(outputNode, targetNode);
+            var squaredNode = TensorOperations<T>.ElementwiseMultiply(diffNode, diffNode);
+            var lossNode = TensorOperations<T>.Mean(squaredNode);
+
+            var gradientDict = tape.Gradient(lossNode);
+
+            int offset = 0;
+            foreach (var kvp in gradientDict)
+            {
+                if (kvp.Key.RequiresGradient && kvp.Value is not null)
+                {
+                    var grad = kvp.Value;
+                    int copyLen = Math.Min(grad.Length, parameters.Length - offset);
+                    for (int i = 0; i < copyLen; i++)
+                        gradients[offset + i] = grad[i];
+                    offset += copyLen;
+                }
+            }
+
+            bool hasValidGradients = false;
+            for (int i = 0; i < Math.Min(gradients.Length, 100); i++)
+            {
+                if (!NumOps.Equals(gradients[i], NumOps.Zero))
+                {
+                    hasValidGradients = true;
+                    break;
+                }
+            }
+
+            if (hasValidGradients)
+                return gradients;
+        }
+        catch (Exception ex)
+        {
+            // Fall through to SPSA when autodiff graph construction fails
+            System.Diagnostics.Trace.TraceWarning($"VAE autodiff gradient failed, falling back to SPSA: {ex.Message}");
         }
 
-        // Restore original parameters
-        SetParameters(parameters);
+        // Fallback: SPSA (6 forward passes total vs 2N for finite differences)
+        var epsilon = NumOps.FromDouble(1e-3);
+        var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
+        var rng = RandomGenerator;
+        var delta = new Vector<T>(parameters.Length);
 
+        for (int s = 0; s < 3; s++)
+        {
+            for (int i = 0; i < parameters.Length; i++)
+                delta[i] = rng.NextDouble() < 0.5 ? NumOps.FromDouble(-1.0) : NumOps.FromDouble(1.0);
+
+            var eDelta = Engine.Multiply(delta, epsilon);
+            SetParameters(Engine.Add(parameters, eDelta));
+            var lossPlus = effectiveLossFunction.CalculateLoss(Predict(input).ToVector(), target.ToVector());
+
+            SetParameters(Engine.Subtract(parameters, eDelta));
+            var lossMinus = effectiveLossFunction.CalculateLoss(Predict(input).ToVector(), target.ToVector());
+
+            var lossDiff = NumOps.Subtract(lossPlus, lossMinus);
+            var scaledDelta = Engine.Multiply(delta, twoEpsilon);
+            gradients = Engine.Add(gradients, Engine.Divide(
+                Engine.Fill(parameters.Length, lossDiff), scaledDelta));
+        }
+
+        gradients = Engine.Multiply(gradients, NumOps.FromDouble(1.0 / 3.0));
+        SetParameters(parameters);
         return gradients;
     }
 
@@ -506,13 +547,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         var parameters = GetParameters();
-
-        for (int i = 0; i < parameters.Length && i < gradients.Length; i++)
-        {
-            var update = NumOps.Multiply(gradients[i], learningRate);
-            parameters[i] = NumOps.Subtract(parameters[i], update);
-        }
-
+        parameters = Engine.Subtract(parameters, Engine.Multiply(gradients, learningRate));
         SetParameters(parameters);
     }
 
