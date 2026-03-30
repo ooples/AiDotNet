@@ -8,7 +8,7 @@ on:
 
 concurrency:
   group: "pages"
-  cancel-in-progress: false
+  cancel-in-progress: true  # Allow rebuild cancellation
 
 permissions:
   contents: read
