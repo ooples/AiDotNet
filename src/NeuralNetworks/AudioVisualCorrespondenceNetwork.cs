@@ -1011,7 +1011,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
         // VGG-style encoder layers (16 layers: 4 blocks x 4 layers each)
         _audioEncoderLayers = new List<ILayer<T>>();
-        int encoderLayerCount = Math.Min(8, Layers.Count - 2); // 4 blocks x 2 Dense layers (no BN)
+        int encoderLayerCount = Math.Min(4, Layers.Count - 2); // 4 blocks x 1 Dense layer each
         for (int i = 0; i < encoderLayerCount; i++)
             _audioEncoderLayers.Add(Layers[idx++]);
 

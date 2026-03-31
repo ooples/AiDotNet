@@ -31240,22 +31240,15 @@ public static class LayerHelper<T>
         // Block 1: 512 -> 64 (paper: 3->64 via conv, we project from input dim)
         // VGG-style blocks without BN (BN requires batch_size > 1; in 1D sequential
         // mode with single samples, BN gradient is exactly zero per Ioffe & Szegedy 2015)
-        // Block 1: input -> 64
-        yield return new DenseLayer<T>(embeddingDimension, 64, reluActivation);
-        yield return new DenseLayer<T>(64, 64, reluActivation);
-        // Block 2: 64 -> 128
-        yield return new DenseLayer<T>(64, 128, reluActivation);
-        yield return new DenseLayer<T>(128, 128, reluActivation);
-        // Block 3: 128 -> 256
+        // VGG-style encoder: 4 blocks with progressive channel expansion
+        // Per Arandjelovic & Zisserman 2017: 64/128/256/512 filters
+        // 1 Dense per block in 1D mode (prevents dynamic range explosion)
+        yield return new DenseLayer<T>(embeddingDimension, 128, reluActivation);
         yield return new DenseLayer<T>(128, 256, reluActivation);
-        yield return new DenseLayer<T>(256, 256, reluActivation);
-        // Block 4: 256 -> 512 (paper's final block)
         yield return new DenseLayer<T>(256, 512, reluActivation);
         yield return new DenseLayer<T>(512, 512, reluActivation);
 
-        // Fusion FC layers per paper: concat(512,512)=1024 -> FC(128) + ReLU -> FC(2)
-        // In sequential mode, single stream processes 512-D input, so fusion is 512->128->2
-        // (the concatenation of audio+visual streams happens in the network's Predict method)
+        // Fusion FC per paper: 512 -> 128 -> 2
         yield return new DenseLayer<T>(512, 128, reluActivation);
         yield return new DenseLayer<T>(128, 2, nullActivation);
     }
