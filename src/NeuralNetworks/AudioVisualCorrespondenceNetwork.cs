@@ -1213,36 +1213,20 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Set parameters from Layers directly (matches GetParameters order, no duplicates)
         var offset = 0;
-
-        void SetLayerParams(ILayer<T> layer)
+        foreach (var layer in Layers)
         {
             var count = layer.ParameterCount;
             var p = new Vector<T>(count);
             for (int i = 0; i < count; i++)
             {
                 if (offset + i < parameters.Length)
-                {
                     p[i] = parameters[offset + i];
-                }
             }
             layer.SetParameters(p);
             offset += count;
         }
-
-        SetLayerParams(AudioInputProjection);
-        foreach (var layer in AudioEncoderLayers) SetLayerParams(layer);
-        SetLayerParams(AudioOutputProjection);
-
-        SetLayerParams(VisualInputProjection);
-        foreach (var layer in VisualEncoderLayers) SetLayerParams(layer);
-        SetLayerParams(VisualOutputProjection);
-
-        foreach (var layer in CrossModalAttentionLayers) SetLayerParams(layer);
-        SetLayerParams(LocalizationHead);
-        SetLayerParams(SyncHead);
-        SetLayerParams(SceneClassificationHead);
-        SetLayerParams(SeparationMaskPredictor);
     }
 
     /// <inheritdoc/>

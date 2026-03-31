@@ -31189,7 +31189,7 @@ public static class LayerHelper<T>
         int numCategories = 35)
     {
         IActivationFunction<T>? nullActivation = null;
-        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        var reluActivation = (IActivationFunction<T>)new LeakyReLUActivation<T>();
 
         // Audio feature encoder (paper: VGG features -> LSTM -> 256-D)
         yield return new DenseLayer<T>(inputSize, embeddingDimension, reluActivation);
@@ -31232,7 +31232,8 @@ public static class LayerHelper<T>
         // Per Arandjelovic & Zisserman 2017: VGG-style encoder producing 512-D embedding.
         // In sequential/1D mode, we use Dense+BN+ReLU blocks matching the paper's
         // [Conv-BN-ReLU, Conv-BN-ReLU, Pool] x 4 pattern with progressive channel expansion.
-        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
+        // Use LeakyReLU to prevent dead neuron problem with constant inputs (Maas et al. 2013)
+        var reluActivation = (IActivationFunction<T>)new LeakyReLUActivation<T>();
         IActivationFunction<T>? nullActivation = null;
 
         // Audio encoder: 4 blocks emulating VGG conv blocks (Dense replaces Conv for 1D input)
