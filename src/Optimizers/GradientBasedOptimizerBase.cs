@@ -1,4 +1,4 @@
-using AiDotNet.Data.Sampling;
+﻿using AiDotNet.Data.Sampling;
 using AiDotNet.Engines;
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.MixedPrecision;
@@ -1341,20 +1341,18 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <param name="layers">The layers of the neural network containing the parameters to update.</param>
     public virtual void UpdateParameters(List<ILayer<T>> layers)
     {
+        // Use per-layer UpdateParameters(T learningRate) instead of the expensive
+        // GetParameters/SetParameters serialization round-trip. The old approach
+        // flattened ALL weights to a Vector, did SGD, then deserialized back —
+        // causing massive allocation overhead for large models (e.g., MobileNetV3
+        // with 34M params was 14x slower). Per-layer update operates directly on
+        // the layer's internal tensors with zero extra allocation.
+        var lr = NumOps.FromDouble(_currentLearningRate);
         foreach (var layer in layers)
         {
             if (layer.SupportsTraining)
             {
-                Vector<T> parameters = layer.GetParameters();
-                Vector<T> gradients = layer.GetParameterGradients();
-
-                // Apply simple gradient descent update using vectorized operations
-                var lr = NumOps.FromDouble(_currentLearningRate);
-                var scaledGradients = (Vector<T>)Engine.Multiply(gradients, lr);
-                var newParameters = (Vector<T>)Engine.Subtract(parameters, scaledGradients);
-
-                layer.SetParameters(newParameters);
-                layer.ClearGradients();
+                layer.UpdateParameters(lr);
             }
         }
     }

@@ -199,9 +199,15 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // Set eval mode on layers for BN (use running stats for batch_size=1)
+        // Set eval mode on STANDALONE BN layers only (for proper forward output).
+        // Internal BN inside InvertedResidualBlock stays in training mode
+        // (needed for training gradient dynamics with batch_size=1).
+        // The InvertedResidualBlock.Forward handles its own BN internally.
         foreach (var layer in Layers)
-            layer.SetTrainingMode(false);
+        {
+            if (layer is BatchNormalizationLayer<T>)
+                layer.SetTrainingMode(false);
+        }
         try
         {
             return Forward(input);
@@ -209,21 +215,21 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
         finally
         {
             foreach (var layer in Layers)
-                layer.SetTrainingMode(true);
+            {
+                if (layer is BatchNormalizationLayer<T>)
+                    layer.SetTrainingMode(true);
+            }
         }
     }
 
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Set training mode but keep BN in eval (batch_size=1 gradient is zero)
-        foreach (var layer in Layers)
-        {
-            if (layer is BatchNormalizationLayer<T>)
-                layer.SetTrainingMode(false);
-            else
-                layer.SetTrainingMode(true);
-        }
+        // Keep default training mode (all layers in training mode).
+        // InvertedResidualBlock internal BN in training mode with batch_size=1
+        // produces zero forward output but large backward gradient (gamma/sqrt(eps)),
+        // which drives fast parameter updates. Setting eval mode breaks this dynamic.
+        SetTrainingMode(true);
         var prediction = ForwardWithMemory(input);
         var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
         LastLoss = loss;

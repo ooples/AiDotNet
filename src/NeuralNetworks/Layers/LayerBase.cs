@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
@@ -47,6 +47,42 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// Gets the global execution engine for vector operations.
     /// </summary>
     protected IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>
+    /// Initializes a tensor with He/Kaiming uniform initialization using Engine vectorized operations.
+    /// Much faster than per-element scalar loops (uses Engine.TensorRandomUniformRange).
+    /// Per He et al. 2015: weights ~ U(-scale, scale) where scale = sqrt(2 / fan_in).
+    /// </summary>
+    /// <param name="shape">Shape of the tensor to initialize.</param>
+    /// <param name="fanIn">Number of input connections (e.g., inputChannels * kernelH * kernelW).</param>
+    /// <returns>Initialized tensor.</returns>
+    protected Tensor<T> HeInitialize(int[] shape, int fanIn)
+    {
+        T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(
+            NumOps.FromDouble(2.0), NumOps.FromDouble(fanIn)));
+        return Engine.TensorRandomUniformRange<T>(shape, NumOps.Negate(scale), scale);
+    }
+
+    /// <summary>
+    /// Initializes a tensor with Xavier/Glorot uniform initialization using Engine vectorized operations.
+    /// Per Glorot & Bengio 2010: weights ~ U(-scale, scale) where scale = sqrt(6 / (fan_in + fan_out)).
+    /// </summary>
+    protected Tensor<T> XavierInitialize(int[] shape, int fanIn, int fanOut)
+    {
+        T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(
+            NumOps.FromDouble(6.0), NumOps.FromDouble(fanIn + fanOut)));
+        return Engine.TensorRandomUniformRange<T>(shape, NumOps.Negate(scale), scale);
+    }
+
+    /// <summary>
+    /// Creates a zero-initialized tensor using Engine for potential GPU acceleration.
+    /// </summary>
+    protected Tensor<T> ZeroInitialize(int[] shape)
+    {
+        var tensor = new Tensor<T>(shape);
+        Engine.TensorFill(tensor, NumOps.Zero);
+        return tensor;
+    }
 
     /// <summary>
     /// Gets the element-wise activation function for this layer, if specified.
