@@ -113,7 +113,22 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
+        // Enable deterministic BLAS (single-threaded GEMM) to ensure bitwise-identical
+        // forward pass results across calls. Multi-threaded MKL/OpenBLAS DGEMM produces
+        // ULP-level non-determinism from parallel reduction ordering.
+        TrySetDeterministicBlas();
+
         InitializeLayers();
+    }
+
+    private static bool _determinismSet;
+    private static void TrySetDeterministicBlas()
+    {
+        if (_determinismSet) return;
+        _determinismSet = true;
+        // Force single-threaded BLAS (MKL/OpenBLAS) for bitwise-deterministic GEMM.
+        // InternalsVisibleTo allows direct access to Tensors internals.
+        AiDotNet.Tensors.Helpers.BlasProvider.SetDeterministicMode(true);
     }
 
     /// <summary>
@@ -165,6 +180,15 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultMobileNetV3Layers(Architecture, _configuration));
         }
 
+        // Set eval mode: BN with constant spatial input in training mode normalizes to zero
+        // (variance=0), destroying information. Eval mode uses running stats which preserves input.
+        SetAllLayersEvalMode();
+    }
+
+    private void SetAllLayersEvalMode()
+    {
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(false);
     }
 
     /// <summary>
@@ -344,6 +368,14 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
             _configuration.InputChannels);
 
         return new MobileNetV3Network<T>(Architecture, config, _optimizer, _lossFunction);
+    }
+
+    /// <inheritdoc />
+    public override void Deserialize(byte[] data)
+    {
+        base.Deserialize(data);
+        // Restore eval mode after deserialization (training/eval state is not serialized).
+        SetAllLayersEvalMode();
     }
 
     /// <inheritdoc />
