@@ -59,6 +59,11 @@ public class PoissonRegression<T> : RegressionBase<T>
     private readonly PoissonRegressionOptions<T> _options;
 
     /// <summary>
+    /// Minimum value for numerical stability guards to prevent division by zero.
+    /// </summary>
+    private const double MinSafeValue = 1e-10;
+
+    /// <summary>
     /// Shift applied to y to make it positive (0 if y was already positive).
     /// </summary>
     private double _yShift;
@@ -139,7 +144,7 @@ public class PoissonRegression<T> : RegressionBase<T>
         double meanY = 0;
         for (int i = 0; i < y.Length; i++) meanY += NumOps.ToDouble(y[i]);
         meanY /= y.Length;
-        Intercept = NumOps.FromDouble(Math.Log(Math.Max(meanY, 1e-10)));
+        Intercept = NumOps.FromDouble(Math.Log(Math.Max(meanY, MinSafeValue)));
 
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
 
@@ -156,7 +161,7 @@ public class PoissonRegression<T> : RegressionBase<T>
 
             // Add ridge regularization to ensure numerical stability
             // This adds a small value to the diagonal to prevent singularity
-            var minRegularization = 1e-10;
+            var minRegularization = MinSafeValue;
             var userStrength = Regularization?.GetOptions().Strength ?? 0.0;
             var effectiveStrength = NumOps.FromDouble(Math.Max(minRegularization, userStrength));
             for (int i = 0; i < xTwx.Rows; i++)
@@ -253,8 +258,18 @@ public class PoissonRegression<T> : RegressionBase<T>
     /// </remarks>
     private static Vector<T> ComputeWorkingResponse(Matrix<T> x, Vector<T> y, Vector<T> mu, Vector<T> coefficients)
     {
+        var ops = MathHelper.GetNumericOperations<T>();
         Vector<T> eta = x.Multiply(coefficients);
-        return eta.Add(y.Subtract(mu).PointwiseDivide(mu));
+        // Guard against near-zero mu to prevent division by zero (NaN poisoning)
+        var safeRatio = new Vector<T>(y.Length);
+        for (int i = 0; i < y.Length; i++)
+        {
+            double muVal = ops.ToDouble(mu[i]);
+            double yVal = ops.ToDouble(y[i]);
+            double safeMu = Math.Max(muVal, MinSafeValue);
+            safeRatio[i] = ops.FromDouble((yVal - safeMu) / safeMu);
+        }
+        return eta.Add(safeRatio);
     }
 
     /// <summary>

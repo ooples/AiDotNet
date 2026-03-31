@@ -67,6 +67,21 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     private readonly LocallyWeightedRegressionOptions _options;
 
     /// <summary>
+    /// Tolerance below which total kernel weight is treated as zero (no neighbors in bandwidth).
+    /// </summary>
+    private const double ZeroWeightTolerance = 1e-15;
+
+    /// <summary>
+    /// Relative scale factor for the adaptive ridge penalty (fraction of mean diagonal magnitude).
+    /// </summary>
+    private const double StabilityStrengthScale = 1e-6;
+
+    /// <summary>
+    /// Absolute floor for the ridge penalty when diagonal magnitude is near zero.
+    /// </summary>
+    private const double MinimumStabilityStrength = 1e-6;
+
+    /// <summary>
     /// Matrix containing the feature vectors of the training samples.
     /// </summary>
     private Matrix<T> _xTrain;
@@ -263,6 +278,22 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         // Compute weights for each training point
         var weights = ComputeWeights(input);
 
+        // Fail fast if the model hasn't been trained yet
+        if (_xTrain.Rows == 0 || _yTrain.Length == 0)
+        {
+            throw new InvalidOperationException("Call Train() before Predict().");
+        }
+
+        // If all weights are zero (query point is outside bandwidth of all training data),
+        // fall back to the global mean of y to avoid NaN from a zero-weight solve.
+        double totalWeight = 0;
+        for (int i = 0; i < weights.Length; i++)
+            totalWeight += NumOps.ToDouble(weights[i]);
+        if (totalWeight < ZeroWeightTolerance)
+        {
+            return _yTrain.Mean();
+        }
+
         // Create the weighted design matrix and target vector
         // For weighted least squares, we multiply each row of X by its corresponding weight
         // This is equivalent to W^0.5 * X where W is the diagonal weight matrix
@@ -275,16 +306,18 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         // Solve the weighted least squares problem
         var xTx = weightedX.Transpose().Multiply(weightedX);
 
-        // Add ridge regularization penalty to ensure numerical stability
+        // Add ridge regularization penalty to ensure numerical stability.
         // The tricube kernel can produce many zero weights, making X^T*W*X nearly singular.
-        // We always add a minimum regularization (1e-10) to ensure the matrix is invertible,
-        // plus any user-specified regularization strength.
-        var minRegularization = 1e-10;
-        var userStrength = Regularization?.GetOptions().Strength ?? 0.0;
-        var effectiveStrength = NumOps.FromDouble(Math.Max(minRegularization, userStrength));
+        // Scale regularization relative to diagonal magnitude.
+        double diagMean = 0;
+        for (int i = 0; i < xTx.Rows; i++)
+            diagMean += Math.Abs(NumOps.ToDouble(xTx[i, i]));
+        diagMean = xTx.Rows > 0 ? diagMean / xTx.Rows : 1.0;
+        var stabilityStrength = NumOps.FromDouble(
+            Math.Max(diagMean * StabilityStrengthScale, MinimumStabilityStrength));
         for (int i = 0; i < xTx.Rows; i++)
         {
-            xTx[i, i] = NumOps.Add(xTx[i, i], effectiveStrength);
+            xTx[i, i] = NumOps.Add(xTx[i, i], stabilityStrength);
         }
 
         var xTy = weightedX.Transpose().Multiply(weightedY);
