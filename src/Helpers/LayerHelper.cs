@@ -1,4 +1,4 @@
-using AiDotNet.Diffusion.VAE;
+﻿using AiDotNet.Diffusion.VAE;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Layers.SSM;
 using AiDotNet.PhysicsInformed.NeuralOperators;
@@ -31231,11 +31231,12 @@ public static class LayerHelper<T>
             yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, numAttentionHeads, geluActivation);
         }
 
-        // Task heads (chained sequentially with compatible dimensions)
-        yield return new DenseLayer<T>(embeddingDimension, 1, nullActivation); // localization
-        yield return new DenseLayer<T>(1, 1, nullActivation); // sync
-        yield return new DenseLayer<T>(1, 256, nullActivation); // scene classification
-        yield return new DenseLayer<T>(256, 128, nullActivation); // separation mask
+        // Correspondence output head: single projection from embedding to output.
+        // Per Arandjelovic & Zisserman 2017 / Owens & Efros 2018, the output head
+        // is a single linear projection from the fused representation.
+        // The previous chained 512->1->1->256->128 architecture created a bottleneck
+        // at dimension 1 that killed gradient flow and information.
+        yield return new DenseLayer<T>(embeddingDimension, 128, nullActivation);
     }
 
     /// <summary>
