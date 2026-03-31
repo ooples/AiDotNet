@@ -4509,34 +4509,60 @@ public static class LayerHelper<T>
         int currentHeight = configuration.InputHeight;
         int currentWidth = configuration.InputWidth;
         var blockLayers = configuration.GetBlockLayers();
+        bool isSmallInput = currentHeight <= 64 && currentWidth <= 64;
 
-        // Stem: 7x7 conv, stride 2, padding 3
-        int stemChannels = 64;
-        yield return new ConvolutionalLayer<T>(
-            inputDepth: configuration.InputChannels,
-            outputDepth: stemChannels,
-            kernelSize: 7,
-            inputHeight: currentHeight,
-            inputWidth: currentWidth,
-            stride: 2,
-            padding: 3,
-            activationFunction: new IdentityActivation<T>());
+        int stemChannels;
+        if (isSmallInput)
+        {
+            // CIFAR variant per Huang et al. 2017: 3x3 conv stride 1, 16 filters, NO MaxPool
+            stemChannels = 2 * configuration.GrowthRate; // Paper uses 2k or 16
+            if (stemChannels < 16) stemChannels = 16;
+            yield return new ConvolutionalLayer<T>(
+                inputDepth: configuration.InputChannels,
+                outputDepth: stemChannels,
+                kernelSize: 3,
+                inputHeight: currentHeight,
+                inputWidth: currentWidth,
+                stride: 1,
+                padding: 1,
+                activationFunction: new IdentityActivation<T>());
+            // No spatial reduction for CIFAR stem (stride 1, padding 1 preserves dims)
 
-        currentHeight = (currentHeight + 2 * 3 - 7) / 2 + 1;
-        currentWidth = (currentWidth + 2 * 3 - 7) / 2 + 1;
+            yield return new BatchNormalizationLayer<T>(stemChannels);
+            yield return new ActivationLayer<T>([stemChannels, currentHeight, currentWidth],
+                activationFunction: new ReLUActivation<T>());
+            // NO MaxPool for CIFAR per paper
+        }
+        else
+        {
+            // ImageNet variant per Huang et al. 2017: 7x7 conv stride 2, 64 filters, then MaxPool
+            stemChannels = 64;
+            yield return new ConvolutionalLayer<T>(
+                inputDepth: configuration.InputChannels,
+                outputDepth: stemChannels,
+                kernelSize: 7,
+                inputHeight: currentHeight,
+                inputWidth: currentWidth,
+                stride: 2,
+                padding: 3,
+                activationFunction: new IdentityActivation<T>());
 
-        yield return new BatchNormalizationLayer<T>(stemChannels);
-        yield return new ActivationLayer<T>([stemChannels, currentHeight, currentWidth],
-            activationFunction: new ReLUActivation<T>());
+            currentHeight = (currentHeight + 2 * 3 - 7) / 2 + 1;
+            currentWidth = (currentWidth + 2 * 3 - 7) / 2 + 1;
 
-        // MaxPool 3x3, stride 2, padding 1
-        yield return new MaxPoolingLayer<T>(
-            inputShape: [stemChannels, currentHeight, currentWidth],
-            poolSize: 3,
-            stride: 2);
+            yield return new BatchNormalizationLayer<T>(stemChannels);
+            yield return new ActivationLayer<T>([stemChannels, currentHeight, currentWidth],
+                activationFunction: new ReLUActivation<T>());
 
-        currentHeight = (currentHeight + 2 * 1 - 3) / 2 + 1;
-        currentWidth = (currentWidth + 2 * 1 - 3) / 2 + 1;
+            // MaxPool 3x3, stride 2
+            yield return new MaxPoolingLayer<T>(
+                inputShape: [stemChannels, currentHeight, currentWidth],
+                poolSize: 3,
+                stride: 2);
+
+            currentHeight = (currentHeight - 3) / 2 + 1;
+            currentWidth = (currentWidth - 3) / 2 + 1;
+        }
 
         int currentChannels = stemChannels;
 

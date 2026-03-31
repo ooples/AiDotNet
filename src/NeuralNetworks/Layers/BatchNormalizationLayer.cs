@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -417,6 +417,11 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         {
             // Inference: Use running statistics
             // output = gamma * (input - runningMean) / sqrt(runningVar + epsilon) + beta
+
+            // Cache running stats for backward pass (needed when BN is in eval mode during training,
+            // e.g., batch_size=1 where training-mode BN gradient is zero)
+            _lastMean = _runningMean;
+            _lastVariance = _runningVariance;
 
             // Calculate scale and shift terms
             var epsilonVec = Tensor<T>.CreateDefault(_runningVariance.Shape.ToArray(), _epsilon);

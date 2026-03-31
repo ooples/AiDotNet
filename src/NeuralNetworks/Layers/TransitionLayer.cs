@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -187,11 +187,24 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         _convOut = _conv.Forward(_reluOut);
 
         // Handle batched input (4D) - use Engine.AvgPool2D directly
-        // AveragePoolingLayer expects 3D input, so we handle 4D separately
-        // [B, C, H, W] uses Engine directly, [C, H, W] uses the AveragePoolingLayer
-        Tensor<T> output = _convOut.Shape.Length == 4
-            ? Engine.AvgPool2D(_convOut, poolSize: 2, stride: 2, padding: 0)
-            : _pool.Forward(_convOut);
+        // Skip pooling when spatial dims < pool size (prevents 0-sized output)
+        // Per Huang et al. 2017: for small inputs, spatial dims may reach 1x1 before
+        // all transitions are applied
+        int spatialH = _convOut.Shape[_convOut.Shape.Length - 2];
+        int spatialW = _convOut.Shape[_convOut.Shape.Length - 1];
+        Tensor<T> output;
+        if (spatialH < 2 || spatialW < 2)
+        {
+            output = _convOut; // Skip pooling at minimum spatial dims
+        }
+        else if (_convOut.Shape.Length == 4)
+        {
+            output = Engine.AvgPool2D(_convOut, poolSize: 2, stride: 2, padding: 0);
+        }
+        else
+        {
+            output = _pool.Forward(_convOut);
+        }
 
         // Restore original batch dimensions for any-rank support
         if (_originalInputShape != null && _originalInputShape.Length > 4)

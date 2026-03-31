@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
@@ -263,24 +263,53 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        return Forward(input);
+        // Set eval mode on layers for BN (use running stats, not batch stats)
+        // Per Ioffe & Szegedy 2015: BN with batch_size=1 normalizes variance to 0
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(false);
+        try
+        {
+            return Forward(input);
+        }
+        finally
+        {
+            foreach (var layer in Layers)
+                layer.SetTrainingMode(true);
+        }
     }
 
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
+        // Keep BN in eval mode (batch_size=1 makes BN gradient zero per Ioffe & Szegedy 2015)
+        // Other layers get training mode for dropout/etc.
+        foreach (var layer in Layers)
+        {
+            if (layer is BatchNormalizationLayer<T>)
+                layer.SetTrainingMode(false);
+            else
+                layer.SetTrainingMode(true);
+        }
         var prediction = ForwardWithMemory(input);
         var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
         LastLoss = loss;
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
 
-        // Backpropagate with gradient clipping to prevent explosion in deep conv networks
-        Backpropagate(new Tensor<T>(prediction.Shape.ToArray(), outputGradient));
+        // Gradient clipping per Huang et al. 2017 for stability in deep networks
+        var gradTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
+        T gradNorm = NumOps.Sqrt(Engine.DotProduct(outputGradient, outputGradient));
+        double gradNormVal = NumOps.ToDouble(gradNorm);
+        if (gradNormVal > 1.0)
+        {
+            T scale = NumOps.FromDouble(1.0 / gradNormVal);
+            gradTensor = Engine.TensorMultiplyScalar(gradTensor, scale);
+        }
+        Backpropagate(gradTensor);
 
         // Update parameters with Adam optimizer
-        T lr = NumOps.FromDouble(0.0001); // Lower LR per Huang et al. 2017 for stability
+        T lr = NumOps.FromDouble(0.001); // LR for CIFAR-variant with eval-mode BN
         foreach (var layer in Layers)
         {
             layer.UpdateParameters(lr);
@@ -365,7 +394,8 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
             _configuration.InputWidth,
             _configuration.InputChannels,
             _configuration.GrowthRate,
-            _configuration.CompressionFactor);
+            _configuration.CompressionFactor,
+            _configuration.GetBlockLayers());
 
         return new DenseNetNetwork<T>(Architecture, config, _optimizer, _lossFunction);
     }
