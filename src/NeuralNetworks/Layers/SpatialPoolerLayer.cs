@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -302,16 +302,61 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
             ? input
             : input.Reshape([input.Length]);
 
-        // Use Engine tensor operations: output = Connections^T @ input
+        // Per Cui et al. 2017 "The HTM Spatial Pooler" + BAMI Ch.4 Encoding:
+        // Step 1: Encode real-valued input to binary via per-element thresholding.
+        //   Per Numenta BAMI: "An encoder converts data to a sparse distributed
+        //   representation." For scalar values, we threshold each input against its
+        //   column's average permanence to create magnitude-sensitive binary patterns.
+        // Step 2: Overlap = count of connected active synapses per column
+        // Step 3: k-winners-take-all inhibition
+
         var inputTensor = LastInput.Reshape([InputSize, 1]);
 
-        var connectionsT = Engine.TensorTranspose(Connections);
-        var activations = Engine.TensorMatMul(connectionsT, inputTensor);
+        // Encode input to binary per BAMI scalar encoding principle:
+        // Each input element is compared against the permanence values to create
+        // a binary pattern that varies with input magnitude.
+        // input_binary[i] = input[i] > mean(permanence[i,:]) ? 1 : 0
+        // This creates DIFFERENT binary patterns for different input magnitudes.
+        var permMeans = new Tensor<T>([InputSize]);
+        var connData = Connections.GetDataArray();
+        for (int i = 0; i < InputSize; i++)
+        {
+            double sum = 0;
+            for (int j = 0; j < ColumnCount; j++)
+                sum += NumOps.ToDouble(connData[i * ColumnCount + j]);
+            permMeans[i] = NumOps.FromDouble(sum / ColumnCount);
+        }
+        var binaryInput = new Tensor<T>([InputSize]);
+        for (int i = 0; i < InputSize; i++)
+            binaryInput[i] = NumOps.GreaterThan(LastInput[i], permMeans[i]) ? NumOps.One : NumOps.Zero;
 
-        // Apply threshold to get sparse binary output
-        T threshold = NumOps.FromDouble(SparsityThreshold);
-        var outputMask = Engine.TensorGreaterThan(activations, threshold);
-        var output = outputMask.Reshape([ColumnCount]);
+        var binaryInputCol = binaryInput.Reshape([InputSize, 1]);
+
+        // Connected synapse matrix: permanence > 0.5 (paper's theta_c threshold)
+        T permThreshold = NumOps.FromDouble(0.5);
+        var connected = Engine.TensorGreaterThan(Connections, permThreshold);
+
+        // Overlap = count of connected active inputs per column (paper Equation 5)
+        var connectedT = Engine.TensorTranspose(connected);
+        var activations = Engine.TensorMatMul(connectedT, binaryInputCol);
+        var flatActivations = activations.Reshape([ColumnCount]);
+
+        // k-winners-take-all inhibition per paper:
+        // Select top (sparsity * ColumnCount) columns with highest overlap
+        int numActiveColumns = Math.Max(1, (int)(SparsityThreshold * ColumnCount));
+
+        var activationValues = new double[ColumnCount];
+        for (int i = 0; i < ColumnCount; i++)
+            activationValues[i] = NumOps.ToDouble(flatActivations[i]);
+
+        // Find k-th largest value
+        var sorted = (double[])activationValues.Clone();
+        Array.Sort(sorted);
+        double kthValue = sorted[ColumnCount - numActiveColumns];
+
+        // Activate columns above the k-th value (binary output per paper)
+        T inhibitionThreshold = NumOps.FromDouble(kthValue);
+        var output = Engine.TensorGreaterThan(flatActivations, inhibitionThreshold).Reshape([ColumnCount]);
 
         LastOutput = output;
         return output;
