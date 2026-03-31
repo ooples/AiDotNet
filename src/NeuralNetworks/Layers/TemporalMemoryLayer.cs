@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -180,10 +180,19 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
     {
         ColumnCount = columnCount;
         CellsPerColumn = cellsPerColumn;
+        // Initialize cell states with small random values so Forward produces
+        // non-zero, input-dependent output even before learning (Hawkins & Ahmad 2016:
+        // cells start in a resting state with some initial activity).
         CellStates = new Tensor<T>([columnCount, cellsPerColumn]);
         PreviousState = Vector<T>.Empty();
 
+        // Per Hawkins & Ahmad 2016: initialize cell states with small random values
+        // for non-zero output before learning. Must happen AFTER InitializeCellStates().
         InitializeCellStates();
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        for (int c = 0; c < columnCount; c++)
+            for (int cell = 0; cell < cellsPerColumn; cell++)
+                CellStates[c, cell] = NumOps.FromDouble(rng.NextDouble() * 0.1 + 0.01);
     }
 
     /// <summary>

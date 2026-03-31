@@ -2402,9 +2402,15 @@ public static class LayerHelper<T>
         // Temporal Memory Layer
         yield return new TemporalMemoryLayer<T>(columnCount, cellsPerColumn);
 
-        // Output Layer
+        // Output Layer (supervised readout per Ahmad & Hawkins 2015)
         yield return new DenseLayer<T>(columnCount * cellsPerColumn, outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
-        yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
+
+        // Only add Softmax for multi-class classification with multiple outputs.
+        // Softmax on single output always returns 1.0, destroying gradient signal.
+        if (outputSize > 1 && architecture.TaskType != Enums.NeuralNetworkTaskType.Regression)
+        {
+            yield return new ActivationLayer<T>([outputSize], new SoftmaxActivation<T>() as IActivationFunction<T>);
+        }
     }
 
     /// <summary>
