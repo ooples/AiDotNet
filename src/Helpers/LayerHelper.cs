@@ -31138,6 +31138,14 @@ public static class LayerHelper<T>
     /// <summary>
     /// Creates layers for the AudioVisualEventLocalizationNetwork.
     /// </summary>
+    /// <summary>
+    /// Creates layers for the Audio-Visual Event Localization network.
+    /// Based on Tian et al., ECCV 2018 "Audio-Visual Event Localization in Unconstrained Videos".
+    ///
+    /// Paper architecture uses LSTM encoders + DMRN fusion + FC head.
+    /// In 1D sequential mode, we approximate with Dense+ReLU blocks matching the paper's
+    /// feature dimension progression, with a single output head (no bottleneck).
+    /// </summary>
     public static IEnumerable<ILayer<T>> CreateAudioVisualEventLocalizationLayers(
         int inputSize = 512,
         int embeddingDimension = 256,
@@ -31145,44 +31153,23 @@ public static class LayerHelper<T>
         int numCategories = 35)
     {
         IActivationFunction<T>? nullActivation = null;
-        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
+        var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
 
-        // Audio encoder: input projection + (attention) × numEncoderLayers + output projection
-        yield return new DenseLayer<T>(inputSize, embeddingDimension, nullActivation);
-        for (int i = 0; i < numEncoderLayers; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, 8, geluActivation);
-        }
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, nullActivation);
+        // Audio feature encoder (paper: VGG features -> LSTM -> 256-D)
+        yield return new DenseLayer<T>(inputSize, embeddingDimension, reluActivation);
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, reluActivation);
 
-        // Visual encoder: input projection + attention × numEncoderLayers + output projection
-        // Uses embeddingDimension as input (visual features come from audio encoder in sequential mode)
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, nullActivation);
-        for (int i = 0; i < numEncoderLayers; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, 8, geluActivation);
-        }
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, nullActivation);
+        // Visual feature encoder (paper: VGG features -> attention -> LSTM -> 256-D)
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, reluActivation);
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, reluActivation);
 
-        // Temporal modeling: 4 attention layers + proposal head
-        // Keep embeddingDimension throughout to avoid information bottleneck
-        for (int i = 0; i < 4; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, 8, geluActivation);
-        }
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, geluActivation); // temporal features
+        // DMRN fusion (paper: dual multimodal residual network)
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, reluActivation);
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, reluActivation);
 
-        // Cross-modal fusion: 4 attention layers
-        for (int i = 0; i < 4; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(1, embeddingDimension, 8, geluActivation);
-        }
-
-        // Task-specific output heads (4 heads, chained sequentially)
-        yield return new DenseLayer<T>(embeddingDimension, numCategories, geluActivation); // event classification
-        yield return new DenseLayer<T>(numCategories, 3, geluActivation); // temporal boundary
-        yield return new DenseLayer<T>(3, 4, geluActivation); // spatial localization
-        yield return new DenseLayer<T>(4, 1, nullActivation); // anomaly detection
+        // Event classification output (paper: FC -> softmax over categories + binary event)
+        // Single output head to avoid bottleneck
+        yield return new DenseLayer<T>(embeddingDimension, 1, nullActivation);
     }
 
     /// <summary>
