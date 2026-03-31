@@ -1341,12 +1341,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <param name="layers">The layers of the neural network containing the parameters to update.</param>
     public virtual void UpdateParameters(List<ILayer<T>> layers)
     {
-        // Use per-layer UpdateParameters(T learningRate) instead of the expensive
-        // GetParameters/SetParameters serialization round-trip. The old approach
-        // flattened ALL weights to a Vector, did SGD, then deserialized back —
-        // causing massive allocation overhead for large models (e.g., MobileNetV3
-        // with 34M params was 14x slower). Per-layer update operates directly on
-        // the layer's internal tensors with zero extra allocation.
+        // Use per-layer UpdateParameters(T learningRate) for direct tensor update
+        // (avoids GetParameters/SetParameters serialization overhead).
+        // The learning rate comes from the optimizer's configured value,
+        // which may be decayed by the learning rate scheduler.
         var lr = NumOps.FromDouble(_currentLearningRate);
         foreach (var layer in layers)
         {
@@ -1355,6 +1353,15 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 layer.UpdateParameters(lr);
             }
         }
+    }
+
+    /// <summary>
+    /// Gets the current learning rate as the generic type T.
+    /// Useful for models that need to pass the optimizer's LR to per-layer updates.
+    /// </summary>
+    public T GetCurrentLearningRateAsT()
+    {
+        return NumOps.FromDouble(_currentLearningRate);
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -1559,10 +1559,10 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
         else
         {
-            _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
-            _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
+            // SGD update using Engine tensor ops for SIMD acceleration
+            _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightsGradient, learningRate));
+            _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
 
-            // Notify engine that weights/biases have changed (for GPU cache invalidation)
             Engine.InvalidatePersistentTensor(_weights);
             Engine.InvalidatePersistentTensor(_biases);
         }

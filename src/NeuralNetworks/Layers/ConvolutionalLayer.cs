@@ -1517,7 +1517,7 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         }
         else
         {
-            // CPU Update using Engine tensor ops
+            // CPU SGD using Engine tensor ops for SIMD acceleration
             _kernels = Engine.TensorSubtract(_kernels, Engine.TensorMultiplyScalar(_kernelsGradient, learningRate));
             _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
         }
