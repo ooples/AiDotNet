@@ -4615,9 +4615,11 @@ public static class LayerHelper<T>
         // Flatten
         yield return new FlattenLayer<T>([currentChannels, 1, 1]);
 
-        // Classification head
+        // Classification head per Huang et al. 2017: Dense + Softmax
         yield return new DenseLayer<T>(currentChannels, configuration.NumClasses,
             activationFunction: new IdentityActivation<T>());
+        yield return new ActivationLayer<T>([configuration.NumClasses],
+            activationFunction: new SoftmaxActivation<T>());
     }
 
     /// <summary>

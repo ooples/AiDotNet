@@ -45,15 +45,6 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             Vector<T>.Concatenate(_bn2.GetParameterGradients(), _conv3x3.GetParameterGradients()));
     }
 
-    public override void SetTrainingMode(bool isTraining)
-    {
-        base.SetTrainingMode(isTraining);
-        _bn1.SetTrainingMode(isTraining);
-        _conv1x1.SetTrainingMode(isTraining);
-        _bn2.SetTrainingMode(isTraining);
-        _conv3x3.SetTrainingMode(isTraining);
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

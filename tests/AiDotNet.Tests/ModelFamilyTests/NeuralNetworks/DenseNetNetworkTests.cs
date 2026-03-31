@@ -1,4 +1,4 @@
-using AiDotNet.Configuration;
+﻿using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -31,6 +31,7 @@ public class DenseNetNetworkTests : NeuralNetworkModelTestBase
             inputHeight: 32, inputWidth: 32, inputDepth: 3,
             outputSize: 10);
 
-        return new DenseNetNetwork<double>(arch, config);
+        return new DenseNetNetwork<double>(arch, config,
+            lossFunction: new AiDotNet.LossFunctions.MeanSquaredErrorLoss<double>());
     }
 }

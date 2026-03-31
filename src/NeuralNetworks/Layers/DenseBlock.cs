@@ -74,13 +74,6 @@ public class DenseBlock<T> : LayerBase<T>
         return Vector<T>.Wrap(_layers.SelectMany(l => l.GetParameterGradients().ToArray()).ToArray());
     }
 
-    public override void SetTrainingMode(bool isTraining)
-    {
-        base.SetTrainingMode(isTraining);
-        foreach (var layer in _layers)
-            layer.SetTrainingMode(isTraining);
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

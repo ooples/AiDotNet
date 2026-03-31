@@ -311,7 +311,7 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
         Backpropagate(gradTensor);
 
         // Update parameters with Adam optimizer
-        T lr = NumOps.FromDouble(0.01); // Aggressive LR for fast convergence in 30 iterations
+        T lr = NumOps.FromDouble(0.001); // Higher LR with MSE loss + Softmax
         foreach (var layer in Layers)
         {
             layer.UpdateParameters(lr);
