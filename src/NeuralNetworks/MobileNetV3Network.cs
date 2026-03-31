@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -199,13 +199,32 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        return Forward(input);
+        // Set eval mode on layers for BN (use running stats for batch_size=1)
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(false);
+        try
+        {
+            return Forward(input);
+        }
+        finally
+        {
+            foreach (var layer in Layers)
+                layer.SetTrainingMode(true);
+        }
     }
 
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        var prediction = Predict(input);
+        // Set training mode but keep BN in eval (batch_size=1 gradient is zero)
+        foreach (var layer in Layers)
+        {
+            if (layer is BatchNormalizationLayer<T>)
+                layer.SetTrainingMode(false);
+            else
+                layer.SetTrainingMode(true);
+        }
+        var prediction = ForwardWithMemory(input);
         var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
         LastLoss = loss;
 

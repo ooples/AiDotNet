@@ -87,6 +87,14 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         return Vector<T>.Concatenate(_bn.GetParameterGradients(), _conv.GetParameterGradients());
     }
 
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        _bn.SetTrainingMode(isTraining);
+        _conv.SetTrainingMode(isTraining);
+        _pool.SetTrainingMode(isTraining);
+    }
+
     public override void ClearGradients()
     {
         base.ClearGradients();

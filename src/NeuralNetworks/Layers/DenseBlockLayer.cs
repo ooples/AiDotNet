@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -43,6 +43,15 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         return Vector<T>.Concatenate(
             Vector<T>.Concatenate(_bn1.GetParameterGradients(), _conv1x1.GetParameterGradients()),
             Vector<T>.Concatenate(_bn2.GetParameterGradients(), _conv3x3.GetParameterGradients()));
+    }
+
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        _bn1.SetTrainingMode(isTraining);
+        _conv1x1.SetTrainingMode(isTraining);
+        _bn2.SetTrainingMode(isTraining);
+        _conv3x3.SetTrainingMode(isTraining);
     }
 
     public override void ClearGradients()

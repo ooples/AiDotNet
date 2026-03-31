@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -92,6 +92,18 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
         grads.AddRange(_projectConv.GetParameterGradients().ToArray());
         grads.AddRange(_projectBn.GetParameterGradients().ToArray());
         return new Vector<T>([.. grads]);
+    }
+
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        _expandConv?.SetTrainingMode(isTraining);
+        _expandBn?.SetTrainingMode(isTraining);
+        _dwConv.SetTrainingMode(isTraining);
+        _dwBn.SetTrainingMode(isTraining);
+        _se?.SetTrainingMode(isTraining);
+        _projectConv.SetTrainingMode(isTraining);
+        _projectBn.SetTrainingMode(isTraining);
     }
 
     public override void ClearGradients()

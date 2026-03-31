@@ -4900,7 +4900,11 @@ public static class LayerHelper<T>
         var alpha = configuration.Alpha;
         bool isLarge = configuration.Variant == Enums.MobileNetV3Variant.Large;
 
-        // Initial convolution: 3x3, stride 2
+        // Initial convolution: 3x3
+        // Per Howard et al. 2019: stride 2 for 224x224 input.
+        // For small inputs (<=64), use stride 1 to preserve spatial resolution.
+        bool smallInput = currentHeight <= 64 && currentWidth <= 64;
+        int stemStride = smallInput ? 1 : 2;
         int firstConvChannels = MakeScaledChannels(16, alpha);
         yield return new ConvolutionalLayer<T>(
             inputDepth: configuration.InputChannels,
@@ -4908,12 +4912,12 @@ public static class LayerHelper<T>
             kernelSize: 3,
             inputHeight: currentHeight,
             inputWidth: currentWidth,
-            stride: 2,
+            stride: stemStride,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
 
-        currentHeight = (currentHeight + 2 * 1 - 3) / 2 + 1;
-        currentWidth = (currentWidth + 2 * 1 - 3) / 2 + 1;
+        currentHeight = (currentHeight + 2 * 1 - 3) / stemStride + 1;
+        currentWidth = (currentWidth + 2 * 1 - 3) / stemStride + 1;
 
         yield return new BatchNormalizationLayer<T>(firstConvChannels);
         yield return new ActivationLayer<T>([firstConvChannels, currentHeight, currentWidth],
