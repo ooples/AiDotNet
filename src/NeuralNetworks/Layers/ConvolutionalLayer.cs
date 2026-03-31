@@ -1756,6 +1756,13 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         metadata["FilterSize"] = KernelSize.ToString();
         metadata["Stride"] = Stride.ToString();
         metadata["Padding"] = Padding.ToString();
+        // Serialize activation type so deserialization restores it correctly
+        // (default is ReLU, but MobileNetV3 uses Identity)
+        if (ScalarActivation is not null)
+        {
+            metadata["ScalarActivationType"] = ScalarActivation.GetType().AssemblyQualifiedName
+                ?? ScalarActivation.GetType().FullName ?? string.Empty;
+        }
         return metadata;
     }
 
