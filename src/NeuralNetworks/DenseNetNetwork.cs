@@ -282,14 +282,16 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-        // Keep BN in eval mode (batch_size=1 makes BN gradient zero per Ioffe & Szegedy 2015)
-        // Other layers get training mode for dropout/etc.
+        // Set training mode for forward/backward computation.
+        // Standalone BN layers need eval mode (batch_size=1 makes BN gradient zero).
+        // Composite layers (DenseBlock, TransitionLayer) stay in training mode
+        // because their internal BN backward pass is needed for gradient flow.
         foreach (var layer in Layers)
         {
             if (layer is BatchNormalizationLayer<T>)
-                layer.SetTrainingMode(false);
+                layer.SetTrainingMode(false); // Standalone BN: eval mode
             else
-                layer.SetTrainingMode(true);
+                layer.SetTrainingMode(true); // Composites: training mode (propagates to internal BN too)
         }
         var prediction = ForwardWithMemory(input);
         var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
@@ -309,7 +311,7 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
         Backpropagate(gradTensor);
 
         // Update parameters with Adam optimizer
-        T lr = NumOps.FromDouble(0.001); // LR for CIFAR-variant with eval-mode BN
+        T lr = NumOps.FromDouble(0.01); // Aggressive LR for fast convergence in 30 iterations
         foreach (var layer in Layers)
         {
             layer.UpdateParameters(lr);
