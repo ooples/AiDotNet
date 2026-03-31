@@ -582,7 +582,8 @@ public static class DeserializationHelper
             {
                 throw new InvalidOperationException($"Cannot find InvertedResidualBlock constructor.");
             }
-            instance = ctor.Invoke(new object?[] { inChannels, outChannels, inputHeight, inputWidth, expansionRatio, stride, useSE, seRatio, null });
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            instance = ctor.Invoke(new object?[] { inChannels, outChannels, inputHeight, inputWidth, expansionRatio, stride, useSE, seRatio, activation });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.TransitionLayer<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.Contains("NeuralNetworks.Layers.TransitionLayer")))
