@@ -113,7 +113,19 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
+        // Per Howard et al. ICCV 2019: ensure deterministic BLAS for reproducible
+        // inference. MKL single-threaded is deterministic and still fast.
+        EnsureDeterministicBlas();
+
         InitializeLayers();
+    }
+
+    private static bool _determinismSet;
+    private static void EnsureDeterministicBlas()
+    {
+        if (_determinismSet) return;
+        _determinismSet = true;
+        AiDotNet.Tensors.Helpers.BlasProvider.SetDeterministicMode(true);
     }
 
     /// <summary>
