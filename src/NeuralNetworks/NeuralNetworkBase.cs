@@ -8,6 +8,7 @@ using AiDotNet.MixedPrecision;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Validation;
@@ -2275,6 +2276,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     public abstract Tensor<T> Predict(Tensor<T> input);
 
     /// <summary>
+    /// Runs the forward pass through all layers WITHOUT suppressing tape recording.
+    /// Used for tape-based training where engine ops must be recorded.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <returns>The network output.</returns>
+    protected virtual Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var current = input;
+        foreach (var layer in Layers)
+        {
+            current = layer.Forward(current);
+        }
+        return current;
+    }
+
+    /// <summary>
     /// Compiles the forward pass into an optimized executable function via JIT compilation.
     /// After compilation, <see cref="Predict"/> and <see cref="ForwardWithMemory"/> use the
     /// compiled function for zero-allocation, fused-kernel execution.
@@ -4102,19 +4119,70 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
     {
+        // Try tape-based gradient computation first (preferred path)
+        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+        if (trainableParams.Length > 0)
+        {
+            try
+            {
+                var engine = AiDotNetEngine.Current;
+
+                using var tape = new GradientTape<T>();
+
+                // Forward pass under tape recording (NOT using Predict which has NoGradScope)
+                var prediction = ForwardForTraining(input);
+
+                // Compute MSE loss via tape-recorded engine ops
+                var diff = engine.TensorSubtract(prediction, target);
+                var squared = engine.TensorMultiply(diff, diff);
+                var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+                var lossTensor = engine.ReduceMean(squared, allAxes, keepDims: false);
+
+                // Reverse-mode AD: compute gradients for all trainable parameters
+                var grads = tape.ComputeGradients(lossTensor, trainableParams);
+
+                // Flatten into parameter gradient vector (same ordering as GetParameters)
+                var flatGradients = new List<T>();
+                foreach (var layer in Layers)
+                {
+                    if (layer is ITrainableLayer<T> trainable)
+                    {
+                        foreach (var param in trainable.GetTrainableParameters())
+                        {
+                            if (grads.TryGetValue(param, out var grad))
+                            {
+                                for (int i = 0; i < grad.Length; i++)
+                                    flatGradients.Add(grad[i]);
+                            }
+                            else
+                            {
+                                // No gradient for this param — add zeros
+                                for (int i = 0; i < param.Length; i++)
+                                    flatGradients.Add(NumOps.Zero);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Non-trainable layer: add zeros for its parameter count
+                        for (int i = 0; i < layer.ParameterCount; i++)
+                            flatGradients.Add(NumOps.Zero);
+                    }
+                }
+                return new Vector<T>(flatGradients.ToArray());
+            }
+            catch
+            {
+                // Fall through to legacy backward path
+            }
+        }
+
+        // Legacy path: manual backward through layers
         var loss = lossFunction ?? DefaultLossFunction;
-
-        // Forward pass
-        var prediction = Predict(input);
-
-        // Compute loss gradient dL/d(output)
-        var lossDerivative = loss.CalculateDerivative(prediction.ToVector(), target.ToVector());
-        var outputGradients = new Tensor<T>(prediction.Shape.ToArray(), lossDerivative);
-
-        // Backward pass through all layers (accumulates parameter gradients)
+        var pred = Predict(input);
+        var lossDerivative = loss.CalculateDerivative(pred.ToVector(), target.ToVector());
+        var outputGradients = new Tensor<T>(pred.Shape.ToArray(), lossDerivative);
         Backpropagate(outputGradients);
-
-        // Collect accumulated parameter gradients from all layers
         return GetParameterGradients();
     }
 
