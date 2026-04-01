@@ -1262,7 +1262,18 @@ public class FILM<T> : FrameInterpolationBase<T>
 
     #region Abstract Implementation
 
-    protected override void InitializeLayers() => ClearLayers();
+    protected override void InitializeLayers()
+    {
+        ClearLayers();
+
+        foreach (var layer in _featureExtractor) Layers.Add(layer);
+        foreach (var layer in _pyramidLayers) Layers.Add(layer);
+        foreach (var layer in _flowEstimator) Layers.Add(layer);
+        Layers.Add(_flowRefinement);
+        foreach (var layer in _fusionLayers) Layers.Add(layer);
+        Layers.Add(_synthesisHead);
+        Layers.Add(_occlusionEstimator);
+    }
 
     public override void UpdateParameters(Vector<T> parameters)
     {

@@ -878,6 +878,15 @@ public class ProPainter<T> : VideoInpaintingBase<T>
     protected override void InitializeLayers()
     {
         ClearLayers();
+
+        foreach (var layer in _flowEncoder) Layers.Add(layer);
+        foreach (var layer in _flowDecoder) Layers.Add(layer);
+        foreach (var layer in _imageEncoder) Layers.Add(layer);
+        foreach (var layer in _imageDecoder) Layers.Add(layer);
+        foreach (var layer in _transformerQKV) Layers.Add(layer);
+        foreach (var layer in _transformerProj) Layers.Add(layer);
+        foreach (var layer in _transformerFFN) Layers.Add(layer);
+        if (_outputConv is not null) Layers.Add(_outputConv);
     }
 
     /// <inheritdoc/>

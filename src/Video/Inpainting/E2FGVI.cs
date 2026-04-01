@@ -807,7 +807,18 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
 
     #region Abstract Implementation
 
-    protected override void InitializeLayers() => ClearLayers();
+    protected override void InitializeLayers()
+    {
+        ClearLayers();
+
+        foreach (var layer in _flowNet) Layers.Add(layer);
+        Layers.Add(_flowHead);
+        foreach (var layer in _encoder) Layers.Add(layer);
+        foreach (var layer in _transformer) Layers.Add(layer);
+        foreach (var layer in _propagation) Layers.Add(layer);
+        foreach (var layer in _decoder) Layers.Add(layer);
+        Layers.Add(_outputHead);
+    }
 
     public override void UpdateParameters(Vector<T> parameters)
     {

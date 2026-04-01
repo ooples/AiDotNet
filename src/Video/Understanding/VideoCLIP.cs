@@ -1135,6 +1135,16 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     protected override void InitializeLayers()
     {
         ClearLayers();
+
+        foreach (var layer in _videoEncoder) Layers.Add(layer);
+        foreach (var layer in _temporalTransformer) Layers.Add(layer);
+        Layers.Add(_videoProjection);
+        foreach (var layer in _textTransformerQKV) Layers.Add(layer);
+        foreach (var layer in _textTransformerAttnProj) Layers.Add(layer);
+        foreach (var layer in _textTransformerFFN1) Layers.Add(layer);
+        foreach (var layer in _textTransformerFFN2) Layers.Add(layer);
+        Layers.Add(_textProjection);
+        Layers.Add(_logitScale);
     }
 
     /// <inheritdoc/>

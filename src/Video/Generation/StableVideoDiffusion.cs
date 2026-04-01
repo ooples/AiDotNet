@@ -1227,6 +1227,22 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     protected override void InitializeLayers()
     {
         ClearLayers();
+
+        foreach (var layer in _vaeEncoder) Layers.Add(layer);
+        foreach (var layer in _vaeDecoder) Layers.Add(layer);
+        foreach (var layer in _downBlocks) Layers.Add(layer);
+        if (_middleBlock is not null) Layers.Add(_middleBlock);
+        foreach (var layer in _upBlocks) Layers.Add(layer);
+        foreach (var layer in _temporalAttention) Layers.Add(layer);
+        foreach (var layer in _textEncoderQKV) Layers.Add(layer);
+        foreach (var layer in _textEncoderAttnProj) Layers.Add(layer);
+        foreach (var layer in _textEncoderFFN1) Layers.Add(layer);
+        foreach (var layer in _textEncoderFFN2) Layers.Add(layer);
+        if (_textEmbedProjection is not null) Layers.Add(_textEmbedProjection);
+        if (_textFinalProjection is not null) Layers.Add(_textFinalProjection);
+        if (_imageConditioner is not null) Layers.Add(_imageConditioner);
+        if (_timeEmbedding is not null) Layers.Add(_timeEmbedding);
+        if (_noisePredictor is not null) Layers.Add(_noisePredictor);
     }
 
     /// <inheritdoc/>

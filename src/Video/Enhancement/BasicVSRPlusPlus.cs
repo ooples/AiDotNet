@@ -1416,6 +1416,15 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     protected override void InitializeLayers()
     {
         ClearLayers();
+
+        if (_flowEstimator is not null) Layers.Add(_flowEstimator);
+        if (_featExtract is not null) Layers.Add(_featExtract);
+        foreach (var layer in _backwardAlignments) Layers.Add(layer);
+        foreach (var layer in _forwardAlignments) Layers.Add(layer);
+        foreach (var layer in _backwardConvs) Layers.Add(layer);
+        foreach (var layer in _forwardConvs) Layers.Add(layer);
+        foreach (var layer in _upsampleLayers) Layers.Add(layer);
+        if (_outputConv is not null) Layers.Add(_outputConv);
     }
 
     #endregion

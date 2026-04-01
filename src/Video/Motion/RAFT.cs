@@ -623,6 +623,16 @@ public class RAFT<T> : OpticalFlowBase<T>
     protected override void InitializeLayers()
     {
         ClearLayers();
+
+        foreach (var layer in _featureEncoder) Layers.Add(layer);
+        foreach (var layer in _contextEncoder) Layers.Add(layer);
+        if (_correlationConv is not null) Layers.Add(_correlationConv);
+        if (_gruConvZ is not null) Layers.Add(_gruConvZ);
+        if (_gruConvR is not null) Layers.Add(_gruConvR);
+        if (_gruConvH is not null) Layers.Add(_gruConvH);
+        if (_flowHead is not null) Layers.Add(_flowHead);
+        if (_deltaFlowHead is not null) Layers.Add(_deltaFlowHead);
+        if (_upsampleConv is not null) Layers.Add(_upsampleConv);
     }
 
     /// <inheritdoc/>

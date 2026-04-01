@@ -966,6 +966,13 @@ public class RIFE<T> : FrameInterpolationBase<T>
     protected override void InitializeLayers()
     {
         ClearLayers();
+
+        foreach (var layer in _encoder) Layers.Add(layer);
+        foreach (var layer in _flowDecoder) Layers.Add(layer);
+        foreach (var layer in _contextEncoder) Layers.Add(layer);
+        if (_fusion is not null) Layers.Add(_fusion);
+        if (_outputConv is not null) Layers.Add(_outputConv);
+        foreach (var layer in _flowBlocks) Layers.Add(layer);
     }
 
     /// <inheritdoc/>
