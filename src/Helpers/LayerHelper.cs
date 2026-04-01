@@ -31129,7 +31129,8 @@ public static class LayerHelper<T>
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateUnifiedMultimodalLayers(
         int embeddingDimension = 512,
-        int numTransformerLayers = 6)
+        int numTransformerLayers = 6,
+        int numClasses = 100)
     {
         IActivationFunction<T>? nullActivation = null;
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
@@ -31169,7 +31170,7 @@ public static class LayerHelper<T>
 
         // Fusion and output
         yield return new DenseLayer<T>(embeddingDimension * 4, embeddingDimension, geluActivation);
-        yield return new DenseLayer<T>(embeddingDimension, 1000, nullActivation);
+        yield return new DenseLayer<T>(embeddingDimension, numClasses, nullActivation);
         yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, geluActivation);
     }
 

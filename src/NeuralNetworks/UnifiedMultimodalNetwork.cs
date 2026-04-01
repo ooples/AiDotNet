@@ -194,7 +194,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         else
         {
             Layers.AddRange(LayerHelper<T>.CreateUnifiedMultimodalLayers(
-                _embeddingDimension, _numTransformerLayers));
+                _embeddingDimension, _numTransformerLayers, Architecture.OutputSize));
         }
 
         // Distribute layers to internal fields
@@ -917,17 +917,39 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         };
 
         var embedding = Encode(multimodalInput);
-        return Tensor<T>.FromVector(embedding);
+        var embeddingTensor = Tensor<T>.FromVector(embedding);
+        return _classificationHead.Forward(embeddingTensor);
     }
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        SetTrainingMode(true);
         var prediction = Predict(input);
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
-        SetTrainingMode(false);
+
+        // MSE loss (CategoricalCrossEntropy assumes softmax-normalized output)
+        var predVec = prediction.ToVector();
+        var targetVec = expectedOutput.ToVector();
+        double mse = 0;
+        for (int i = 0; i < predVec.Length; i++)
+        {
+            double diff = Convert.ToDouble(predVec[i]) - Convert.ToDouble(targetVec[i]);
+            mse += diff * diff;
+        }
+        mse /= predVec.Length;
+        LastLoss = NumOps.FromDouble(mse);
+
+        // MSE gradient + backward through classification head
+        var gradData = new T[predVec.Length];
+        double scale = 2.0 / predVec.Length;
+        for (int i = 0; i < predVec.Length; i++)
+            gradData[i] = NumOps.FromDouble((Convert.ToDouble(predVec[i]) - Convert.ToDouble(targetVec[i])) * scale);
+
+        var grad = new Tensor<T>(prediction.Shape.ToArray(), new Vector<T>(gradData));
+        _classificationHead.Backward(grad);
+
+        // Update classification head via optimizer
+        if (_optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradOpt)
+            _classificationHead.UpdateParameters(NumOps.FromDouble(gradOpt.GetCurrentLearningRate()));
     }
 
     /// <inheritdoc/>
