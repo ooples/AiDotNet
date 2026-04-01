@@ -18831,27 +18831,35 @@ public static class LayerHelper<T>
     /// <remarks>
     /// <para>
     /// AutoDiffTab uses automated architecture search over diffusion configurations.
-    /// The denoiser MLP is similar to TabDDPM but with configurable depth/width.
-    /// Architecture: Dense(SiLU) → [Dropout] → Dense(SiLU) → [Dropout] → ... → Dense(Identity)
+    /// The denoiser MLP follows the TabDDPM architecture (Kotelnikov et al., 2023):
+    /// 1. Timestep projection: Linear(teDim, teDim, SiLU) — projects sinusoidal embedding
+    /// 2. Hidden layers: Linear(inputDim, hidden, SiLU) with optional dropout
+    /// 3. Output projection: Linear(lastHidden, outputDim, Identity)
     /// </para>
     /// <para>
-    /// Reference: "Automated Diffusion Models for Tabular Data" (2024)
+    /// Reference: "TabDDPM: Modelling Tabular Data with Diffusion Models" (Kotelnikov et al., 2023)
     /// </para>
     /// </remarks>
     /// <param name="inputDim">Input dimension (dataWidth + timestepEmbeddingDim).</param>
     /// <param name="outputDim">Output dimension (dataWidth).</param>
     /// <param name="hiddenDims">Hidden layer dimensions.</param>
+    /// <param name="timestepEmbeddingDim">Timestep embedding dimension for projection layer.</param>
     /// <param name="dropoutRate">Dropout rate between hidden layers.</param>
-    /// <returns>A collection of layers forming the denoiser MLP.</returns>
+    /// <returns>A collection of layers forming the complete denoiser (timestep projection + MLP + output).</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultAutoDiffTabDenoiserLayers(
         int inputDim,
         int outputDim,
         int[] hiddenDims,
+        int timestepEmbeddingDim = 128,
         double dropoutRate = 0.0)
     {
         var silu = (IActivationFunction<T>)new SiLUActivation<T>();
-        int prevDim = inputDim;
 
+        // 1. Timestep projection (sinusoidal embedding → learned projection)
+        yield return new FullyConnectedLayer<T>(timestepEmbeddingDim, timestepEmbeddingDim, silu);
+
+        // 2. Denoiser hidden layers
+        int prevDim = inputDim;
         for (int i = 0; i < hiddenDims.Length; i++)
         {
             yield return new DenseLayer<T>(prevDim, hiddenDims[i], silu);
@@ -18864,7 +18872,8 @@ public static class LayerHelper<T>
             prevDim = hiddenDims[i];
         }
 
-        yield return new DenseLayer<T>(prevDim, outputDim, (IActivationFunction<T>)new IdentityActivation<T>());
+        // 3. Output projection (FullyConnectedLayer per TabDDPM architecture)
+        yield return new FullyConnectedLayer<T>(prevDim, outputDim, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     /// <summary>
