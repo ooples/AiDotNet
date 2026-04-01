@@ -360,16 +360,7 @@ public class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
             throw new InvalidOperationException("Training is only supported in native mode.");
 
         SetTrainingMode(true);
-        var output = PredictNative(input);
-        var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        var gradTensor = Tensor<T>.FromVector(gradient, output.Shape.ToArray());
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradTensor = Layers[i].Backward(gradTensor);
-        }
-
-        _optimizer.UpdateParameters(Layers);
+        TrainWithTape(input, target);
         SetTrainingMode(false);
     }
 

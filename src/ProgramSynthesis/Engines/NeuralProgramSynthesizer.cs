@@ -667,22 +667,7 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-        var output = input;
-        foreach (var layer in Layers)
-        {
-            output = layer.Forward(output);
-        }
-
-        LastLoss = LossFunction.CalculateLoss(output.ToVector(), expectedOutput.ToVector());
-
-        var outputGradient = LossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector());
-        var gradient = new Tensor<T>(output.Shape.ToArray(), outputGradient);
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-
-        _optimizer.UpdateParameters(Layers);
+        TrainWithTape(input, expectedOutput);
         SetTrainingMode(false);
     }
 

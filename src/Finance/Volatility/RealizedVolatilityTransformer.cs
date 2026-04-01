@@ -252,15 +252,7 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
     protected override void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output)
     {
         SetTrainingMode(true);
-        var outputGradient = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        var currentGrad = Tensor<T>.FromVector(outputGradient, output.Shape.ToArray());
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            currentGrad = Layers[i].Backward(currentGrad);
-        }
-
-        _optimizer.UpdateParameters(Layers);
+        TrainWithTape(input, target);
         SetTrainingMode(false);
     }
 
