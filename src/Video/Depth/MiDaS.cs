@@ -281,21 +281,7 @@ public class MiDaS<T> : NeuralNetworkBase<T>
     {
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode.");
-
-        var prediction = Predict(input);
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
-
-        var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-
-        var currentGradient = outputGradientTensor;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            currentGradient = Layers[i].Backward(currentGradient);
-        }
-
-        _optimizer?.UpdateParameters(Layers);
+        TrainWithTape(input, expectedOutput);
     }
 
     #endregion

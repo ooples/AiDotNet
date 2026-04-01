@@ -400,15 +400,7 @@ public class FastDVDNet<T> : VideoDenoisingBase<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode.");
-
-        var prediction = Predict(input);
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        var gradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var gradTensor = new Tensor<T>(prediction.Shape.ToArray(), gradient);
-
-        for (int i = Layers.Count - 1; i >= 0; i--) gradTensor = Layers[i].Backward(gradTensor);
-        _optimizer?.UpdateParameters(Layers);
+        TrainWithTape(input, expectedOutput);
     }
 
     #endregion

@@ -223,15 +223,7 @@ public class NeuralVaR<T> : RiskModelBase<T>
         if (!UseNativeMode) throw new InvalidOperationException("Training not supported in ONNX mode.");
         
         SetTrainingMode(true);
-        var output = Predict(input);
-        var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        
-        var currentGrad = Tensor<T>.FromVector(grad, output.Shape.ToArray());
-        for (int i = Layers.Count - 1; i >= 0; i--)
-            currentGrad = Layers[i].Backward(currentGrad);
-
-        _optimizer.UpdateParameters(Layers);
-        _lastTrainingLoss = LossFunction.CalculateLoss(output.ToVector(), target.ToVector());
+        TrainWithTape(input, target);
         SetTrainingMode(false);
     }
 
