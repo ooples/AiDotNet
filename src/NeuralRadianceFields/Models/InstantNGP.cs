@@ -1694,26 +1694,10 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        var prediction = ForwardWithMemory(input);
+        SetTrainingMode(true);
+        TrainWithTape(input, expectedOutput);
 
-        if (LossFunction == null)
-        {
-            throw new InvalidOperationException("Loss function not set.");
-        }
-
-        LastLoss = LossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        var lossGradient = LossFunction.ComputeGradient(prediction, expectedOutput);
-        Backpropagate(lossGradient);
-
-        foreach (var layer in Layers)
-        {
-            if (layer.SupportsTraining && layer.ParameterCount > 0)
-            {
-                layer.UpdateParameters(_learningRate);
-            }
-        }
-
+        // Hash table and occupancy grid updates (model-specific)
         if (_lastHashFeatureGradients != null)
         {
             ApplyHashTableGradients(_lastHashFeatureGradients);
@@ -1724,6 +1708,8 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         {
             UpdateOccupancyGrid();
         }
+
+        SetTrainingMode(false);
     }
 
     public override void UpdateParameters(Vector<T> parameters)

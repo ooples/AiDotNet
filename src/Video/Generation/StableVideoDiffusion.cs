@@ -539,29 +539,9 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Training involves predicting noise added to latents
-        var latent = EncodeToLatent(input);
-        var random = RandomHelper.CreateSecureRandom();
-
-        // Add noise
-        double noiseLevel = random.NextDouble();
-        var noise = GenerateNoise(latent.Shape.ToArray(), random);
-        var noisyLatent = AddNoiseAtLevel(latent, noise, noiseLevel);
-
-        // Predict noise
-        var timeEmbed = CreateTimeEmbedding(noiseLevel);
-        var predictedNoise = PredictNoise(noisyLatent, null, timeEmbed, null, null);
-
-        // Compute loss gradient
-        var lossGradient = Engine.TensorSubtract(predictedNoise, noise);
-
-        BackwardPass(lossGradient);
-
-        T lr = NumOps.FromDouble(0.0001);
-        foreach (var layer in Layers)
-        {
-            layer.UpdateParameters(lr);
-        }
+        SetTrainingMode(true);
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     #endregion
