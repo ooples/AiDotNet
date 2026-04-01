@@ -176,11 +176,7 @@ public class Pengi<T> : AudioNeuralNetworkBase<T>, IAudioLanguageModel<T>
     {
         if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        var output = Predict(input);
-        var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-        var gt = Tensor<T>.FromVector(grad);
-        for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer?.UpdateParameters(Layers);
+        TrainWithTape(input, expected);
         SetTrainingMode(false);
     }
 

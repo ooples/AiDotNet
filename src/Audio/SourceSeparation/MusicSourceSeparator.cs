@@ -460,23 +460,7 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
         }
 
         SetTrainingMode(true);
-
-        // Forward pass
-        var output = Predict(input);
-
-        // Calculate loss gradient
-        var gradient = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-        var gradientTensor = Tensor<T>.FromVector(gradient);
-
-        // Backward pass through layers
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradientTensor = Layers[i].Backward(gradientTensor);
-        }
-
-        // Update parameters
-        _optimizer?.UpdateParameters(Layers);
-
+        TrainWithTape(input, expected);
         SetTrainingMode(false);
     }
 
