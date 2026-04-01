@@ -249,13 +249,6 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
             epochs: 10, learningRate: MathHelper.GetNumericOperations<T>().FromDouble(0.0001),
             activationFunction: (IActivationFunction<T>?)null)
     {
-        // Per Salakhutdinov & Hinton 2009: initialize default hidden layers
-        // Visible(128) → Hidden1(64) → Hidden2(32) for compact representation
-        if (_layerSizes.Count <= 1)
-        {
-            _layerSizes = [128, 64, 32];
-            InitializeParameters();
-        }
     }
 
     /// <summary>
@@ -924,6 +917,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     {
         get
         {
+            // When using Layers-based forward/backward (supervised), use Layers parameters.
+            // When using CD training (_layerWeights), use internal parameter store.
+            if (Layers.Count > 0)
+                return Layers.Sum(l => l.ParameterCount);
+
             int count = 0;
             for (int i = 0; i < _layerWeights.Count; i++)
             {
@@ -936,6 +934,10 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
+        // When using Layers-based forward/backward (supervised), delegate to base.
+        if (Layers.Count > 0)
+            return base.GetParameters();
+
         var parameters = new Vector<T>(ParameterCount);
         int index = 0;
         for (int i = 0; i < _layerWeights.Count; i++)
