@@ -256,40 +256,7 @@ public class GPT4TS<T> : TimeSeriesFoundationModelBase<T>
         SetTrainingMode(true);
         try
         {
-            var output = ForwardNative(input);
-            LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
-
-            var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            var gradTensor = Tensor<T>.FromVector(gradient, output.Shape.ToArray());
-
-            // Only backprop through task head and patch embedding (backbone is frozen)
-            if (_taskHead is not null)
-                gradTensor = _taskHead.Backward(gradTensor);
-
-            if (!_freezeBackbone)
-            {
-                if (_finalLayerNorm is not null)
-                    gradTensor = _finalLayerNorm.Backward(gradTensor);
-
-                for (int i = _backboneLayers.Count - 1; i >= 0; i--)
-                    gradTensor = _backboneLayers[i].Backward(gradTensor);
-            }
-
-            if (_patchEmbedding is not null)
-                _patchEmbedding.Backward(gradTensor);
-
-            // Only update trainable layers: when backbone is frozen, skip backbone layers
-            if (_freezeBackbone)
-            {
-                var trainableLayers = new List<ILayer<T>>();
-                if (_patchEmbedding is not null) trainableLayers.Add(_patchEmbedding);
-                if (_taskHead is not null) trainableLayers.Add(_taskHead);
-                _optimizer.UpdateParameters(trainableLayers);
-            }
-            else
-            {
-                _optimizer.UpdateParameters(Layers);
-            }
+            TrainWithTape(input, target);
         }
         finally
         {
