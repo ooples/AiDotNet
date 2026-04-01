@@ -393,14 +393,9 @@ namespace AiDotNet.NeuralNetworks
         /// </summary>
         public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
         {
-            var prediction = Predict(input);
-            LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-            var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-
-            Backpropagate(outputGradientTensor);
-            _optimizer.UpdateParameters(Layers);
+            SetTrainingMode(true);
+            TrainWithTape(input, expectedOutput);
+            SetTrainingMode(false);
         }
 
         /// <inheritdoc/>
