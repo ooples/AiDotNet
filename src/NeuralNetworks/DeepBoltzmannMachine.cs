@@ -107,7 +107,9 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// layer to the deepest hidden layer.
     /// </remarks>
     private List<int> _layerSizes;
+    #pragma warning disable CS0169
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+    #pragma warning restore CS0169
 
     /// <summary>
     /// Gets or sets the number of training epochs.
@@ -765,36 +767,9 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         // CD training is for unsupervised pretraining; for supervised tasks, use backprop
         if (Layers.Count > 0)
         {
-            // Forward through layers
             SetTrainingMode(true);
-            var prediction = ForwardWithMemory(input);
-
-            // Compute loss and gradients
-            var flatPred = prediction.ToVector();
-            var flatTarget = expectedOutput.Rank == 1
-                ? expectedOutput.ToVector()
-                : expectedOutput.Reshape([expectedOutput.Length]).ToVector();
-            LastLoss = LossFunction.CalculateLoss(flatPred, flatTarget);
-            var outputGrad = LossFunction.CalculateDerivative(flatPred, flatTarget);
-
-            // Backpropagate
-            Backpropagate(Tensor<T>.FromVector(outputGrad));
-
-            // Update parameters
-            _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-            foreach (var layer in Layers)
-            {
-                if (layer.SupportsTraining && layer.ParameterCount > 0)
-                {
-                    var layerParams = layer.GetParameters();
-                    var layerGrads = layer.GetParameterGradients();
-                    if (layerParams.Length == layerGrads.Length && layerGrads.Length > 0)
-                    {
-                        var updated = _trainOptimizer.UpdateParameters(layerParams, layerGrads);
-                        layer.SetParameters(updated);
-                    }
-                }
-            }
+            TrainWithTape(input, expectedOutput);
+            SetTrainingMode(false);
         }
         else
         {
