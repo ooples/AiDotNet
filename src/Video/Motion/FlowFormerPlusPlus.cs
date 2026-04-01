@@ -124,6 +124,13 @@ public class FlowFormerPlusPlus<T> : OpticalFlowBase<T>
     protected override void InitializeLayers()
     {
         ClearLayers();
+
+        if (_featureExtract is not null)
+            Layers.Add(_featureExtract);
+        foreach (var block in _processingBlocks)
+            Layers.Add(block);
+        if (_outputConv is not null)
+            Layers.Add(_outputConv);
     }
 
     /// <inheritdoc/>
@@ -179,28 +186,9 @@ public class FlowFormerPlusPlus<T> : OpticalFlowBase<T>
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        var output = Predict(input);
-        if (output.Length != expectedOutput.Length)
-            throw new ArgumentException(
-                $"Expected output length {expectedOutput.Length} does not match model output length {output.Length}.",
-                nameof(expectedOutput));
-        var gradient = new Tensor<T>(output.Shape.ToArray());
-        for (int i = 0; i < output.Length; i++)
-        {
-            gradient.Data.Span[i] = NumOps.Subtract(output.Data.Span[i], expectedOutput.Data.Span[i]);
-        }
-        if (_outputConv is not null)
-        {
-            gradient = _outputConv.Backward(gradient);
-        }
-        for (int i = _processingBlocks.Count - 1; i >= 0; i--)
-        {
-            gradient = _processingBlocks[i].Backward(gradient);
-        }
-        if (_featureExtract is not null)
-        {
-            _featureExtract.Backward(gradient);
-        }
+        SetTrainingMode(true);
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     /// <inheritdoc/>

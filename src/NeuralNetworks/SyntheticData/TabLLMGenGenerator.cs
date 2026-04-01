@@ -315,24 +315,9 @@ public class TabLLMGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Training is handled through Fit() for tabular generators.
-        // This method provides NeuralNetworkBase compatibility.
-        var output = Predict(input);
-
-        // Compute simple MSE gradient for backprop
-        var gradient = new Tensor<T>(output.Shape.ToArray());
-        for (int i = 0; i < output.Length && i < expectedOutput.Length; i++)
-        {
-            gradient[i] = NumOps.FromDouble(
-                2.0 * (NumOps.ToDouble(output[i]) - NumOps.ToDouble(expectedOutput[i])));
-        }
-
-        // Backward through FFN layers in reverse
-        var current = gradient;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            current = Layers[i].Backward(current);
-        }
+        SetTrainingMode(true);
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     /// <inheritdoc />

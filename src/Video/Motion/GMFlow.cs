@@ -297,38 +297,9 @@ public class GMFlow<T> : OpticalFlowBase<T>
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        var prediction = Predict(input);
-
-        // Compute loss gradient
-        var lossGradient = Engine.TensorSubtract(prediction, expectedOutput);
-
-        // Backward pass through all layers
-        var gradient = lossGradient;
-        foreach (var layer in _refinement.AsEnumerable().Reverse())
-        {
-            gradient = layer.Backward(gradient);
-        }
-        foreach (var layer in _flowDecoder.AsEnumerable().Reverse())
-        {
-            gradient = layer.Backward(gradient);
-        }
-        foreach (var layer in _crossAttention.AsEnumerable().Reverse())
-        {
-            gradient = layer.Backward(gradient);
-        }
-        foreach (var layer in _selfAttention.AsEnumerable().Reverse())
-        {
-            gradient = layer.Backward(gradient);
-        }
-        foreach (var layer in _encoder.AsEnumerable().Reverse())
-        {
-            gradient = layer.Backward(gradient);
-        }
-
-        // Update parameters
-        T lr = NumOps.FromDouble(0.0001);
-        foreach (var layer in Layers)
-            layer.UpdateParameters(lr);
+        SetTrainingMode(true);
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     #endregion
@@ -655,7 +626,17 @@ public class GMFlow<T> : OpticalFlowBase<T>
 
     #region Abstract Implementation
 
-    protected override void InitializeLayers() => ClearLayers();
+    protected override void InitializeLayers()
+    {
+        ClearLayers();
+
+        foreach (var layer in _encoder) Layers.Add(layer);
+        foreach (var layer in _selfAttention) Layers.Add(layer);
+        foreach (var layer in _crossAttention) Layers.Add(layer);
+        foreach (var layer in _flowDecoder) Layers.Add(layer);
+        Layers.Add(_flowHead);
+        foreach (var layer in _refinement) Layers.Add(layer);
+    }
 
     public override void UpdateParameters(Vector<T> parameters)
     {
