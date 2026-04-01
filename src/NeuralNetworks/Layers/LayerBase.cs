@@ -68,74 +68,74 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         private static IEngine E => AiDotNetEngine.Current;
         private static INumericOperations<T> N => MathHelper.GetNumericOperations<T>();
 
-        // Element-wise arithmetic
-        public static Tensor<T> Add(Tensor<T> a, Tensor<T> b) => E.TensorAdd(a, b);
-        public static Tensor<T> Subtract(Tensor<T> a, Tensor<T> b) => E.TensorSubtract(a, b);
-        public static Tensor<T> Multiply(Tensor<T> a, Tensor<T> b) => E.TensorMultiply(a, b);
-        public static Tensor<T> Divide(Tensor<T> a, Tensor<T> b) => E.TensorDivide(a, b);
-        public static Tensor<T> Negate(Tensor<T> a) => E.TensorNegate(a);
-        public static Tensor<T> MultiplyScalar(Tensor<T> a, T scalar) => E.TensorMultiplyScalar(a, scalar);
-        public static Tensor<T> AddScalar(Tensor<T> a, T scalar) => E.TensorAddScalar(a, scalar);
+        // Element-wise arithmetic — use DifferentiableOps for gradient tape recording
+        public static Tensor<T> Add(Tensor<T> a, Tensor<T> b) => DifferentiableOps<T>.Add(a, b);
+        public static Tensor<T> Subtract(Tensor<T> a, Tensor<T> b) => DifferentiableOps<T>.Subtract(a, b);
+        public static Tensor<T> Multiply(Tensor<T> a, Tensor<T> b) => DifferentiableOps<T>.Multiply(a, b);
+        public static Tensor<T> Divide(Tensor<T> a, Tensor<T> b) => DifferentiableOps<T>.Divide(a, b);
+        public static Tensor<T> Negate(Tensor<T> a) => DifferentiableOps<T>.Negate(a);
+        public static Tensor<T> MultiplyScalar(Tensor<T> a, T scalar) => DifferentiableOps<T>.MultiplyScalar(a, scalar);
+        public static Tensor<T> AddScalar(Tensor<T> a, T scalar) => DifferentiableOps<T>.AddScalar(a, scalar);
         public static Tensor<T> DivideScalar(Tensor<T> a, T scalar) => E.TensorDivideScalar(a, scalar);
 
         // Matrix operations
-        public static Tensor<T> MatMul(Tensor<T> a, Tensor<T> b) => E.TensorMatMul(a, b);
-        public static Tensor<T> Transpose(Tensor<T> a) => E.TensorTranspose(a);
-        public static Tensor<T> Bmm(Tensor<T> a, Tensor<T> b) => E.BatchMatMul(a, b);
+        public static Tensor<T> MatMul(Tensor<T> a, Tensor<T> b) => DifferentiableOps<T>.MatMul(a, b);
+        public static Tensor<T> Transpose(Tensor<T> a) => DifferentiableOps<T>.Transpose(a);
+        public static Tensor<T> Bmm(Tensor<T> a, Tensor<T> b) => DifferentiableOps<T>.Bmm(a, b);
 
         // Reductions
-        public static Tensor<T> Sum(Tensor<T> a) => E.TensorMeanDiff(a); // returns scalar tensor
-        public static Tensor<T> Mean(Tensor<T> a) => E.TensorMeanDiff(a);
-        public static Tensor<T> SumAxis(Tensor<T> a, int[] axes, bool keepDims = false) => E.ReduceSum(a, axes, keepDims);
-        public static Tensor<T> MeanAxis(Tensor<T> a, int[] axes, bool keepDims = false) => E.ReduceMean(a, axes, keepDims);
-        public static Tensor<T> Var(Tensor<T> a, int[] axes, bool keepDims = false) => E.TensorVar(a);
-        public static Tensor<T> Std(Tensor<T> a, int[] axes, bool keepDims = false) => E.TensorStd(a);
+        public static Tensor<T> Sum(Tensor<T> a) => DifferentiableOps<T>.Sum(a);
+        public static Tensor<T> Mean(Tensor<T> a) => DifferentiableOps<T>.Mean(a);
+        public static Tensor<T> SumAxis(Tensor<T> a, int[] axes, bool keepDims = false) => DifferentiableOps<T>.SumAxis(a, axes, keepDims);
+        public static Tensor<T> MeanAxis(Tensor<T> a, int[] axes, bool keepDims = false) => DifferentiableOps<T>.MeanAxis(a, axes, keepDims);
+        public static Tensor<T> Var(Tensor<T> a, int[] axes, bool keepDims = false) => DifferentiableOps<T>.Var(a, axes, keepDims);
+        public static Tensor<T> Std(Tensor<T> a, int[] axes, bool keepDims = false) => DifferentiableOps<T>.Std(a, axes, keepDims);
 
         // Activations
-        public static Tensor<T> Sigmoid(Tensor<T> x) => E.TensorSigmoid(x);
-        public static Tensor<T> Tanh(Tensor<T> x) => E.TensorTanh(x);
-        public static Tensor<T> ReLU(Tensor<T> x) => E.TensorReLU(x);
-        public static Tensor<T> GELU(Tensor<T> x) => E.TensorGELU(x);
-        public static Tensor<T> Swish(Tensor<T> x) => E.Swish(x);
-        public static Tensor<T> Softplus(Tensor<T> x, double beta = 1.0) => E.Softplus(x);
-        public static Tensor<T> LeakyReLU(Tensor<T> x, double alpha = 0.01) => E.TensorLeakyReLU(x, N.FromDouble(alpha));
-        public static Tensor<T> ELU(Tensor<T> x, double alpha = 1.0) => E.ELU(x, alpha);
-        public static Tensor<T> SELU(Tensor<T> x) => E.TensorSELU(x);
-        public static Tensor<T> Mish(Tensor<T> x) => E.TensorMish(x);
-        public static Tensor<T> HardSigmoid(Tensor<T> x) => E.TensorHardSigmoid(x);
-        public static Tensor<T> HardSwish(Tensor<T> x) => E.TensorHardSwish(x);
-        public static Tensor<T> ReLU6(Tensor<T> x) => E.TensorReLU6(x);
+        public static Tensor<T> Sigmoid(Tensor<T> x) => DifferentiableOps<T>.Sigmoid(x);
+        public static Tensor<T> Tanh(Tensor<T> x) => DifferentiableOps<T>.Tanh(x);
+        public static Tensor<T> ReLU(Tensor<T> x) => DifferentiableOps<T>.ReLU(x);
+        public static Tensor<T> GELU(Tensor<T> x) => DifferentiableOps<T>.GELU(x);
+        public static Tensor<T> Swish(Tensor<T> x) => DifferentiableOps<T>.Swish(x);
+        public static Tensor<T> Softplus(Tensor<T> x, double beta = 1.0) => DifferentiableOps<T>.Softplus(x, beta);
+        public static Tensor<T> LeakyReLU(Tensor<T> x, double alpha = 0.01) => DifferentiableOps<T>.LeakyReLU(x, alpha);
+        public static Tensor<T> ELU(Tensor<T> x, double alpha = 1.0) => DifferentiableOps<T>.ELU(x, alpha);
+        public static Tensor<T> SELU(Tensor<T> x) => DifferentiableOps<T>.SELU(x);
+        public static Tensor<T> Mish(Tensor<T> x) => DifferentiableOps<T>.Mish(x);
+        public static Tensor<T> HardSigmoid(Tensor<T> x) => DifferentiableOps<T>.HardSigmoid(x);
+        public static Tensor<T> HardSwish(Tensor<T> x) => DifferentiableOps<T>.HardSwish(x);
+        public static Tensor<T> ReLU6(Tensor<T> x) => DifferentiableOps<T>.ReLU6(x);
         public static Tensor<T> PReLU(Tensor<T> x, Tensor<T> alpha) => E.TensorPReLU(x, alpha);
         public static Tensor<T> RReLU(Tensor<T> x, double lower = 0.125, double upper = 0.333, bool training = true) => E.TensorRReLU(x, lower, upper, training);
         public static Tensor<T> Threshold(Tensor<T> x, double threshold, double value) => E.TensorThreshold(x, N.FromDouble(threshold), N.FromDouble(value));
         public static Tensor<T> Softmax(Tensor<T> x) => E.TensorSoftmax(x, x.Rank - 1);
-        public static Tensor<T> LogSoftmax(Tensor<T> x, int axis = -1) => E.TensorLogSoftmax(x, axis < 0 ? x.Rank + axis : axis);
+        public static Tensor<T> LogSoftmax(Tensor<T> x, int axis = -1) => DifferentiableOps<T>.LogSoftmax(x, axis);
 
         // Math
-        public static Tensor<T> Log(Tensor<T> x) => E.TensorLog(x);
-        public static Tensor<T> Exp(Tensor<T> x) => E.TensorExp(x);
-        public static Tensor<T> Sqrt(Tensor<T> x) => E.TensorSqrt(x);
+        public static Tensor<T> Log(Tensor<T> x) => DifferentiableOps<T>.Log(x);
+        public static Tensor<T> Exp(Tensor<T> x) => DifferentiableOps<T>.Exp(x);
+        public static Tensor<T> Sqrt(Tensor<T> x) => DifferentiableOps<T>.Sqrt(x);
         public static Tensor<T> Abs(Tensor<T> x) => E.TensorAbs(x);
         public static Tensor<T> Pow(Tensor<T> x, double n) => E.TensorPower(x, N.FromDouble(n));
         public static Tensor<T> Clamp(Tensor<T> x, double min, double max) => E.TensorClamp(x, N.FromDouble(min), N.FromDouble(max));
         public static Tensor<T> Floor(Tensor<T> x) => E.TensorFloor(x);
         public static Tensor<T> Ceil(Tensor<T> x) => E.TensorCeiling(x);
-        public static Tensor<T> Sign(Tensor<T> x) => E.TensorSign(x);
-        public static Tensor<T> Square(Tensor<T> x) => E.TensorSquare(x);
-        public static Tensor<T> Reciprocal(Tensor<T> x) => E.TensorReciprocal(x);
+        public static Tensor<T> Sign(Tensor<T> x) => DifferentiableOps<T>.Sign(x);
+        public static Tensor<T> Square(Tensor<T> x) => DifferentiableOps<T>.Square(x);
+        public static Tensor<T> Reciprocal(Tensor<T> x) => DifferentiableOps<T>.Reciprocal(x);
         public static Tensor<T> Norm(Tensor<T> x, double p = 2.0) => E.TensorNorm(x);
         public static Tensor<T> LogSumExp(Tensor<T> x) => E.TensorLogSumExp(x);
 
         // Shape operations
-        public static Tensor<T> Reshape(Tensor<T> a, int[] newShape) => E.Reshape(a, newShape);
-        public static Tensor<T> Permute(Tensor<T> a, int[] axes) => E.TensorPermute(a, axes);
-        public static Tensor<T> Squeeze(Tensor<T> a, int? dim = null) => E.TensorSqueeze(a, dim ?? -1);
-        public static Tensor<T> Unsqueeze(Tensor<T> a, int dim) => E.TensorExpandDims(a, dim);
-        public static Tensor<T> Flatten(Tensor<T> a) => E.TensorFlatten(a);
+        public static Tensor<T> Reshape(Tensor<T> a, int[] newShape) => DifferentiableOps<T>.Reshape(a, newShape);
+        public static Tensor<T> Permute(Tensor<T> a, int[] axes) => DifferentiableOps<T>.Permute(a, axes);
+        public static Tensor<T> Squeeze(Tensor<T> a, int? dim = null) => DifferentiableOps<T>.Squeeze(a, dim);
+        public static Tensor<T> Unsqueeze(Tensor<T> a, int dim) => DifferentiableOps<T>.Unsqueeze(a, dim);
+        public static Tensor<T> Flatten(Tensor<T> a) => DifferentiableOps<T>.Flatten(a);
         public static Tensor<T> Narrow(Tensor<T> input, int dim, int start, int length) => E.TensorNarrow(input, dim, start, length);
         public static Tensor<T> Expand(Tensor<T> a, int[] targetShape) => E.TensorExpandDims(a, 0); // simplified
-        public static Tensor<T> Concatenate(Tensor<T>[] tensors, int axis = 0) => E.TensorConcatenate(tensors, axis);
-        public static Tensor<T> Stack(Tensor<T>[] tensors, int axis = 0) => E.TensorStackDiff(tensors, axis);
+        public static Tensor<T> Concatenate(Tensor<T>[] tensors, int axis = 0) => DifferentiableOps<T>.Concatenate(tensors, axis);
+        public static Tensor<T> Stack(Tensor<T>[] tensors, int axis = 0) => DifferentiableOps<T>.Stack(tensors, axis);
         public static Tensor<T>[] Split(Tensor<T> x, int[] splitSizes, int axis = 0) => E.TensorSplit(x, splitSizes.Length, axis);
         public static Tensor<T> Tile(Tensor<T> input, int[] repeats) => E.TensorTile(input, repeats);
 
