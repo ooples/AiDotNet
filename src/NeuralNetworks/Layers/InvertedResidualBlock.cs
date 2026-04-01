@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8, 8", TestConstructorArgs = "4, 8, 8, 8")]
-public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
+public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph<T>, ILayerSerializationExtras<T>
 {
     private readonly ConvolutionalLayer<T>? _expandConv;
     private readonly BatchNormalizationLayer<T>? _expandBn;
@@ -228,6 +228,23 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
             activationFunction: new IdentityActivation<T>());
 
         _projectBn = new BatchNormalizationLayer<T>(outChannels);
+
+        // Default internal BN layers to eval mode.
+        // BN with batch_size=1 in training mode normalizes to zero (I - 1/N*11^T = 0 when N=1),
+        // which breaks forward pass for single samples. Eval mode uses running stats.
+        _expandBn?.SetTrainingMode(false);
+        _dwBn.SetTrainingMode(false);
+        _projectBn.SetTrainingMode(false);
+    }
+
+    /// <inheritdoc />
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        // Propagate to internal BN layers which behave differently in training vs eval mode
+        _expandBn?.SetTrainingMode(isTraining);
+        _dwBn.SetTrainingMode(isTraining);
+        _projectBn.SetTrainingMode(isTraining);
     }
 
     /// <summary>
@@ -504,6 +521,63 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
             int count = _projectBn.GetParameters().Length;
             _projectBn.SetParameters(parameters.SubVector(offset, count));
             // offset not incremented since this is the last parameter block
+        }
+    }
+
+    // --- ILayerSerializationExtras: serialize internal BN running stats ---
+
+    int ILayerSerializationExtras<T>.ExtraParameterCount
+    {
+        get
+        {
+            int count = 0;
+            if (_expandBn is ILayerSerializationExtras<T> eb) count += eb.ExtraParameterCount;
+            if (_dwBn is ILayerSerializationExtras<T> db) count += db.ExtraParameterCount;
+            if (_projectBn is ILayerSerializationExtras<T> pb) count += pb.ExtraParameterCount;
+            return count;
+        }
+    }
+
+    Vector<T> ILayerSerializationExtras<T>.GetExtraParameters()
+    {
+        var parts = new List<T>();
+        if (_expandBn is ILayerSerializationExtras<T> eb)
+            parts.AddRange(eb.GetExtraParameters().ToArray());
+        if (_dwBn is ILayerSerializationExtras<T> db)
+            parts.AddRange(db.GetExtraParameters().ToArray());
+        if (_projectBn is ILayerSerializationExtras<T> pb)
+            parts.AddRange(pb.GetExtraParameters().ToArray());
+        return new Vector<T>(parts.ToArray());
+    }
+
+    void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
+    {
+        int offset = 0;
+        if (_expandBn is ILayerSerializationExtras<T> eb)
+        {
+            int count = eb.ExtraParameterCount;
+            if (offset + count <= extraParameters.Length)
+            {
+                eb.SetExtraParameters(extraParameters.SubVector(offset, count));
+                offset += count;
+            }
+        }
+        if (_dwBn is ILayerSerializationExtras<T> db)
+        {
+            int count = db.ExtraParameterCount;
+            if (offset + count <= extraParameters.Length)
+            {
+                db.SetExtraParameters(extraParameters.SubVector(offset, count));
+                offset += count;
+            }
+        }
+        if (_projectBn is ILayerSerializationExtras<T> pb)
+        {
+            int count = pb.ExtraParameterCount;
+            if (offset + count <= extraParameters.Length)
+            {
+                pb.SetExtraParameters(extraParameters.SubVector(offset, count));
+            }
         }
     }
 

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
-public class BatchNormalizationLayer<T> : LayerBase<T>
+public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     /// <summary>
     /// A small constant added to the variance for numerical stability.
@@ -98,6 +98,11 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
     /// Initialized to ones.
     /// </remarks>
     private Tensor<T> _runningVariance;
+
+    // Cached inference scale/shift for deterministic forward pass
+    private Tensor<T>? _cachedInferenceScale;
+    private Tensor<T>? _cachedInferenceShift;
+    private bool _inferenceScaleDirty = true;
 
     /// <summary>
     /// The input from the last forward pass.
@@ -405,6 +410,9 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             var scaledBatchVar = Engine.TensorMultiplyScalar(batchVariance, oneMinusMomentum);
             _runningVariance = Engine.TensorAdd(momentumRunningVar, scaledBatchVar);
 
+            // Invalidate cached inference scale/shift since running stats changed
+            _inferenceScaleDirty = true;
+
             // Preserve original rank
             if (_inputWas1D)
             {
@@ -418,24 +426,28 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
             // Inference: Use running statistics
             // output = gamma * (input - runningMean) / sqrt(runningVar + epsilon) + beta
 
-            // Cache running stats for backward pass (needed when BN is in eval mode during training,
-            // e.g., batch_size=1 where training-mode BN gradient is zero)
+            // Cache running stats for backward pass support (needed when training with BN in eval mode)
             _lastMean = _runningMean;
             _lastVariance = _runningVariance;
 
-            // Calculate scale and shift terms
-            var epsilonVec = Tensor<T>.CreateDefault(_runningVariance.Shape.ToArray(), _epsilon);
-            var variancePlusEps = Engine.TensorAdd(_runningVariance, epsilonVec);
-            var stdDev = Engine.TensorSqrt(variancePlusEps);
+            // Cache scale/shift to ensure deterministic forward pass
+            // (recomputing creates new tensor allocations that can cause SIMD alignment differences)
+            if (_inferenceScaleDirty || _cachedInferenceScale is null || _cachedInferenceShift is null)
+            {
+                var epsilonVec = Tensor<T>.CreateDefault(_runningVariance.Shape.ToArray(), _epsilon);
+                var variancePlusEps = Engine.TensorAdd(_runningVariance, epsilonVec);
+                var stdDev = Engine.TensorSqrt(variancePlusEps);
 
-            var scale = Engine.TensorDivide(_gamma, stdDev);
-            var term2 = Engine.TensorDivide(Engine.TensorMultiply(_gamma, _runningMean), stdDev);
-            var shift = Engine.TensorSubtract(_beta, term2);
+                _cachedInferenceScale = Engine.TensorDivide(_gamma, stdDev);
+                var term2 = Engine.TensorDivide(Engine.TensorMultiply(_gamma, _runningMean), stdDev);
+                _cachedInferenceShift = Engine.TensorSubtract(_beta, term2);
+                _inferenceScaleDirty = false;
+            }
 
             // Handle any tensor rank (2D, 3D, 4D, 5D, etc.)
             // Dimension 0 is batch, dimension 1 is features/channels
             // Dimensions 2+ are spatial dimensions
-            var result = ApplyInferenceAnyRank(input, scale, shift);
+            var result = ApplyInferenceAnyRank(input, _cachedInferenceScale, _cachedInferenceShift);
 
             // Preserve original rank
             if (_inputWas1D)
@@ -1028,6 +1040,32 @@ public class BatchNormalizationLayer<T> : LayerBase<T>
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_gamma);
         Engine.InvalidatePersistentTensor(_beta);
+        _inferenceScaleDirty = true;
+    }
+
+    // --- ILayerSerializationExtras: running mean/variance are non-trainable state ---
+
+    int ILayerSerializationExtras<T>.ExtraParameterCount => _runningMean.Length + _runningVariance.Length;
+
+    Vector<T> ILayerSerializationExtras<T>.GetExtraParameters()
+    {
+        return Vector<T>.Concatenate(
+            Vector<T>.FromMemory(_runningMean.Data),
+            Vector<T>.FromMemory(_runningVariance.Data));
+    }
+
+    void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
+    {
+        int featureSize = InputShape[0];
+        if (extraParameters.Length != featureSize * 2)
+            return; // graceful no-op for legacy data without extras
+
+        var meanVec = extraParameters.Slice(0, featureSize);
+        var varVec = extraParameters.Slice(featureSize, featureSize);
+
+        _runningMean = Tensor<T>.FromVector(meanVec, [featureSize]);
+        _runningVariance = Tensor<T>.FromVector(varVec, [featureSize]);
+        _inferenceScaleDirty = true;
     }
 
     private Tensor<T>? _gammaVelocity;

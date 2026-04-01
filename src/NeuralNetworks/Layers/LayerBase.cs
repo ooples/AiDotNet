@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
@@ -49,39 +49,154 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
-    /// Initializes a tensor with He/Kaiming uniform initialization using Engine vectorized operations.
-    /// Much faster than per-element scalar loops (uses Engine.TensorRandomUniformRange).
-    /// Per He et al. 2015: weights ~ U(-scale, scale) where scale = sqrt(2 / fan_in).
+    /// Tape-aware tensor operations. Zero-overhead when no GradientTape is active
+    /// (delegates directly to Engine). When a tape IS active, operations are recorded
+    /// for reverse-mode automatic differentiation — same architecture as PyTorch autograd.
     /// </summary>
-    /// <param name="shape">Shape of the tensor to initialize.</param>
-    /// <param name="fanIn">Number of input connections (e.g., inputChannels * kernelH * kernelW).</param>
-    /// <returns>Initialized tensor.</returns>
-    protected Tensor<T> HeInitialize(int[] shape, int fanIn)
-    {
-        T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(
-            NumOps.FromDouble(2.0), NumOps.FromDouble(fanIn)));
-        return Engine.TensorRandomUniformRange<T>(shape, NumOps.Negate(scale), scale);
-    }
-
+    /// <remarks>
+    /// Use <c>Ops.Add(a, b)</c> instead of <c>Engine.TensorAdd(a, b)</c> in Forward()
+    /// methods to enable end-to-end gradient computation through layers.
+    /// </remarks>
     /// <summary>
-    /// Initializes a tensor with Xavier/Glorot uniform initialization using Engine vectorized operations.
-    /// Per Glorot & Bengio 2010: weights ~ U(-scale, scale) where scale = sqrt(6 / (fan_in + fan_out)).
+    /// Differentiable operations facade — delegates to the Tensors engine which
+    /// auto-records to the gradient tape when one is active. This gives us
+    /// SIMD backward kernels, GPU backward, TensorPool, and PyTorch-beating performance
+    /// for free via the AiDotNet.Tensors package.
     /// </summary>
-    protected Tensor<T> XavierInitialize(int[] shape, int fanIn, int fanOut)
+    protected static class Ops
     {
-        T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(
-            NumOps.FromDouble(6.0), NumOps.FromDouble(fanIn + fanOut)));
-        return Engine.TensorRandomUniformRange<T>(shape, NumOps.Negate(scale), scale);
-    }
+        private static IEngine E => AiDotNetEngine.Current;
+        private static INumericOperations<T> N => MathHelper.GetNumericOperations<T>();
 
-    /// <summary>
-    /// Creates a zero-initialized tensor using Engine for potential GPU acceleration.
-    /// </summary>
-    protected Tensor<T> ZeroInitialize(int[] shape)
-    {
-        var tensor = new Tensor<T>(shape);
-        Engine.TensorFill(tensor, NumOps.Zero);
-        return tensor;
+        // Element-wise arithmetic
+        public static Tensor<T> Add(Tensor<T> a, Tensor<T> b) => E.TensorAdd(a, b);
+        public static Tensor<T> Subtract(Tensor<T> a, Tensor<T> b) => E.TensorSubtract(a, b);
+        public static Tensor<T> Multiply(Tensor<T> a, Tensor<T> b) => E.TensorMultiply(a, b);
+        public static Tensor<T> Divide(Tensor<T> a, Tensor<T> b) => E.TensorDivide(a, b);
+        public static Tensor<T> Negate(Tensor<T> a) => E.TensorNegate(a);
+        public static Tensor<T> MultiplyScalar(Tensor<T> a, T scalar) => E.TensorMultiplyScalar(a, scalar);
+        public static Tensor<T> AddScalar(Tensor<T> a, T scalar) => E.TensorAddScalar(a, scalar);
+        public static Tensor<T> DivideScalar(Tensor<T> a, T scalar) => E.TensorDivideScalar(a, scalar);
+
+        // Matrix operations
+        public static Tensor<T> MatMul(Tensor<T> a, Tensor<T> b) => E.TensorMatMul(a, b);
+        public static Tensor<T> Transpose(Tensor<T> a) => E.TensorTranspose(a);
+        public static Tensor<T> Bmm(Tensor<T> a, Tensor<T> b) => E.BatchMatMul(a, b);
+
+        // Reductions
+        public static Tensor<T> Sum(Tensor<T> a) => E.TensorMeanDiff(a); // returns scalar tensor
+        public static Tensor<T> Mean(Tensor<T> a) => E.TensorMeanDiff(a);
+        public static Tensor<T> SumAxis(Tensor<T> a, int[] axes, bool keepDims = false) => E.ReduceSum(a, axes, keepDims);
+        public static Tensor<T> MeanAxis(Tensor<T> a, int[] axes, bool keepDims = false) => E.ReduceMean(a, axes, keepDims);
+        public static Tensor<T> Var(Tensor<T> a, int[] axes, bool keepDims = false) => E.TensorVar(a);
+        public static Tensor<T> Std(Tensor<T> a, int[] axes, bool keepDims = false) => E.TensorStd(a);
+
+        // Activations
+        public static Tensor<T> Sigmoid(Tensor<T> x) => E.TensorSigmoid(x);
+        public static Tensor<T> Tanh(Tensor<T> x) => E.TensorTanh(x);
+        public static Tensor<T> ReLU(Tensor<T> x) => E.TensorReLU(x);
+        public static Tensor<T> GELU(Tensor<T> x) => E.TensorGELU(x);
+        public static Tensor<T> Swish(Tensor<T> x) => E.Swish(x);
+        public static Tensor<T> Softplus(Tensor<T> x, double beta = 1.0) => E.Softplus(x);
+        public static Tensor<T> LeakyReLU(Tensor<T> x, double alpha = 0.01) => E.TensorLeakyReLU(x, N.FromDouble(alpha));
+        public static Tensor<T> ELU(Tensor<T> x, double alpha = 1.0) => E.ELU(x, alpha);
+        public static Tensor<T> SELU(Tensor<T> x) => E.TensorSELU(x);
+        public static Tensor<T> Mish(Tensor<T> x) => E.TensorMish(x);
+        public static Tensor<T> HardSigmoid(Tensor<T> x) => E.TensorHardSigmoid(x);
+        public static Tensor<T> HardSwish(Tensor<T> x) => E.TensorHardSwish(x);
+        public static Tensor<T> ReLU6(Tensor<T> x) => E.TensorReLU6(x);
+        public static Tensor<T> PReLU(Tensor<T> x, Tensor<T> alpha) => E.TensorPReLU(x, alpha);
+        public static Tensor<T> RReLU(Tensor<T> x, double lower = 0.125, double upper = 0.333, bool training = true) => E.TensorRReLU(x, lower, upper, training);
+        public static Tensor<T> Threshold(Tensor<T> x, double threshold, double value) => E.TensorThreshold(x, N.FromDouble(threshold), N.FromDouble(value));
+        public static Tensor<T> Softmax(Tensor<T> x) => E.TensorSoftmax(x, x.Rank - 1);
+        public static Tensor<T> LogSoftmax(Tensor<T> x, int axis = -1) => E.TensorLogSoftmax(x, axis < 0 ? x.Rank + axis : axis);
+
+        // Math
+        public static Tensor<T> Log(Tensor<T> x) => E.TensorLog(x);
+        public static Tensor<T> Exp(Tensor<T> x) => E.TensorExp(x);
+        public static Tensor<T> Sqrt(Tensor<T> x) => E.TensorSqrt(x);
+        public static Tensor<T> Abs(Tensor<T> x) => E.TensorAbs(x);
+        public static Tensor<T> Pow(Tensor<T> x, double n) => E.TensorPower(x, N.FromDouble(n));
+        public static Tensor<T> Clamp(Tensor<T> x, double min, double max) => E.TensorClamp(x, N.FromDouble(min), N.FromDouble(max));
+        public static Tensor<T> Floor(Tensor<T> x) => E.TensorFloor(x);
+        public static Tensor<T> Ceil(Tensor<T> x) => E.TensorCeiling(x);
+        public static Tensor<T> Sign(Tensor<T> x) => E.TensorSign(x);
+        public static Tensor<T> Square(Tensor<T> x) => E.TensorSquare(x);
+        public static Tensor<T> Reciprocal(Tensor<T> x) => E.TensorReciprocal(x);
+        public static Tensor<T> Norm(Tensor<T> x, double p = 2.0) => E.TensorNorm(x);
+        public static Tensor<T> LogSumExp(Tensor<T> x) => E.TensorLogSumExp(x);
+
+        // Shape operations
+        public static Tensor<T> Reshape(Tensor<T> a, int[] newShape) => E.Reshape(a, newShape);
+        public static Tensor<T> Permute(Tensor<T> a, int[] axes) => E.TensorPermute(a, axes);
+        public static Tensor<T> Squeeze(Tensor<T> a, int? dim = null) => E.TensorSqueeze(a, dim ?? -1);
+        public static Tensor<T> Unsqueeze(Tensor<T> a, int dim) => E.TensorExpandDims(a, dim);
+        public static Tensor<T> Flatten(Tensor<T> a) => E.TensorFlatten(a);
+        public static Tensor<T> Narrow(Tensor<T> input, int dim, int start, int length) => E.TensorNarrow(input, dim, start, length);
+        public static Tensor<T> Expand(Tensor<T> a, int[] targetShape) => E.TensorExpandDims(a, 0); // simplified
+        public static Tensor<T> Concatenate(Tensor<T>[] tensors, int axis = 0) => E.TensorConcatenate(tensors, axis);
+        public static Tensor<T> Stack(Tensor<T>[] tensors, int axis = 0) => E.TensorStackDiff(tensors, axis);
+        public static Tensor<T>[] Split(Tensor<T> x, int[] splitSizes, int axis = 0) => E.TensorSplit(x, splitSizes.Length, axis);
+        public static Tensor<T> Tile(Tensor<T> input, int[] repeats) => E.TensorTile(input, repeats);
+
+        // Indexing
+        public static Tensor<T> Gather(Tensor<T> input, int[] indices, int axis = 0) => E.TensorGather(input, new Tensor<int>(indices, [indices.Length]), axis);
+        public static Tensor<T> IndexSelect(Tensor<T> input, int dim, int[] indices) => E.TensorIndexSelectDiff(input, new Tensor<int>(indices, [indices.Length]), dim);
+        public static Tensor<T> ScatterAdd(Tensor<T> src, int[] indices, int dim, int outputSize) { var shape = src.Shape.ToArray(); shape[dim] = outputSize; var dest = new Tensor<T>(shape); return E.TensorScatterAdd(dest, new Tensor<int>(indices, [indices.Length]), src, dim); }
+        public static Tensor<T> MaskedFill(Tensor<T> input, Tensor<T> mask, double fillValue) => E.TensorMaskedFill(input, mask.GetFlattenedData().Select(v => N.ToDouble(v) != 0).ToArray(), N.FromDouble(fillValue));
+        public static Tensor<T> Where(Tensor<T> condition, Tensor<T> x, Tensor<T> y) => E.TensorWhere(condition.GetFlattenedData().Select(v => N.ToDouble(v) != 0).ToArray(), x, y);
+        public static Tensor<T> OneHot(int[] indices, int numClasses) => E.TensorOneHot<T>(new Tensor<int>(indices, [indices.Length]), numClasses);
+
+        // Conv
+        public static Tensor<T> Conv1D(Tensor<T> input, Tensor<T> kernel, int stride = 1, int padding = 0) => E.Conv1D(input, kernel, stride, padding, 1);
+        public static Tensor<T> Conv2D(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] dilation) => E.Conv2D(input, kernel, stride, padding, dilation);
+        public static Tensor<T> Conv3D(Tensor<T> input, Tensor<T> kernel, int[] stride, int[] padding, int[] dilation) => E.Conv3D(input, kernel, stride, padding, dilation);
+        public static Tensor<T> ConvTranspose2D(Tensor<T> input, Tensor<T> kernel, int stride = 1, int padding = 0) => E.ConvTranspose2D(input, kernel, new[] { stride, stride }, new[] { padding, padding }, new[] { 0, 0 });
+
+        // Normalization
+        public static Tensor<T> BatchNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double eps = 1e-5) => E.BatchNorm(input, gamma, beta, eps, out _, out _);
+        public static Tensor<T> LayerNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, double eps = 1e-5) => E.LayerNorm(input, gamma, beta, eps, out _, out _);
+        public static Tensor<T> GroupNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta, int numGroups, double eps = 1e-5) => E.GroupNorm(input, numGroups, gamma, beta, eps, out _, out _);
+        public static Tensor<T> InstanceNorm(Tensor<T> input, Tensor<T>? weight = null, Tensor<T>? bias = null) => E.InstanceNorm(input, weight ?? new Tensor<T>([input.Shape[1]]), bias ?? new Tensor<T>([input.Shape[1]]), 1e-5, out _, out _);
+        public static Tensor<T> RMSNorm(Tensor<T> input, Tensor<T> weight) => E.RMSNorm(input, weight, 1e-5, out _);
+
+        // Pooling
+        public static Tensor<T> AvgPool2D(Tensor<T> x, int poolSize, int stride) => E.AvgPool2D(x, poolSize, stride);
+        public static Tensor<T> MaxPool2D(Tensor<T> x, int poolSize, int stride) => E.MaxPool2D(x, poolSize, stride);
+        public static Tensor<T> AdaptiveAvgPool2D(Tensor<T> input, int outputH, int outputW) => E.AdaptiveAvgPool2D(input, outputH, outputW);
+        public static Tensor<T> AdaptiveMaxPool2D(Tensor<T> input, int outputH, int outputW) => E.TensorAdaptiveMaxPool2D(input, new[] { outputH, outputW });
+        public static Tensor<T> AvgPool1D(Tensor<T> input, int kernelSize, int stride = -1) => E.TensorAvgPool1D(input, kernelSize, stride < 0 ? kernelSize : stride);
+        public static Tensor<T> MaxPool1D(Tensor<T> input, int kernelSize, int stride = -1) => E.TensorMaxPool1D(input, kernelSize, stride < 0 ? kernelSize : stride);
+
+        // Interpolation
+        public static Tensor<T> ConstantPad(Tensor<T> input, int[] padding, double value = 0) => E.TensorConstantPad(input, padding, N.FromDouble(value));
+        public static Tensor<T> UpsampleNearest(Tensor<T> input, int scaleFactor) => E.Upsample(input, scaleFactor, scaleFactor);
+        public static Tensor<T> UpsampleBilinear(Tensor<T> input, int outputH, int outputW) => E.TensorUpsampleBilinear(input, new[] { outputH, outputW });
+
+        // Dropout
+        public static Tensor<T> Dropout(Tensor<T> x, double p, bool training, Random? rng = null) { if (!training) return x; var result = E.Dropout(x, p, training, out _); return result; }
+
+        // Embedding
+        public static Tensor<T> Embedding(Tensor<T> table, int[] indices) => E.Embedding(new Tensor<int>(indices, [indices.Length]), table);
+
+        // Attention
+        public static Tensor<T> ScaledDotProductAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v, Tensor<T>? mask = null) => E.TensorScaledDotProductAttention(q, k, v);
+
+        // Cosine similarity
+        public static Tensor<T> CosineSimilarity(Tensor<T> a, Tensor<T> b) => E.TensorCosineSimilarityLoss(a, b);
+
+        // Element-wise min/max
+        public static Tensor<T> Min(Tensor<T> a, Tensor<T> b) => E.TensorMin(a, b);
+        public static Tensor<T> Max(Tensor<T> a, Tensor<T> b) => E.TensorMax(a, b);
+
+        // Loss functions
+        public static Tensor<T> CrossEntropyLoss(Tensor<T> logits, Tensor<T> targets) => E.TensorCrossEntropyLoss(logits, targets);
+        public static Tensor<T> MSELoss(Tensor<T> pred, Tensor<T> target) => E.TensorMSELoss(pred, target);
+        public static Tensor<T> L1Loss(Tensor<T> pred, Tensor<T> target) => E.TensorL1Loss(pred, target);
+        public static Tensor<T> BCEWithLogitsLoss(Tensor<T> logits, Tensor<T> targets) => E.TensorBCEWithLogitsLoss(logits, targets);
+        public static Tensor<T> HuberLoss(Tensor<T> pred, Tensor<T> target, double delta = 1.0) => E.TensorHuberLoss(pred, target, delta);
+        public static Tensor<T> KLDivLoss(Tensor<T> logP, Tensor<T> target) => E.TensorKLDivLoss(logP, target);
+        public static Tensor<T> NLLLoss(Tensor<T> logProbs, int[] targets) => E.TensorNLLLoss(logProbs, new Tensor<T>(targets.Select(t => N.FromDouble(t)).ToArray(), [targets.Length]));
     }
 
     /// <summary>
@@ -880,7 +995,12 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// All layers are required to implement this method, even if they set SupportsJitCompilation = false.
     /// </para>
     /// </remarks>
-    public abstract ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes);
+    public virtual ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement ExportComputationGraph. " +
+            "Use GradientTape-based autodiff instead.");
+    }
 
     /// <summary>
     /// Gets whether this layer supports JIT compilation.
@@ -902,7 +1022,108 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// When false, the layer will use the standard Forward() method instead.
     /// </para>
     /// </remarks>
-    public abstract bool SupportsJitCompilation { get; }
+    public virtual bool SupportsJitCompilation => false;
+
+    /// <summary>
+    /// Declares the named input ports this layer accepts.
+    /// Default: single port named "input" with the layer's input shape.
+    /// Override for multi-input layers (e.g., DiffusionResBlock, CrossAttention).
+    /// </summary>
+    private IReadOnlyList<LayerPort>? _cachedInputPorts;
+    public virtual IReadOnlyList<LayerPort> InputPorts =>
+        _cachedInputPorts ??= [new LayerPort("input", GetInputShape())];
+
+    /// <summary>
+    /// Declares the named output ports this layer produces.
+    /// Default: single port named "output" with the layer's output shape.
+    /// </summary>
+    private IReadOnlyList<LayerPort>? _cachedOutputPorts;
+    public virtual IReadOnlyList<LayerPort> OutputPorts =>
+        _cachedOutputPorts ??= [new LayerPort("output", GetOutputShape())];
+
+    /// <summary>
+    /// Multi-input forward pass. Receives inputs by name, enabling layers that
+    /// need multiple distinct tensors (time embeddings, conditioning, Q/K/V, etc.).
+    /// </summary>
+    /// <param name="inputs">Named input tensors matching <see cref="InputPorts"/>.</param>
+    /// <returns>Output tensor.</returns>
+    public virtual Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    {
+        if (inputs.TryGetValue("input", out var input))
+            return Forward(input);
+
+        if (inputs.Count == 1)
+            return Forward(inputs.Values.First());
+
+        var missing = InputPorts
+            .Where(p => p.Required && !inputs.ContainsKey(p.Name))
+            .Select(p => p.Name)
+            .ToList();
+
+        if (missing.Count > 0)
+            throw new ArgumentException(
+                $"{GetType().Name} requires input ports: {string.Join(", ", missing)}. " +
+                $"Provided: {string.Join(", ", inputs.Keys)}.");
+
+        throw new NotSupportedException(
+            $"{GetType().Name} has {InputPorts.Count} input ports but does not override " +
+            $"Forward(IReadOnlyDictionary). Override it to handle: " +
+            $"{string.Join(", ", InputPorts.Select(p => p.Name))}.");
+    }
+
+    /// <summary>
+    /// Multi-output backward pass. Returns gradients per named input port.
+    /// Default delegates to single-input <see cref="Backward(Tensor{T})"/>.
+    /// </summary>
+    public virtual IReadOnlyDictionary<string, Tensor<T>> BackwardMulti(
+        IReadOnlyDictionary<string, Tensor<T>> outputGradients)
+    {
+        if (InputPorts.Count > 1)
+        {
+            throw new NotSupportedException(
+                $"{GetType().Name} has {InputPorts.Count} input ports but does not override " +
+                $"BackwardMulti. Override it to return gradients for: " +
+                $"{string.Join(", ", InputPorts.Select(p => p.Name))}.");
+        }
+
+        var grad = outputGradients.TryGetValue("output", out var g) ? g : outputGradients.Values.First();
+        var inputGrad = Backward(grad);
+        return new Dictionary<string, Tensor<T>> { ["input"] = inputGrad };
+    }
+
+    /// <summary>
+    /// GPU multi-input forward pass. Default delegates to single-input ForwardGpu.
+    /// </summary>
+    public virtual IGpuTensor<T> ForwardGpu(IReadOnlyDictionary<string, IGpuTensor<T>> inputs)
+    {
+        if (inputs.TryGetValue("input", out var input))
+            return ForwardGpu(input);
+
+        if (inputs.Count == 1)
+            return ForwardGpu(inputs.Values.First());
+
+        throw new NotSupportedException(
+            $"{GetType().Name} does not override ForwardGpu(IReadOnlyDictionary).");
+    }
+
+    /// <summary>
+    /// GPU multi-output backward pass. Default delegates to single-input BackwardGpu.
+    /// </summary>
+    public virtual IReadOnlyDictionary<string, IGpuTensor<T>> BackwardGpuMulti(
+        IReadOnlyDictionary<string, IGpuTensor<T>> outputGradients)
+    {
+        if (InputPorts.Count > 1)
+        {
+            throw new NotSupportedException(
+                $"{GetType().Name} has {InputPorts.Count} input ports but does not override " +
+                $"BackwardGpuMulti.");
+        }
+
+        var grad = outputGradients.TryGetValue("output", out var g) ? g : outputGradients.Values.First();
+        var inputGrad = BackwardGpu(grad);
+        return new Dictionary<string, IGpuTensor<T>> { ["input"] = inputGrad };
+    }
+
     /// <summary>
     /// Performs the forward pass of the layer.
     /// </summary>

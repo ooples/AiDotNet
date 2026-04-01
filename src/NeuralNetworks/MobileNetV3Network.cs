@@ -4,6 +4,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Validation;
@@ -163,6 +164,7 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
             // Use MobileNetV3-specific layer configuration
             Layers.AddRange(LayerHelper<T>.CreateDefaultMobileNetV3Layers(Architecture, _configuration));
         }
+
     }
 
     /// <summary>
@@ -227,35 +229,66 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
     {
         // ALL BN layers must use eval mode (running stats) for batch_size=1.
         // Per Ioffe & Szegedy 2015: BN gradient is exactly zero for N=1 in
-        // training mode (I - 1/N*11^T = 0). This kills gradient flow through
-        // both standalone BN and BN inside InvertedResidualBlock.
-        // Eval-mode BN gives: grad = gamma / sqrt(running_var + eps) * d_output
-        // which is a proper non-zero gradient pass-through.
+        // training mode (I - 1/N*11^T = 0). This kills gradient flow.
         // Per Howard et al. 2019: paper uses batch_size=4096 where BN works normally.
-        // For single-sample training, eval-mode BN is the correct approximation.
         foreach (var layer in Layers)
             layer.SetTrainingMode(false);
         var prediction = ForwardWithMemory(input);
         var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
         LastLoss = loss;
 
-        var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
+        // Forward pass
+        var current = input;
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
+        var prediction = current;
 
+        // MSE loss: works correctly regardless of output range (unlike CategoricalCrossEntropy
+        // which assumes softmax-normalized probabilities and gives wrong gradient signs on raw logits).
+        var predVec = prediction.ToVector();
+        var targetVec = expectedOutput.ToVector();
+        double mse = 0;
+        for (int i = 0; i < predVec.Length; i++)
+        {
+            double diff = Convert.ToDouble(predVec[i]) - Convert.ToDouble(targetVec[i]);
+            mse += diff * diff;
+        }
+        mse /= predVec.Length;
+        LastLoss = NumOps.FromDouble(mse);
+
+        // MSE gradient: 2*(pred - target) / N
+        var gradData = new T[predVec.Length];
+        double scale = 2.0 / predVec.Length;
+        for (int i = 0; i < predVec.Length; i++)
+        {
+            double diff = Convert.ToDouble(predVec[i]) - Convert.ToDouble(targetVec[i]);
+            gradData[i] = NumOps.FromDouble(diff * scale);
+        }
+        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), new Vector<T>(gradData));
+
+        // Gradient clipping to prevent explosion
+        double gradNorm = 0;
+        for (int i = 0; i < gradData.Length; i++)
+        {
+            double v = Convert.ToDouble(gradData[i]);
+            gradNorm += v * v;
+        }
+        gradNorm = Math.Sqrt(gradNorm);
+        if (gradNorm > 1.0)
+        {
+            double clipScale = 1.0 / gradNorm;
+            outputGradientTensor = Engine.TensorMultiplyScalar(outputGradientTensor, NumOps.FromDouble(clipScale));
+        }
+
+        // Backward pass
         var currentGradient = outputGradientTensor;
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
             currentGradient = Layers[i].Backward(currentGradient);
         }
 
-        // Direct per-layer SGD at LR=0.01 for single-sample training
-        // (Adam default 0.001 is too low for 150-iteration convergence)
-        T lr = NumOps.FromDouble(0.1); // Higher LR for convergence in 30 iterations
-        foreach (var layer in Layers)
-        {
-            if (layer.SupportsTraining)
-                layer.UpdateParameters(lr);
-        }
+        // Update via optimizer (uses configured learning rate)
+        _optimizer.UpdateParameters(Layers);
     }
 
     /// <inheritdoc />
