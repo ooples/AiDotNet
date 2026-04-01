@@ -2708,6 +2708,39 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Performs tape-based backward pass and parameter update. Call this from Train()
+    /// overrides instead of the manual <c>for (i = Layers.Count-1; ...) Layers[i].Backward(gt)</c> loop.
+    /// </summary>
+    /// <param name="input">The input tensor (for re-running forward under tape).</param>
+    /// <param name="expected">The target tensor.</param>
+    /// <param name="learningRate">Learning rate for SGD update. Default: 0.001</param>
+    protected void TrainWithTape(Tensor<T> input, Tensor<T> expected, double learningRate = 0.001)
+    {
+        var engine = AiDotNetEngine.Current;
+        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+
+        using var tape = new GradientTape<T>();
+        var output = ForwardForTraining(input);
+
+        var diff = engine.TensorSubtract(output, expected);
+        var squared = engine.TensorMultiply(diff, diff);
+        var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+        var loss = engine.ReduceMean(squared, allAxes, keepDims: false);
+
+        var grads = tape.ComputeGradients(loss, trainableParams);
+
+        var lr = NumOps.FromDouble(learningRate);
+        foreach (var param in trainableParams)
+        {
+            if (grads.TryGetValue(param, out var grad))
+            {
+                for (int i = 0; i < param.Length && i < grad.Length; i++)
+                    param[i] = NumOps.Subtract(param[i], NumOps.Multiply(lr, grad[i]));
+            }
+        }
+    }
+
+    /// <summary>
     /// Persistent optimizer for models using the standard TrainStep pattern.
     /// Lazily initialized on first use (Adam with default settings).
     /// </summary>

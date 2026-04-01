@@ -1083,27 +1083,8 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
                 "without a modelPath parameter to train natively.");
         }
 
-        // Enable training mode: activates dropout and sets batch norm to use batch statistics
         SetTrainingMode(true);
-
-        // Forward pass through the full BEATs layer stack
-        var output = Predict(input);
-
-        // Compute gradient for backward pass
-        var gradient = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-
-        // Backward pass: propagate gradients from classification head back through
-        // Transformer encoder to patch projection, computing parameter gradients
-        var gradientTensor = Tensor<T>.FromVector(gradient);
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradientTensor = Layers[i].Backward(gradientTensor);
-        }
-
-        // Update all parameters using AdamW optimizer
-        _optimizer?.UpdateParameters(Layers);
-
-        // Restore inference mode: disables dropout, uses running statistics for batch norm
+        TrainWithTape(input, expected);
         SetTrainingMode(false);
     }
 

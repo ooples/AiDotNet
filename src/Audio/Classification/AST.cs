@@ -494,17 +494,7 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         }
 
         SetTrainingMode(true);
-
-        var output = Predict(input);
-        var gradient = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-
-        var gradientTensor = Tensor<T>.FromVector(gradient);
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradientTensor = Layers[i].Backward(gradientTensor);
-        }
-
-        _optimizer?.UpdateParameters(Layers);
+        TrainWithTape(input, expected);
         SetTrainingMode(false);
     }
 

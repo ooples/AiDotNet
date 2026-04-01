@@ -212,11 +212,7 @@ public class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        var output = Predict(input);
-        var gradient = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-        var gradTensor = Tensor<T>.FromVector(gradient);
-        for (int i = Layers.Count - 1; i >= 0; i--) gradTensor = Layers[i].Backward(gradTensor);
-        _optimizer?.UpdateParameters(Layers);
+        TrainWithTape(input, expected);
         SetTrainingMode(false);
     }
 
