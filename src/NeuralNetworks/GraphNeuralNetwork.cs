@@ -823,64 +823,17 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         int numNodes = input.Shape[0];
         var adjacencyMatrix = EnsureAdjacencyMatrix(numNodes);
 
-        // Set all layers to training mode
+        // Set adjacency for graph layers before training
         foreach (var layer in Layers)
         {
             layer.SetTrainingMode(true);
-        }
-
-        // Forward pass through all layers with adjacency
-        Tensor<T> current = input;
-        foreach (var layer in Layers)
-        {
             if (layer is IGraphConvolutionLayer<T> graphLayer)
-            {
                 graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
-            }
-            current = layer.Forward(current);
         }
 
-        // Calculate loss
-        var flattenedPredictions = current.ToVector();
-        var flattenedExpected = expectedOutput.ToVector();
-        LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
+        TrainWithTape(input, expectedOutput);
 
-        // Calculate output gradients
-        var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
-        var gradOutput = Tensor<T>.FromVector(outputGradients);
-
-        // Reshape gradient back to tensor shape if needed
-        if (gradOutput.Shape.Length == 1 && current.Shape.Length > 1)
-        {
-            gradOutput = gradOutput.Reshape(current.Shape.ToArray());
-        }
-
-        // Backward pass through all layers
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradOutput = Layers[i].Backward(gradOutput);
-        }
-
-        // Get parameter gradients for all trainable layers
-        Vector<T> parameterGradients = GetParameterGradients();
-
-        // Clip gradients to prevent exploding gradients
-        parameterGradients = ClipGradient(parameterGradients);
-
-        // Reuse optimizer across Train calls to preserve Adam momentum state.
-        // Use lower learning rate (0.0001) for GNNs — graph convolution aggregates
-        // neighbor features which amplifies gradient magnitudes.
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = DefaultTrainLearningRate });
-
-        // Get current parameters
-        Vector<T> currentParameters = GetParameters();
-
-        // Update parameters using the optimizer
-        Vector<T> updatedParameters = _trainOptimizer.UpdateParameters(currentParameters, parameterGradients);
-
-        // Apply updated parameters
-        UpdateParameters(updatedParameters);
+        SetTrainingMode(false);
     }
 
     /// <summary>

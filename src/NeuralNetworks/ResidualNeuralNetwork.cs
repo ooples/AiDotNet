@@ -111,7 +111,9 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     private List<ILayer<T>> _auxiliaryClassifiers = new();
     private readonly List<int> _auxiliaryClassifierPositions = new();
     private List<List<ILayer<T>>> _auxiliaryClassifierLayers = new();
+    #pragma warning disable CS0649
     private Vector<T>? _lastExpectedOutput;
+    #pragma warning restore CS0649
 
     /// <summary>
     /// Adds an auxiliary classifier at the specified layer position for deep supervision.
@@ -172,7 +174,9 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     /// Persistent Adam optimizer for Train() calls. Momentum state persists across
     /// iterations for stable convergence on deep residual networks.
     /// </summary>
+    #pragma warning disable CS0169
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+#pragma warning restore CS0169
 
     /// <summary>
     /// Gets or sets the number of training epochs.
@@ -682,37 +686,12 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-
-        // Propagate training mode to all layers including ResidualLayer inner layers
         foreach (var layer in Layers)
-        {
             layer.SetTrainingMode(true);
-        }
 
-        // Forward pass through all layers
-        var output = ForwardWithMemory(input);
-        var outputVector = output.ToVector();
-        var expectedVector = expectedOutput.ToVector();
+        TrainWithTape(input, expectedOutput);
 
-        // Cache expected output for auxiliary loss computation
-        _lastExpectedOutput = expectedVector;
-
-        // Compute loss
-        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
-
-        // Backward pass using proper loss gradient
-        var lossGradient = LossFunction.CalculateDerivative(outputVector, expectedVector);
-        Backpropagate(Tensor<T>.FromVector(lossGradient));
-
-        // Use persistent Adam optimizer for gradient-scaled parameter updates.
-        // Raw SGD fails on deep ResNets because gradients vanish — Adam's adaptive
-        // learning rate and momentum handle this. Persistent optimizer keeps momentum
-        // state across Train() calls for stable convergence.
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        var paramGradients = GetParameterGradients();
-        var currentParams = GetParameters();
-        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGradients);
-        UpdateParameters(updatedParams);
+        SetTrainingMode(false);
     }
 
     /// <summary>

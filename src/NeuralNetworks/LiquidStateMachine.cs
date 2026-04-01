@@ -54,7 +54,9 @@ namespace AiDotNet.NeuralNetworks;
 public class LiquidStateMachine<T> : NeuralNetworkBase<T>
 {
     private readonly LiquidStateMachineOptions _options;
+    #pragma warning disable CS0169
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+#pragma warning restore CS0169
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -466,46 +468,13 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (!IsTrainingMode)
-        {
-            SetTrainingMode(true);
-        }
-
-        // Forward pass with memory for backpropagation
+        SetTrainingMode(true);
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
-        Tensor<T> prediction = ForwardWithMemory(input);
 
-        // Calculate loss
-        var flattenedPredictions = prediction.ToVector();
-        var flattenedExpected = expectedOutput.ToVector();
-        LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
+        TrainWithTape(input, expectedOutput);
 
-        // Calculate output gradients
-        var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
-
-        // Backpropagate to get parameter gradients
-        Backpropagate(Tensor<T>.FromVector(outputGradients));
-
-        // Only update trainable (non-reservoir) layers
-        // ReservoirLayer weights are fixed; only readout Dense layers train
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        foreach (var layer in Layers)
-        {
-            if (layer is ReservoirLayer<T>)
-                continue; // Skip fixed reservoir
-
-            if (layer.SupportsTraining && layer.ParameterCount > 0)
-            {
-                var layerParams = layer.GetParameters();
-                var layerGrads = layer.GetParameterGradients();
-                if (layerParams.Length == layerGrads.Length && layerGrads.Length > 0)
-                {
-                    var updated = _trainOptimizer.UpdateParameters(layerParams, layerGrads);
-                    layer.SetParameters(updated);
-                }
-            }
-        }
+        SetTrainingMode(false);
     }
 
     /// <summary>
