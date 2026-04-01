@@ -51,7 +51,10 @@ namespace AiDotNet.NeuralNetworks;
 public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly DeepBeliefNetworkOptions _options;
+    // Optimizer is now handled by TrainWithTape in NeuralNetworkBase
+    #pragma warning disable CS0169
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+    #pragma warning restore CS0169
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -588,28 +591,11 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
 
-        // Single forward/backward pass per Train call
-        var output = ForwardWithMemory(input);
-        var outputVector = output.ToVector();
-        var expectedVector = expectedOutput.ToVector();
+        TrainWithTape(input, expectedOutput);
 
-        // Compute loss
-        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
-
-        // Backward pass with proper loss gradient
-        var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
-        var gradTensor = Tensor<T>.FromVector(lossGrad);
-        if (gradTensor.Rank < output.Rank)
-            gradTensor = gradTensor.Reshape(output.Shape.ToArray());
-
-        Backpropagate(gradTensor);
-
-        // Persistent Adam optimizer
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        var paramGrads = GetParameterGradients();
-        var currentParams = GetParameters();
-        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
-        UpdateParameters(updatedParams);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(false);
+        SetTrainingMode(false);
     }
 
     /// <summary>
