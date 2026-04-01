@@ -945,8 +945,8 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     {
         // Use Vector.Concatenate for production-grade parameter extraction
         return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_convWeights.Data),
-            Vector<T>.FromMemory(_convBias.Data)
+            new Vector<T>(_convWeights.ToArray()),
+            new Vector<T>(_convBias.ToArray())
         );
     }
 
@@ -979,9 +979,19 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameterGradients()
     {
-        var wGrad = _convWeightsGradient != null ? (_convWeightsGradient is not null ? Vector<T>.FromMemory(_convWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_convWeights.Length);
-        var bGrad = _convBiasGradient != null ? (_convBiasGradient is not null ? Vector<T>.FromMemory(_convBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_convBias.Length);
+        var wGrad = _convWeightsGradient != null ? new Vector<T>(_convWeightsGradient.ToArray()) : new Vector<T>(_convWeights.Length);
+        var bGrad = _convBiasGradient != null ? new Vector<T>(_convBiasGradient.ToArray()) : new Vector<T>(_convBias.Length);
         return Vector<T>.Concatenate(wGrad, bGrad);
+    }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["CapsuleChannels"] = _capsuleChannels.ToString();
+        metadata["CapsuleDimension"] = _capsuleDimension.ToString();
+        metadata["KernelSize"] = _kernelSize.ToString();
+        metadata["Stride"] = _stride.ToString();
+        return metadata;
     }
 
     public override void ClearGradients()
@@ -1043,5 +1053,53 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         _inputWasNCHW = false;
     }
 
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        if (_convWeights == null || _convBias == null)
+            throw new InvalidOperationException("Layer not initialized. Call Initialize() first.");
+
+        // Create input node - expecting [batch, height, width, channels]
+        var symbolicInput = new Tensor<T>(InputShape);
+        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Reshape the matrix weights to Conv2D format [outChannels, inChannels, kH, kW]
+        int totalOutputChannels = _capsuleChannels * _capsuleDimension;
+        var convWeightsTensor = _convWeights.Reshape(new int[] { totalOutputChannels, _inputChannels, _kernelSize, _kernelSize });
+        var weightsNode = Autodiff.TensorOperations<T>.Constant(convWeightsTensor, "conv_weights");
+
+        // _convBias is already a Tensor<T>, use directly
+        var biasNode = Autodiff.TensorOperations<T>.Constant(_convBias, "conv_bias");
+
+        // Apply convolution: [batch, height, width, channels] -> [batch, outH, outW, totalOutputChannels]
+        var convOutput = Autodiff.TensorOperations<T>.Conv2D(inputNode, weightsNode, biasNode, new[] { _stride, _stride }, padding: new[] { 0, 0 });
+
+        // Reshape to separate capsules: [batch, outH, outW, totalOutputChannels]
+        // -> [batch, outH, outW, capsuleChannels, capsuleDimension]
+        int batchSize = InputShape[0];
+        int inputHeight = InputShape[1];
+        int inputWidth = InputShape[2];
+        int outputHeight = (inputHeight - _kernelSize) / _stride + 1;
+        int outputWidth = (inputWidth - _kernelSize) / _stride + 1;
+
+        var reshapedOutput = Autodiff.TensorOperations<T>.Reshape(
+            convOutput,
+            new int[] { batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension }
+        );
+
+        // Apply Squash activation to each capsule vector (along the last dimension)
+        // The Squash operation scales the length of each capsule vector to [0, 1)
+        var output = Autodiff.TensorOperations<T>.Squash(reshapedOutput);
+
+        return output;
+    }
+
+    public override bool SupportsJitCompilation => _convWeights != null && _convBias != null;
 
 }

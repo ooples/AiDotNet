@@ -970,7 +970,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Use ToArray() for production-grade parameter extraction
-        return Vector<T>.FromMemory(_weights.Data);
+        return new Vector<T>(_weights.ToArray());
     }
 
     /// <summary>
@@ -1003,7 +1003,18 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     {
         if (_weightsGradient == null)
             return new Vector<T>(_weights.Length);
-        return (_weightsGradient is not null ? Vector<T>.FromMemory(_weightsGradient.Data) : new Vector<T>(0));
+        return new Vector<T>(_weightsGradient.ToArray());
+    }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["InputCapsules"] = _inputCapsules.ToString();
+        metadata["InputCapsuleDimension"] = _inputCapsuleDimension.ToString();
+        metadata["NumClasses"] = _numClasses.ToString();
+        metadata["OutputCapsuleDimension"] = _outputCapsuleDimension.ToString();
+        metadata["RoutingIterations"] = _routingIterations.ToString();
+        return metadata;
     }
 
     public override void ClearGradients()
@@ -1070,7 +1081,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         // Create weight tensor as constant node [inputCapsules, numClasses, inputCapsuleDimension, outputCapsuleDimension]
         var weightsTensor = new Tensor<T>(
             new[] { _inputCapsules, _numClasses, _inputCapsuleDimension, _outputCapsuleDimension },
-            Vector<T>.FromMemory(_weights.Data));
+            _weights.ToVector());
         var weightsNode = TensorOperations<T>.Constant(weightsTensor, "DigitCapsWeights");
 
         // Transform input capsules to predictions for each class
