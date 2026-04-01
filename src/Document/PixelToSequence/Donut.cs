@@ -112,7 +112,9 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
 
     // Gradient storage
     private Tensor<T>? _decoderPositionEmbeddingsGradients;
+    #pragma warning disable CS0414
     private bool _decoderForwardExecuted;
+    #pragma warning restore CS0414
 
     #endregion
 
@@ -1280,55 +1282,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         }
 
         SetTrainingMode(true);
-        _decoderForwardExecuted = false;
-
-        // Forward pass
-        var output = Predict(input);
-
-        // Compute loss
-        LastLoss = LossFunction.CalculateLoss(output.ToVector(), expectedOutput.ToVector());
-
-        // Backward pass - compute gradients
-        var lossGradient = LossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector());
-        var gradient = Tensor<T>.FromVector(lossGradient);
-
-        if (_decoderForwardExecuted)
-        {
-            // Propagate gradients backward through decoder layers
-            for (int i = _outputLayers.Count - 1; i >= 0; i--)
-            {
-                gradient = _outputLayers[i].Backward(gradient);
-            }
-
-            for (int i = _decoderLayers.Count - 1; i >= 0; i--)
-            {
-                gradient = _decoderLayers[i].Backward(gradient);
-            }
-
-            for (int i = _decoderEmbeddingLayers.Count - 1; i >= 0; i--)
-            {
-                gradient = _decoderEmbeddingLayers[i].Backward(gradient);
-            }
-        }
-
-        // Propagate through encoder layers
-        for (int i = _encoderLayers.Count - 1; i >= 0; i--)
-        {
-            gradient = _encoderLayers[i].Backward(gradient);
-        }
-
-        for (int i = _patchEmbeddingLayers.Count - 1; i >= 0; i--)
-        {
-            gradient = _patchEmbeddingLayers[i].Backward(gradient);
-        }
-
-        // Update embedding gradients
-        UpdateEmbeddingGradients(gradient);
-
-        // Apply optimizer update
-        var paramGradients = CollectParameterGradients();
-        UpdateParameters(paramGradients);
-
+        TrainWithTape(input, expectedOutput);
         SetTrainingMode(false);
     }
 
