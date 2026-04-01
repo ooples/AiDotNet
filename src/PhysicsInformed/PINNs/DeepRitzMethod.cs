@@ -651,17 +651,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
         public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
         {
             SetTrainingMode(true);
-
-            var prediction = Forward(input);
-            var lossFunction = LossFunction ?? new MeanSquaredErrorLoss<T>();
-            LastLoss = lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-            var outputGradient = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction.Shape.ToArray());
-
-            Backpropagate(outputGradientTensor);
-            _optimizer.UpdateParameters(Layers);
-
+            TrainWithTape(input, expectedOutput);
             SetTrainingMode(false);
         }
 
