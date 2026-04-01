@@ -801,23 +801,7 @@ public class VITSModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         }
 
         SetTrainingMode(true);
-
-        // Forward pass
-        var prediction = Predict(input);
-
-        // Calculate loss
-        var flatPrediction = prediction.ToVector();
-        var flatExpected = expectedOutput.ToVector();
-        LastLoss = _lossFunction.CalculateLoss(flatPrediction, flatExpected);
-
-        // Backward pass
-        var lossGradient = _lossFunction.CalculateDerivative(flatPrediction, flatExpected);
-        Backpropagate(Tensor<T>.FromVector(lossGradient));
-
-        // Update parameters
-        var gradients = GetParameterGradients();
-        UpdateParameters(gradients);
-
+        TrainWithTape(input, expectedOutput);
         SetTrainingMode(false);
     }
 
