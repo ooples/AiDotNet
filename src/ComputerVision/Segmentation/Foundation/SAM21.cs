@@ -219,10 +219,7 @@ public class SAM21<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode.");
 
-        var predicted = Forward(input);
-        var lossGradient = LossFunction.ComputeGradient(predicted, expectedOutput);
-        BackwardPass(lossGradient);
-        _optimizer?.UpdateParameters(Layers);
+        TrainWithTape(input, expectedOutput);
     }
 
     /// <summary>

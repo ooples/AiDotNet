@@ -197,10 +197,7 @@ public class BiomedParse<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
 
-        var predicted = Forward(input);
-        var lossGradient = LossFunction.ComputeGradient(predicted, expectedOutput);
-        BackwardPass(lossGradient);
-        _optimizer?.UpdateParameters(Layers);
+        TrainWithTape(input, expectedOutput);
     }
     #endregion
 

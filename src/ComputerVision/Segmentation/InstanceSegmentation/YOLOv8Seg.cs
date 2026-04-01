@@ -191,10 +191,7 @@ public class YOLOv8Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode.");
 
-        var predicted = Forward(input);
-        var lossGradient = LossFunction.ComputeGradient(predicted, expectedOutput);
-        BackwardPass(lossGradient);
-        _optimizer?.UpdateParameters(Layers);
+        TrainWithTape(input, expectedOutput);
     }
 
     #endregion

@@ -573,22 +573,9 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Training with contrastive loss
-        // input: video frames, expectedOutput: text tokens
-
-        var videoEmbed = EncodeVideo(input);
-        var textEmbed = EncodeText(expectedOutput);
-
-        // Compute loss gradient (push matching pairs together, non-matching apart)
-        var lossGradient = Engine.TensorSubtract(videoEmbed, textEmbed);
-
-        BackwardPass(lossGradient);
-
-        T lr = NumOps.FromDouble(0.0001);
-        foreach (var layer in Layers)
-        {
-            layer.UpdateParameters(lr);
-        }
+        SetTrainingMode(true);
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     #endregion

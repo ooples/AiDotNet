@@ -282,27 +282,9 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Ensure we're in training mode
         SetTrainingMode(true);
-
-        // Step 1: Forward pass with memory for backpropagation
-        Vector<T> outputVector = ForwardWithMemory(input).ToVector();
-
-        // Step 2: Calculate loss
-        Vector<T> expectedVector = expectedOutput.ToVector();
-        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
-
-        // Step 3: Backpropagation using proper loss gradient (not raw error)
-        Vector<T> lossGradient = LossFunction.CalculateDerivative(outputVector, expectedVector);
-        Backpropagate(Tensor<T>.FromVector(lossGradient));
-
-        // Step 4: Update parameters using gradients and learning rate
-        T learningRate = NumOps.FromDouble(0.01);
-
-        foreach (var layer in Layers.Where(l => l.SupportsTraining && l.ParameterCount > 0))
-        {
-            layer.UpdateParameters(learningRate);
-        }
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
 

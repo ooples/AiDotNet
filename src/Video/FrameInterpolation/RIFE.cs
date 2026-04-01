@@ -261,21 +261,9 @@ public class RIFE<T> : FrameInterpolationBase<T>
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass
-        var predicted = Predict(input);
-
-        // Calculate loss gradient
-        var lossGradient = Engine.TensorSubtract(predicted, expectedOutput);
-
-        // Backward pass
-        BackwardPass(lossGradient);
-
-        // Update parameters
-        T lr = NumOps.FromDouble(0.0001);
-        foreach (var layer in Layers)
-        {
-            layer.UpdateParameters(lr);
-        }
+        SetTrainingMode(true);
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     #endregion
