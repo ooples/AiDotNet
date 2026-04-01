@@ -287,32 +287,9 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass
-        var prediction = Predict(input);
-
-        // Calculate loss
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        // Store the last loss value
-        LastLoss = loss;
-
-        // Calculate output gradient
-        var outputGradient = CalculateOutputGradient(prediction, expectedOutput);
-
-        // Convert output gradient back to a tensor
-        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-
-        // Backpropagation
-        var gradients = new List<Tensor<T>>();
-        var currentGradient = outputGradientTensor;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            currentGradient = Layers[i].Backward(currentGradient);
-            gradients.Insert(0, currentGradient);
-        }
-
-        // Update parameters
-        UpdateParameters(gradients);
+        SetTrainingMode(true);
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     /// <summary>
