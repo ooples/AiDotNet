@@ -113,22 +113,7 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
-        // Enable deterministic BLAS (single-threaded GEMM) to ensure bitwise-identical
-        // forward pass results across calls. Multi-threaded MKL/OpenBLAS DGEMM produces
-        // ULP-level non-determinism from parallel reduction ordering.
-        TrySetDeterministicBlas();
-
         InitializeLayers();
-    }
-
-    private static bool _determinismSet;
-    private static void TrySetDeterministicBlas()
-    {
-        if (_determinismSet) return;
-        _determinismSet = true;
-        // Force single-threaded BLAS (MKL/OpenBLAS) for bitwise-deterministic GEMM.
-        // InternalsVisibleTo allows direct access to Tensors internals.
-        AiDotNet.Tensors.Helpers.BlasProvider.SetDeterministicMode(true);
     }
 
     /// <summary>
