@@ -720,23 +720,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
             }
 
             SetTrainingMode(true);
-
-            try
-            {
-                var prediction = ForwardWithMemory(input);
-                var lossFunction = LossFunction ?? new MeanSquaredErrorLoss<T>();
-                LastLoss = lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-                var outputGradientVector = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-                var outputGradient = new Tensor<T>(prediction.Shape.ToArray(), outputGradientVector);
-
-                Backpropagate(outputGradient);
-                _optimizer.UpdateParameters(Layers);
-            }
-            finally
-            {
-                SetTrainingMode(false);
-            }
+            try { TrainWithTape(input, expectedOutput); }
+            finally { SetTrainingMode(false); }
         }
 
         /// <inheritdoc/>

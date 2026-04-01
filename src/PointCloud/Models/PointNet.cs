@@ -383,34 +383,8 @@ public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointClou
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-
-        // Reset global features
-        _globalFeatures = null;
-
-        // Forward pass
-        var prediction = ForwardWithMemory(input);
-
-        // Compute loss
-        if (LossFunction == null)
-        {
-            throw new InvalidOperationException("Loss function not set for training.");
-        }
-
-        var loss = LossFunction.ComputeLoss(prediction, expectedOutput);
-        LastLoss = loss;
-
-        // Backward pass
-        var lossGradient = LossFunction.ComputeGradient(prediction, expectedOutput);
-        Backpropagate(lossGradient);
-
-        // Basic SGD parameter update
-        foreach (var layer in Layers)
-        {
-            if (layer.SupportsTraining && layer.ParameterCount > 0)
-            {
-                layer.UpdateParameters(_learningRate);
-            }
-        }
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     public override Tensor<T> Predict(Tensor<T> input)

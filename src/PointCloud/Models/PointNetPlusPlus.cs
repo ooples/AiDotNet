@@ -532,30 +532,8 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-
-        _globalFeatures = null;
-
-        var prediction = ForwardWithMemory(input);
-
-        if (LossFunction == null)
-        {
-            throw new InvalidOperationException("Loss function not set.");
-        }
-
-        var loss = LossFunction.ComputeLoss(prediction, expectedOutput);
-        LastLoss = loss;
-
-        var lossGradient = LossFunction.ComputeGradient(prediction, expectedOutput);
-        Backpropagate(lossGradient);
-
-        // Basic SGD parameter update
-        foreach (var layer in Layers)
-        {
-            if (layer.SupportsTraining && layer.ParameterCount > 0)
-            {
-                layer.UpdateParameters(_learningRate);
-            }
-        }
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     public override Tensor<T> Predict(Tensor<T> input)

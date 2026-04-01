@@ -1253,32 +1253,8 @@ public class NeRF<T> : NeuralNetworkBase<T>, IRadianceField<T>
     /// </summary>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Set training mode
         SetTrainingMode(true);
-
-        // Forward pass
-        var prediction = ForwardWithMemory(input);
-
-        // Compute loss
-        var flatPrediction = prediction.ToVector();
-        var flatExpected = expectedOutput.ToVector();
-        LastLoss = _lossFunction.CalculateLoss(flatPrediction, flatExpected);
-
-        // Compute gradients - reshape to [N, 4] for backpropagation
-        var lossGradient = _lossFunction.CalculateDerivative(flatPrediction, flatExpected);
-        int numPoints = prediction.Shape[0];
-        var gradTensor = new Tensor<T>(lossGradient.ToArray(), [numPoints, 4]);
-        Backpropagate(gradTensor);
-
-        // Update layer parameters
-        foreach (var layer in Layers)
-        {
-            if (layer.SupportsTraining && layer.ParameterCount > 0)
-            {
-                layer.UpdateParameters(_learningRate);
-            }
-        }
-
+        TrainWithTape(input, expectedOutput);
         SetTrainingMode(false);
     }
 
