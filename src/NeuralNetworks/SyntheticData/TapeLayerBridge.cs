@@ -115,12 +115,12 @@ public static class TapeLayerBridge<T>
         bool was1D = input.Shape.Length == 1;
         var input2D = was1D ? input.Reshape([1, input.Length]) : input;
 
-        // Use the new tensor-based GradientTape API with DifferentiableOps
+        // Use the tensor-based GradientTape API with direct Engine calls
         using var tape = new GradientTape<T>(persistent: true);
         tape.Watch(input2D);
 
-        // Forward through layers using DifferentiableOps (records to tape)
-        var output = ForwardWithDifferentiableOps(input2D, layers, activation, applyActivationOnLast, leakyAlpha);
+        // Forward through layers using Engine (auto-records to tape)
+        var output = ForwardWithEngine(input2D, layers, activation, applyActivationOnLast, leakyAlpha);
 
         // Compute gradient: dOutput/dInput via reverse-mode AD
         var gradients = tape.Gradient(output, createGraph: true);
@@ -181,15 +181,16 @@ public static class TapeLayerBridge<T>
     }
 
     /// <summary>
-    /// Forwards a tensor through layers using DifferentiableOps (records to active tape).
+    /// Forwards a tensor through layers using direct Engine calls (auto-records to active tape).
     /// </summary>
-    private static Tensor<T> ForwardWithDifferentiableOps(
+    private static Tensor<T> ForwardWithEngine(
         Tensor<T> input,
         IReadOnlyList<ILayer<T>> layers,
         HiddenActivation activation,
         bool applyActivationOnLast,
         double leakyAlpha)
     {
+        var engine = AiDotNetEngine.Current;
         var current = input;
 
         // Filter out dropout layers (gradient penalty uses eval mode)
@@ -207,20 +208,19 @@ public static class TapeLayerBridge<T>
 
             if (layer is FullyConnectedLayer<T>)
             {
-                // Extract weights/biases and use DifferentiableOps for tape recording
                 var weights = layer.GetWeights();
                 if (weights == null)
                     throw new InvalidOperationException(
                         "FullyConnectedLayer has null weights. Ensure initialization before gradient computation.");
 
-                var weightsT = DifferentiableOps<T>.Transpose(weights);
-                current = DifferentiableOps<T>.MatMul(current, weightsT);
+                var weightsT = engine.TensorTranspose(weights);
+                current = engine.TensorMatMul(current, weightsT);
 
                 var biases = layer.GetBiases();
                 if (biases != null)
                 {
                     var biasReshaped = biases.Reshape([1, biases.Length]);
-                    current = DifferentiableOps<T>.Add(current, biasReshaped);
+                    current = engine.TensorAdd(current, biasReshaped);
                 }
             }
             else
@@ -242,39 +242,18 @@ public static class TapeLayerBridge<T>
             {
                 current = activation switch
                 {
-                    HiddenActivation.ReLU => DifferentiableOps<T>.ReLU(current),
-                    HiddenActivation.Sigmoid => DifferentiableOps<T>.Sigmoid(current),
-                    HiddenActivation.Tanh => DifferentiableOps<T>.Tanh(current),
-                    HiddenActivation.SiLU => DifferentiableOps<T>.Swish(current),
-                    HiddenActivation.GELU => DifferentiableOps<T>.GELU(current),
-                    HiddenActivation.LeakyReLU => ApplyLeakyReLU(current, leakyAlpha),
+                    HiddenActivation.ReLU => engine.TensorReLU(current),
+                    HiddenActivation.Sigmoid => engine.TensorSigmoid(current),
+                    HiddenActivation.Tanh => engine.TensorTanh(current),
+                    HiddenActivation.SiLU => engine.TensorSiLU(current),
+                    HiddenActivation.GELU => engine.TensorGELU(current),
+                    HiddenActivation.LeakyReLU => engine.TensorLeakyReLU(current, MathHelper.GetNumericOperations<T>().FromDouble(leakyAlpha)),
                     _ => current,
                 };
             }
         }
 
         return current;
-    }
-
-    /// <summary>
-    /// LeakyReLU via DifferentiableOps: max(alpha*x, x).
-    /// </summary>
-    private static Tensor<T> ApplyLeakyReLU(Tensor<T> x, double alpha)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(x.Shape.ToArray());
-        var mask = new Tensor<T>(x.Shape.ToArray());
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = numOps.ToDouble(x[i]);
-            result[i] = val >= 0 ? x[i] : numOps.FromDouble(val * alpha);
-            mask[i] = numOps.FromDouble(val >= 0 ? 1.0 : alpha);
-        }
-
-        GradientTape<T>.Current?.RecordOp("LeakyReLU", [x], result,
-            grad => [DifferentiableOps<T>.Multiply(grad, mask)]);
-
-        return result;
     }
 
     /// <summary>

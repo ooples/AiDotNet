@@ -349,7 +349,7 @@ public abstract class TabDPTBase<T>
     /// </summary>
     private sealed class TransformerBlock<TBlock>
     {
-        private static readonly INumericOperations<TBlock> Ops = MathHelper.GetNumericOperations<TBlock>();
+        private static readonly INumericOperations<TBlock> NumOps = MathHelper.GetNumericOperations<TBlock>();
 
         private readonly int _embeddingDim;
         private readonly int _numHeads;
@@ -444,7 +444,7 @@ public abstract class TabDPTBase<T>
             var weights = new Tensor<TBlock>(shape);
             for (int i = 0; i < weights.Length; i++)
             {
-                weights[i] = Ops.FromDouble(random.NextGaussian() * scale);
+                weights[i] = NumOps.FromDouble(random.NextGaussian() * scale);
             }
             return weights;
         }
@@ -514,7 +514,7 @@ public abstract class TabDPTBase<T>
 
         private Tensor<TBlock> ComputeAttention(Tensor<TBlock> query, Tensor<TBlock> key, Tensor<TBlock> value, int batchSize)
         {
-            var scale = Ops.FromDouble(1.0 / Math.Sqrt(_headDim));
+            var scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDim));
 
             // Compute attention scores: Q * K^T / sqrt(d_k)
             var scores = new Tensor<TBlock>([batchSize, batchSize]);
@@ -523,14 +523,14 @@ public abstract class TabDPTBase<T>
             {
                 for (int j = 0; j < batchSize; j++)
                 {
-                    var dot = Ops.Zero;
+                    var dot = NumOps.Zero;
                     for (int k = 0; k < _embeddingDim; k++)
                     {
-                        dot = Ops.Add(dot, Ops.Multiply(
+                        dot = NumOps.Add(dot, NumOps.Multiply(
                             query[i * _embeddingDim + k],
                             key[j * _embeddingDim + k]));
                     }
-                    scores[i * batchSize + j] = Ops.Multiply(dot, scale);
+                    scores[i * batchSize + j] = NumOps.Multiply(dot, scale);
                 }
             }
 
@@ -541,21 +541,21 @@ public abstract class TabDPTBase<T>
                 for (int j = 1; j < batchSize; j++)
                 {
                     var val = scores[i * batchSize + j];
-                    if (Ops.Compare(val, maxVal) > 0)
+                    if (NumOps.Compare(val, maxVal) > 0)
                         maxVal = val;
                 }
 
-                var sumExp = Ops.Zero;
+                var sumExp = NumOps.Zero;
                 for (int j = 0; j < batchSize; j++)
                 {
-                    var expVal = Ops.Exp(Ops.Subtract(scores[i * batchSize + j], maxVal));
+                    var expVal = NumOps.Exp(NumOps.Subtract(scores[i * batchSize + j], maxVal));
                     scores[i * batchSize + j] = expVal;
-                    sumExp = Ops.Add(sumExp, expVal);
+                    sumExp = NumOps.Add(sumExp, expVal);
                 }
 
                 for (int j = 0; j < batchSize; j++)
                 {
-                    scores[i * batchSize + j] = Ops.Divide(scores[i * batchSize + j], sumExp);
+                    scores[i * batchSize + j] = NumOps.Divide(scores[i * batchSize + j], sumExp);
                 }
             }
 
@@ -568,10 +568,10 @@ public abstract class TabDPTBase<T>
             {
                 for (int k = 0; k < _embeddingDim; k++)
                 {
-                    var sum = Ops.Zero;
+                    var sum = NumOps.Zero;
                     for (int j = 0; j < batchSize; j++)
                     {
-                        sum = Ops.Add(sum, Ops.Multiply(
+                        sum = NumOps.Add(sum, NumOps.Multiply(
                             scores[i * batchSize + j],
                             value[j * _embeddingDim + k]));
                     }
@@ -626,10 +626,10 @@ public abstract class TabDPTBase<T>
 
             // Zero gradients
             var eng = AiDotNetEngine.Current;
-            eng.TensorFill(_queryGrad, Ops.Zero);
-            eng.TensorFill(_keyGrad, Ops.Zero);
-            eng.TensorFill(_valueGrad, Ops.Zero);
-            eng.TensorFill(_outputGrad, Ops.Zero);
+            eng.TensorFill(_queryGrad, NumOps.Zero);
+            eng.TensorFill(_keyGrad, NumOps.Zero);
+            eng.TensorFill(_valueGrad, NumOps.Zero);
+            eng.TensorFill(_outputGrad, NumOps.Zero);
 
             _ff1.ResetState();
             _ff2.ResetState();
@@ -643,7 +643,7 @@ public abstract class TabDPTBase<T>
     /// </summary>
     private sealed class FeatureAttentionBlock<TBlock>
     {
-        private static readonly INumericOperations<TBlock> Ops = MathHelper.GetNumericOperations<TBlock>();
+        private static readonly INumericOperations<TBlock> NumOps = MathHelper.GetNumericOperations<TBlock>();
 
         private readonly int _embeddingDim;
         private readonly int _numHeads;
@@ -676,7 +676,7 @@ public abstract class TabDPTBase<T>
             var weights = new Tensor<TBlock>(shape);
             for (int i = 0; i < weights.Length; i++)
             {
-                weights[i] = Ops.FromDouble(random.NextGaussian() * scale);
+                weights[i] = NumOps.FromDouble(random.NextGaussian() * scale);
             }
             return weights;
         }

@@ -22,14 +22,14 @@ namespace AiDotNet.Autodiff;
 ///     public override Tensor&lt;double&gt; Forward(AutogradContext ctx, params Tensor&lt;double&gt;[] inputs)
 ///     {
 ///         ctx.SaveForBackward(inputs[0]);
-///         return DifferentiableOps&lt;double&gt;.Multiply(inputs[0], inputs[0]); // x^2
+///         return Engine.TensorMultiply(inputs[0], inputs[0]); // x^2
 ///     }
 ///
 ///     public override Tensor&lt;double&gt;[] Backward(AutogradContext ctx, Tensor&lt;double&gt; gradOutput)
 ///     {
 ///         var x = ctx.GetSaved(0);
-///         return [DifferentiableOps&lt;double&gt;.MultiplyScalar(
-///             DifferentiableOps&lt;double&gt;.Multiply(gradOutput, x),
+///         return [Engine.TensorMultiplyScalar(
+///             Engine.TensorMultiply(gradOutput, x),
 ///             MathHelper.GetNumericOperations&lt;double&gt;().FromDouble(2.0))];
 ///     }
 /// }

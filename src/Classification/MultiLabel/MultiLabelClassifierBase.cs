@@ -458,18 +458,18 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     /// </summary>
     private class BinaryCrossEntropyLoss<TLoss> : ILossFunction<TLoss>
     {
-        private static INumericOperations<TLoss> Ops => MathHelper.GetNumericOperations<TLoss>();
+        private static INumericOperations<TLoss> NumOps => MathHelper.GetNumericOperations<TLoss>();
 
         public TLoss CalculateLoss(Vector<TLoss> predicted, Vector<TLoss> actual)
         {
             double loss = 0;
             for (int i = 0; i < predicted.Length; i++)
             {
-                double p = Math.Max(1e-15, Math.Min(1 - 1e-15, Ops.ToDouble(predicted[i])));
-                double y = Ops.ToDouble(actual[i]);
+                double p = Math.Max(1e-15, Math.Min(1 - 1e-15, NumOps.ToDouble(predicted[i])));
+                double y = NumOps.ToDouble(actual[i]);
                 loss -= y * Math.Log(p) + (1 - y) * Math.Log(1 - p);
             }
-            return Ops.FromDouble(loss / Math.Max(1, predicted.Length));
+            return NumOps.FromDouble(loss / Math.Max(1, predicted.Length));
         }
 
         public Vector<TLoss> CalculateDerivative(Vector<TLoss> predicted, Vector<TLoss> actual)
@@ -477,9 +477,9 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
             var derivative = new Vector<TLoss>(predicted.Length);
             for (int i = 0; i < predicted.Length; i++)
             {
-                double p = Math.Max(1e-15, Math.Min(1 - 1e-15, Ops.ToDouble(predicted[i])));
-                double y = Ops.ToDouble(actual[i]);
-                derivative[i] = Ops.FromDouble((p - y) / (p * (1 - p) + 1e-15));
+                double p = Math.Max(1e-15, Math.Min(1 - 1e-15, NumOps.ToDouble(predicted[i])));
+                double y = NumOps.ToDouble(actual[i]);
+                derivative[i] = NumOps.FromDouble((p - y) / (p * (1 - p) + 1e-15));
             }
             return derivative;
         }
