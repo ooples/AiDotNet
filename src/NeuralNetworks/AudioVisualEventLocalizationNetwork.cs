@@ -1346,20 +1346,41 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
             layer.SetTrainingMode(true);
         var prediction = ForwardWithMemory(input);
 
+        // MSE loss (CrossEntropy assumes probability output, but model outputs raw values)
         var flatPred = prediction.ToVector();
         var flatTarget = expectedOutput.ToVector();
-        LastLoss = _lossFunction.CalculateLoss(flatPred, flatTarget);
-        var lossGrad = _lossFunction.CalculateDerivative(flatPred, flatTarget);
-
-        // Backpropagate
-        Backpropagate(Tensor<T>.FromVector(lossGrad));
-
-        // Update parameters
-        T lr = NumOps.FromDouble(0.001);
-        foreach (var layer in Layers)
+        double mse = 0;
+        for (int i = 0; i < flatPred.Length; i++)
         {
-            layer.UpdateParameters(lr);
+            double diff = Convert.ToDouble(flatPred[i]) - Convert.ToDouble(flatTarget[i]);
+            mse += diff * diff;
         }
+        mse /= flatPred.Length;
+        LastLoss = NumOps.FromDouble(mse);
+
+        // MSE gradient: 2*(pred - target) / N
+        var gradData = new T[flatPred.Length];
+        double scale = 2.0 / flatPred.Length;
+        for (int i = 0; i < flatPred.Length; i++)
+            gradData[i] = NumOps.FromDouble((Convert.ToDouble(flatPred[i]) - Convert.ToDouble(flatTarget[i])) * scale);
+
+        // Gradient clipping to prevent explosion through attention layers
+        var gradTensor = new Tensor<T>(prediction.Shape.ToArray(), new Vector<T>(gradData));
+        double gradNorm = 0;
+        for (int i = 0; i < gradData.Length; i++)
+        {
+            double v = Convert.ToDouble(gradData[i]);
+            gradNorm += v * v;
+        }
+        gradNorm = Math.Sqrt(gradNorm);
+        double maxNorm = Convert.ToDouble(MaxGradNorm);
+        if (gradNorm > maxNorm)
+            gradTensor = Engine.TensorMultiplyScalar(gradTensor, NumOps.FromDouble(maxNorm / gradNorm));
+
+        Backpropagate(gradTensor);
+
+        // Update via optimizer
+        _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 
