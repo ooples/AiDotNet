@@ -411,28 +411,9 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass
-        var prediction = Predict(input);
-
-        // Calculate loss
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
-
-        // Calculate output gradient
-        var outputGradient = CalculateOutputGradient(prediction, expectedOutput);
-        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-
-        // Backpropagation: propagate gradients through all layers
-        // Each layer stores its parameter gradients internally during Backward()
-        var currentGradient = outputGradientTensor;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            currentGradient = Layers[i].Backward(currentGradient);
-        }
-
-        // Update parameters using the optimizer
-        // The optimizer retrieves parameter gradients from each layer
-        ApplyParameterUpdates();
+        SetTrainingMode(true);
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     /// <summary>

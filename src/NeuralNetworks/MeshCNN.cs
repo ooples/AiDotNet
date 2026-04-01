@@ -421,24 +421,9 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        var prediction = Forward(input);
-
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
-
-        var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-
-        var gradients = new List<Tensor<T>>();
-        var currentGradient = outputGradientTensor;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            currentGradient = Layers[i].Backward(currentGradient);
-            gradients.Insert(0, currentGradient);
-        }
-
-        ClipGradients(gradients);
-        _optimizer.UpdateParameters(Layers);
+        SetTrainingMode(true);
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     /// <summary>

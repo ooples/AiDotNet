@@ -537,26 +537,9 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
     /// <param name="expectedOutput">The expected output tensor (one-hot encoded class labels).</param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass
-        var prediction = Predict(input);
-
-        // Calculate loss
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
-
-        // Calculate output gradient
-        var outputGradient = CalculateOutputGradient(prediction, expectedOutput);
-        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-
-        // Backpropagation
-        var currentGradient = outputGradientTensor;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            currentGradient = Layers[i].Backward(currentGradient);
-        }
-
-        // Update parameters using the optimizer
-        ApplyParameterUpdates();
+        SetTrainingMode(true);
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     /// <summary>
