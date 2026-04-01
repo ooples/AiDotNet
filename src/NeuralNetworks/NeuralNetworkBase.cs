@@ -2652,7 +2652,60 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// After training, you can get the loss value using the GetLastLoss() method to see how well the network is learning.
     /// </para>
     /// </remarks>
-    public abstract void Train(Tensor<T> input, Tensor<T> expectedOutput);
+    public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        SetTrainingMode(true);
+        try
+        {
+            var engine = AiDotNetEngine.Current;
+            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+
+            if (trainableParams.Length > 0)
+            {
+                // Tape-based training: forward under tape, compute loss, get gradients, update params
+                using var tape = new GradientTape<T>();
+                var output = ForwardForTraining(input);
+
+                var diff = engine.TensorSubtract(output, expectedOutput);
+                var squared = engine.TensorMultiply(diff, diff);
+                var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+                var loss = engine.ReduceMean(squared, allAxes, keepDims: false);
+
+                var grads = tape.ComputeGradients(loss, trainableParams);
+
+                // In-place SGD update: param -= lr * grad
+                var lr = NumOps.FromDouble(0.001);
+
+                foreach (var param in trainableParams)
+                {
+                    if (grads.TryGetValue(param, out var grad))
+                    {
+                        for (int i = 0; i < param.Length && i < grad.Length; i++)
+                            param[i] = NumOps.Subtract(param[i], NumOps.Multiply(lr, grad[i]));
+                    }
+                }
+            }
+            else
+            {
+                // Fallback for networks without ITrainableLayer layers:
+                // forward, compute loss gradient, backpropagate, update with default lr
+                var output = Predict(input);
+                var lossGrad = DefaultLossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector());
+                var outputGradients = new Tensor<T>(output.Shape.ToArray(), lossGrad);
+                Backpropagate(outputGradients);
+                var defaultLr = NumOps.FromDouble(0.001);
+                foreach (var layer in Layers)
+                {
+                    if (layer.SupportsTraining)
+                        layer.UpdateParameters(defaultLr);
+                }
+            }
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
 
     /// <summary>
     /// Persistent optimizer for models using the standard TrainStep pattern.
