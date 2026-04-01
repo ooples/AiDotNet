@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, false, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class GRULayer<T> : LayerBase<T>
+public class GRULayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// The weight tensors for the update gate (z), reset gate (r), and candidate hidden state (h).
@@ -1762,6 +1762,18 @@ public class GRULayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
+        _dWz = null; _dWr = null; _dWh = null;
+        _dUz = null; _dUr = null; _dUh = null;
+        _dbz = null; _dbr = null; _dbh = null;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() =>
+        [_Wz, _Wr, _Wh, _Uz, _Ur, _Uh, _bz, _br, _bh];
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
         _dWz = null; _dWr = null; _dWh = null;
         _dUz = null; _dUr = null; _dUh = null;
         _dbz = null; _dbr = null; _dbh = null;

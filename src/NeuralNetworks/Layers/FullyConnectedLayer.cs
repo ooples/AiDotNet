@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class FullyConnectedLayer<T> : LayerBase<T>
+public class FullyConnectedLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// The weight matrix connecting input neurons to output neurons.
@@ -945,6 +945,16 @@ public class FullyConnectedLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override Tensor<T>? GetBiases() => _biases;
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_weights, _biases];
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
+        _weightsGradient?.Fill(NumOps.Zero);
+        _biasesGradient?.Fill(NumOps.Zero);
+    }
 
     public override bool SupportsJitCompilation
     {

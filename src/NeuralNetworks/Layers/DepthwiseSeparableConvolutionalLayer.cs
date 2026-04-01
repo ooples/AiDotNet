@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.Medium, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "1, 2, 3, 8, 8, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
+public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// The filter kernels used for the depthwise convolution step.
@@ -430,6 +430,15 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
+        _depthwiseKernelsGradient = null; _pointwiseKernelsGradient = null; _biasesGradient = null;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_depthwiseKernels, _pointwiseKernels, _biases];
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
         _depthwiseKernelsGradient = null; _pointwiseKernelsGradient = null; _biasesGradient = null;
     }
 

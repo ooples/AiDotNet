@@ -29,7 +29,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 8", TestConstructorArgs = "4, 8, 2")]
-public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// Gets or sets whether auxiliary loss (attention regularization) should be used during training.
@@ -1602,6 +1602,18 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         base.ClearGradients();
         _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() =>
+        [_queryWeights, _keyWeights, _valueWeights, _outputWeights, _outputBias];
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
+        _queryWeightsGradient = null;
+        _keyWeightsGradient = null;
+        _valueWeightsGradient = null;
     }
 
     public override void ResetState()

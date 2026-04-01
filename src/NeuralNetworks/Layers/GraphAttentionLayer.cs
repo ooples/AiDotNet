@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, 2", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
-public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, ITrainableLayer<T>
 {
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
@@ -1446,6 +1446,15 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
+        _weightsGradient = null; _attentionWeightsGradient = null; _biasGradient = null;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_weights, _attentionWeights, _bias];
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
         _weightsGradient = null; _attentionWeightsGradient = null; _biasGradient = null;
     }
 

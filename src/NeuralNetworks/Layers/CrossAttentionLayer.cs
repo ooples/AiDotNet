@@ -31,7 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.CrossModalAttention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 16", TestConstructorArgs = "16, 16, 2, 4")]
-public class CrossAttentionLayer<T> : LayerBase<T>
+public class CrossAttentionLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     private readonly int _queryDim;
     private readonly int _contextDim;
@@ -1060,6 +1060,20 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
+        _queryWeightsGradient = null;
+        _keyWeightsGradient = null;
+        _valueWeightsGradient = null;
+        _outputWeightsGradient = null;
+        _outputBiasGradient = null;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() =>
+        [_queryWeights, _keyWeights, _valueWeights, _outputWeights, _outputBias];
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;
         _valueWeightsGradient = null;

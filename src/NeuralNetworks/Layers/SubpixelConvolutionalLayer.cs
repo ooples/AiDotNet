@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "1, 1, 2, 3, 4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class SubpixelConvolutionalLayer<T> : LayerBase<T>
+public class SubpixelConvolutionalLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// The number of channels in the input tensor.
@@ -1237,6 +1237,12 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         _kernelGradients = null;
         _biasGradients = null;
     }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_kernels, _biases];
+
+    /// <inheritdoc />
+    public void ZeroGrad() { _kernelGradients = null; _biasGradients = null; }
 
     public override void SetParameters(Vector<T> parameters)
     {

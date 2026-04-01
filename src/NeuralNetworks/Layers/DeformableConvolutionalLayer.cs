@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "8, 8, 1, 2, 3")]
-public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
+public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputationGraph<T>, ITrainableLayer<T>
 {
     #region Fields
 
@@ -1502,6 +1502,23 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
     public override void ClearGradients()
     {
         base.ClearGradients();
+        _weightGradients = null; _biasGradients = null;
+        _offsetWeightGradients = null; _offsetBiasGradients = null;
+        _maskWeightGradients = null; _maskBiasGradients = null;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters()
+    {
+        var parameters = new List<Tensor<T>> { _weights, _bias, _offsetWeights, _offsetBias };
+        if (_maskWeights is not null) parameters.Add(_maskWeights);
+        if (_maskBias is not null) parameters.Add(_maskBias);
+        return parameters.ToArray();
+    }
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
         _weightGradients = null; _biasGradients = null;
         _offsetWeightGradients = null; _offsetBiasGradients = null;
         _maskWeightGradients = null; _maskBiasGradients = null;

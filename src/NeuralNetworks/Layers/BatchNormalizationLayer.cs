@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
-public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
+public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// A small constant added to the variance for numerical stability.
@@ -1196,6 +1196,16 @@ public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtra
     public override void ClearGradients()
     {
         base.ClearGradients();
+        _gammaGradient = null;
+        _betaGradient = null;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_gamma, _beta];
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
         _gammaGradient = null;
         _betaGradient = null;
     }

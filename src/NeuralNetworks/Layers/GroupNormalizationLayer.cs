@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "2, 4")]
-public class GroupNormalizationLayer<T> : LayerBase<T>
+public class GroupNormalizationLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     private readonly T _epsilon;
     private readonly int _numGroups;
@@ -461,6 +461,16 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
     }
 
     public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_gamma, _beta];
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
+        _gammaGradient = null;
+        _betaGradient = null;
+    }
 
     public override void ResetState()
     {

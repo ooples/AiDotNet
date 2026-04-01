@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Gating)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class GatedLinearUnitLayer<T> : LayerBase<T>
+public class GatedLinearUnitLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// The weight tensor for the linear transformation path.
@@ -967,6 +967,17 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
+        _linearWeightsGradient = null; _gateWeightsGradient = null;
+        _linearBiasGradient = null; _gateBiasGradient = null;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() =>
+        [_linearWeights, _gateWeights, _linearBias, _gateBias];
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
         _linearWeightsGradient = null; _gateWeightsGradient = null;
         _linearBiasGradient = null; _gateBiasGradient = null;
     }

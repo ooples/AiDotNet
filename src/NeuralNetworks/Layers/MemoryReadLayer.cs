@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Memory)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, NormalizesInput = true, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -1148,6 +1148,17 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
+        _keyWeightsGradient = null; _valueWeightsGradient = null;
+        _outputWeightsGradient = null; _outputBiasGradient = null;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() =>
+        [_keyWeights, _valueWeights, _outputWeights, _outputBias];
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
         _keyWeightsGradient = null; _valueWeightsGradient = null;
         _outputWeightsGradient = null; _outputBiasGradient = null;
     }

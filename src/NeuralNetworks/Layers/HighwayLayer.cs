@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Gating)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -1273,6 +1273,17 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
+        _transformWeightsGradient = null; _transformBiasGradient = null;
+        _gateWeightsGradient = null; _gateBiasGradient = null;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() =>
+        [_transformWeights, _transformBias, _gateWeights, _gateBias];
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
         _transformWeightsGradient = null; _transformBiasGradient = null;
         _gateWeightsGradient = null; _gateBiasGradient = null;
     }

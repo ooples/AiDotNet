@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "1, 2, 3, 8, 8, 2, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class DilatedConvolutionalLayer<T> : LayerBase<T>
+public class DilatedConvolutionalLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// The number of channels in the input data.
@@ -350,6 +350,12 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     }
 
     public override void ClearGradients() { base.ClearGradients(); _kernelGradients = null; _biasGradients = null; }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_kernels, _biases];
+
+    /// <inheritdoc />
+    public void ZeroGrad() { _kernelGradients = null; _biasGradients = null; }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.

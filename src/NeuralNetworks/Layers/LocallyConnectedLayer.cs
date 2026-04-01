@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "4, 4, 1, 2, 3, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class LocallyConnectedLayer<T> : LayerBase<T>
+public class LocallyConnectedLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// The weight tensors for the locally connected filters.
@@ -1228,6 +1228,12 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         _weightGradients = null;
         _biasGradients = null;
     }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_weights, _biases];
+
+    /// <inheritdoc />
+    public void ZeroGrad() { _weightGradients = null; _biasGradients = null; }
 
     public override void SetParameters(Vector<T> parameters)
     {

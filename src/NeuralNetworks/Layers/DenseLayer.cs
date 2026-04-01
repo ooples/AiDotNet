@@ -45,7 +45,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
-public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// Gets or sets whether auxiliary loss (weight regularization) should be used during training.
@@ -738,6 +738,20 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Ensure biases are initialized (supports lazy initialization)
         EnsureInitialized();
         return _biases;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters()
+    {
+        EnsureInitialized();
+        return [_weights, _biases];
+    }
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
+        _weightsGradient?.Fill(NumOps.Zero);
+        _biasesGradient?.Fill(NumOps.Zero);
     }
 
     /// <summary>

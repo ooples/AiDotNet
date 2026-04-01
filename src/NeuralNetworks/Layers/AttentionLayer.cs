@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IVectorActivationFunction<double>?)null")]
-public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// The weight tensor for the query transformation.
@@ -1514,6 +1514,17 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     public override void ClearGradients()
+    {
+        _dWq = null;
+        _dWk = null;
+        _dWv = null;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_Wq, _Wk, _Wv, _Wo];
+
+    /// <inheritdoc />
+    public void ZeroGrad()
     {
         _dWq = null;
         _dWk = null;

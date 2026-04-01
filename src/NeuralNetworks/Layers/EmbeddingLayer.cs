@@ -55,7 +55,7 @@ public enum EmbeddingInputMode
 [LayerCategory(LayerCategory.Embedding)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "100, 16")]
-public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmbedding<T>
+public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmbedding<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// The embedding tensor that stores vector representations for each token in the vocabulary.
@@ -1234,6 +1234,21 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
     public override void ClearGradients()
     {
         base.ClearGradients();
+        _embeddingGradient = null;
+        _projectionWeightsGradient = null;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters()
+    {
+        if (_projectionWeights is not null)
+            return [_embeddingTensor, _projectionWeights];
+        return [_embeddingTensor];
+    }
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
         _embeddingGradient = null;
         _projectionWeightsGradient = null;
     }

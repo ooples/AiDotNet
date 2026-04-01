@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 1", TestConstructorArgs = "8, 16")]
-public class TimeEmbeddingLayer<T> : LayerBase<T>
+public class TimeEmbeddingLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// The dimension of the sinusoidal embedding before MLP projection.
@@ -127,6 +127,17 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
+        _linear1WeightsGradient = null; _linear1BiasGradient = null;
+        _linear2WeightsGradient = null; _linear2BiasGradient = null;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() =>
+        [_linear1Weights, _linear1Bias, _linear2Weights, _linear2Bias];
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
         _linear1WeightsGradient = null; _linear1BiasGradient = null;
         _linear2WeightsGradient = null; _linear2BiasGradient = null;
     }

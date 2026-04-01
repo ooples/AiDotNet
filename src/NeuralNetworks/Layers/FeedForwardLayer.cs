@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)new AiDotNet.ActivationFunctions.LeakyReLUActivation<double>()")]
-public class FeedForwardLayer<T> : LayerBase<T>
+public class FeedForwardLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// The weight matrix connecting input neurons to output neurons.
@@ -929,6 +929,16 @@ public class FeedForwardLayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
+        WeightsGradient = Tensor<T>.Empty();
+        BiasesGradient = Tensor<T>.Empty();
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [Weights, Biases];
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
         WeightsGradient = Tensor<T>.Empty();
         BiasesGradient = Tensor<T>.Empty();
     }

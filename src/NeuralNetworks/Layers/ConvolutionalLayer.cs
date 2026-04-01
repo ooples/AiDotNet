@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "1, 8, 8, 2, 3")]
-public class ConvolutionalLayer<T> : LayerBase<T>
+public class ConvolutionalLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// Gets the depth (number of channels) of the input data.
@@ -182,6 +182,16 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     public override Tensor<T> GetBiases()
     {
         return _biases;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_kernels, _biases];
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
+        _kernelsGradient = null;
+        _biasesGradient = null;
     }
 
     public override bool SupportsTraining => true;

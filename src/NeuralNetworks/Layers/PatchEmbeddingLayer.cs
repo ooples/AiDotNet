@@ -32,7 +32,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "8, 8, 3, 4, 16")]
-public class PatchEmbeddingLayer<T> : LayerBase<T>
+public class PatchEmbeddingLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// The size of each square patch (both width and height).
@@ -665,6 +665,16 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     {
         base.ClearGradients();
         _projectionWeightsGradient = null; _projectionBiasGradient = null;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_projectionWeights, _projectionBias];
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
+        _projectionWeightsGradient = null;
+        _projectionBiasGradient = null;
     }
 
     public override void ResetState()

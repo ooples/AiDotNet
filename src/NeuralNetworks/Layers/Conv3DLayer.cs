@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.VolumetricProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "1, 2, 3, 4, 4, 4, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)new AiDotNet.ActivationFunctions.LeakyReLUActivation<double>()")]
-public class Conv3DLayer<T> : LayerBase<T>
+public class Conv3DLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     #region Properties
 
@@ -113,6 +113,12 @@ public class Conv3DLayer<T> : LayerBase<T>
     }
 
     public override void ClearGradients() { base.ClearGradients(); _kernelsGradient = null; _biasesGradient = null; }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_kernels, _biases];
+
+    /// <inheritdoc />
+    public void ZeroGrad() { _kernelsGradient = null; _biasesGradient = null; }
 
     internal override Dictionary<string, string> GetMetadata()
     {

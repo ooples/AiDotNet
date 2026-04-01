@@ -45,7 +45,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "new[] { 1, 4, 4, 1 }, 3, 2, 1, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class ConvLSTMLayer<T> : LayerBase<T>
+public class ConvLSTMLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     private readonly int _kernelSize;
     private readonly int _filters;
@@ -2348,6 +2348,17 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     {
         _gradients?.Clear();
     }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() =>
+    [
+        _weightsFi, _weightsIi, _weightsCi, _weightsOi,
+        _weightsFh, _weightsIh, _weightsCh, _weightsOh,
+        _biasF, _biasI, _biasC, _biasO
+    ];
+
+    /// <inheritdoc />
+    public void ZeroGrad() { _gradients?.Clear(); }
 
     public override void SetParameters(Vector<T> parameters)
     {

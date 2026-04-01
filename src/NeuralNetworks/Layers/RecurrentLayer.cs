@@ -45,7 +45,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class RecurrentLayer<T> : LayerBase<T>
+public class RecurrentLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// Tensor storing the weight parameters for connections between inputs and hidden neurons.
@@ -1192,6 +1192,17 @@ public class RecurrentLayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
+        _inputWeightsGradient = null;
+        _hiddenWeightsGradient = null;
+        _biasesGradient = null;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_inputWeights, _hiddenWeights, _biases];
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
         _inputWeightsGradient = null;
         _hiddenWeightsGradient = null;
         _biasesGradient = null;
