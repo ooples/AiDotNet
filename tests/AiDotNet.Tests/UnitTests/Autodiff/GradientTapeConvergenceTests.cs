@@ -1,5 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -27,7 +29,6 @@ public class GradientTapeConvergenceTests
         for (int step = 0; step < 100; step++)
         {
             using var tape = new GradientTape<double>();
-            tape.Watch(w);
             tape.Watch(b);
 
             // Forward: y_pred = w * x + b
@@ -44,7 +45,7 @@ public class GradientTapeConvergenceTests
             if (step == 0) initialLoss = lossVal;
             if (step == 99) finalLoss = lossVal;
 
-            var grads = tape.Gradient(loss);
+            var grads = tape.ComputeGradients(loss);
 
             // SGD update
             if (grads.TryGetValue(w, out var wGrad))
@@ -72,8 +73,7 @@ public class GradientTapeConvergenceTests
 
         for (int step = 0; step < 200; step++)
         {
-            using var tape = new GradientTape<double>(persistent: true);
-            tape.Watch(W);
+            using var tape = new GradientTape<double>(new GradientTapeOptions { Persistent = true });
 
             var x = new Tensor<double>([2, 1], new Vector<double>(new double[] { 1.0, 2.0 }));
             var pred = DifferentiableOps<double>.MatMul(W, x);
@@ -85,7 +85,7 @@ public class GradientTapeConvergenceTests
             if (step == 0) initialLoss = lossVal;
             if (step == 199) finalLoss = lossVal;
 
-            var grads = tape.Gradient(loss);
+            var grads = tape.ComputeGradients(loss);
             if (grads.TryGetValue(W, out var wGrad))
             {
                 for (int i = 0; i < W.Length; i++)
@@ -101,17 +101,16 @@ public class GradientTapeConvergenceTests
     public void HigherOrderGradient_CreateGraphProducesGradients()
     {
         // Verify createGraph=true produces gradient tensors that are themselves differentiable
-        using var outerTape = new GradientTape<double>(persistent: true);
+        using var outerTape = new GradientTape<double>(new GradientTapeOptions { Persistent = true });
 
         var x = new Tensor<double>([1], new Vector<double>(new double[] { 3.0 }));
-        outerTape.Watch(x);
 
         // f(x) = x^3, f'(x) = 3x^2, f''(x) = 6x
         var x2 = DifferentiableOps<double>.Multiply(x, x);
         var x3 = DifferentiableOps<double>.Multiply(x2, x);
 
         // First derivative with createGraph=true
-        var firstGrads = outerTape.Gradient(x3, createGraph: true);
+        var firstGrads = outerTape.ComputeGradients(x3, createGraph: true);
         Assert.True(firstGrads.ContainsKey(x), "Should have gradient for x");
 
         var dx = firstGrads[x]; // Should be 3 * 3^2 = 27
@@ -124,7 +123,6 @@ public class GradientTapeConvergenceTests
     {
         using var tape = new GradientTape<double>();
         var x = new Tensor<double>([1], new Vector<double>(new double[] { 2.0 }));
-        tape.Watch(x);
 
         Tensor<double> result;
         using (new NoGradScope<double>())
@@ -133,7 +131,7 @@ public class GradientTapeConvergenceTests
             result = DifferentiableOps<double>.Multiply(x, x);
         }
 
-        var grads = tape.Gradient(result);
+        var grads = tape.ComputeGradients(result);
         // x should have NO gradient because the multiply was inside NoGradScope
         Assert.False(grads.ContainsKey(x),
             "NoGradScope should prevent gradient computation");
@@ -144,11 +142,10 @@ public class GradientTapeConvergenceTests
     {
         using var tape = new GradientTape<double>();
         var x = new Tensor<double>([3], new Vector<double>(new double[] { -1.0, 0.0, 2.0 }));
-        tape.Watch(x);
 
         var y = DifferentiableOps<double>.Softplus(x);
         var loss = DifferentiableOps<double>.Sum(y);
-        var grads = tape.Gradient(loss);
+        var grads = tape.ComputeGradients(loss);
 
         Assert.True(grads.ContainsKey(x), "Should have gradient for x");
         var dx = grads[x];
@@ -168,11 +165,10 @@ public class GradientTapeConvergenceTests
     {
         using var tape = new GradientTape<double>();
         var x = new Tensor<double>([4], new Vector<double>(new double[] { -2.0, -0.5, 0.0, 1.0 }));
-        tape.Watch(x);
 
         var y = DifferentiableOps<double>.LeakyReLU(x, alpha: 0.1);
         var loss = DifferentiableOps<double>.Sum(y);
-        var grads = tape.Gradient(loss);
+        var grads = tape.ComputeGradients(loss);
 
         var dx = grads[x];
         // LeakyReLU'(x) = 1 if x >= 0, alpha if x < 0
@@ -191,14 +187,11 @@ public class GradientTapeConvergenceTests
         var query = Tensor<double>.CreateRandom([1, 4, 8]);
         var key = Tensor<double>.CreateRandom([1, 4, 8]);
         var value = Tensor<double>.CreateRandom([1, 4, 8]);
-
-        tape.Watch(query);
         tape.Watch(key);
-        tape.Watch(value);
 
         var output = DifferentiableOps<double>.ScaledDotProductAttention(query, key, value);
         var loss = DifferentiableOps<double>.Sum(output);
-        var grads = tape.Gradient(loss);
+        var grads = tape.ComputeGradients(loss);
 
         Assert.True(grads.ContainsKey(query), "Should have query gradient");
         Assert.True(grads.ContainsKey(key), "Should have key gradient");

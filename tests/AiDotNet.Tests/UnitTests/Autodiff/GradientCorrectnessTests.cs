@@ -1,6 +1,7 @@
 using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Autodiff.Testing;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -540,7 +541,6 @@ public class GradientCorrectnessTests
         using (var tape = new GradientTape<float>())
         {
             var inputNode = TensorOperations<float>.Variable(input, "input", requiresGradient: true);
-            tape.Watch(inputNode);
 
             var output = TensorOperations<float>.Softmax(inputNode, axis: -1);
             output.Gradient = outputGradient;
@@ -611,7 +611,6 @@ public class GradientCorrectnessTests
         using (var tape = new GradientTape<float>())
         {
             var inputNode = TensorOperations<float>.Variable(input, "input", requiresGradient: true);
-            tape.Watch(inputNode);
 
             var output = TensorOperations<float>.TaylorSoftmax(inputNode, order: 2, axis: -1);
             output.Gradient = outputGradient;
@@ -681,7 +680,6 @@ public class GradientCorrectnessTests
         using (var tape = new GradientTape<float>())
         {
             var inputNode = TensorOperations<float>.Variable(input, "input", requiresGradient: true);
-            tape.Watch(inputNode);
 
             var output = TensorOperations<float>.TaylorSoftmax(inputNode, order: 4, axis: -1);
             output.Gradient = outputGradient;
@@ -764,7 +762,6 @@ public class GradientCorrectnessTests
         using (var tape = new GradientTape<float>())
         {
             var inputNode = TensorOperations<float>.Variable(input, "input", requiresGradient: true);
-            tape.Watch(inputNode);
 
             // Use soft mode (hard=false) for proper gradient testing
             var output = TensorOperations<float>.GumbelSoftmax(inputNode, temperature: 1.0, hard: false);
@@ -886,7 +883,6 @@ public class GradientCorrectnessTests
         using (var tape = new GradientTape<float>())
         {
             var inputNode = TensorOperations<float>.Variable(input, "input", requiresGradient: true);
-            tape.Watch(inputNode);
 
             var output = TensorOperations<float>.MaxPool2D(inputNode, new int[] { 2, 2 });
             output.Gradient = outputGradient;
@@ -929,7 +925,6 @@ public class GradientCorrectnessTests
         using (var tape = new GradientTape<float>())
         {
             var inputNode = TensorOperations<float>.Variable(input, "input", requiresGradient: true);
-            tape.Watch(inputNode);
 
             var output = TensorOperations<float>.AvgPool2D(inputNode, new int[] { 2, 2 });
             output.Gradient = outputGradient;
@@ -973,7 +968,6 @@ public class GradientCorrectnessTests
         {
             var node1 = TensorOperations<float>.Variable(input1, "input1", requiresGradient: true);
             var node2 = TensorOperations<float>.Variable(input2, "input2", requiresGradient: true);
-            tape.Watch(node1);
             tape.Watch(node2);
 
             var nodes = new List<ComputationNode<float>> { node1, node2 };
@@ -1025,7 +1019,6 @@ public class GradientCorrectnessTests
         using (var tape = new GradientTape<float>())
         {
             var inputNode = TensorOperations<float>.Variable(input, "input", requiresGradient: true);
-            tape.Watch(inputNode);
 
             var output = TensorOperations<float>.Pad(inputNode, padWidth, 0f);
             output.Gradient = outputGradient;
@@ -1112,9 +1105,7 @@ public class GradientCorrectnessTests
             var inputNode = TensorOperations<float>.Variable(input, "input", requiresGradient: true);
             var gammaNode = TensorOperations<float>.Variable(gamma, "gamma", requiresGradient: true);
             var betaNode = TensorOperations<float>.Variable(beta, "beta", requiresGradient: true);
-            tape.Watch(inputNode);
             tape.Watch(gammaNode);
-            tape.Watch(betaNode);
 
             var output = TensorOperations<float>.LayerNorm(inputNode, new int[] { features }, gammaNode, betaNode);
             output.Gradient = outputGradient;
@@ -1195,9 +1186,7 @@ public class GradientCorrectnessTests
             var inputNode = TensorOperations<float>.Variable(input, "input", requiresGradient: true);
             var gammaNode = TensorOperations<float>.Variable(gamma, "gamma", requiresGradient: true);
             var betaNode = TensorOperations<float>.Variable(beta, "beta", requiresGradient: true);
-            tape.Watch(inputNode);
             tape.Watch(gammaNode);
-            tape.Watch(betaNode);
 
             var output = TensorOperations<float>.BatchNorm(
                 inputNode, gammaNode, betaNode, null, null, training: true);

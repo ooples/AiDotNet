@@ -1,5 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -547,11 +549,10 @@ public class DifferentiableOpsGradientCheckTests
         using (var tape = new GradientTape<double>())
         {
             foreach (var input in inputs)
-                tape.Watch(input);
 
             var output = forward(inputs);
             var loss = DifferentiableOps<double>.Sum(output);
-            gradients = tape.Gradient(loss);
+            gradients = tape.ComputeGradients(loss);
         }
 
         // 2. Verify each input's gradient against finite differences

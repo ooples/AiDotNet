@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -84,11 +85,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(0.5, 1.0, 2.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.SELU(a);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         var numerical = ComputeNumericalGradient(aData, t =>
         {
@@ -108,11 +108,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-0.5, -1.0, -2.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.SELU(a);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         var numerical = ComputeNumericalGradient(aData, t =>
         {
@@ -133,11 +132,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-1.5, 0.5, -0.3, 2.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.SELU(a);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         var numerical = ComputeNumericalGradient(aData, t =>
         {
@@ -162,11 +160,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-0.5, 0.0, 0.5, 0.9);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.HardTanh(a);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         var numerical = ComputeNumericalGradient(aData, t =>
         {
@@ -185,11 +182,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-3.0, -1.5, 1.5, 3.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.HardTanh(a);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         // In saturation region, gradient should be 0
         for (int i = 0; i < grads[a].Length; i++)
@@ -207,11 +203,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-1.0, -0.5, 0.5, 1.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.CELU(a, alpha: 1.0);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         var numerical = ComputeNumericalGradient(aData, t =>
         {
@@ -230,11 +225,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-2.0, -0.3, 0.7, 1.5);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.CELU(a, alpha: 0.5);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         double alpha = 0.5;
         var numerical = ComputeNumericalGradient(aData, t =>
@@ -258,11 +252,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-1.0, -0.5, 0.0, 0.5, 1.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.LiSHT(a);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         var numerical = ComputeNumericalGradient(aData, t =>
         {
@@ -285,7 +278,6 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(0.0, 1.0, -1.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.LiSHT(a);
 
@@ -304,11 +296,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-2.0, -1.0, 0.0, 1.0, 2.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.BentIdentity(a);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         var numerical = ComputeNumericalGradient(aData, t =>
         {
@@ -329,7 +320,6 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(0.0, 1.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.BentIdentity(a);
 
@@ -348,11 +338,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-1.5, -0.5, 0.0, 0.5, 1.5);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.Gaussian(a);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         var numerical = ComputeNumericalGradient(aData, t =>
         {
@@ -373,7 +362,6 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(0.0, 1.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.Gaussian(a);
 
@@ -388,11 +376,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(0.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.Gaussian(a);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         Assert.True(Math.Abs(grads[a][0]) < Tolerance,
             $"Gaussian gradient at x=0 should be 0, got {grads[a][0]}");
@@ -408,11 +395,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-1.0, -0.5, 0.0, 0.5, 1.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.ScaledTanh(a, beta: 1.0);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         double beta = 1.0;
         var numerical = ComputeNumericalGradient(aData, t =>
@@ -435,11 +421,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-0.8, 0.3, 0.7);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.ScaledTanh(a, beta: 2.5);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         double beta = 2.5;
         var numerical = ComputeNumericalGradient(aData, t =>
@@ -466,11 +451,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-1.0, -0.5, 0.0, 0.5, 1.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.Mish(a);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         var numerical = ComputeNumericalGradient(aData, t =>
         {
@@ -491,7 +475,6 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(0.0, 1.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.Mish(a);
 
@@ -510,11 +493,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-2.0, -0.5, 0.5, 2.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.PReLU(a, alpha: 0.1);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         double alpha = 0.1;
         var numerical = ComputeNumericalGradient(aData, t =>
@@ -536,7 +518,6 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(2.0, -3.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.PReLU(a, alpha: 0.1);
 
@@ -554,12 +535,11 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-1.0, 0.5, 1.5, 3.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         double threshold = 1.0;
         var result = TensorOperations<double>.ThresholdedReLU(a, threshold: threshold);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         var numerical = ComputeNumericalGradient(aData, t =>
         {
@@ -580,7 +560,6 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(0.5, 1.5);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.ThresholdedReLU(a, threshold: 1.0);
 
@@ -598,11 +577,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-2.0, -0.5, 0.0, 0.5, 2.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.ISRU(a, alpha: 1.0);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         double alpha = 1.0;
         var numerical = ComputeNumericalGradient(aData, t =>
@@ -622,11 +600,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-1.0, 0.5, 1.5);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.ISRU(a, alpha: 2.0);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         double alpha = 2.0;
         var numerical = ComputeNumericalGradient(aData, t =>
@@ -648,7 +625,6 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(0.0, 1.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.ISRU(a, alpha: 1.0);
 
@@ -666,11 +642,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-1.0, -0.5, 0.0, 0.5, 1.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.SQRBF(a, beta: 1.0);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         double beta = 1.0;
         var numerical = ComputeNumericalGradient(aData, t =>
@@ -690,11 +665,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-0.8, 0.3, 0.6);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.SQRBF(a, beta: 3.0);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         double beta = 3.0;
         var numerical = ComputeNumericalGradient(aData, t =>
@@ -741,12 +715,11 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor2D(new double[,] { { 1.0, 2.0, 3.0 }, { 4.0, 5.0, 6.0 } });
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // Reshape 2x3 -> 6
         var reshaped = TensorOperations<double>.Reshape(a, 6);
         var f = TensorOperations<double>.Sum(TensorOperations<double>.Square(reshaped));
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         // d/da_i[sum(a_i^2)] = 2*a_i
         for (int i = 0; i < aData.Length; i++)
@@ -766,13 +739,12 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(0.3, 0.5, 0.8);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(Mish(a^2))
         var sq = TensorOperations<double>.Square(a);
         var mish = TensorOperations<double>.Mish(sq);
         var f = TensorOperations<double>.Sum(mish);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         var numerical = ComputeNumericalGradient(aData, t =>
         {
@@ -796,13 +768,12 @@ public class AutodiffDeepMathIntegrationTests
         // (SELU derivative is discontinuous at 0: left=λα≈1.758, right=λ≈1.051)
         var aData = MakeTensor(-0.5, 0.3, 0.5);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(SELU(tanh(a)))
         var tanhA = TensorOperations<double>.Tanh(a);
         var selu = TensorOperations<double>.SELU(tanhA);
         var f = TensorOperations<double>.Sum(selu);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         double lambda = 1.0507009873554804934193349852946;
         double alpha = 1.6732632423543772848170429916717;
@@ -826,13 +797,12 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-1.0, 0.0, 1.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(BentIdentity(Sigmoid(a)))
         var sig = TensorOperations<double>.Sigmoid(a);
         var bent = TensorOperations<double>.BentIdentity(sig);
         var f = TensorOperations<double>.Sum(bent);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         var numerical = ComputeNumericalGradient(aData, t =>
         {
@@ -855,13 +825,12 @@ public class AutodiffDeepMathIntegrationTests
         // Use small values to avoid overflow
         var aData = MakeTensor(-0.5, 0.0, 0.3);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(Gaussian(Exp(a)))
         var expA = TensorOperations<double>.Exp(a);
         var gauss = TensorOperations<double>.Gaussian(expA);
         var f = TensorOperations<double>.Sum(gauss);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         var numerical = ComputeNumericalGradient(aData, t =>
         {
@@ -883,13 +852,12 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(-0.5, 0.0, 0.5);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(LiSHT(CELU(a)))
         var celu = TensorOperations<double>.CELU(a, alpha: 1.0);
         var lisht = TensorOperations<double>.LiSHT(celu);
         var f = TensorOperations<double>.Sum(lisht);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         var numerical = ComputeNumericalGradient(aData, t =>
         {
@@ -913,7 +881,6 @@ public class AutodiffDeepMathIntegrationTests
         var bData = MakeTensor(0.3, 0.7);
         var a = TensorOperations<double>.Variable(aData, "a");
         var b = TensorOperations<double>.Variable(bData, "b");
-        tape.Watch(a);
         tape.Watch(b);
 
         // f = sum(exp(a * b + a))
@@ -921,7 +888,7 @@ public class AutodiffDeepMathIntegrationTests
         var abPlusA = TensorOperations<double>.Add(ab, a);
         var result = TensorOperations<double>.Exp(abPlusA);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a, b });
+        var grads = tape.ComputeGradients(f, new[] { a, b });
 
         var numericalA = ComputeNumericalGradient(aData, t =>
         {
@@ -956,13 +923,12 @@ public class AutodiffDeepMathIntegrationTests
 
         var mat = TensorOperations<double>.Variable(matData, "mat");
         var vec = TensorOperations<double>.Variable(vecData, "vec");
-        tape.Watch(mat);
         tape.Watch(vec);
 
         // f = sum(mat @ vec) where @ is matrix-vector multiply
         var mv = TensorOperations<double>.MatrixVectorMultiply(mat, vec);
         var f = TensorOperations<double>.Sum(mv);
-        var grads = tape.Gradient(f, new[] { mat, vec });
+        var grads = tape.ComputeGradients(f, new[] { mat, vec });
 
         // Numerical gradient for mat
         var numericalMat = ComputeNumericalGradient(matData, t =>
@@ -1010,14 +976,13 @@ public class AutodiffDeepMathIntegrationTests
 
         var a = TensorOperations<double>.Variable(aData, "a");
         var b = TensorOperations<double>.Variable(bData, "b");
-        tape.Watch(a);
         tape.Watch(b);
 
         // Concat along axis 0: [1,2] + [3,4] => [[1,2],[3,4]]
         var concat = TensorOperations<double>.Concat(new List<ComputationNode<double>> { a, b }, axis: 0);
         var sq = TensorOperations<double>.Square(concat);
         var f = TensorOperations<double>.Sum(sq);
-        var grads = tape.Gradient(f, new[] { a, b });
+        var grads = tape.ComputeGradients(f, new[] { a, b });
 
         // d/da_i[sum(concat^2)] for a-elements: 2*a_i
         var numericalA = ComputeNumericalGradient(aData, t =>
@@ -1041,13 +1006,12 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(1.0, 2.0, 3.0, 4.0, 5.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // Slice elements 1..3 (indices 1,2,3)
         var sliced = TensorOperations<double>.Slice(a, start: 1, length: 3, step: 1, axis: 0);
         var sq = TensorOperations<double>.Square(sliced);
         var f = TensorOperations<double>.Sum(sq);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         // Only elements 1,2,3 contribute; gradient is 2*a_i for those, 0 for others
         var numerical = ComputeNumericalGradient(aData, t =>
@@ -1065,19 +1029,18 @@ public class AutodiffDeepMathIntegrationTests
     [Fact]
     public void PersistentTape_CanComputeGradientsTwice()
     {
-        using var tape = new GradientTape<double>(persistent: true);
+        using var tape = new GradientTape<double>(new GradientTapeOptions { Persistent = true });
         var aData = MakeTensor(1.0, 2.0, 3.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var sq = TensorOperations<double>.Square(a);
         var f = TensorOperations<double>.Sum(sq);
 
         // First gradient computation
-        var grads1 = tape.Gradient(f, new[] { a });
+        var grads1 = tape.ComputeGradients(f, new[] { a });
 
         // Second gradient computation (should not throw)
-        var grads2 = tape.Gradient(f, new[] { a });
+        var grads2 = tape.ComputeGradients(f, new[] { a });
 
         // Both should give the same result: 2*a
         for (int i = 0; i < aData.Length; i++)
@@ -1090,19 +1053,18 @@ public class AutodiffDeepMathIntegrationTests
     [Fact]
     public void NonPersistentTape_ThrowsOnSecondGradient()
     {
-        using var tape = new GradientTape<double>(persistent: false);
+        using var tape = new GradientTape<double>();
         var aData = MakeTensor(1.0, 2.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var sq = TensorOperations<double>.Square(a);
         var f = TensorOperations<double>.Sum(sq);
 
         // First call succeeds
-        tape.Gradient(f, new[] { a });
+        tape.ComputeGradients(f, new[] { a });
 
         // Second call should throw
-        Assert.Throws<InvalidOperationException>(() => tape.Gradient(f, new[] { a }));
+        Assert.Throws<InvalidOperationException>(() => tape.ComputeGradients(f, new[] { a }));
     }
 
     #endregion
@@ -1115,14 +1077,13 @@ public class AutodiffDeepMathIntegrationTests
         var tape = new GradientTape<double>();
         var aData = MakeTensor(1.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var sq = TensorOperations<double>.Square(a);
         var f = TensorOperations<double>.Sum(sq);
 
         tape.Dispose();
 
-        Assert.Throws<ObjectDisposedException>(() => tape.Gradient(f, new[] { a }));
+        Assert.Throws<ObjectDisposedException>(() => tape.ComputeGradients(f, new[] { a }));
     }
 
     [Fact]
@@ -1147,13 +1108,12 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(1.0, 2.0, 3.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(a + a) = sum(2*a)
         // d/da_i = 2
         var added = TensorOperations<double>.Add(a, a);
         var f = TensorOperations<double>.Sum(added);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         for (int i = 0; i < aData.Length; i++)
         {
@@ -1168,7 +1128,6 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(1.0, 2.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(a^2 + exp(a))
         // d/da_i = 2*a_i + exp(a_i)
@@ -1176,7 +1135,7 @@ public class AutodiffDeepMathIntegrationTests
         var ex = TensorOperations<double>.Exp(a);
         var combined = TensorOperations<double>.Add(sq, ex);
         var f = TensorOperations<double>.Sum(combined);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         var numerical = ComputeNumericalGradient(aData, t =>
         {
@@ -1202,11 +1161,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(1.0, -1.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.SELU(a);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         // At x=1: d(SELU)/dx = lambda ≈ 1.0507
         Assert.True(Math.Abs(grads[a][0] - lambda) < Tolerance,
@@ -1224,11 +1182,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(0.0, 1.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.BentIdentity(a);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         // At x=0: d/dx = 0/(2*1) + 1 = 1.0
         Assert.True(Math.Abs(grads[a][0] - 1.0) < Tolerance,
@@ -1246,11 +1203,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(1.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.Gaussian(a);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         // At x=1: d/dx = -2*1*exp(-1) ≈ -0.7358
         double expected = -2.0 * Math.Exp(-1.0);
@@ -1264,11 +1220,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(0.0, 1.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.ISRU(a, alpha: 1.0);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         // At x=0: d/dx = (1+0)^(-3/2) = 1.0
         Assert.True(Math.Abs(grads[a][0] - 1.0) < Tolerance,
@@ -1286,11 +1241,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(0.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.LiSHT(a);
         var f = TensorOperations<double>.Sum(result);
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
 
         // At x=0: d/dx = tanh(0) + 0*(1-tanh^2(0)) = 0 + 0 = 0
         Assert.True(Math.Abs(grads[a][0]) < Tolerance,
@@ -1308,7 +1262,6 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(0.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.CELU(a, alpha: 1.0);
 
@@ -1323,7 +1276,6 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(0.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.ScaledTanh(a, beta: 2.0);
 
@@ -1339,7 +1291,6 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(0.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.SQRBF(a, beta: 3.0);
 
@@ -1353,7 +1304,6 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(0.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var result = TensorOperations<double>.Mish(a);
 
@@ -1393,11 +1343,10 @@ public class AutodiffDeepMathIntegrationTests
         using var tape = new GradientTape<double>();
         var aData = MakeTensor(1.0, 2.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var sq = TensorOperations<double>.Square(a);
         var f = TensorOperations<double>.Sum(sq);
-        tape.Gradient(f, new[] { a });
+        tape.ComputeGradients(f, new[] { a });
 
         // After backward, gradient should be non-zero
         Assert.NotNull(a.Gradient);
@@ -1431,14 +1380,13 @@ public class AutodiffDeepMathIntegrationTests
     [Fact]
     public void Reset_ClearsAllState()
     {
-        using var tape = new GradientTape<double>(persistent: true);
+        using var tape = new GradientTape<double>(new GradientTapeOptions { Persistent = true });
         var aData = MakeTensor(1.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var sq = TensorOperations<double>.Square(a);
         var f = TensorOperations<double>.Sum(sq);
-        tape.Gradient(f, new[] { a });
+        tape.ComputeGradients(f, new[] { a });
 
         // Reset should clear state
         tape.Reset();
@@ -1455,7 +1403,6 @@ public class AutodiffDeepMathIntegrationTests
         using var outerTape = new GradientTape<double>();
         var aData = MakeTensor(2.0);
         var a = TensorOperations<double>.Variable(aData, "a");
-        outerTape.Watch(a);
 
         var sq = TensorOperations<double>.Square(a);
 
@@ -1464,11 +1411,10 @@ public class AutodiffDeepMathIntegrationTests
         {
             var bData = MakeTensor(3.0);
             var b = TensorOperations<double>.Variable(bData, "b");
-            innerTape.Watch(b);
 
             var bSq = TensorOperations<double>.Square(b);
             var fInner = TensorOperations<double>.Sum(bSq);
-            var innerGrads = innerTape.Gradient(fInner, new[] { b });
+            var innerGrads = innerTape.ComputeGradients(fInner, new[] { b });
 
             // Inner gradient: d/db[b^2] = 2b = 6
             Assert.True(Math.Abs(innerGrads[b][0] - 6.0) < Tolerance);
@@ -1476,7 +1422,7 @@ public class AutodiffDeepMathIntegrationTests
 
         // Outer tape should still work
         var fOuter = TensorOperations<double>.Sum(sq);
-        var outerGrads = outerTape.Gradient(fOuter, new[] { a });
+        var outerGrads = outerTape.ComputeGradients(fOuter, new[] { a });
 
         // Outer gradient: d/da[a^2] = 2a = 4
         Assert.True(Math.Abs(outerGrads[a][0] - 4.0) < Tolerance);

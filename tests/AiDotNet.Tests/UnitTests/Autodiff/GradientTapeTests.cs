@@ -1,4 +1,6 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -13,7 +15,6 @@ public class GradientTapeTests
         var b = new Tensor<double>([2], new Vector<double>([1.0, 2.0]));
 
         using var tape = new GradientTape<double>();
-        tape.Watch(a);
         tape.Watch(b);
 
         // c = a + b (element-wise)
@@ -23,7 +24,7 @@ public class GradientTapeTests
         tape.RecordOp("add", [a, b], c,
             grad => [grad, grad]); // d(a+b)/da = 1, d(a+b)/db = 1
 
-        var grads = tape.Gradient(c);
+        var grads = tape.ComputeGradients(c);
 
         Assert.True(grads.ContainsKey(a));
         Assert.True(grads.ContainsKey(b));
@@ -40,7 +41,6 @@ public class GradientTapeTests
         var b = new Tensor<double>([2], new Vector<double>([5.0, 6.0]));
 
         using var tape = new GradientTape<double>();
-        tape.Watch(a);
         tape.Watch(b);
 
         // c = a * b (element-wise)
@@ -61,7 +61,7 @@ public class GradientTapeTests
                 return [ga, gb];
             });
 
-        var grads = tape.Gradient(c);
+        var grads = tape.ComputeGradients(c);
 
         // dc/da = b = [5, 6]
         Assert.Equal(5.0, grads[a][0]);
@@ -77,7 +77,6 @@ public class GradientTapeTests
         var x = new Tensor<double>([1], new Vector<double>([2.0]));
 
         using var tape = new GradientTape<double>();
-        tape.Watch(x);
 
         // y = x * x (square)
         var y = new Tensor<double>([1]);
@@ -96,7 +95,7 @@ public class GradientTapeTests
         tape.RecordOp("add_const", [y], z,
             grad => [grad]); // d(y+1)/dy = 1
 
-        var grads = tape.Gradient(z);
+        var grads = tape.ComputeGradients(z);
 
         // dz/dx = dz/dy * dy/dx = 1 * 2x = 2*2 = 4
         Assert.Equal(4.0, grads[x][0]);
@@ -108,7 +107,6 @@ public class GradientTapeTests
         var x = new Tensor<double>([1], new Vector<double>([3.0]));
 
         using var tape = new GradientTape<double>();
-        tape.Watch(x);
 
         // y = x + x = 2x
         var y = new Tensor<double>([1]);
@@ -116,7 +114,7 @@ public class GradientTapeTests
         tape.RecordOp("add", [x, x], y,
             grad => [grad, grad]); // Both inputs are x
 
-        var grads = tape.Gradient(y);
+        var grads = tape.ComputeGradients(y);
 
         // dy/dx = 2 (gradient accumulated from both uses)
         Assert.Equal(2.0, grads[x][0]);
@@ -127,29 +125,27 @@ public class GradientTapeTests
     {
         var x = new Tensor<double>([1], new Vector<double>([1.0]));
         using var tape = new GradientTape<double>();
-        tape.Watch(x);
 
         // Use a distinct output tensor (not aliased with input)
         var y = new Tensor<double>([1], new Vector<double>([1.0]));
         tape.RecordOp("id", [x], y, grad => [grad]);
-        tape.Gradient(y);
+        tape.ComputeGradients(y);
 
-        Assert.Throws<InvalidOperationException>(() => tape.Gradient(y));
+        Assert.Throws<InvalidOperationException>(() => tape.ComputeGradients(y));
     }
 
     [Fact]
     public void Tape_Persistent_AllowsMultipleGradients()
     {
         var x = new Tensor<double>([1], new Vector<double>([1.0]));
-        using var tape = new GradientTape<double>(persistent: true);
-        tape.Watch(x);
+        using var tape = new GradientTape<double>(new GradientTapeOptions { Persistent = true });
 
         // Use a distinct output tensor (not aliased with input)
         var y = new Tensor<double>([1], new Vector<double>([1.0]));
         tape.RecordOp("id", [x], y, grad => [grad]);
 
-        var g1 = tape.Gradient(y);
-        var g2 = tape.Gradient(y);
+        var g1 = tape.ComputeGradients(y);
+        var g2 = tape.ComputeGradients(y);
 
         Assert.Equal(g1[x][0], g2[x][0]);
     }
@@ -159,7 +155,6 @@ public class GradientTapeTests
     {
         var x = new Tensor<double>([1], new Vector<double>([2.0]));
         using var tape = new GradientTape<double>();
-        tape.Watch(x);
 
         // Record an op outside the scope — this should be tracked
         var y = new Tensor<double>([1], new Vector<double>([3.0]));
@@ -182,7 +177,7 @@ public class GradientTapeTests
         Assert.False(NoGradScope<double>.IsSuppressed);
 
         // Gradient should only reflect the "double" op, not the ignored one
-        var grads = tape.Gradient(y);
+        var grads = tape.ComputeGradients(y);
         Assert.True(grads.ContainsKey(x));
         Assert.Equal(2.0, grads[x][0]);
     }
@@ -200,7 +195,7 @@ public class GradientTapeTests
         z[0] = x[0] + y[0];
         tape.RecordOp("add", [x, y], z, grad => [grad, grad]);
 
-        var grads = tape.Gradient(z);
+        var grads = tape.ComputeGradients(z);
 
         Assert.True(grads.ContainsKey(x));
         Assert.False(grads.ContainsKey(y)); // y not watched
@@ -247,7 +242,6 @@ public class GradientTapeTests
         var x = new Tensor<double>([1], new Vector<double>([2.0]));
 
         using var tape = new GradientTape<double>();
-        tape.Watch(x);
 
         var current = x;
         // Apply alternating multiply and add, 10 ops total
@@ -263,7 +257,7 @@ public class GradientTapeTests
         current = DifferentiableOps<double>.AddScalar(current, 0.5);
 
         var loss = DifferentiableOps<double>.Sum(current);
-        var grads = tape.Gradient(loss);
+        var grads = tape.ComputeGradients(loss);
 
         // Chain rule: d/dx = 2 * 3 * 0.5 * 4 * 0.25 = 3.0
         Assert.True(grads.ContainsKey(x));
@@ -278,7 +272,6 @@ public class GradientTapeTests
         var x = new Tensor<double>([2], new Vector<double>([1.0, 2.0]));
 
         using var tape = new GradientTape<double>();
-        tape.Watch(x);
 
         var y = DifferentiableOps<double>.MultiplyScalar(x, 2.0);
         var z = DifferentiableOps<double>.MultiplyScalar(x, 3.0);
@@ -286,7 +279,7 @@ public class GradientTapeTests
         var sumZ = DifferentiableOps<double>.Sum(z);
         var loss = DifferentiableOps<double>.Add(sumY, sumZ);
 
-        var grads = tape.Gradient(loss);
+        var grads = tape.ComputeGradients(loss);
 
         // dx = 2 + 3 = 5 for each element
         Assert.Equal(5.0, grads[x][0], 10);
@@ -303,9 +296,7 @@ public class GradientTapeTests
         var w2 = new Tensor<double>([3], new Vector<double>([0.4, 0.5, 0.6]));
 
         using var tape = new GradientTape<double>();
-        tape.Watch(x);
         tape.Watch(w1);
-        tape.Watch(w2);
 
         var prod1 = DifferentiableOps<double>.Multiply(w1, x);
         var prod2 = DifferentiableOps<double>.Multiply(w2, x);
@@ -313,7 +304,7 @@ public class GradientTapeTests
         var sum2 = DifferentiableOps<double>.Sum(prod2);
         var loss = DifferentiableOps<double>.Add(sum1, sum2);
 
-        var grads = tape.Gradient(loss);
+        var grads = tape.ComputeGradients(loss);
 
         // dw1 = x
         Assert.Equal(1.0, grads[w1][0], 10);
@@ -343,12 +334,11 @@ public class GradientTapeTests
         Dictionary<Tensor<double>, Tensor<double>> grads;
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(w);
             var linear = DifferentiableOps<double>.MatMul(x, w);
             var biased = DifferentiableOps<double>.Add(linear, b);
             var activated = DifferentiableOps<double>.Sigmoid(biased);
             var loss = DifferentiableOps<double>.Mean(activated);
-            grads = tape.Gradient(loss);
+            grads = tape.ComputeGradients(loss);
         }
 
         Assert.True(grads.ContainsKey(w));
@@ -394,11 +384,10 @@ public class GradientTapeTests
         var x = new Tensor<double>([3], new Vector<double>([1e-15, 1e-10, 1e-8]));
 
         using var tape = new GradientTape<double>();
-        tape.Watch(x);
 
         var y = DifferentiableOps<double>.Multiply(x, x);
         var loss = DifferentiableOps<double>.Sum(y);
-        var grads = tape.Gradient(loss);
+        var grads = tape.ComputeGradients(loss);
 
         for (int i = 0; i < x.Length; i++)
         {
@@ -413,12 +402,11 @@ public class GradientTapeTests
         var x = new Tensor<double>([3], new Vector<double>([100.0, 200.0, 50.0]));
 
         using var tape = new GradientTape<double>();
-        tape.Watch(x);
 
         // Sigmoid saturates at large values — gradient should be near zero, not NaN
         var y = DifferentiableOps<double>.Sigmoid(x);
         var loss = DifferentiableOps<double>.Sum(y);
-        var grads = tape.Gradient(loss);
+        var grads = tape.ComputeGradients(loss);
 
         for (int i = 0; i < x.Length; i++)
         {
@@ -436,10 +424,9 @@ public class GradientTapeTests
         var x = new Tensor<double>([3], new Vector<double>([1.0, 2.0, 3.0]));
 
         using var tape = new GradientTape<double>();
-        tape.Watch(x);
 
         // x IS the loss — no ops between watch and gradient
-        var grads = tape.Gradient(x);
+        var grads = tape.ComputeGradients(x);
 
         Assert.True(grads.ContainsKey(x));
         Assert.Equal(1.0, grads[x][0]);
@@ -452,7 +439,7 @@ public class GradientTapeTests
     {
         var x = new Tensor<double>([1], new Vector<double>([3.0]));
 
-        using var outer = new GradientTape<double>(persistent: true);
+        using var outer = new GradientTape<double>(new GradientTapeOptions { Persistent = true });
         outer.Watch(x);
 
         var y = DifferentiableOps<double>.MultiplyScalar(x, 2.0); // Recorded on outer
@@ -486,19 +473,17 @@ public class GradientTapeTests
             {
                 var x = new Tensor<double>([1], new Vector<double>([2.0]));
                 using var tape = new GradientTape<double>();
-                tape.Watch(x);
                 var y = DifferentiableOps<double>.MultiplyScalar(x, 3.0);
                 var loss = DifferentiableOps<double>.Sum(y);
-                return tape.Gradient(loss)[x][0]; // Should be 3.0
+                return tape.ComputeGradients(loss)[x][0]; // Should be 3.0
             }),
             Task.Run(() =>
             {
                 var x = new Tensor<double>([1], new Vector<double>([2.0]));
                 using var tape = new GradientTape<double>();
-                tape.Watch(x);
                 var y = DifferentiableOps<double>.MultiplyScalar(x, 5.0);
                 var loss = DifferentiableOps<double>.Sum(y);
-                return tape.Gradient(loss)[x][0]; // Should be 5.0
+                return tape.ComputeGradients(loss)[x][0]; // Should be 5.0
             })
         );
 
@@ -511,21 +496,19 @@ public class GradientTapeTests
     {
         var x = new Tensor<double>([1], new Vector<double>([2.0]));
 
-        using var tape = new GradientTape<double>(persistent: true);
-        tape.Watch(x);
+        using var tape = new GradientTape<double>(new GradientTapeOptions { Persistent = true });
 
         var y1 = DifferentiableOps<double>.MultiplyScalar(x, 3.0);
         var loss1 = DifferentiableOps<double>.Sum(y1);
-        var grads1 = tape.Gradient(loss1);
+        var grads1 = tape.ComputeGradients(loss1);
         Assert.Equal(3.0, grads1[x][0]);
 
         // Reset and compute different gradient
         tape.Reset();
-        tape.Watch(x);
 
         var y2 = DifferentiableOps<double>.MultiplyScalar(x, 7.0);
         var loss2 = DifferentiableOps<double>.Sum(y2);
-        var grads2 = tape.Gradient(loss2);
+        var grads2 = tape.ComputeGradients(loss2);
         Assert.Equal(7.0, grads2[x][0]);
     }
 }

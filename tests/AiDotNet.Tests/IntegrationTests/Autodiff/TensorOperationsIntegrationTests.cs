@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -89,14 +90,13 @@ public class TensorOperationsIntegrationTests
 
         var a = TensorOperations<double>.Variable(aData, "a");
         var b = TensorOperations<double>.Variable(bData, "b");
-        tape.Watch(a);
         tape.Watch(b);
 
         // f = sum(a + b)
         var c = TensorOperations<double>.Add(a, b);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a, b });
+        var grads = tape.ComputeGradients(f, new[] { a, b });
         var gradA = grads[a];
         var gradB = grads[b];
 
@@ -123,14 +123,13 @@ public class TensorOperationsIntegrationTests
 
         var a = TensorOperations<double>.Variable(aData, "a");
         var b = TensorOperations<double>.Variable(bData, "b");
-        tape.Watch(a);
         tape.Watch(b);
 
         // f = sum(a - b)
         var c = TensorOperations<double>.Subtract(a, b);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a, b });
+        var grads = tape.ComputeGradients(f, new[] { a, b });
         var gradA = grads[a];
         var gradB = grads[b];
 
@@ -157,14 +156,13 @@ public class TensorOperationsIntegrationTests
 
         var a = TensorOperations<double>.Variable(aData, "a");
         var b = TensorOperations<double>.Variable(bData, "b");
-        tape.Watch(a);
         tape.Watch(b);
 
         // f = sum(a * b)
         var c = TensorOperations<double>.ElementwiseMultiply(a, b);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a, b });
+        var grads = tape.ComputeGradients(f, new[] { a, b });
         var gradA = grads[a];
         var gradB = grads[b];
 
@@ -192,14 +190,13 @@ public class TensorOperationsIntegrationTests
 
         var a = TensorOperations<double>.Variable(aData, "a");
         var b = TensorOperations<double>.Variable(bData, "b");
-        tape.Watch(a);
         tape.Watch(b);
 
         // f = sum(a / b)
         var c = TensorOperations<double>.Divide(a, b);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a, b });
+        var grads = tape.ComputeGradients(f, new[] { a, b });
         var gradA = grads[a];
         var gradB = grads[b];
 
@@ -223,13 +220,12 @@ public class TensorOperationsIntegrationTests
         aData[0] = 2.0; aData[1] = 3.0; aData[2] = 4.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(a^3)
         var c = TensorOperations<double>.Power(a, 3.0);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
 
         // df/da[i] = 3 * a[i]^2
@@ -248,13 +244,12 @@ public class TensorOperationsIntegrationTests
         aData[0] = 2.0; aData[1] = 3.0; aData[2] = 4.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(a^2)
         var c = TensorOperations<double>.Square(a);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
 
         // df/da[i] = 2 * a[i]
@@ -277,13 +272,12 @@ public class TensorOperationsIntegrationTests
         aData[0] = 0.5; aData[1] = 1.0; aData[2] = 1.5;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(exp(a))
         var c = TensorOperations<double>.Exp(a);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
 
         // df/da[i] = exp(a[i])
@@ -302,13 +296,12 @@ public class TensorOperationsIntegrationTests
         aData[0] = 1.0; aData[1] = 2.0; aData[2] = 3.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(log(a))
         var c = TensorOperations<double>.Log(a);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
 
         // df/da[i] = 1/a[i]
@@ -327,13 +320,12 @@ public class TensorOperationsIntegrationTests
         aData[0] = 1.0; aData[1] = 4.0; aData[2] = 9.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(sqrt(a))
         var c = TensorOperations<double>.Sqrt(a);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
 
         // df/da[i] = 0.5 / sqrt(a[i])
@@ -352,13 +344,12 @@ public class TensorOperationsIntegrationTests
         aData[0] = 1.0; aData[1] = 2.0; aData[2] = 3.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(-a)
         var c = TensorOperations<double>.Negate(a);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
 
         // df/da[i] = -1
@@ -378,13 +369,12 @@ public class TensorOperationsIntegrationTests
         aData[0] = 2.0; aData[1] = -3.0; aData[2] = 4.0; aData[3] = -5.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(abs(a))
         var c = TensorOperations<double>.Abs(a);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
 
         // df/da[i] = sign(a[i])
@@ -408,13 +398,12 @@ public class TensorOperationsIntegrationTests
         aData[0] = 2.0; aData[1] = -1.0; aData[2] = 0.5; aData[3] = -0.5;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(relu(a))
         var c = TensorOperations<double>.ReLU(a);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
 
         // df/da[i] = 1 if a[i] > 0 else 0
@@ -434,13 +423,12 @@ public class TensorOperationsIntegrationTests
         aData[0] = 0.0; aData[1] = 1.0; aData[2] = -1.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(sigmoid(a))
         var c = TensorOperations<double>.Sigmoid(a);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
 
         // df/da[i] = sigmoid(a[i]) * (1 - sigmoid(a[i]))
@@ -462,13 +450,12 @@ public class TensorOperationsIntegrationTests
         aData[0] = 0.0; aData[1] = 0.5; aData[2] = -0.5;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(tanh(a))
         var c = TensorOperations<double>.Tanh(a);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
 
         // df/da[i] = 1 - tanh(a[i])^2
@@ -490,14 +477,13 @@ public class TensorOperationsIntegrationTests
         aData[0] = 2.0; aData[1] = -1.0; aData[2] = 0.5; aData[3] = -2.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         double alpha = 0.1;
         // f = sum(leaky_relu(a, alpha))
         var c = TensorOperations<double>.LeakyReLU(a, alpha);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
 
         // df/da[i] = 1 if a[i] > 0 else alpha
@@ -517,14 +503,13 @@ public class TensorOperationsIntegrationTests
         aData[0] = 2.0; aData[1] = -0.5; aData[2] = 0.5; aData[3] = -1.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         double alpha = 1.0;
         // f = sum(elu(a, alpha))
         var c = TensorOperations<double>.ELU(a, alpha);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
 
         // df/da[i] = 1 if a[i] > 0 else alpha * exp(a[i])
@@ -544,13 +529,12 @@ public class TensorOperationsIntegrationTests
         aData[0] = 0.0; aData[1] = 1.0; aData[2] = -1.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(softplus(a)) = sum(log(1 + exp(a)))
         var c = TensorOperations<double>.SoftPlus(a);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
 
         // df/da[i] = exp(a[i]) / (1 + exp(a[i])) = sigmoid(a[i])
@@ -569,13 +553,12 @@ public class TensorOperationsIntegrationTests
         aData[0] = 0.0; aData[1] = 1.0; aData[2] = -1.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(swish(a)) = sum(a * sigmoid(a))
         var c = TensorOperations<double>.Swish(a);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
 
         // df/da[i] = sigmoid(a[i]) + a[i] * sigmoid(a[i]) * (1 - sigmoid(a[i]))
@@ -609,12 +592,11 @@ public class TensorOperationsIntegrationTests
         aData[0] = 0.0; aData[1] = 1.0; aData[2] = -1.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var c = TensorOperations<double>.GELU(a);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
         Assert.NotNull(gradA);
 
@@ -652,12 +634,11 @@ public class TensorOperationsIntegrationTests
         aData[4] = 3.0;   // Above upper bound
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var c = TensorOperations<double>.HardSigmoid(a);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
         Assert.NotNull(gradA);
 
@@ -680,13 +661,12 @@ public class TensorOperationsIntegrationTests
         aData[0] = 0.0; aData[1] = 2.0; aData[2] = -2.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // softsign(x) = x / (1 + |x|)
         var c = TensorOperations<double>.SoftSign(a);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
         Assert.NotNull(gradA);
 
@@ -709,12 +689,11 @@ public class TensorOperationsIntegrationTests
         for (int i = 0; i < 6; i++) aData[i] = i + 1;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(a)
         var f = TensorOperations<double>.Sum(a);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
 
         // df/da[i] = 1 for all i
@@ -734,12 +713,11 @@ public class TensorOperationsIntegrationTests
         aData[0] = 1.0; aData[1] = 2.0; aData[2] = 3.0; aData[3] = 4.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = mean(a)
         var f = TensorOperations<double>.Mean(a);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
 
         // df/da[i] = 1/n for all i
@@ -772,7 +750,6 @@ public class TensorOperationsIntegrationTests
 
         var a = TensorOperations<double>.Variable(aData, "A");
         var b = TensorOperations<double>.Variable(bData, "B");
-        tape.Watch(a);
         tape.Watch(b);
 
         // C = A @ B (2x2 result)
@@ -780,7 +757,7 @@ public class TensorOperationsIntegrationTests
         // f = sum(C)
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a, b });
+        var grads = tape.ComputeGradients(f, new[] { a, b });
         var gradA = grads[a];
         var gradB = grads[b];
 
@@ -826,13 +803,12 @@ public class TensorOperationsIntegrationTests
         for (int i = 0; i < 6; i++) aData[i] = i + 1;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(transpose(a))
         var t = TensorOperations<double>.Transpose(a);
         var f = TensorOperations<double>.Sum(t);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
 
         // Transpose of upstream gradient of all ones is still all ones
@@ -856,7 +832,6 @@ public class TensorOperationsIntegrationTests
         aData[0] = 1.0; aData[1] = 2.0; aData[2] = 3.0; aData[3] = 4.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(softmax(a) * [1, 2, 3, 4])  (weighted sum)
         var s = TensorOperations<double>.Softmax(a);
@@ -866,7 +841,7 @@ public class TensorOperationsIntegrationTests
         var weighted = TensorOperations<double>.ElementwiseMultiply(s, weights);
         var f = TensorOperations<double>.Sum(weighted);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
         Assert.NotNull(gradA);
 
@@ -910,12 +885,11 @@ public class TensorOperationsIntegrationTests
         aData[0] = 1.0; aData[1] = 2.0; aData[2] = 3.0; aData[3] = 4.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var s = TensorOperations<double>.LogSoftmax(a);
         var f = TensorOperations<double>.Sum(s);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
         Assert.NotNull(gradA);
 
@@ -957,14 +931,13 @@ public class TensorOperationsIntegrationTests
         aData[0] = 0.5; aData[1] = 1.0; aData[2] = 0.3;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(exp(a^2))
         var sq = TensorOperations<double>.Square(a);
         var exp = TensorOperations<double>.Exp(sq);
         var f = TensorOperations<double>.Sum(exp);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
 
         // df/da[i] = exp(a[i]^2) * 2 * a[i]
@@ -985,14 +958,13 @@ public class TensorOperationsIntegrationTests
         aData[0] = 0.5; aData[1] = 1.0; aData[2] = -0.5;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         // f = sum(log(sigmoid(a)))
         var sig = TensorOperations<double>.Sigmoid(a);
         var logSig = TensorOperations<double>.Log(sig);
         var f = TensorOperations<double>.Sum(logSig);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
         Assert.NotNull(gradA);
 
@@ -1018,7 +990,6 @@ public class TensorOperationsIntegrationTests
 
         var a = TensorOperations<double>.Variable(aData, "a");
         var b = TensorOperations<double>.Variable(bData, "b");
-        tape.Watch(a);
         tape.Watch(b);
 
         // f = sum(tanh(a * b + a^2))
@@ -1028,7 +999,7 @@ public class TensorOperationsIntegrationTests
         var th = TensorOperations<double>.Tanh(sumTerm);
         var f = TensorOperations<double>.Sum(th);
 
-        var grads = tape.Gradient(f, new[] { a, b });
+        var grads = tape.ComputeGradients(f, new[] { a, b });
         var gradA = grads[a];
         var gradB = grads[b];
 
@@ -1079,12 +1050,11 @@ public class TensorOperationsIntegrationTests
         aData[1] = 1.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var c = TensorOperations<double>.Exp(a);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
         Assert.NotNull(gradA);
 
@@ -1103,12 +1073,11 @@ public class TensorOperationsIntegrationTests
         aData[2] = 1.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var c = TensorOperations<double>.Log(a);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
         Assert.NotNull(gradA);
 
@@ -1129,12 +1098,11 @@ public class TensorOperationsIntegrationTests
         aData[2] = 1.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var c = TensorOperations<double>.Sqrt(a);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
         Assert.NotNull(gradA);
 
@@ -1156,12 +1124,11 @@ public class TensorOperationsIntegrationTests
         aData[3] = 1.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var c = TensorOperations<double>.Sigmoid(a);
         var f = TensorOperations<double>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
         Assert.NotNull(gradA);
 
@@ -1189,12 +1156,11 @@ public class TensorOperationsIntegrationTests
         aData[3] = 1003.0;
 
         var a = TensorOperations<double>.Variable(aData, "a");
-        tape.Watch(a);
 
         var s = TensorOperations<double>.Softmax(a);
         var f = TensorOperations<double>.Sum(s);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
         Assert.NotNull(gradA);
 
@@ -1224,13 +1190,12 @@ public class TensorOperationsIntegrationTests
 
         var a = TensorOperations<float>.Variable(aData, "a");
         var b = TensorOperations<float>.Variable(bData, "b");
-        tape.Watch(a);
         tape.Watch(b);
 
         var c = TensorOperations<float>.Add(a, b);
         var f = TensorOperations<float>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a, b });
+        var grads = tape.ComputeGradients(f, new[] { a, b });
         var gradA = grads[a];
         var gradB = grads[b];
 
@@ -1252,12 +1217,11 @@ public class TensorOperationsIntegrationTests
         aData[0] = 0.0f; aData[1] = 1.0f; aData[2] = -1.0f;
 
         var a = TensorOperations<float>.Variable(aData, "a");
-        tape.Watch(a);
 
         var c = TensorOperations<float>.Sigmoid(a);
         var f = TensorOperations<float>.Sum(c);
 
-        var grads = tape.Gradient(f, new[] { a });
+        var grads = tape.ComputeGradients(f, new[] { a });
         var gradA = grads[a];
         Assert.NotNull(gradA);
 

@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -589,9 +590,8 @@ public class GradientCheckpointingIntegrationTests
             requiresGradient: true);
 
         // Act - use checkpoint within gradient tape context
-        using (var tape = new GradientTape<double>(persistent: true))
+        using (var tape = new GradientTape<double>(new GradientTapeOptions { Persistent = true }))
         {
-            tape.Watch(input);
 
             var checkpointedOutput = GradientCheckpointing<double>.Checkpoint(
                 () => TensorOperations<double>.Sum(TensorOperations<double>.Square(input)),

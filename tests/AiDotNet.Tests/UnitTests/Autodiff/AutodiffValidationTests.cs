@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -242,17 +243,16 @@ public class AutodiffValidationTests
         // Arrange
         var tensor = new Tensor<double>(new[] { 3 }, new Vector<double>([1.0, 2.0, 3.0]));
 
-        using var tape = new GradientTape<double>(persistent: false);
+        using var tape = new GradientTape<double>();
         var x = TensorOperations<double>.Variable(tensor, "x", requiresGradient: true);
-        tape.Watch(x);
         var y = TensorOperations<double>.Sum(x);
 
         // Act - First gradient call should succeed
-        var grads1 = tape.Gradient(y, new[] { x });
+        var grads1 = tape.ComputeGradients(y, new[] { x });
         Assert.NotNull(grads1);
 
         // Assert - Second gradient call should throw
-        Assert.Throws<InvalidOperationException>(() => tape.Gradient(y, new[] { x }));
+        Assert.Throws<InvalidOperationException>(() => tape.ComputeGradients(y, new[] { x }));
     }
 
     [Fact]
@@ -261,16 +261,15 @@ public class AutodiffValidationTests
         // Arrange
         var tensor = new Tensor<double>(new[] { 3 }, new Vector<double>([1.0, 2.0, 3.0]));
 
-        using var tape = new GradientTape<double>(persistent: true);
+        using var tape = new GradientTape<double>(new GradientTapeOptions { Persistent = true });
         var x = TensorOperations<double>.Variable(tensor, "x", requiresGradient: true);
-        tape.Watch(x);
         var y = TensorOperations<double>.Sum(x);
 
         // Act & Assert - Multiple gradient calls should succeed
-        var grads1 = tape.Gradient(y, new[] { x });
+        var grads1 = tape.ComputeGradients(y, new[] { x });
         Assert.NotNull(grads1);
 
-        var grads2 = tape.Gradient(y, new[] { x });
+        var grads2 = tape.ComputeGradients(y, new[] { x });
         Assert.NotNull(grads2);
     }
 
@@ -281,14 +280,13 @@ public class AutodiffValidationTests
         var tensor = new Tensor<double>(new[] { 3 }, new Vector<double>([1.0, 2.0, 3.0]));
         var tape = new GradientTape<double>();
         var x = TensorOperations<double>.Variable(tensor, "x", requiresGradient: true);
-        tape.Watch(x);
         var y = TensorOperations<double>.Sum(x);
 
         // Act
         tape.Dispose();
 
         // Assert
-        Assert.Throws<ObjectDisposedException>(() => tape.Gradient(y, new[] { x }));
+        Assert.Throws<ObjectDisposedException>(() => tape.ComputeGradients(y, new[] { x }));
     }
 
     #endregion
@@ -305,13 +303,12 @@ public class AutodiffValidationTests
         using var tape = new GradientTape<double>();
         var a = TensorOperations<double>.Variable(aTensor, "a", requiresGradient: true);
         var b = TensorOperations<double>.Variable(bTensor, "b", requiresGradient: true);
-        tape.Watch(a);
         tape.Watch(b);
 
         // Act
         var c = TensorOperations<double>.Add(a, b);
         var loss = TensorOperations<double>.Sum(c);
-        tape.Gradient(loss, new[] { a, b });
+        tape.ComputeGradients(loss, new[] { a, b });
 
         // Assert - gradient of sum(a+b) w.r.t. a and b should be all ones
         Assert.NotNull(a.Gradient);
@@ -332,13 +329,12 @@ public class AutodiffValidationTests
         using var tape = new GradientTape<double>();
         var a = TensorOperations<double>.Variable(aTensor, "a", requiresGradient: true);
         var b = TensorOperations<double>.Variable(bTensor, "b", requiresGradient: true);
-        tape.Watch(a);
         tape.Watch(b);
 
         // Act - c = a * b, loss = sum(c)
         var c = TensorOperations<double>.ElementwiseMultiply(a, b);
         var loss = TensorOperations<double>.Sum(c);
-        tape.Gradient(loss, new[] { a, b });
+        tape.ComputeGradients(loss, new[] { a, b });
 
         // Assert - gradient of sum(a*b) w.r.t. a is b, w.r.t. b is a
         Assert.NotNull(a.Gradient);
@@ -357,12 +353,11 @@ public class AutodiffValidationTests
 
         using var tape = new GradientTape<double>();
         var a = TensorOperations<double>.Variable(tensor, "a", requiresGradient: true);
-        tape.Watch(a);
 
         // Act - c = a^2, loss = sum(c)
         var c = TensorOperations<double>.Power(a, 2.0);
         var loss = TensorOperations<double>.Sum(c);
-        tape.Gradient(loss, new[] { a });
+        tape.ComputeGradients(loss, new[] { a });
 
         // Assert - gradient of sum(a^2) w.r.t. a is 2*a
         Assert.NotNull(a.Gradient);

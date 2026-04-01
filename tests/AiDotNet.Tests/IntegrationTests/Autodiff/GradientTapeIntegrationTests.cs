@@ -1,4 +1,5 @@
 using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Autodiff.Testing;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -40,12 +41,11 @@ public class GradientTapeIntegrationTests
         // Act
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             // f(x) = x^2
             var y = TensorOperations<double>.ElementwiseMultiply(x, x);
 
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // Assert
             Assert.True(gradients.ContainsKey(x));
@@ -70,13 +70,12 @@ public class GradientTapeIntegrationTests
         // Act
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             // f(x) = x * x * x = x^3
             var x2 = TensorOperations<double>.ElementwiseMultiply(x, x);
             var y = TensorOperations<double>.ElementwiseMultiply(x2, x);
 
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // Assert
             var grad = gradients[x];
@@ -101,12 +100,11 @@ public class GradientTapeIntegrationTests
         // Act
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
             tape.Watch(y);
 
             var z = TensorOperations<double>.Add(x, y);
 
-            var gradients = tape.Gradient(z, new[] { x, y });
+            var gradients = tape.ComputeGradients(z, new[] { x, y });
 
             // Assert
             // d(x+y)/dx = 1, d(x+y)/dy = 1
@@ -130,12 +128,11 @@ public class GradientTapeIntegrationTests
         // Act
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
             tape.Watch(y);
 
             var z = TensorOperations<double>.Subtract(x, y);
 
-            var gradients = tape.Gradient(z, new[] { x, y });
+            var gradients = tape.ComputeGradients(z, new[] { x, y });
 
             // Assert
             // d(x-y)/dx = 1, d(x-y)/dy = -1
@@ -160,12 +157,11 @@ public class GradientTapeIntegrationTests
         // Act
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
             tape.Watch(y);
 
             var z = TensorOperations<double>.ElementwiseMultiply(x, y);
 
-            var gradients = tape.Gradient(z, new[] { x, y });
+            var gradients = tape.ComputeGradients(z, new[] { x, y });
 
             // Assert
             // d(xy)/dx = y = 5, d(xy)/dy = x = 3
@@ -190,12 +186,11 @@ public class GradientTapeIntegrationTests
         // Act
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
             tape.Watch(y);
 
             var z = TensorOperations<double>.Divide(x, y);
 
-            var gradients = tape.Gradient(z, new[] { x, y });
+            var gradients = tape.ComputeGradients(z, new[] { x, y });
 
             // Assert
             // d(x/y)/dx = 1/y = 1/2 = 0.5
@@ -223,13 +218,12 @@ public class GradientTapeIntegrationTests
         // Act
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             // f(x) = exp(x^2)
             var x2 = TensorOperations<double>.ElementwiseMultiply(x, x);
             var y = TensorOperations<double>.Exp(x2);
 
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // Assert
             // By chain rule: df/dx = 2x * exp(x^2) = 2 * 1 * exp(1) = 2e ≈ 5.4366
@@ -256,14 +250,13 @@ public class GradientTapeIntegrationTests
         // Act
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             // f(x) = log(x^2 + 1)
             var x2 = TensorOperations<double>.ElementwiseMultiply(x, x);
             var sum = TensorOperations<double>.Add(x2, one);
             var y = TensorOperations<double>.Log(sum);
 
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // Assert
             // df/dx = 2x / (x^2 + 1) = 4 / 5 = 0.8
@@ -289,14 +282,13 @@ public class GradientTapeIntegrationTests
         // Act
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             // f(x) = sqrt(x^2 + 1)
             var x2 = TensorOperations<double>.ElementwiseMultiply(x, x);
             var sum = TensorOperations<double>.Add(x2, one);
             var y = TensorOperations<double>.Sqrt(sum);
 
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // Assert
             // df/dx = x / sqrt(x^2 + 1) = 0 / sqrt(1) = 0
@@ -319,13 +311,12 @@ public class GradientTapeIntegrationTests
         // Act
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             // f(x) = tanh(sigmoid(x))
             var sigmoid_x = TensorOperations<double>.Sigmoid(x);
             var y = TensorOperations<double>.Tanh(sigmoid_x);
 
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // Verify with numerical gradient
             double h = NumericalEpsilon;
@@ -352,17 +343,16 @@ public class GradientTapeIntegrationTests
         var x = TensorOperations<double>.Variable(new Tensor<double>(new[] { 1 }), "x");
         x.Value[0] = 2.0;
 
-        using (var tape = new GradientTape<double>(persistent: false))
+        using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
             var y = TensorOperations<double>.ElementwiseMultiply(x, x);
 
             // First call should succeed
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
             Assert.Equal(4.0, gradients[x][0], Tolerance);
 
             // Second call should throw
-            Assert.Throws<InvalidOperationException>(() => tape.Gradient(y, new[] { x }));
+            Assert.Throws<InvalidOperationException>(() => tape.ComputeGradients(y, new[] { x }));
         }
     }
 
@@ -376,17 +366,16 @@ public class GradientTapeIntegrationTests
         var x = TensorOperations<double>.Variable(new Tensor<double>(new[] { 1 }), "x");
         x.Value[0] = 2.0;
 
-        using (var tape = new GradientTape<double>(persistent: true))
+        using (var tape = new GradientTape<double>(new GradientTapeOptions { Persistent = true }))
         {
-            tape.Watch(x);
             var y = TensorOperations<double>.ElementwiseMultiply(x, x);
 
             // First call
-            var gradients1 = tape.Gradient(y, new[] { x });
+            var gradients1 = tape.ComputeGradients(y, new[] { x });
             Assert.Equal(4.0, gradients1[x][0], Tolerance);
 
             // Second call should also succeed
-            var gradients2 = tape.Gradient(y, new[] { x });
+            var gradients2 = tape.ComputeGradients(y, new[] { x });
             Assert.Equal(4.0, gradients2[x][0], Tolerance);
         }
     }
@@ -401,22 +390,20 @@ public class GradientTapeIntegrationTests
         var x = TensorOperations<double>.Variable(new Tensor<double>(new[] { 1 }), "x");
         x.Value[0] = 2.0;
 
-        using (var tape = new GradientTape<double>(persistent: true))
+        using (var tape = new GradientTape<double>(new GradientTapeOptions { Persistent = true }))
         {
-            tape.Watch(x);
             var y = TensorOperations<double>.ElementwiseMultiply(x, x);
-            var gradients1 = tape.Gradient(y, new[] { x });
+            var gradients1 = tape.ComputeGradients(y, new[] { x });
 
             // Reset tape
             tape.Reset();
 
             // After reset, we need to re-watch
-            tape.Watch(x);
 
             // Change x value
             x.Value[0] = 3.0;
             var y2 = TensorOperations<double>.ElementwiseMultiply(x, x);
-            var gradients2 = tape.Gradient(y2, new[] { x });
+            var gradients2 = tape.ComputeGradients(y2, new[] { x });
 
             // Should have new gradient for x=3
             Assert.Equal(6.0, gradients2[x][0], Tolerance);
@@ -434,7 +421,6 @@ public class GradientTapeIntegrationTests
         x.Value[0] = 2.0;
 
         var tape = new GradientTape<double>();
-        tape.Watch(x);
         tape.Dispose();
 
         // Act & Assert
@@ -487,10 +473,9 @@ public class GradientTapeIntegrationTests
         using (var tape = new GradientTape<double>())
         {
             // Only watch x, not y
-            tape.Watch(x);
 
             var z = TensorOperations<double>.Add(x, y);
-            var gradients = tape.Gradient(z, new[] { x });
+            var gradients = tape.ComputeGradients(z, new[] { x });
 
             // Assert
             Assert.True(gradients.ContainsKey(x));
@@ -514,13 +499,12 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(new[] { a, b, c });
 
             // f(a,b,c) = a*b + c
             var ab = TensorOperations<double>.ElementwiseMultiply(a, b);
             var y = TensorOperations<double>.Add(ab, c);
 
-            var gradients = tape.Gradient(y);
+            var gradients = tape.ComputeGradients(y);
 
             // Assert
             // df/da = b = 2
@@ -544,11 +528,10 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
             tape.Watch(x); // Watch again
 
             var y = TensorOperations<double>.ElementwiseMultiply(x, x);
-            var gradients = tape.Gradient(y);
+            var gradients = tape.ComputeGradients(y);
 
             // Assert - should still work correctly
             Assert.Equal(6.0, gradients[x][0], Tolerance);
@@ -572,16 +555,14 @@ public class GradientTapeIntegrationTests
         // Outer tape
         using (var outerTape = new GradientTape<double>())
         {
-            outerTape.Watch(x);
 
             // Inner tape for different computation
             using (var innerTape = new GradientTape<double>())
             {
-                innerTape.Watch(x);
 
                 // Inner computation: f(x) = x^2
                 var innerY = TensorOperations<double>.ElementwiseMultiply(x, x);
-                var innerGradients = innerTape.Gradient(innerY, new[] { x });
+                var innerGradients = innerTape.ComputeGradients(innerY, new[] { x });
 
                 // Inner gradient: 2x = 4
                 Assert.Equal(4.0, innerGradients[x][0], Tolerance);
@@ -590,7 +571,7 @@ public class GradientTapeIntegrationTests
             // Outer computation continues: g(x) = x^3
             var x2 = TensorOperations<double>.ElementwiseMultiply(x, x);
             var outerY = TensorOperations<double>.ElementwiseMultiply(x2, x);
-            var outerGradients = outerTape.Gradient(outerY, new[] { x });
+            var outerGradients = outerTape.ComputeGradients(outerY, new[] { x });
 
             // Outer gradient: 3x^2 = 12
             Assert.Equal(12.0, outerGradients[x][0], Tolerance);
@@ -617,14 +598,13 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
             tape.Watch(y);
 
             // z = sum(x * y) (dot product)
             var xy = TensorOperations<double>.ElementwiseMultiply(x, y);
             var z = TensorOperations<double>.Sum(xy);
 
-            var gradients = tape.Gradient(z, new[] { x, y });
+            var gradients = tape.ComputeGradients(z, new[] { x, y });
 
             // Assert
             // dz/dx = y
@@ -653,10 +633,9 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             var y = TensorOperations<double>.Sum(x);
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // Assert - all gradients should be 1
             for (int i = 0; i < 5; i++)
@@ -681,10 +660,9 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             var y = TensorOperations<double>.Mean(x);
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // Assert - all gradients should be 1/n
             double expected = 1.0 / n;
@@ -715,12 +693,11 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             var relu = TensorOperations<double>.ReLU(x);
             var y = TensorOperations<double>.Sum(relu);
 
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // Assert
             Assert.Equal(1.0, gradients[x][0], Tolerance); // positive
@@ -743,12 +720,11 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             var sig = TensorOperations<double>.Sigmoid(x);
             var y = TensorOperations<double>.Sum(sig);
 
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // Assert
             // sigmoid(1) = 1 / (1 + exp(-1)) ≈ 0.7311
@@ -772,12 +748,11 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             var tanhX = TensorOperations<double>.Tanh(x);
             var y = TensorOperations<double>.Sum(tanhX);
 
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // Assert
             // gradient = 1 - tanh^2(0.5)
@@ -810,12 +785,11 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             var soft = TensorOperations<double>.Softmax(x);
             var y = TensorOperations<double>.Sum(soft);
 
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // For sum(softmax(x)), gradient is all zeros because sum is constant = 1
             // Actually, because softmax sums to 1, derivative of sum(softmax) is 0
@@ -858,7 +832,6 @@ public class GradientTapeIntegrationTests
 
             using (var tape = new GradientTape<double>())
             {
-                tape.Watch(x);
 
                 // f(x) = x^3 + 2x^2 - 5x + 3
                 var x2 = TensorOperations<double>.ElementwiseMultiply(x, x);
@@ -870,7 +843,7 @@ public class GradientTapeIntegrationTests
                 var temp2 = TensorOperations<double>.Subtract(temp1, term3); // x^3 + 2x^2 - 5x
                 var y = TensorOperations<double>.Add(temp2, three); // x^3 + 2x^2 - 5x + 3
 
-                var gradients = tape.Gradient(y, new[] { x });
+                var gradients = tape.ComputeGradients(y, new[] { x });
 
                 // Expected: df/dx = 3x^2 + 4x - 5
                 double expected = 3.0 * xVal * xVal + 4.0 * xVal - 5.0;
@@ -936,10 +909,9 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             var y = TensorOperations<double>.ElementwiseMultiply(x, x);
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             Assert.Equal(0.0, gradients[x][0], Tolerance);
             Assert.False(double.IsNaN(gradients[x][0]));
@@ -957,11 +929,10 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             // f(x) = x^2
             var y = TensorOperations<double>.ElementwiseMultiply(x, x);
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // df/dx = 2x = 2e-10
             double expected = 2e-10;
@@ -982,14 +953,13 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             // f(x) = x + 1 (linear, safe for large values)
             var one = TensorOperations<double>.Constant(new Tensor<double>(new[] { 1 }));
             one.Value[0] = 1.0;
             var y = TensorOperations<double>.Add(x, one);
 
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // df/dx = 1
             Assert.Equal(1.0, gradients[x][0], Tolerance);
@@ -1009,10 +979,9 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             var y = TensorOperations<double>.Log(x);
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // d(log(x))/dx = 1/x = 1e10
             // Should be large but not NaN or Inf
@@ -1032,10 +1001,9 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             var y = TensorOperations<double>.Exp(x);
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // d(exp(x))/dx = exp(x) = exp(-10) ≈ 4.54e-5
             double expected = Math.Exp(-10.0);
@@ -1059,7 +1027,6 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             // This operation should be recorded
             var y1 = TensorOperations<double>.ElementwiseMultiply(x, x);
@@ -1072,7 +1039,7 @@ public class GradientTapeIntegrationTests
             tape.ResumeRecording();
 
             // Compute gradient - should only reflect y1 = x^2
-            var gradients = tape.Gradient(y1, new[] { x });
+            var gradients = tape.ComputeGradients(y1, new[] { x });
 
             // Gradient of x^2 = 2x = 4
             Assert.Equal(4.0, gradients[x][0], Tolerance);
@@ -1094,10 +1061,9 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<float>())
         {
-            tape.Watch(x);
 
             var y = TensorOperations<float>.ElementwiseMultiply(x, x);
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // df/dx = 2x = 6
             Assert.Equal(6.0f, gradients[x][0], 1e-4f);
@@ -1122,7 +1088,6 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             // f(x) = x^10 computed as repeated multiplication
             var result = x;
@@ -1131,7 +1096,7 @@ public class GradientTapeIntegrationTests
                 result = TensorOperations<double>.ElementwiseMultiply(result, x);
             }
 
-            var gradients = tape.Gradient(result, new[] { x });
+            var gradients = tape.ComputeGradients(result, new[] { x });
 
             // Assert
             // df/dx = 10 * x^9 = 10 * 10^9 = 10^10
@@ -1155,7 +1120,6 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             // f(x) = x^10
             var result = x;
@@ -1164,7 +1128,7 @@ public class GradientTapeIntegrationTests
                 result = TensorOperations<double>.ElementwiseMultiply(result, x);
             }
 
-            var gradients = tape.Gradient(result, new[] { x });
+            var gradients = tape.ComputeGradients(result, new[] { x });
 
             // Assert
             // df/dx = 10 * x^9 = 10 * 0.1^9 = 10 * 10^-9 = 10^-8
@@ -1187,12 +1151,11 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             var relu = TensorOperations<double>.ReLU(x);
             var y = TensorOperations<double>.Sum(relu);
 
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // Assert - at x=0, subgradient is typically 0 (could also be 0.5 in some implementations)
             Assert.True(gradients.ContainsKey(x));
@@ -1216,12 +1179,11 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             var abs = TensorOperations<double>.Abs(x);
             var y = TensorOperations<double>.Sum(abs);
 
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // Assert
             Assert.True(gradients.ContainsKey(x));
@@ -1248,12 +1210,11 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             var sig = TensorOperations<double>.Sigmoid(x);
             var y = TensorOperations<double>.Sum(sig);
 
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // Assert
             Assert.True(gradients.ContainsKey(x));
@@ -1282,12 +1243,11 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             // f(x) = x^2
             var y = TensorOperations<double>.ElementwiseMultiply(x, x);
 
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // Assert
             // df/dx = 2x = 2 * 1e-15 = 2e-15
@@ -1310,13 +1270,12 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             // f(x) = e^(e^x)
             var exp1 = TensorOperations<double>.Exp(x);
             var y = TensorOperations<double>.Exp(exp1);
 
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // Assert
             // d/dx[e^(e^x)] = e^(e^x) * e^x
@@ -1343,13 +1302,12 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             // f(x) = x^2, df/dx = 2x
             var y = TensorOperations<double>.ElementwiseMultiply(x, x);
             var z = TensorOperations<double>.Sum(y);
 
-            var gradients = tape.Gradient(z, new[] { x });
+            var gradients = tape.ComputeGradients(z, new[] { x });
 
             // Assert - gradients should scale with input
             Assert.True(gradients.ContainsKey(x));
@@ -1376,12 +1334,11 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             var leakyRelu = TensorOperations<double>.LeakyReLU(x, alpha);
             var y = TensorOperations<double>.Sum(leakyRelu);
 
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // Assert
             Assert.True(gradients.ContainsKey(x));
@@ -1407,14 +1364,13 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             // f(x) = 1/x
             var one = TensorOperations<double>.Constant(new Tensor<double>(new[] { 1 }));
             one.Value[0] = 1.0;
             var y = TensorOperations<double>.Divide(one, x);
 
-            var gradients = tape.Gradient(y, new[] { x });
+            var gradients = tape.ComputeGradients(y, new[] { x });
 
             // Assert
             // df/dx = -1/x^2 = -1/0.000001 = -1000000
@@ -1437,7 +1393,6 @@ public class GradientTapeIntegrationTests
 
         using (var tape = new GradientTape<double>())
         {
-            tape.Watch(x);
 
             // f(x) = x + x + x + ... (100 times) = 100x, df/dx = 100
             var result = x;
@@ -1446,7 +1401,7 @@ public class GradientTapeIntegrationTests
                 result = TensorOperations<double>.Add(result, x);
             }
 
-            var gradients = tape.Gradient(result, new[] { x });
+            var gradients = tape.ComputeGradients(result, new[] { x });
 
             // Assert
             Assert.True(gradients.ContainsKey(x));
