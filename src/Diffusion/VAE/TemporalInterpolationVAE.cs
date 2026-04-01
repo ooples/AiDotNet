@@ -302,14 +302,16 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
 
     protected override void BackpropagateVAE(Tensor<T> lossGradient)
     {
-        var grad = lossGradient;
+        // Reverse of decode: _decoderIn -> _decoderNorm -> _decoderOut
+        var grad = _decoderOut.Backward(lossGradient);
         grad = _decoderNorm.Backward(grad);
-        grad = _decoderOut.Backward(grad);
         grad = _decoderIn.Backward(grad);
+        // Reverse of interpolate: _interpIn -> _interpOut
         grad = _interpOut.Backward(grad);
         grad = _interpIn.Backward(grad);
-        grad = _encoderNorm.Backward(grad);
+        // Reverse of encode: _encoderIn -> _encoderNorm -> _encoderOut
         grad = _encoderOut.Backward(grad);
+        grad = _encoderNorm.Backward(grad);
         _encoderIn.Backward(grad);
     }
 

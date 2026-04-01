@@ -327,11 +327,19 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
 
     protected override void BackpropagateVAE(Tensor<T> lossGradient)
     {
+        // Reverse of decode: _postQuantConv -> decoderLayers -> _outputConv
         var grad = lossGradient;
+        if (_outputConv is not null) grad = _outputConv.Backward(grad);
         for (int i = _decoderLayers.Count - 1; i >= 0; i--)
             grad = _decoderLayers[i].Backward(grad);
+        if (_postQuantConv is not null) grad = _postQuantConv.Backward(grad);
+        // Reverse of encode: _inputConv -> encoderLayers -> _meanConv/_logVarConv
+        // _logVarConv gets the same gradient as _meanConv (both branch from encoder output)
+        if (_logVarConv is not null) _logVarConv.Backward(grad);
+        if (_meanConv is not null) grad = _meanConv.Backward(grad);
         for (int i = _encoderLayers.Count - 1; i >= 0; i--)
             grad = _encoderLayers[i].Backward(grad);
+        if (_inputConv is not null) _inputConv.Backward(grad);
     }
 
     protected override Vector<T> GetParameterGradients()
