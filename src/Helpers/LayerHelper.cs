@@ -19005,28 +19005,67 @@ public static class LayerHelper<T>
     /// <param name="hiddenDims">Hidden layer dimensions.</param>
     /// <param name="dropoutRate">Dropout rate.</param>
     /// <returns>A collection of layers.</returns>
+    /// <summary>
+    /// Creates ALL layers for MedSynth VAE-GAN medical tabular data generator.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Architecture per "Privacy-Preserving Medical Tabular Synthesis" (2024):
+    /// - Encoder: FC layers reducing to latent space
+    /// - VAE heads: mean and log-variance projections
+    /// - Decoder: FC layers with BatchNorm expanding from latent
+    /// - Decoder output: FC projection to data width
+    /// - Discriminator: FC layers with dropout for adversarial training
+    /// - Discriminator output: FC projection to 1 (real/fake)
+    ///
+    /// All layers are returned in a single list so InitializeLayers
+    /// can register them all via Layers.AddRange.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultMedSynthLayers(
-        int inputDim,
-        int outputDim,
-        int[] hiddenDims,
-        double dropoutRate = 0.1)
+        int dataWidth,
+        int latentDim,
+        int[] encoderDims,
+        int[] discriminatorDims,
+        double discriminatorDropout = 0.2)
     {
-        var silu = (IActivationFunction<T>)new SiLUActivation<T>();
-        int prevDim = inputDim;
+        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
 
-        for (int i = 0; i < hiddenDims.Length; i++)
+        // Encoder layers
+        for (int i = 0; i < encoderDims.Length; i++)
         {
-            yield return new DenseLayer<T>(prevDim, hiddenDims[i], silu);
-
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate);
-            }
-
-            prevDim = hiddenDims[i];
+            int layerInput = i == 0 ? dataWidth : encoderDims[i - 1];
+            yield return new FullyConnectedLayer<T>(layerInput, encoderDims[i], identity);
         }
 
-        yield return new DenseLayer<T>(prevDim, outputDim, (IActivationFunction<T>)new IdentityActivation<T>());
+        // VAE heads (mean + log-variance)
+        int lastEncoderDim = encoderDims.Length > 0 ? encoderDims[^1] : dataWidth;
+        yield return new FullyConnectedLayer<T>(lastEncoderDim, latentDim, identity); // mean
+        yield return new FullyConnectedLayer<T>(lastEncoderDim, latentDim, identity); // logvar
+
+        // Decoder layers (reverse of encoder) with BatchNorm
+        for (int i = encoderDims.Length - 1; i >= 0; i--)
+        {
+            int layerInput = i == encoderDims.Length - 1 ? latentDim : encoderDims[i + 1];
+            yield return new FullyConnectedLayer<T>(layerInput, encoderDims[i], identity);
+            yield return new BatchNormalizationLayer<T>(encoderDims[i]);
+        }
+
+        // Decoder output
+        int lastDecoderDim = encoderDims.Length > 0 ? encoderDims[0] : latentDim;
+        yield return new FullyConnectedLayer<T>(lastDecoderDim, dataWidth, identity);
+
+        // Discriminator layers
+        for (int i = 0; i < discriminatorDims.Length; i++)
+        {
+            int layerInput = i == 0 ? dataWidth : discriminatorDims[i - 1];
+            yield return new FullyConnectedLayer<T>(layerInput, discriminatorDims[i], identity);
+            yield return new DropoutLayer<T>(discriminatorDropout);
+        }
+
+        // Discriminator output
+        int lastDiscDim = discriminatorDims.Length > 0 ? discriminatorDims[^1] : dataWidth;
+        yield return new FullyConnectedLayer<T>(lastDiscDim, 1, identity);
     }
 
     /// <summary>

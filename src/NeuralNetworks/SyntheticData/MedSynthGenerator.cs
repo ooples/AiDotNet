@@ -169,6 +169,8 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     /// </remarks>
     protected override void InitializeLayers()
     {
+        Layers.Clear();
+
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -176,19 +178,70 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         }
         else
         {
-            // Create default decoder hidden layers (reverse of encoder dims)
-            var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-            var dims = _options.EncoderDimensions;
-            int latentDim = _options.LatentDimension;
-            int outputDim = Architecture.OutputSize;
-
-            for (int i = dims.Length - 1; i >= 0; i--)
-            {
-                int layerInput = i == dims.Length - 1 ? latentDim : dims[i + 1];
-                Layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-            }
+            int dataWidth = Math.Max(1, Architecture.OutputSize);
+            var allLayers = LayerHelper<T>.CreateDefaultMedSynthLayers(
+                dataWidth, _options.LatentDimension,
+                _options.EncoderDimensions, _options.DiscriminatorDimensions,
+                _options.DiscriminatorDropout).ToList();
+            Layers.AddRange(allLayers);
             _usingCustomLayers = false;
         }
+
+        ExtractMedSynthLayerReferences();
+    }
+
+    /// <summary>
+    /// Extracts private layer references as aliases from the unified Layers list.
+    /// </summary>
+    private void ExtractMedSynthLayerReferences()
+    {
+        _encoderLayers.Clear();
+        _decoderBN.Clear();
+        _discLayers.Clear();
+        _discDropout.Clear();
+
+        int idx = 0;
+        var dims = _options.EncoderDimensions;
+        var discDims = _options.DiscriminatorDimensions;
+
+        // Encoder layers
+        for (int i = 0; i < dims.Length && idx < Layers.Count; i++)
+        {
+            if (Layers[idx] is FullyConnectedLayer<T> enc)
+                _encoderLayers.Add(enc);
+            idx++;
+        }
+
+        // VAE heads
+        if (idx < Layers.Count && Layers[idx] is FullyConnectedLayer<T> mean)
+        { _meanHead = mean; idx++; }
+        if (idx < Layers.Count && Layers[idx] is FullyConnectedLayer<T> logvar)
+        { _logvarHead = logvar; idx++; }
+
+        // Decoder layers (FC + BN pairs)
+        for (int i = 0; i < dims.Length && idx < Layers.Count; i++)
+        {
+            idx++; // FC layer
+            if (idx < Layers.Count && Layers[idx] is BatchNormalizationLayer<T> bn)
+            { _decoderBN.Add(bn); idx++; }
+        }
+
+        // Decoder output
+        if (idx < Layers.Count && Layers[idx] is FullyConnectedLayer<T> decOut)
+        { _decoderOutput = decOut; idx++; }
+
+        // Discriminator layers (FC + Dropout pairs)
+        for (int i = 0; i < discDims.Length && idx < Layers.Count; i++)
+        {
+            if (Layers[idx] is FullyConnectedLayer<T> disc)
+            { _discLayers.Add(disc); idx++; }
+            if (idx < Layers.Count && Layers[idx] is DropoutLayer<T> drop)
+            { _discDropout.Add(drop); idx++; }
+        }
+
+        // Discriminator output
+        if (idx < Layers.Count && Layers[idx] is FullyConnectedLayer<T> discOut)
+        { _discOutput = discOut; idx++; }
     }
 
     /// <summary>
@@ -196,52 +249,18 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     /// </summary>
     private void RebuildLayersWithActualDimensions()
     {
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-        var dims = _options.EncoderDimensions;
-
-        // Build encoder (always auxiliary)
-        _encoderLayers.Clear();
-        for (int i = 0; i < dims.Length; i++)
-        {
-            int layerInput = i == 0 ? _dataWidth : dims[i - 1];
-            _encoderLayers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-        }
-
-        int lastEncoderDim = dims.Length > 0 ? dims[^1] : _dataWidth;
-        _meanHead = new FullyConnectedLayer<T>(lastEncoderDim, _options.LatentDimension, identity);
-        _logvarHead = new FullyConnectedLayer<T>(lastEncoderDim, _options.LatentDimension, identity);
-
-        // Rebuild decoder (Layers) if not using custom layers
         if (!_usingCustomLayers)
         {
+            // Rebuild ALL layers via LayerHelper with actual data dimensions
             Layers.Clear();
-            _decoderBN.Clear();
+            var allLayers = LayerHelper<T>.CreateDefaultMedSynthLayers(
+                _dataWidth, _options.LatentDimension,
+                _options.EncoderDimensions, _options.DiscriminatorDimensions,
+                _options.DiscriminatorDropout).ToList();
+            Layers.AddRange(allLayers);
 
-            for (int i = dims.Length - 1; i >= 0; i--)
-            {
-                int layerInput = i == dims.Length - 1 ? _options.LatentDimension : dims[i + 1];
-                Layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-                _decoderBN.Add(new BatchNormalizationLayer<T>(dims[i]));
-            }
+            ExtractMedSynthLayerReferences();
         }
-
-        int lastDecoderDim = dims.Length > 0 ? dims[0] : _options.LatentDimension;
-        _decoderOutput = new FullyConnectedLayer<T>(lastDecoderDim, _dataWidth, identity);
-
-        // Build discriminator (always auxiliary)
-        _discLayers.Clear();
-        _discDropout.Clear();
-
-        var discDims = _options.DiscriminatorDimensions;
-        for (int i = 0; i < discDims.Length; i++)
-        {
-            int layerInput = i == 0 ? _dataWidth : discDims[i - 1];
-            _discLayers.Add(new FullyConnectedLayer<T>(layerInput, discDims[i], identity));
-            _discDropout.Add(new DropoutLayer<T>(_options.DiscriminatorDropout));
-        }
-
-        int lastDiscDim = discDims.Length > 0 ? discDims[^1] : _dataWidth;
-        _discOutput = new FullyConnectedLayer<T>(lastDiscDim, 1, identity);
     }
 
     #endregion
@@ -357,23 +376,9 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Training is handled through Fit() for tabular generators.
-        var output = Predict(input);
-
-        var gradient = new Tensor<T>(output.Shape.ToArray());
-        for (int i = 0; i < output.Length && i < expectedOutput.Length; i++)
-        {
-            gradient[i] = NumOps.FromDouble(
-                2.0 * (NumOps.ToDouble(output[i]) - NumOps.ToDouble(expectedOutput[i])));
-        }
-
-        var current = gradient;
-        if (_decoderOutput is not null)
-            current = _decoderOutput.Backward(current);
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            current = Layers[i].Backward(current);
-        }
+        SetTrainingMode(true);
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     /// <inheritdoc />
