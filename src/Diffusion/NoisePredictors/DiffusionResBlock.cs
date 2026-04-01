@@ -50,6 +50,9 @@ public class DiffusionResBlock<T> : LayerBase<T>
 
     // Cache for backward
     private Tensor<T>? _lastInput;
+    private Tensor<T>? _preSiLU1;   // norm1 output (before SiLU)
+    private Tensor<T>? _preSiLU2;   // norm2 output (before SiLU)
+    private bool _lastForwardUsedTime; // whether last forward was time-conditioned
     private int[]? _originalInputShape;
 
     /// <inheritdoc />
@@ -144,9 +147,11 @@ public class DiffusionResBlock<T> : LayerBase<T>
     {
         _originalInputShape = input.Shape.ToArray();
         _lastInput = input;
+        _lastForwardUsedTime = false;
 
         // First block: GroupNorm → SiLU → Conv3x3
         var h = _norm1.Forward(input);
+        _preSiLU1 = h;
         h = ApplySiLU(h);
         h = _conv1.Forward(h);
 
@@ -155,10 +160,11 @@ public class DiffusionResBlock<T> : LayerBase<T>
 
         // Second block: GroupNorm → SiLU → Conv3x3
         h = _norm2.Forward(h);
+        _preSiLU2 = h;
         h = ApplySiLU(h);
         h = _conv2.Forward(h);
 
-        // Add residual in-place — no allocation for the addition result
+        // Add residual
         h = Engine.TensorAdd(h, residual);
         return h;
     }
@@ -173,9 +179,11 @@ public class DiffusionResBlock<T> : LayerBase<T>
     {
         _originalInputShape = input.Shape.ToArray();
         _lastInput = input;
+        _lastForwardUsedTime = true;
 
         // First block: GroupNorm → SiLU → Conv3x3
         var h = _norm1.Forward(input);
+        _preSiLU1 = h;
         h = ApplySiLU(h);
         h = _conv1.Forward(h);
 
@@ -200,10 +208,11 @@ public class DiffusionResBlock<T> : LayerBase<T>
 
         // Second block: GroupNorm → SiLU → Conv3x3
         h = _norm2.Forward(h);
+        _preSiLU2 = h;
         h = ApplySiLU(h);
         h = _conv2.Forward(h);
 
-        // Add residual in-place — no allocation for the addition result
+        // Add residual in-place
         h = Engine.TensorAdd(h, residual);
         return h;
     }
@@ -225,14 +234,16 @@ public class DiffusionResBlock<T> : LayerBase<T>
         // Residual add: gradient flows to both main branch and skip branch
         // Main branch backward (reverse of forward):
         // Forward: norm1 → SiLU → conv1 → (+timeProj) → norm2 → SiLU → conv2
-        // Backward: conv2 → norm2 → (time grad split) → conv1 → norm1
+        // Backward: conv2 → SiLU' → norm2 → (time grad split) → conv1 → SiLU' → norm1
         var mainGrad = _conv2.Backward(outputGradient);
+        if (_preSiLU2 is not null)
+            mainGrad = ApplySiLUBackward(_preSiLU2, mainGrad);
         mainGrad = _norm2.Backward(mainGrad);
 
         // Time conditioning backward: the time projection was ADDED to h,
         // so its gradient is the same as mainGrad at this point (before conv1).
         // Propagate back through _timeMlp to get the time embed gradient.
-        if (_timeEmbedDim > 0)
+        if (_timeEmbedDim > 0 && _lastForwardUsedTime)
         {
             // mainGrad shape: [B, outChannels, H, W]
             // Time projection was broadcast from [B, outChannels, 1, 1]
@@ -242,6 +253,9 @@ public class DiffusionResBlock<T> : LayerBase<T>
         }
 
         mainGrad = _conv1.Backward(mainGrad);
+        // SiLU backward: d/dx[x*sigmoid(x)] = sigmoid(x) + x*sigmoid(x)*(1-sigmoid(x))
+        if (_preSiLU1 is not null)
+            mainGrad = ApplySiLUBackward(_preSiLU1, mainGrad);
         mainGrad = _norm1.Backward(mainGrad);
 
         // Skip branch
@@ -255,9 +269,25 @@ public class DiffusionResBlock<T> : LayerBase<T>
 
     private Tensor<T> ApplySiLU(Tensor<T> x)
     {
-        // Use Engine.Swish for vectorized SiLU: x * sigmoid(x)
-        // This avoids the element-by-element scalar loop in ActivationFunctionBase.Activate(Tensor)
         return Engine.Swish(x);
+    }
+
+    /// <summary>
+    /// SiLU/Swish backward: d/dx[x*sigmoid(x)] = sigmoid(x) + x*sigmoid(x)*(1-sigmoid(x))
+    /// = sigmoid(x) * (1 + x*(1-sigmoid(x)))
+    /// </summary>
+    private Tensor<T> ApplySiLUBackward(Tensor<T> preSiLU, Tensor<T> gradOutput)
+    {
+        var sig = Engine.TensorSigmoid(preSiLU);
+        var oneMinusSig = Engine.TensorSubtract(
+            Engine.TensorAddScalar(Engine.TensorMultiplyScalar(sig, NumOps.Zero), NumOps.One),
+            sig);
+        var xTimesOneMinusSig = Engine.TensorMultiply(preSiLU, oneMinusSig);
+        var deriv = Engine.TensorMultiply(sig,
+            Engine.TensorAdd(
+                Engine.TensorAddScalar(Engine.TensorMultiplyScalar(sig, NumOps.Zero), NumOps.One),
+                xTimesOneMinusSig));
+        return Engine.TensorMultiply(gradOutput, deriv);
     }
 
     /// <summary>
