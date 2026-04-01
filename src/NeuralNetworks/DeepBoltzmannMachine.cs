@@ -245,10 +245,17 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
             inputSize: 128,
-            outputSize: 1),
+            outputSize: 128),  // DBM is generative: output = reconstruction of input
             epochs: 10, learningRate: MathHelper.GetNumericOperations<T>().FromDouble(0.0001),
             activationFunction: (IActivationFunction<T>?)null)
     {
+        // Per Salakhutdinov & Hinton 2009: initialize default hidden layers
+        // Visible(128) → Hidden1(64) → Hidden2(32) for compact representation
+        if (_layerSizes.Count <= 1)
+        {
+            _layerSizes = [128, 64, 32];
+            InitializeParameters();
+        }
     }
 
     /// <summary>
