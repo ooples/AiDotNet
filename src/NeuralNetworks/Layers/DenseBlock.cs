@@ -71,7 +71,7 @@ public class DenseBlock<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        return Vector<T>.Wrap(_layers.SelectMany(l => l.GetParameterGradients().ToArray()).ToArray());
+        return new Vector<T>(_layers.SelectMany(l => l.GetParameterGradients().ToArray()).ToArray());
     }
 
     public override void ClearGradients()
@@ -307,7 +307,7 @@ public class DenseBlock<T> : LayerBase<T>
     /// </summary>
     public override Vector<T> GetParameters()
     {
-        return Vector<T>.Wrap(_layers.SelectMany(l => l.GetParameters().ToArray()).ToArray());
+        return new Vector<T>(_layers.SelectMany(l => l.GetParameters().ToArray()).ToArray());
     }
 
     /// <summary>

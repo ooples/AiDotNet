@@ -492,16 +492,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Forward pass must be called before backward pass.");
         }
 
-        // Reshape gradient to match _lastPreActivation shape if needed
-        // Forward may have reshaped output; backward gradient must match pre-activation shape
-        var grad = outputGradient;
-        if (!_lastPreActivation.Shape.ToArray().SequenceEqual(outputGradient.Shape.ToArray()) &&
-            _lastPreActivation.Length == outputGradient.Length)
-        {
-            grad = outputGradient.Reshape(_lastPreActivation.Shape.ToArray());
-        }
-
-        var activationGradient = ApplyActivationDerivative(_lastPreActivation, grad);
+        var activationGradient = ApplyActivationDerivative(_lastPreActivation, outputGradient);
 
         int batchSize = _lastInput.Shape[0];
         int patchDim = _channels * _patchSize * _patchSize;
@@ -666,8 +657,8 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         if (_projectionWeightsGradient == null || _projectionBiasGradient == null)
             return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_projectionWeightsGradient is not null ? Vector<T>.FromMemory(_projectionWeightsGradient.Data) : new Vector<T>(0)),
-            (_projectionBiasGradient is not null ? Vector<T>.FromMemory(_projectionBiasGradient.Data) : new Vector<T>(0)));
+            new Vector<T>(_projectionWeightsGradient.ToArray()),
+            new Vector<T>(_projectionBiasGradient.ToArray()));
     }
 
     public override void ClearGradients()

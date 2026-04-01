@@ -2547,8 +2547,7 @@ public static class LayerHelper<T>
         yield return new RecurrentLayer<T>(
             inputSize: inputSize,
             hiddenSize: hiddenSize,
-            activationFunction: new TanhActivation<T>(),
-            initSeed: 42
+            activationFunction: new TanhActivation<T>()
         );
 
         for (int i = 1; i < recurrentLayerCount; i++)
@@ -2556,8 +2555,7 @@ public static class LayerHelper<T>
             yield return new RecurrentLayer<T>(
                 inputSize: hiddenSize,
                 hiddenSize: hiddenSize,
-                activationFunction: new TanhActivation<T>(),
-                initSeed: 42 + i * 1000
+                activationFunction: new TanhActivation<T>()
             );
         }
 

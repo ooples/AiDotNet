@@ -126,6 +126,11 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     /// </summary>
     public override bool SupportsTraining => true;
 
+    /// <summary>
+    /// Gets whether this layer supports JIT compilation.
+    /// Returns true only if the activation function also supports JIT compilation.
+    /// </summary>
+    public override bool SupportsJitCompilation => CanActivationBeJitted();
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
@@ -882,6 +887,81 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         _biasesGradient = null;
     }
 
+    /// <summary>
+    /// Exports the layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node.</returns>
+    /// <remarks>
+    /// <para>
+    /// This method builds a computation graph for the octonion linear layer using the
+    /// TensorOperations.OctonionMatMul operation. The weights and biases are converted
+    /// to tensor format for use in the computation graph.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes is null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape is null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create symbolic input node with batch dimension
+        // Input shape is [inputFeatures * 8]
+        var symbolicInput = new Tensor<T>(new int[] { 1, InputFeatures * 8 });
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Convert weights to tensor format [outputFeatures, inputFeatures, 8]
+        var weightsTensor = new Tensor<T>(new int[] { OutputFeatures, InputFeatures, 8 });
+        for (int o = 0; o < OutputFeatures; o++)
+        {
+            for (int i = 0; i < InputFeatures; i++)
+            {
+                var oct = _weights[o, i];
+                weightsTensor[o, i, 0] = oct.Scalar;
+                weightsTensor[o, i, 1] = oct.E1;
+                weightsTensor[o, i, 2] = oct.E2;
+                weightsTensor[o, i, 3] = oct.E3;
+                weightsTensor[o, i, 4] = oct.E4;
+                weightsTensor[o, i, 5] = oct.E5;
+                weightsTensor[o, i, 6] = oct.E6;
+                weightsTensor[o, i, 7] = oct.E7;
+            }
+        }
+        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "weights");
+
+        // Convert biases to tensor format [outputFeatures, 8]
+        var biasesTensor = new Tensor<T>(new int[] { OutputFeatures, 8 });
+        for (int o = 0; o < OutputFeatures; o++)
+        {
+            var oct = _biases[o];
+            biasesTensor[o, 0] = oct.Scalar;
+            biasesTensor[o, 1] = oct.E1;
+            biasesTensor[o, 2] = oct.E2;
+            biasesTensor[o, 3] = oct.E3;
+            biasesTensor[o, 4] = oct.E4;
+            biasesTensor[o, 5] = oct.E5;
+            biasesTensor[o, 6] = oct.E6;
+            biasesTensor[o, 7] = oct.E7;
+        }
+        var biasesNode = TensorOperations<T>.Constant(biasesTensor, "biases");
+
+        // Perform octonion matrix multiplication
+        var outputNode = TensorOperations<T>.OctonionMatMul(inputNode, weightsNode, biasesNode);
+
+        // Apply activation function if needed
+        // Note: Octonion activation is applied element-wise to all 8 components
+        if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
+        {
+            // Use the activation's ApplyToGraph for proper computation graph integration
+            // CanActivationBeJitted() ensures this is only called when activation supports JIT
+            outputNode = ScalarActivation.ApplyToGraph(outputNode);
+        }
+
+        return outputNode;
+    }
 
     /// <summary>
     /// Converts a tensor to an octonion array.

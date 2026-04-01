@@ -778,12 +778,12 @@ public class QuantumLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Return rotation angles as a Vector<T>
-        return Vector<T>.FromMemory(_rotationAngles.Data);
+        return new Vector<T>(_rotationAngles.ToArray());
     }
 
     public override Vector<T> GetParameterGradients()
     {
-        return Vector<T>.FromMemory(_angleGradients.Data);
+        return new Vector<T>(_angleGradients.ToArray());
     }
 
     public override void ClearGradients()

@@ -736,7 +736,7 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Return the weight tensor as a flattened vector
-        return Vector<T>.FromMemory(_weights.Data);
+        return new Vector<T>(_weights.ToArray());
     }
 
     /// <summary>

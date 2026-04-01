@@ -86,6 +86,8 @@ public class PixelShuffleLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Indicates whether this layer supports GPU execution.
@@ -545,6 +547,36 @@ public class PixelShuffleLayer<T> : LayerBase<T>
 
     #region JIT Compilation
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Exports this layer's computation as a differentiable computation graph for JIT compilation.
+    /// The pixel shuffle operation is supported in the computation graph via TensorOperations.PixelShuffle.
+    /// </para>
+    /// <para><b>For Beginners:</b> JIT (Just-In-Time) compilation creates an optimized version of this
+    /// layer that can run faster during inference. Once compiled, the computation graph can be executed
+    /// as native code rather than interpreted operations.
+    /// </para>
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create symbolic input node with batch dimension
+        // Input shape: [batch, channels, height, width] (NCHW format)
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "pixelshuffle_input");
+        inputNodes.Add(inputNode);
+
+        // Apply PixelShuffle operation from TensorOperations
+        var shuffled = TensorOperations<T>.PixelShuffle(inputNode, _upscaleFactor);
+
+        return shuffled;
+    }
 
     #endregion
 }

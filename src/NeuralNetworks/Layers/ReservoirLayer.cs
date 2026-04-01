@@ -300,13 +300,29 @@ public class ReservoirLayer<T> : LayerBase<T>
                 stepInput[j] = NumOps.Multiply(stepInput[j], inputScale);
             }
 
-            // Input contribution: W_in @ x — vectorized matmul
-            var stepCol = stepInput.Reshape(_inputSize, 1);
-            var inputContribution = Engine.TensorMatMul(_inputWeights, stepCol).Reshape(_reservoirSize);
+            // Manual matmul for input contribution
+            var inputContribution = new Tensor<T>([_reservoirSize]);
+            for (int r = 0; r < _reservoirSize; r++)
+            {
+                T sum = NumOps.Zero;
+                for (int c = 0; c < _inputSize; c++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(_inputWeights[r, c], stepInput[c]));
+                }
+                inputContribution[r] = sum;
+            }
 
-            // Weighted state: W_res @ state — vectorized matmul
-            var stateCol = _reservoirState.Reshape(_reservoirSize, 1);
-            var weightedState = Engine.TensorMatMul(_reservoirWeights, stateCol).Reshape(_reservoirSize);
+            // Manual matmul for weighted state
+            var weightedState = new Tensor<T>([_reservoirSize]);
+            for (int r = 0; r < _reservoirSize; r++)
+            {
+                T sum = NumOps.Zero;
+                for (int c = 0; c < _reservoirSize; c++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(_reservoirWeights[r, c], _reservoirState[c]));
+                }
+                weightedState[r] = sum;
+            }
 
             var reservoirInput = Engine.TensorAdd(weightedState, inputContribution);
 
@@ -676,7 +692,7 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </remarks>
     public Vector<T> GetState()
     {
-        return Vector<T>.FromMemory(_reservoirState.Data);
+        return new Vector<T>(_reservoirState.ToArray());
     }
 
     /// <summary>

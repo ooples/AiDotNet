@@ -97,7 +97,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the gamma (scale) parameters.
     /// </summary>
-    public Vector<T> GetGamma() => Vector<T>.FromMemory(_gamma.Data);
+    public Vector<T> GetGamma() => _gamma.ToVector();
 
     /// <summary>
     /// Gets the gamma (scale) parameters as a tensor.
@@ -107,7 +107,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the beta (shift) parameters.
     /// </summary>
-    public Vector<T> GetBeta() => Vector<T>.FromMemory(_beta.Data);
+    public Vector<T> GetBeta() => _beta.ToVector();
 
     /// <summary>
     /// Gets the beta (shift) parameters as a tensor.
@@ -498,7 +498,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
         if (!_affine)
             return new Vector<T>(0);
 
-        return Vector<T>.Concatenate(Vector<T>.FromMemory(_gamma.Data), Vector<T>.FromMemory(_beta.Data));
+        return Vector<T>.Concatenate(_gamma.ToVector(), _beta.ToVector());
     }
 
     /// <summary>
@@ -541,7 +541,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_gammaGradient == null || _betaGradient == null) return new Vector<T>(ParameterCount);
-        return Vector<T>.Concatenate((_gammaGradient is not null ? Vector<T>.FromMemory(_gammaGradient.Data) : new Vector<T>(0)), (_betaGradient is not null ? Vector<T>.FromMemory(_betaGradient.Data) : new Vector<T>(0)));
+        return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
     }
 
     public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }

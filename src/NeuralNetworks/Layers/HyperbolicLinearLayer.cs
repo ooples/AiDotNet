@@ -129,6 +129,11 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
     /// </summary>
     public override bool SupportsTraining => true;
 
+    /// <summary>
+    /// Gets whether this layer supports JIT compilation.
+    /// Hyperbolic operations use TensorOperations for JIT compilation.
+    /// </summary>
+    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
@@ -1098,6 +1103,70 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         _biasesGradient = null;
     }
 
+    /// <summary>
+    /// Exports the layer's forward pass as a JIT-compilable computation graph.
+    /// </summary>
+    /// <param name="inputNodes">List to populate with input computation nodes.</param>
+    /// <returns>The output computation node.</returns>
+    /// <remarks>
+    /// The exported computation graph uses TensorOperations.HyperbolicLinear which implements:
+    /// 1. Project input to Poincare ball
+    /// 2. For each output: exp_origin(weight) → Mobius add with input → Mobius add with bias → distance from origin
+    /// The curvature is captured at export time.
+    /// </remarks>
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes is null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (InputShape is null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // Create symbolic input node with batch dimension [batchSize, inputFeatures]
+        var symbolicInput = new Tensor<T>(new int[] { 1, InputFeatures });
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // Create weight tensor from internal matrix [outputFeatures, inputFeatures]
+        var weightTensor = new Tensor<T>(new int[] { OutputFeatures, InputFeatures });
+        for (int o = 0; o < OutputFeatures; o++)
+        {
+            for (int i = 0; i < InputFeatures; i++)
+            {
+                weightTensor[o, i] = _weights[o, i];
+            }
+        }
+        var weightsNode = TensorOperations<T>.Constant(weightTensor, "weights");
+
+        // Create bias tensor from internal matrix [outputFeatures, inputFeatures]
+        var biasTensor = new Tensor<T>(new int[] { OutputFeatures, InputFeatures });
+        for (int o = 0; o < OutputFeatures; o++)
+        {
+            for (int i = 0; i < InputFeatures; i++)
+            {
+                biasTensor[o, i] = _biases[o, i];
+            }
+        }
+        var biasesNode = TensorOperations<T>.Constant(biasTensor, "biases");
+
+        // Get curvature as double for TensorOperations
+        double curvature = _numOps.ToDouble(_curvature);
+
+        // Apply HyperbolicLinear operation
+        var outputNode = TensorOperations<T>.HyperbolicLinear(
+            inputNode,
+            weightsNode,
+            biasesNode,
+            curvature);
+
+        // Apply activation function if needed
+        if (ScalarActivation is not null && ScalarActivation is not IdentityActivation<T>)
+        {
+            outputNode = ApplyActivationToComputationNode(outputNode);
+        }
+
+        return outputNode;
+    }
 
     /// <summary>
     /// Applies the activation function to a computation node.

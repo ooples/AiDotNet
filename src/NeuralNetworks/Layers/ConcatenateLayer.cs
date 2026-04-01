@@ -626,19 +626,9 @@ public class ConcatenateLayer<T> : LayerBase<T>
     /// Instead, you should use the other Forward method that accepts multiple inputs (params Tensor&lt;T&gt;[] inputs).
     /// </para>
     /// </remarks>
-    /// <inheritdoc/>
-    public override IReadOnlyList<LayerPort> InputPorts =>
-        [new LayerPort("input_a", GetInputShape()), new LayerPort("input_b", GetInputShape())];
-
-    /// <inheritdoc/>
-    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
-    {
-        return Forward(inputs.Values.ToArray());
-    }
-
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        throw new NotSupportedException("ConcatenateLayer requires multiple inputs. Use Forward(IReadOnlyDictionary) or Forward(params Tensor<T>[]) instead.");
+        throw new NotSupportedException("ConcatenateLayer requires multiple inputs. Use Forward(params Tensor<T>[] inputs) instead.");
     }
 
     /// <summary>
@@ -698,5 +688,27 @@ public class ConcatenateLayer<T> : LayerBase<T>
         _lastInputSizesGpu = null;
     }
 
+    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
+    {
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
 
+        if (InputShape == null || InputShape.Length == 0)
+            throw new InvalidOperationException("Layer input shape not configured.");
+
+        // ConcatenateLayer expects multiple inputs - create symbolic input
+        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
+        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
+        inputNodes.Add(inputNode);
+
+        // If multiple inputs are provided, concatenate them using TensorOperations.Concat()
+        if (inputNodes.Count > 1)
+        {
+            return TensorOperations<T>.Concat(inputNodes, axis: _axis);
+        }
+
+        return inputNode;
+    }
+
+    public override bool SupportsJitCompilation => true;
 }
