@@ -841,11 +841,12 @@ public class ConvolutionalLayer<T> : LayerBase<T>
 
     private void InitializeWeights()
     {
-        // Use Engine-vectorized He initialization (LayerBase utility)
-        // instead of scalar per-element loops. ~5x faster for large conv layers.
+        // He initialization for conv weights
         int fanIn = InputDepth * KernelSize * KernelSize;
-        _kernels = HeInitialize(new[] { OutputDepth, InputDepth, KernelSize, KernelSize }, fanIn);
-        _biases = ZeroInitialize(new[] { OutputDepth });
+        double stdDev = Math.Sqrt(2.0 / fanIn);
+        var kernelShape = new[] { OutputDepth, InputDepth, KernelSize, KernelSize };
+        _kernels = Engine.TensorRandomUniformRange<T>(kernelShape, NumOps.FromDouble(-stdDev), NumOps.FromDouble(stdDev));
+        _biases = new Tensor<T>(new[] { OutputDepth });
     }
 
     /// <summary>

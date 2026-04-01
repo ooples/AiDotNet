@@ -231,63 +231,22 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
         // Per Ioffe & Szegedy 2015: BN gradient is exactly zero for N=1 in
         // training mode (I - 1/N*11^T = 0). This kills gradient flow.
         // Per Howard et al. 2019: paper uses batch_size=4096 where BN works normally.
+        // BN eval mode for batch_size=1 (training mode gives zero gradient)
         foreach (var layer in Layers)
             layer.SetTrainingMode(false);
+
+        // Forward + loss
         var prediction = ForwardWithMemory(input);
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
+        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
-        // Forward pass
-        var current = input;
-        foreach (var layer in Layers)
-            current = layer.Forward(current);
-        var prediction = current;
+        // Backward
+        var outputGrad = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
+        var gradTensor = Tensor<T>.FromVector(outputGrad);
+        if (gradTensor.Rank < prediction.Rank)
+            gradTensor = gradTensor.Reshape(prediction.Shape.ToArray());
+        Backpropagate(gradTensor);
 
-        // MSE loss: works correctly regardless of output range (unlike CategoricalCrossEntropy
-        // which assumes softmax-normalized probabilities and gives wrong gradient signs on raw logits).
-        var predVec = prediction.ToVector();
-        var targetVec = expectedOutput.ToVector();
-        double mse = 0;
-        for (int i = 0; i < predVec.Length; i++)
-        {
-            double diff = Convert.ToDouble(predVec[i]) - Convert.ToDouble(targetVec[i]);
-            mse += diff * diff;
-        }
-        mse /= predVec.Length;
-        LastLoss = NumOps.FromDouble(mse);
-
-        // MSE gradient: 2*(pred - target) / N
-        var gradData = new T[predVec.Length];
-        double scale = 2.0 / predVec.Length;
-        for (int i = 0; i < predVec.Length; i++)
-        {
-            double diff = Convert.ToDouble(predVec[i]) - Convert.ToDouble(targetVec[i]);
-            gradData[i] = NumOps.FromDouble(diff * scale);
-        }
-        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), new Vector<T>(gradData));
-
-        // Gradient clipping to prevent explosion
-        double gradNorm = 0;
-        for (int i = 0; i < gradData.Length; i++)
-        {
-            double v = Convert.ToDouble(gradData[i]);
-            gradNorm += v * v;
-        }
-        gradNorm = Math.Sqrt(gradNorm);
-        if (gradNorm > 1.0)
-        {
-            double clipScale = 1.0 / gradNorm;
-            outputGradientTensor = Engine.TensorMultiplyScalar(outputGradientTensor, NumOps.FromDouble(clipScale));
-        }
-
-        // Backward pass
-        var currentGradient = outputGradientTensor;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            currentGradient = Layers[i].Backward(currentGradient);
-        }
-
-        // Update via optimizer (uses configured learning rate)
+        // Update via optimizer
         _optimizer.UpdateParameters(Layers);
     }
 
