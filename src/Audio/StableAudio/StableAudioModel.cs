@@ -1004,18 +1004,7 @@ public class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         }
 
         SetTrainingMode(true);
-
-        var prediction = Forward(input);
-        var flatPrediction = prediction.ToVector();
-        var flatExpected = expectedOutput.ToVector();
-
-        LastLoss = _lossFunction.CalculateLoss(flatPrediction, flatExpected);
-        var lossGradient = _lossFunction.CalculateDerivative(flatPrediction, flatExpected);
-
-        Backpropagate(Tensor<T>.FromVector(lossGradient));
-
-        _optimizer?.UpdateParameters(Layers);
-
+        TrainWithTape(input, expectedOutput);
         SetTrainingMode(false);
     }
 
