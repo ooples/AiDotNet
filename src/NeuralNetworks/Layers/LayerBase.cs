@@ -2394,7 +2394,14 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     {
         if (ScalarActivation is IOutputDerivative<T> outputDeriv)
         {
-            return outputDeriv.DerivativeFromOutput(output).ElementwiseMultiply(outputGradient);
+            var deriv = outputDeriv.DerivativeFromOutput(output);
+            // Reshape derivative to match gradient shape if needed (e.g., CapsuleNet
+            // flattened reconstruction layer outputs different rank than gradient)
+            if (deriv.Length == outputGradient.Length && deriv.Rank != outputGradient.Rank)
+            {
+                deriv = deriv.Reshape(outputGradient.Shape.ToArray());
+            }
+            return Engine.TensorMultiply(deriv, outputGradient);
         }
         // Use cached pre-activation input if available, otherwise fall back to output.
         // This prevents computing f'(f(x)) instead of f'(x) for activations like GELU
