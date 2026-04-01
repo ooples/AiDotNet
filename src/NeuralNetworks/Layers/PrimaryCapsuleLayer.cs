@@ -714,7 +714,18 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
         {
             // Scalar activation: element-wise derivatives [totalCapsules, D]
             var derivatives = ScalarActivation.Derivative(preSquash);
-            activationGradientFlat = Engine.TensorMultiply(derivatives, flatGrad);
+            // Handle case where activation returns Jacobian [N, D, D] instead of element-wise [N, D]
+            // (happens with SquashActivation which implements both IActivation and IVectorActivation)
+            if (derivatives.Rank == 3 && derivatives.Shape[1] == _capsuleDimension && derivatives.Shape[2] == _capsuleDimension)
+            {
+                var gradCol = flatGrad.Reshape([totalCapsules, _capsuleDimension, 1]);
+                var resultCol = Engine.BatchMatMul(derivatives, gradCol);
+                activationGradientFlat = resultCol.Reshape([totalCapsules, _capsuleDimension]);
+            }
+            else
+            {
+                activationGradientFlat = Engine.TensorMultiply(derivatives, flatGrad);
+            }
         }
         else
         {

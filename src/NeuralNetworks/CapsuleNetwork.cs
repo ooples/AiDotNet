@@ -433,11 +433,16 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         var totalLoss = NumOps.Add(marginLoss, auxiliaryLoss);
         LastLoss = totalLoss;
 
-        // Backward pass
-        var gradient = CalculateGradient(totalLoss);
+        // Backward pass — accumulates gradients in each layer
+        CalculateGradient(totalLoss);
 
-        // Update parameters
-        UpdateParameters(gradient);
+        // Update parameters using per-layer gradient descent
+        T lr = NumOps.FromDouble(0.001);
+        foreach (var layer in Layers)
+        {
+            if (layer.SupportsTraining)
+                layer.UpdateParameters(lr);
+        }
     }
 
     /// <summary>
