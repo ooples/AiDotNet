@@ -574,10 +574,11 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
         if (_projectBn is ILayerSerializationExtras<T> pb)
         {
             int count = pb.ExtraParameterCount;
-            if (offset + count <= extraParameters.Length)
-            {
-                pb.SetExtraParameters(extraParameters.SubVector(offset, count));
-            }
+            if (offset + count > extraParameters.Length)
+                throw new ArgumentException(
+                    $"Truncated extra-parameters: need {offset + count} but got {extraParameters.Length}. " +
+                    "Ensure the parameter blob matches the block's expected size.");
+            pb.SetExtraParameters(extraParameters.SubVector(offset, count));
         }
     }
 

@@ -2250,6 +2250,8 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
             {
                 deriv = deriv.Reshape(outputGradient.Shape.ToArray());
             }
+            // Pop the cached pre-activation to keep cache balanced
+            if (_preActivationCache.Count > 0) _preActivationCache.Pop();
             return Engine.TensorMultiply(deriv, outputGradient);
         }
         // Use cached pre-activation input if available, otherwise fall back to output.

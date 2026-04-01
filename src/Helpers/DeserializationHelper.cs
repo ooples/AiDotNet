@@ -433,6 +433,8 @@ public static class DeserializationHelper
                 throw new InvalidOperationException($"Cannot find ConvolutionalLayer constructor.");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            if (activation is null && additionalParams is not null && additionalParams.ContainsKey("ScalarActivationType"))
+                throw new InvalidOperationException($"Failed to deserialize activation function of type '{additionalParams["ScalarActivationType"]}' for ConvolutionalLayer.");
             instance = ctor.Invoke(new object?[] { inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding, activation, null });
         }
         else if (genericDef == typeof(Conv3DLayer<>))

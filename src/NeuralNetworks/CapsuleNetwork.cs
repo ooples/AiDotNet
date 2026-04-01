@@ -437,7 +437,8 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         CalculateGradient(totalLoss);
 
         // Update parameters using per-layer gradient descent
-        T lr = NumOps.FromDouble(0.001);
+        const double defaultLearningRate = 0.001;
+        T lr = NumOps.FromDouble(defaultLearningRate);
         foreach (var layer in Layers)
         {
             if (layer.SupportsTraining)
