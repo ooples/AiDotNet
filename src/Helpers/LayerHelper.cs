@@ -756,7 +756,9 @@ public static class LayerHelper<T>
         // Define the sizes of each layer in the DBM
         int[] layerSizes = [inputSize, 500, 500, 2000, architecture.OutputSize];
 
-        // Create layers
+        // Create layers — per Salakhutdinov & Hinton 2009, DBMs use RBM layers
+        // with sigmoid activation. No BatchNorm (not in the original paper, and BN
+        // with batch_size=1 normalizes to zero, destroying all information).
         for (int i = 0; i < layerSizes.Length - 1; i++)
         {
             yield return new RBMLayer<T>(
@@ -764,12 +766,6 @@ public static class LayerHelper<T>
                 hiddenUnits: layerSizes[i + 1],
                 new SigmoidActivation<T>() as IActivationFunction<T>
             );
-
-            // Add a BatchNormalization layer after each RBM layer except the last one
-            if (i < layerSizes.Length - 2)
-            {
-                yield return new BatchNormalizationLayer<T>(layerSizes[i + 1]);
-            }
         }
 
         // Output layer
