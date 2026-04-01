@@ -482,17 +482,9 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode.");
 
-        // Forward pass
-        var output = EnhanceVideoNative(input);
-
-        // Compute loss gradient
-        var lossGradient = ComputeLossGradient(output, expectedOutput);
-
-        // Backward pass
-        BackwardPass(lossGradient);
-
-        // Update parameters
-        UpdateAllParameters();
+        SetTrainingMode(true);
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     #endregion
