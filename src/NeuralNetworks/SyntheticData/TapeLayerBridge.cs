@@ -1,6 +1,6 @@
-using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.SyntheticData;
@@ -115,15 +115,14 @@ public static class TapeLayerBridge<T>
         bool was1D = input.Shape.Length == 1;
         var input2D = was1D ? input.Reshape([1, input.Length]) : input;
 
-        // Use the tensor-based GradientTape API with direct Engine calls
-        using var tape = new GradientTape<T>(persistent: true);
-        tape.Watch(input2D);
+        // Use the Tensors GradientTape API with direct Engine calls
+        using var tape = new GradientTape<T>(new GradientTapeOptions { Persistent = true });
 
         // Forward through layers using Engine (auto-records to tape)
         var output = ForwardWithEngine(input2D, layers, activation, applyActivationOnLast, leakyAlpha);
 
         // Compute gradient: dOutput/dInput via reverse-mode AD
-        var gradients = tape.Gradient(output, createGraph: true);
+        var gradients = tape.ComputeGradients(output, sources: [input2D], createGraph: true);
 
         if (gradients.TryGetValue(input2D, out var inputGrad))
         {
@@ -228,11 +227,22 @@ public static class TapeLayerBridge<T>
                 // Opaque forward: use layer.Forward + record as single op for backward
                 var layerInput = current;
                 var output = layer.Forward(current);
-                var tape = GradientTape<T>.Current;
-                if (tape is not null)
+                var activeTape = GradientTape<T>.Current;
+                if (activeTape is not null)
                 {
-                    tape.RecordOp($"opaque_{layer.GetType().Name}", [layerInput], output,
-                        grad => [layer.Backward(grad)]);
+                    var capturedLayer = layer;
+                    activeTape.Record(new TapeEntry<T>(
+                        $"opaque_{layer.GetType().Name}",
+                        [layerInput],
+                        output,
+                        (gradOutput, inputs, _, _, eng, grads) =>
+                        {
+                            var layerGrad = capturedLayer.Backward(gradOutput);
+                            if (grads.TryGetValue(inputs[0], out var existing))
+                                eng.TensorAddInPlace(existing, layerGrad);
+                            else
+                                grads[inputs[0]] = layerGrad;
+                        }));
                 }
                 current = output;
             }

@@ -3,6 +3,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;

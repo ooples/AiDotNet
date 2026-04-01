@@ -3,46 +3,19 @@ using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Autodiff;
 /// <summary>
-/// Provides automatic differentiation support for tensor operations.
+/// Provides computation graph operations on <see cref="ComputationNode{T}"/> for legacy autodiff.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// TensorOperations is a helper class that integrates automatic differentiation with tensor operations.
-/// It records operations performed on tensors to an active GradientTape (if present) and creates
-/// the computation graph needed for backpropagation.
+/// TensorOperations builds a <see cref="ComputationNode{T}"/> graph with backward functions
+/// for reverse-mode differentiation. Each operation creates a node that remembers its inputs
+/// and how to propagate gradients.
 /// </para>
 /// <para>
-/// This class follows the opt-in pattern: tensor operations only record to the gradient tape
-/// when explicitly used within a GradientTape context. Outside of a GradientTape context,
-/// operations work normally without any overhead.
-/// </para>
-/// <para><b>For Beginners:</b> This class bridges regular tensor operations with automatic differentiation.
-///
-/// Think of it like adding a "recording mode" to your calculations:
-/// - When you're inside a GradientTape context, operations are recorded
-/// - The recording remembers how each value was computed
-/// - Later, you can "play it backwards" to compute gradients
-/// - When not recording, operations work exactly as before
-///
-/// This enables features like:
-/// - Automatic gradient computation for neural network training
-/// - Computing derivatives without writing manual backward passes
-/// - Building complex computational graphs automatically
-///
-/// Example usage:
-/// <code>
-/// using (var tape = new GradientTape&lt;double&gt;())
-/// {
-///     var x = TensorOperations&lt;double&gt;.Variable(inputTensor, "x");
-///     var y = TensorOperations&lt;double&gt;.Variable(parameterTensor, "y");
-///     tape.Watch(x);
-///     tape.Watch(y);
-///
-///     var z = TensorOperations&lt;double&gt;.Add(x, y); // Recorded to tape
-///     var gradients = tape.Gradient(z, new[] { x, y });
-/// }
-/// </code>
+/// <b>Note:</b> Tape recording for these operations is handled by the engine layer
+/// (via <c>AiDotNet.Tensors.Engines.Autodiff.GradientTape</c>). This class no longer
+/// records to a tape directly.
 /// </para>
 /// </remarks>
 public static class TensorOperations<T>
@@ -194,13 +167,6 @@ public static class TensorOperations<T>
         // Set JIT compiler metadata
         node.OperationType = OperationType.Add;
         node.OperationParams = null;
-
-        // Record to active tape if present
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-        {
-            tape.RecordOperation(node);
-        }
         return node;
     }
     /// <summary>
@@ -274,13 +240,6 @@ public static class TensorOperations<T>
         // Set JIT compiler metadata
         node.OperationType = OperationType.Subtract;
         node.OperationParams = null;
-
-        // Record to active tape if present
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-        {
-            tape.RecordOperation(node);
-        }
         return node;
     }
     /// <summary>
@@ -375,13 +334,6 @@ public static class TensorOperations<T>
         // Set JIT compiler metadata
         node.OperationType = OperationType.Multiply;
         node.OperationParams = null;
-
-        // Record to active tape if present
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-        {
-            tape.RecordOperation(node);
-        }
         return node;
     }
     /// <summary>
@@ -468,9 +420,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Divide;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -532,9 +481,6 @@ public static class TensorOperations<T>
             { "Exponent", exponent }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -582,9 +528,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Exp;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -647,9 +590,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Log;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -722,9 +662,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Sqrt;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -777,9 +714,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Tanh;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -832,9 +766,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Sigmoid;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -890,9 +821,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.ReLU;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -937,9 +865,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Negate;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1006,9 +931,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Abs;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1061,9 +983,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.MatMul;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1160,9 +1079,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.MatMul;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1204,9 +1120,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Transpose;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -1330,9 +1243,6 @@ public static class TensorOperations<T>
             ? new Dictionary<string, object> { { "Axes", axes }, { "KeepDims", keepDims } }
             : new Dictionary<string, object> { { "KeepDims", keepDims } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -1383,9 +1293,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Mean;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -1432,9 +1339,6 @@ public static class TensorOperations<T>
             { "NewShape", newShape }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1489,9 +1393,6 @@ public static class TensorOperations<T>
             { "Axes", axes }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1570,9 +1471,6 @@ public static class TensorOperations<T>
             { "TargetShape", targetShape }
         };
 
-        var broadcastTape = GradientTape<T>.Current;
-        if (broadcastTape != null && broadcastTape.IsRecording)
-            broadcastTape.RecordOperation(node);
         return node;
     }
 
@@ -1639,9 +1537,6 @@ public static class TensorOperations<T>
             { "Axis", axis }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1695,9 +1590,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.ELU;
         node.OperationParams = new Dictionary<string, object> { { "Alpha", alpha } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1747,9 +1639,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.LeakyReLU;
         node.OperationParams = new Dictionary<string, object> { { "Alpha", alpha } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1824,9 +1713,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.GELU;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1887,9 +1773,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Swish;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -1952,9 +1835,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Mish;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2021,9 +1901,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.SoftPlus;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2099,9 +1976,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.SELU;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2174,9 +2048,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.HardSigmoid;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2240,9 +2111,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.HardTanh;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2302,9 +2170,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.SoftSign;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2370,9 +2235,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.CELU;
         node.OperationParams = new Dictionary<string, object> { { "alpha", alpha } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2429,9 +2291,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.LiSHT;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2492,9 +2351,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.BentIdentity;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2552,9 +2408,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Gaussian;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2618,9 +2471,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.ScaledTanh;
         node.OperationParams = new Dictionary<string, object> { { "beta", beta } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2709,9 +2559,6 @@ public static class TensorOperations<T>
             { "Axis", normalizedAxis }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -2859,9 +2706,6 @@ public static class TensorOperations<T>
                 { "Value", value! }
             };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
         else
@@ -2957,9 +2801,6 @@ public static class TensorOperations<T>
                 { "Value", value! }
             };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
     }
@@ -3049,9 +2890,6 @@ public static class TensorOperations<T>
             { "Padding", new int[] { 0, 0 } }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -3124,9 +2962,6 @@ public static class TensorOperations<T>
             { "Padding", new int[] { 0, 0 } }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -3315,9 +3150,6 @@ public static class TensorOperations<T>
                 { "Epsilon", epsilon }
             };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
         else
@@ -3487,9 +3319,6 @@ public static class TensorOperations<T>
             node.OperationType = OperationType.LayerNorm;
             node.OperationParams = new Dictionary<string, object> { { "Epsilon", epsilon } };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
     }
@@ -3735,9 +3564,6 @@ public static class TensorOperations<T>
                 { "Epsilon", epsilon }
             };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
         else if (shape.Length == 4)
@@ -3917,9 +3743,6 @@ public static class TensorOperations<T>
             node.OperationType = OperationType.BatchNorm;
             node.OperationParams = new Dictionary<string, object> { { "Epsilon", epsilon } };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
         else
@@ -4043,9 +3866,6 @@ public static class TensorOperations<T>
             node.OperationType = OperationType.BatchNorm;
             node.OperationParams = new Dictionary<string, object> { { "Epsilon", epsilon } };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
     }
@@ -4305,9 +4125,6 @@ public static class TensorOperations<T>
                 { "Epsilon", epsilon }
             };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
         else
@@ -4473,9 +4290,6 @@ public static class TensorOperations<T>
                 { "Epsilon", epsilon }
             };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
     }
@@ -4617,9 +4431,6 @@ public static class TensorOperations<T>
             { "Padding", padding }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -4779,9 +4590,6 @@ public static class TensorOperations<T>
             { "Padding", padding }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -4851,9 +4659,6 @@ public static class TensorOperations<T>
             { "Padding", new int[] { 0, 0, 0 } }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -4919,9 +4724,6 @@ public static class TensorOperations<T>
             { "ScaleW", scaleW }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -5093,9 +4895,6 @@ public static class TensorOperations<T>
             { "OutputPadding", outputPadding }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -5206,9 +5005,6 @@ public static class TensorOperations<T>
             { "KeepDims", keepDims }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -5335,9 +5131,6 @@ public static class TensorOperations<T>
             { "KeepDims", keepDims }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -5429,9 +5222,6 @@ public static class TensorOperations<T>
                 { "SplitIndex", split }
             };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             results.Add(node);
         }
         return results;
@@ -5509,9 +5299,6 @@ public static class TensorOperations<T>
                 { "Cropping", cropping }
             };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
             return node;
         }
         else
@@ -5567,9 +5354,6 @@ public static class TensorOperations<T>
             { "Scale", scale }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -5623,9 +5407,6 @@ public static class TensorOperations<T>
             { "UpscaleFactor", upscaleFactor }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -5742,9 +5523,6 @@ public static class TensorOperations<T>
             { "Dilation", dilation }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -5911,9 +5689,6 @@ public static class TensorOperations<T>
             { "Padding", padding }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -6132,9 +5907,6 @@ public static class TensorOperations<T>
             { "Stride", stride }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -6310,9 +6082,6 @@ public static class TensorOperations<T>
             { "Dilation", dilation }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -6459,9 +6228,6 @@ public static class TensorOperations<T>
             { "Epsilon", epsilon }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -6637,9 +6403,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.RBFKernel;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -6771,9 +6534,6 @@ public static class TensorOperations<T>
             { "OutputSize", new int[] { outputHeight, outputWidth } }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -6990,9 +6750,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.GridSample;
         node.OperationParams = new Dictionary<string, object>();
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
     /// <summary>
@@ -7228,9 +6985,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.GraphConv;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -7364,9 +7118,6 @@ public static class TensorOperations<T>
             { "Padding", padding }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -7472,9 +7223,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Activation;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -7549,9 +7297,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Embedding;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -7832,9 +7577,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Square;
         node.OperationParams = null;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -7979,9 +7721,6 @@ public static class TensorOperations<T>
             { "Epsilon", epsilon }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -8136,9 +7875,6 @@ public static class TensorOperations<T>
             { "Epsilon", epsilon }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -8344,9 +8080,6 @@ public static class TensorOperations<T>
             node.OperationType = OperationType.ComplexMatMul;
             node.OperationParams = new Dictionary<string, object> { { "Format", format } };
 
-            var tape = GradientTape<T>.Current;
-            if (tape != null && tape.IsRecording)
-                tape.RecordOperation(node);
 
             return node;
         }
@@ -8524,10 +8257,6 @@ public static class TensorOperations<T>
             nodeInterleaved.OperationType = OperationType.ComplexMatMul;
             nodeInterleaved.OperationParams = new Dictionary<string, object> { { "Format", format } };
 
-            var tapeInterleaved = GradientTape<T>.Current;
-            if (tapeInterleaved != null && tapeInterleaved.IsRecording)
-                tapeInterleaved.RecordOperation(nodeInterleaved);
-
             return nodeInterleaved;
         }
 
@@ -8683,9 +8412,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.ComplexMultiply;
         node.OperationParams = new Dictionary<string, object> { { "Format", format } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -8840,9 +8566,6 @@ public static class TensorOperations<T>
             { "Axis", axis }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
 
         return node;
     }
@@ -8976,9 +8699,6 @@ public static class TensorOperations<T>
             { "Hard", hard }
         };
 
-        var tape2 = GradientTape<T>.Current;
-        if (tape2 != null && tape2.IsRecording)
-            tape2.RecordOperation(node);
 
         return node;
     }
@@ -9048,9 +8768,6 @@ public static class TensorOperations<T>
             { "SurrogateBeta", surrogateBeta }
         };
 
-        var tape3 = GradientTape<T>.Current;
-        if (tape3 != null && tape3.IsRecording)
-            tape3.RecordOperation(node);
 
         return node;
     }
@@ -9098,9 +8815,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.StraightThroughThreshold;
         node.OperationParams = new Dictionary<string, object> { { "Threshold", threshold } };
 
-        var tape4 = GradientTape<T>.Current;
-        if (tape4 != null && tape4.IsRecording)
-            tape4.RecordOperation(node);
 
         return node;
     }
@@ -9204,9 +8918,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.TopKSoftmax;
         node.OperationParams = new Dictionary<string, object> { { "K", k } };
 
-        var tape5 = GradientTape<T>.Current;
-        if (tape5 != null && tape5.IsRecording)
-            tape5.RecordOperation(node);
 
         return node;
     }
@@ -9448,9 +9159,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.CRFForward;
         node.OperationParams = null;
 
-        var tape6 = GradientTape<T>.Current;
-        if (tape6 != null && tape6.IsRecording)
-            tape6.RecordOperation(node);
 
         return node;
     }
@@ -9525,9 +9233,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.PReLU;
         node.OperationParams = new Dictionary<string, object> { { "Alpha", alpha } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -9585,9 +9290,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.ThresholdedReLU;
         node.OperationParams = new Dictionary<string, object> { { "Threshold", threshold } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -9645,9 +9347,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.ISRU;
         node.OperationParams = new Dictionary<string, object> { { "Alpha", alpha } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -9709,9 +9408,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Sign;
         node.OperationParams = new Dictionary<string, object> { { "SurrogateBeta", surrogateBeta } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -9835,9 +9531,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.LogSoftmax;
         node.OperationParams = new Dictionary<string, object> { { "Axis", capturedAxis } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -9958,9 +9651,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Softmin;
         node.OperationParams = new Dictionary<string, object> { { "Axis", capturedAxis } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -10080,9 +9770,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.LogSoftmin;
         node.OperationParams = new Dictionary<string, object> { { "Axis", capturedAxis } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -10142,9 +9829,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.SQRBF;
         node.OperationParams = new Dictionary<string, object> { { "Beta", beta } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -10241,9 +9925,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Maxout;
         node.OperationParams = new Dictionary<string, object> { { "NumPieces", numPieces } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -10325,9 +10006,6 @@ public static class TensorOperations<T>
             { "IsTraining", isTraining }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -10502,9 +10180,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.SphericalSoftmax;
         node.OperationParams = new Dictionary<string, object> { { "Axis", capturedAxis } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -10674,9 +10349,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.TaylorSoftmax;
         node.OperationParams = new Dictionary<string, object> { { "Order", capturedOrder }, { "Axis", capturedAxis } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -10847,9 +10519,6 @@ public static class TensorOperations<T>
         node.OperationType = OperationType.Sparsemax;
         node.OperationParams = new Dictionary<string, object> { { "Axis", capturedAxis } };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -11076,9 +10745,6 @@ public static class TensorOperations<T>
             { "TreeDepth", treeDepth }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -11214,9 +10880,6 @@ public static class TensorOperations<T>
             { "Temperature", temp! }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -11402,9 +11065,6 @@ public static class TensorOperations<T>
             { "Temperature", temp! }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -11550,9 +11210,6 @@ public static class TensorOperations<T>
             { "Symmetric", symmetric }
         };
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 
@@ -11977,9 +11634,6 @@ public static class TensorOperations<T>
 
         node.OperationType = OperationType.OctonionMatMul;
 
-        var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording)
-            tape.RecordOperation(node);
         return node;
     }
 

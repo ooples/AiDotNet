@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Engines.Autodiff;
+
 namespace AiDotNet.Autodiff;
 
 /// <summary>
@@ -82,31 +84,27 @@ public static class GradientCheckpointing<T>
         }
         _checkpointStack.Push(context);
 
-        // Stop recording during checkpoint forward pass
-        var tape = GradientTape<T>.Current;
-        bool wasRecording = tape?.IsRecording ?? false;
-        if (tape != null) tape.IsRecording = false;
+        // Suspend tape recording during checkpoint forward pass by using NoGradScope
+        // (ops within NoGradScope are not recorded to the active tape)
+        ComputationNode<T> output;
+        using (new NoGradScope<T>())
+        {
+            output = function();
+        }
+
+        // Save only the inputs and output for recomputation
+        foreach (var input in inputList)
+        {
+            if (input.Value != null)
+            {
+                context.SavedTensors[input] = input.Value.Clone();
+            }
+        }
+        context.Output = output;
+        context.OutputValue = output.Value?.Clone();
 
         try
         {
-            // Execute forward pass without recording
-            var output = function();
-
-            // Save only the inputs and output for recomputation
-            foreach (var input in inputList)
-            {
-                if (input.Value != null)
-                {
-                    context.SavedTensors[input] = input.Value.Clone();
-                }
-            }
-            context.Output = output;
-            context.OutputValue = output.Value?.Clone();
-
-            // Restore recording state BEFORE creating checkpoint node,
-            // so the synthetic RecordOp is captured on the tape
-            if (tape != null) tape.IsRecording = wasRecording;
-
             // Create a wrapper node that will trigger recomputation during backward
             var checkpointNode = CreateCheckpointNode(context, output);
 
@@ -144,14 +142,14 @@ public static class GradientCheckpointing<T>
         }
         _checkpointStack.Push(context);
 
-        var tape = GradientTape<T>.Current;
-        bool wasRecording = tape?.IsRecording ?? false;
-        if (tape != null) tape.IsRecording = false;
+        IReadOnlyList<ComputationNode<T>> outputs;
+        using (new NoGradScope<T>())
+        {
+            outputs = function();
+        }
 
         try
         {
-            var outputs = function();
-
             foreach (var input in inputList)
             {
                 if (input.Value != null)
@@ -161,10 +159,6 @@ public static class GradientCheckpointing<T>
             }
 
             context.MultiOutputs = outputs.ToList();
-
-            // Restore recording state BEFORE creating checkpoint nodes,
-            // so the synthetic RecordOps are captured on the tape
-            if (tape != null) tape.IsRecording = wasRecording;
 
             var checkpointNodes = outputs.Select((output, index) =>
                 CreateCheckpointNode(context, output, index)).ToList();
@@ -194,27 +188,35 @@ public static class GradientCheckpointing<T>
             BackwardFunction = (grad) => RecomputeAndBackward(context, grad, outputIndex)
         };
 
-        // Register a synthetic "checkpoint" op on the active tape so that
-        // GradientTape.Gradient() can trace through the checkpoint boundary.
+        // Register a synthetic "checkpoint" op on the active Tensors tape so that
+        // ComputeGradients() can trace through the checkpoint boundary.
         var tape = GradientTape<T>.Current;
-        if (tape != null && tape.IsRecording && output.Value != null)
+        if (tape is not null && output.Value is not null)
         {
             var inputTensors = context.Inputs
                 .Where(i => i.Value != null)
-                .Select(i => i.Value)
+                .Select(i => i.Value!)
                 .ToArray();
 
-            tape.RecordOp(
+            tape.Record(new TapeEntry<T>(
                 "checkpoint",
                 inputTensors,
                 checkpointNode.Value,
-                grad =>
+                (gradOutput, inputs, _, _, eng, grads) =>
                 {
-                    RecomputeAndBackward(context, grad, outputIndex);
-                    return context.Inputs
-                        .Select(i => i.Gradient ?? new Tensor<T>(i.Value.Shape.ToArray()))
-                        .ToArray();
-                });
+                    RecomputeAndBackward(context, gradOutput, outputIndex);
+                    for (int i = 0; i < context.Inputs.Count && i < inputs.Length; i++)
+                    {
+                        var inputGrad = context.Inputs[i].Gradient;
+                        if (inputGrad is not null)
+                        {
+                            if (grads.TryGetValue(inputs[i], out var existing))
+                                eng.TensorAddInPlace(existing, inputGrad);
+                            else
+                                grads[inputs[i]] = inputGrad;
+                        }
+                    }
+                }));
         }
 
         return checkpointNode;
@@ -236,15 +238,8 @@ public static class GradientCheckpointing<T>
             inputNode.Value = savedValue.Clone();
         }
 
-        // Create a temporary tape for recomputation
-        using (var recomputeTape = new GradientTape<T>(persistent: false))
+        // Recompute forward pass using ComputationNode backward
         {
-            // Watch all inputs
-            foreach (var input in context.Inputs)
-            {
-                recomputeTape.Watch(input);
-            }
-
             // Recompute forward pass
             ComputationNode<T> recomputedOutput;
             if (context.Function != null)

@@ -1,6 +1,7 @@
 using System.Threading;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.TimeSeries;
 
@@ -436,7 +437,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     public virtual Vector<T> Predict(Matrix<T> input)
     {
         // Suppress tape recording during inference
-        using var _noGrad = new Autodiff.NoGradScope<T>();
+        using var _noGrad = new NoGradScope<T>();
 
         // Check if model is trained
         if (!IsTrained)

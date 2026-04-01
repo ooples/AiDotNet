@@ -368,7 +368,11 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     /// <inheritdoc />
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
-        // Default implementation: no-op
+        // Default: no feature selection support. Subclasses that support
+        // feature selection should override this method.
+        throw new NotSupportedException(
+            $"{GetType().Name} does not support feature selection. " +
+            "Override SetActiveFeatureIndices to implement this capability.");
     }
 
     /// <inheritdoc />

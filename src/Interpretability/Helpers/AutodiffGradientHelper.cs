@@ -4,6 +4,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
+// Note: GradientTape references removed — ComputationNode has its own backward mechanism
+
 namespace AiDotNet.Interpretability.Helpers;
 
 /// <summary>
@@ -105,34 +107,30 @@ public class AutodiffGradientHelper<T>
     /// </remarks>
     public Tensor<T> ComputeGradient(Tensor<T> input, int outputIndex = 0)
     {
-        using (var tape = new GradientTape<T>())
+        // Create input node
+        var inputNode = TensorOperations<T>.Variable(input, "input", requiresGradient: true);
+
+        // Run model forward pass
+        var outputNode = _modelFunction(inputNode);
+
+        // Create one-hot gradient for target output
+        var outputGrad = new Tensor<T>(outputNode.Value.Shape.ToArray());
+        if (outputIndex < outputNode.Value.Length)
         {
-            // Create input node and watch it
-            var inputNode = TensorOperations<T>.Variable(input, "input", requiresGradient: true);
-            tape.Watch(inputNode);
-
-            // Run model forward pass
-            var outputNode = _modelFunction(inputNode);
-
-            // Create one-hot gradient for target output
-            var outputGrad = new Tensor<T>(outputNode.Value.Shape.ToArray());
-            if (outputIndex < outputNode.Value.Length)
-            {
-                outputGrad[outputIndex] = NumOps.One;
-            }
-
-            // Set the output gradient and compute backward
-            outputNode.Gradient = outputGrad;
-            outputNode.Backward();
-
-            // Return input gradients
-            if (inputNode.Gradient != null)
-            {
-                return inputNode.Gradient;
-            }
-
-            return new Tensor<T>(input.Shape.ToArray());
+            outputGrad[outputIndex] = NumOps.One;
         }
+
+        // Set the output gradient and compute backward via ComputationNode graph
+        outputNode.Gradient = outputGrad;
+        outputNode.Backward();
+
+        // Return input gradients
+        if (inputNode.Gradient != null)
+        {
+            return inputNode.Gradient;
+        }
+
+        return new Tensor<T>(input.Shape.ToArray());
     }
 
     /// <summary>
@@ -193,32 +191,23 @@ public class AutodiffGradientHelper<T>
         Func<Dictionary<string, ComputationNode<T>>, ComputationNode<T>> modelOutput,
         int outputIndex = 0)
     {
-        using (var tape = new GradientTape<T>())
+        // Run forward pass
+        var outputNode = modelOutput(inputNodes);
+
+        // Backward through the ComputationNode graph
+        outputNode.Backward();
+
+        // Collect gradients from input nodes
+        var result = new Dictionary<string, Tensor<T>>();
+        foreach (var kvp in inputNodes)
         {
-            // Watch all input nodes
-            foreach (var node in inputNodes.Values)
+            if (kvp.Value.Gradient is not null)
             {
-                tape.Watch(node);
+                result[kvp.Key] = kvp.Value.Gradient;
             }
-
-            // Run forward pass
-            var outputNode = modelOutput(inputNodes);
-
-            // Compute gradients
-            var gradientMap = tape.Gradient(outputNode, inputNodes.Values);
-
-            // Convert to named dictionary
-            var result = new Dictionary<string, Tensor<T>>();
-            foreach (var kvp in inputNodes)
-            {
-                if (gradientMap.TryGetValue(kvp.Value, out var grad))
-                {
-                    result[kvp.Key] = grad;
-                }
-            }
-
-            return result;
         }
+
+        return result;
     }
 
     /// <summary>
@@ -244,53 +233,31 @@ public class AutodiffGradientHelper<T>
     /// </remarks>
     public Tensor<T> ComputeHessianVectorProduct(Tensor<T> input, Tensor<T> vector, int outputIndex = 0)
     {
-        using (var outerTape = new GradientTape<T>())
+        // Hessian-vector products require second-order autodiff (createGraph=true),
+        // which is supported by the Tensors GradientTape but not by ComputationNode backward.
+        // Use a numerical approximation: Hvp ≈ [∇f(x + εv) - ∇f(x)] / ε
+        var eps = 1e-5;
+        var numOps2 = MathHelper.GetNumericOperations<T>();
+
+        // Compute gradient at x
+        var grad0 = ComputeGradient(input, outputIndex);
+
+        // Compute gradient at x + ε*v
+        var perturbedShape = input.Shape.ToArray();
+        var perturbed = new Tensor<T>(perturbedShape);
+        for (int i = 0; i < input.Length; i++)
         {
-            var inputNode = TensorOperations<T>.Variable(input, "input", requiresGradient: true);
-            outerTape.Watch(inputNode);
-
-            using (var innerTape = new GradientTape<T>())
-            {
-                innerTape.Watch(inputNode);
-
-                // Forward pass
-                var outputNode = _modelFunction(inputNode);
-
-                // First gradient
-                var outputGrad = new Tensor<T>(outputNode.Value.Shape.ToArray());
-                if (outputIndex < outputNode.Value.Length)
-                {
-                    outputGrad[outputIndex] = NumOps.One;
-                }
-
-                // Compute first gradient with createGraph=true to enable second gradient
-                outputNode.Gradient = outputGrad;
-                var firstGradients = innerTape.Gradient(outputNode, new[] { inputNode }, createGraph: true);
-
-                if (!firstGradients.TryGetValue(inputNode, out var firstGrad))
-                {
-                    return new Tensor<T>(input.Shape.ToArray());
-                }
-
-                // Compute dot product of first gradient and vector
-                var gradNode = TensorOperations<T>.Variable(firstGrad, "firstGrad", requiresGradient: true);
-                var vectorNode = TensorOperations<T>.Constant(vector, "vector");
-                var dotProduct = TensorOperations<T>.Sum(
-                    TensorOperations<T>.ElementwiseMultiply(gradNode, vectorNode));
-
-                // Second gradient (Hessian-vector product)
-                dotProduct.Gradient = new Tensor<T>(dotProduct.Value.Shape.ToArray());
-                dotProduct.Gradient[0] = NumOps.One;
-                var hvp = outerTape.Gradient(dotProduct, new[] { inputNode });
-
-                if (hvp.TryGetValue(inputNode, out var result))
-                {
-                    return result;
-                }
-            }
+            perturbed[i] = numOps2.Add(input[i], numOps2.Multiply(numOps2.FromDouble(eps), vector[i]));
         }
+        var grad1 = ComputeGradient(perturbed, outputIndex);
 
-        return new Tensor<T>(input.Shape.ToArray());
+        // Hvp ≈ (grad1 - grad0) / ε
+        var result = new Tensor<T>(perturbedShape);
+        for (int i = 0; i < result.Length; i++)
+        {
+            result[i] = numOps2.Divide(numOps2.Subtract(grad1[i], grad0[i]), numOps2.FromDouble(eps));
+        }
+        return result;
     }
 
     /// <summary>

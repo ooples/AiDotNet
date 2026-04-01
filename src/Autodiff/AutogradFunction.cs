@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Autodiff;
@@ -67,8 +68,24 @@ public abstract class AutogradFunction<T>
         var tape = GradientTape<T>.Current;
         if (tape is not null)
         {
-            tape.RecordOp(GetType().Name, inputs, output,
-                grad => Backward(ctx, grad));
+            tape.Record(new TapeEntry<T>(
+                GetType().Name,
+                inputs,
+                output,
+                (gradOutput, inputTensors, _, _, eng, grads) =>
+                {
+                    var inputGrads = Backward(ctx, gradOutput);
+                    for (int i = 0; i < inputTensors.Length && i < inputGrads.Length; i++)
+                    {
+                        if (inputGrads[i] is not null)
+                        {
+                            if (grads.TryGetValue(inputTensors[i], out var existing))
+                                eng.TensorAddInPlace(existing, inputGrads[i]);
+                            else
+                                grads[inputTensors[i]] = inputGrads[i];
+                        }
+                    }
+                }));
         }
 
         return output;
