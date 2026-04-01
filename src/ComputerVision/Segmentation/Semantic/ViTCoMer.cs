@@ -245,11 +245,7 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode.");
 
-        var predicted = Forward(input);
-        var lossGradient = predicted.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
-        BackwardPass(lossGradient);
-        _optimizer?.UpdateParameters(Layers);
+        TrainWithTape(input, expectedOutput);
     }
 
     #endregion
