@@ -811,13 +811,7 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         SetTrainingMode(true);
         try
         {
-            var preprocessed = PreprocessTokens(input);
-            var preprocessedLabels = PreprocessLabels(expected, preprocessed.Shape[0]);
-            var output = Forward(preprocessed);
-            var grad = LossFunction.CalculateDerivative(output.ToVector(), preprocessedLabels.ToVector());
-            var gt = Tensor<T>.FromVector(grad);
-            for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-            _optimizer.UpdateParameters(Layers);
+            TrainWithTape(input, expected);
         }
         finally
         {

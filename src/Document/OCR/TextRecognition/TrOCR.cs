@@ -809,22 +809,10 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
         SetTrainingMode(true);
 
-        var output = Predict(input);
-        LastLoss = LossFunction.CalculateLoss(output.ToVector(), expectedOutput.ToVector());
-
-        var lossGradient = LossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector());
-        var gradient = Tensor<T>.FromVector(lossGradient);
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-
+        TrainWithTape(input, expectedOutput);
         var paramGradients = CollectParameterGradients();
         UpdateParameters(paramGradients);
-
-        SetTrainingMode(false);
-    }
+        SetTrainingMode(false);}
 
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> gradients)

@@ -792,29 +792,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
             try
             {
-                var prediction = ForwardWithMemory(input);
-                if (!prediction.Shape.ToArray().SequenceEqual(expectedOutput.Shape.ToArray()))
-                {
-                    throw new ArgumentException("Expected output tensor must match prediction shape.", nameof(expectedOutput));
-                }
-
-                var lossFunction = LossFunction ?? new MeanSquaredErrorLoss<T>();
-                LastLoss = lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-                var outputGradientVector = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-                var outputGradient = new Tensor<T>(prediction.Shape.ToArray(), outputGradientVector);
-
-                Backpropagate(outputGradient);
-
-                var gradients = GetGradients();
-                var parameters = GetParameters();
-                if (parameters.Length > 0)
-                {
-                    var updatedParameters = _optimizer.UpdateParameters(parameters, gradients);
-                    UpdateParameters(updatedParameters);
-                }
-
-                ClearGradients();
+                TrainWithTape(input, expectedOutput);
             }
             finally
             {

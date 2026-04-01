@@ -361,18 +361,9 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
             throw new InvalidOperationException("Training is not supported in ONNX mode. Use native mode constructor for training.");
         }
 
-        var predicted = Predict(input);
-
-        // Compute loss gradient using the configured loss function
-        var gradientVector = LossFunction.CalculateDerivative(predicted.ToVector(), expectedOutput.ToVector());
-        var lossGradient = new Tensor<T>(predicted.Shape.ToArray(), gradientVector);
-
-        BackwardPass(lossGradient);
-
-        if (_optimizer != null)
-        {
-            _optimizer.UpdateParameters(Layers);
-        }
+        SetTrainingMode(true);
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     #endregion

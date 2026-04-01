@@ -403,16 +403,9 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
             throw new InvalidOperationException("Training is not supported in ONNX mode. Use native mode constructor for training.");
         }
 
-        var predicted = Predict(input);
-        var lossGradient = predicted.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
-
-        BackwardPass(lossGradient);
-
-        if (_optimizer != null)
-        {
-            _optimizer.UpdateParameters(Layers);
-        }
+        SetTrainingMode(true);
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     #endregion
