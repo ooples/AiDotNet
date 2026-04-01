@@ -533,6 +533,48 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     }
 
     /// <summary>
+    /// Runs the VAE forward pass (encode + decode) without suppressing tape recording.
+    /// Used for tape-based training where the forward ops must be recorded.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <returns>The reconstructed output.</returns>
+    protected virtual Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var latent = Encode(input, sampleMode: false);
+        return Decode(latent);
+    }
+
+    /// <summary>
+    /// Computes gradients using the Tensors GradientTape for automatic differentiation.
+    /// This is the preferred training path — gradients are computed by recording all
+    /// engine ops during the forward pass and then running reverse-mode AD.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="target">The target tensor for loss computation.</param>
+    /// <param name="trainableParams">The trainable parameter tensors to compute gradients for.</param>
+    /// <returns>Dictionary mapping each parameter tensor to its gradient.</returns>
+    public Dictionary<Tensor<T>, Tensor<T>> ComputeGradientsWithTape(
+        Tensor<T> input,
+        Tensor<T> target,
+        Tensor<T>[] trainableParams)
+    {
+        using var tape = new GradientTape<T>();
+
+        // Forward pass (recorded by the engine)
+        var predicted = ForwardForTraining(input);
+
+        // Compute MSE loss using tape-recorded engine ops
+        var diff = Engine.TensorSubtract(predicted, target);
+        var squared = Engine.TensorMultiply(diff, diff);
+        // ReduceMean with all axes produces a scalar tensor that the tape can differentiate
+        var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+        var loss = Engine.ReduceMean(squared, allAxes, keepDims: false);
+
+        // Reverse-mode AD: compute gradients for all trainable parameters
+        return tape.ComputeGradients(loss, trainableParams);
+    }
+
+    /// <summary>
     /// Backpropagates the loss gradient through the VAE's encoder/decoder layers.
     /// Override in derived classes to implement layer-by-layer gradient computation.
     /// </summary>
