@@ -810,11 +810,22 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         var discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
         _lastDiscriminatorLoss = discriminatorLoss;
 
-        // Train generator with tape
+        // Train generator to fool discriminator (adversarial objective)
+        // Generator wants discriminator to output "real" (1) for fake images
         var allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
-        Generator.Train(input, allRealLabels);
-        var genPred = Discriminator.Predict(GenerateImages(input));
-        T generatorLoss = LossFunction.CalculateLoss(genPred.ToVector(), allRealLabels.ToVector());
+        var trainableGen = (NeuralNetworkBase<T>)Generator;
+        T generatorLoss = trainableGen.TrainWithCustomLoss(input, genOutput =>
+        {
+            // genOutput = generated fake images from ForwardForTraining (tape-tracked)
+            // Pass through discriminator (detached — only generator weights update)
+            var discScore = Discriminator.Predict(genOutput);
+            // Generator loss: BCE(discriminator(fake), real_labels)
+            // Use engine ops for tape differentiability
+            var diff = Engine.TensorSubtract(discScore, allRealLabels);
+            var squared = Engine.TensorMultiply(diff, diff);
+            var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+            return Engine.ReduceMean(squared, allAxes, keepDims: false);
+        });
         _lastGeneratorLoss = generatorLoss;
 
         // Calculate auxiliary losses if enabled

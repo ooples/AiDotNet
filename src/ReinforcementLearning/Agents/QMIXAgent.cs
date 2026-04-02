@@ -346,16 +346,71 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
                 target = NumOps.Add(experience.Reward, NumOps.Multiply(DiscountFactor, targetTeamQ));
             }
 
-            // TD error
+            // TD error for monitoring
             var tdError = NumOps.Subtract(target, teamQ);
             var loss = NumOps.Multiply(tdError, tdError);
             totalLoss = NumOps.Add(totalLoss, loss);
 
-            // --- Train mixing network (MSE on Q_total target) ---
-            var targetTensor = new Tensor<T>([1, 1]);
-            targetTensor[0, 0] = target;
-            var mixInputTensor = Tensor<T>.FromVector(mixingInput, [1, mixingInput.Length]);
-            _mixingNetwork.Train(mixInputTensor, targetTensor);
+            // --- End-to-end training: agents → mixing → loss (Rashid et al. 2018) ---
+            // Collect ALL trainable parameters from agent networks + mixing network
+            var allParams = new List<Tensor<T>>();
+            foreach (var agentNet in _agentNetworks)
+            {
+                if (agentNet is NeuralNetworkBase<T> nnBase)
+                    allParams.AddRange(Training.TapeTrainingStep<T>.CollectParameters(nnBase.Layers));
+            }
+            if (_mixingNetwork is NeuralNetworkBase<T> mixBase)
+                allParams.AddRange(Training.TapeTrainingStep<T>.CollectParameters(mixBase.Layers));
+
+            var paramArray = allParams.ToArray();
+            if (paramArray.Length > 0)
+            {
+                // Single tape recording: agents forward → mixing forward → MSE loss
+                using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
+
+                // Forward each agent under tape to get Q-values
+                var agentQTensor = new Tensor<T>([_options.NumAgents]);
+                for (int i = 0; i < _options.NumAgents; i++)
+                {
+                    var agentBase = (NeuralNetworkBase<T>)_agentNetworks[i];
+                    var stateTensor = Tensor<T>.FromVector(agentStates[i], [1, _options.StateSize]);
+                    var qOut = agentBase.ForwardForTraining(stateTensor);
+                    int actionIdx = ArgMax(agentActions[i]);
+                    agentQTensor[i] = qOut[actionIdx];
+                }
+
+                // Concatenate agent Q-values with global state for mixing input
+                var mixInput = new Tensor<T>([1, _options.NumAgents + globalState.Length]);
+                for (int i = 0; i < _options.NumAgents; i++)
+                    mixInput[0, i] = agentQTensor[i];
+                for (int i = 0; i < globalState.Length; i++)
+                    mixInput[0, _options.NumAgents + i] = globalState[i];
+
+                // Forward through mixing network under tape
+                var mixBase2 = (NeuralNetworkBase<T>)_mixingNetwork;
+                var qTotal = mixBase2.ForwardForTraining(mixInput);
+
+                // MSE loss vs TD target via engine ops
+                var targetScalar = new Tensor<T>([1]);
+                targetScalar[0] = target;
+                var diff = Engine.TensorSubtract(qTotal, targetScalar);
+                var squared = Engine.TensorMultiply(diff, diff);
+                var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+                var mseLoss = Engine.ReduceMean(squared, allAxes, keepDims: false);
+
+                // Compute gradients for ALL parameters (agents + mixing) in one pass
+                var grads = tape.ComputeGradients(mseLoss, paramArray);
+
+                // Apply gradients in-place using learning rate
+                foreach (var param in paramArray)
+                {
+                    if (grads.TryGetValue(param, out var grad))
+                    {
+                        for (int j = 0; j < param.Length && j < grad.Length; j++)
+                            param[j] = NumOps.Subtract(param[j], NumOps.Multiply(LearningRate, grad[j]));
+                    }
+                }
+            }
 
             // Enforce QMIX monotonicity: clamp mixing network weights to non-negative
             var mixingParams = _mixingNetwork.GetParameters();
@@ -365,19 +420,6 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
                     mixingParams[j] = NumOps.Zero;
             }
             _mixingNetwork.UpdateParameters(mixingParams);
-
-            // --- Train agent networks (each agent's Q-value toward its contribution) ---
-            for (int i = 0; i < _options.NumAgents; i++)
-            {
-                var agentState = Tensor<T>.FromVector(agentStates[i], [1, _options.StateSize]);
-                var currentQ = _agentNetworks[i].Predict(agentState);
-                var agentTarget = currentQ.Clone();
-                int actionIdx = ArgMax(agentActions[i]);
-                // Each agent's target Q adjusts the selected action by proportional TD error
-                T agentContribution = NumOps.Divide(tdError, NumOps.FromDouble(_options.NumAgents));
-                agentTarget[actionIdx] = NumOps.Add(agentTarget[actionIdx], agentContribution);
-                _agentNetworks[i].Train(agentState, agentTarget);
-            }
         }
 
         // Update target networks
