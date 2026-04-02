@@ -250,7 +250,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
             taskType: Enums.NeuralNetworkTaskType.Regression,
             inputSize: 128,
             outputSize: 128),  // DBM is generative: output = reconstruction of input
-            epochs: 10, learningRate: MathHelper.GetNumericOperations<T>().FromDouble(0.0001),
+            epochs: 10,
             activationFunction: (IActivationFunction<T>?)null)
     {
     }
@@ -1153,12 +1153,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
             return new DeepBoltzmannMachine<T>(
                 Architecture,
                 _epochs,
-                _learningRate,
                 Convert.ToDouble(_learningRateDecay),
-                _lossFunction,
-                _activationFunction,
-                _batchSize,
-                _cdSteps
+                lossFunction: _lossFunction,
+                activationFunction: _activationFunction,
+                batchSize: _batchSize,
+                cdSteps: _cdSteps
             );
         }
         else
@@ -1166,12 +1165,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
             return new DeepBoltzmannMachine<T>(
                 Architecture,
                 _epochs,
-                _learningRate,
                 Convert.ToDouble(_learningRateDecay),
-                _lossFunction,
-                _vectorActivationFunction,
-                _batchSize,
-                _cdSteps
+                lossFunction: _lossFunction,
+                activationFunction: (IActivationFunction<T>?)null,
+                batchSize: _batchSize,
+                cdSteps: _cdSteps
             );
         }
     }

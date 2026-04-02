@@ -227,8 +227,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
             inputSize: 128,
-            outputSize: 128),
-            learningRate: MathHelper.GetNumericOperations<T>().FromDouble(0.001))
+            outputSize: 128))
     {
     }
 
@@ -997,10 +996,9 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         var clone = new Autoencoder<T>(
             Architecture,
-            _learningRate,
             _epochs,
             _batchSize,
-            _lossFunction
+            lossFunction: _lossFunction
         );
         // Carry sparse-training configuration into the new instance
         clone.UseAuxiliaryLoss = UseAuxiliaryLoss;

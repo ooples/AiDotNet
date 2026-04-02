@@ -151,7 +151,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: 1,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, _a2cOptions.ValueLossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _a2cOptions.ValueLossFunction);
     }
 
     /// <inheritdoc/>

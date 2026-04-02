@@ -561,6 +561,6 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
         // Create a new instance with the cloned architecture and RBF
-        return new RadialBasisFunctionNetwork<T>(Architecture, _radialBasisFunction, LossFunction);
+        return new RadialBasisFunctionNetwork<T>(Architecture, _radialBasisFunction, lossFunction: LossFunction);
     }
 }

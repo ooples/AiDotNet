@@ -162,7 +162,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: _options.ActionSize,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, _options.LossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _options.LossFunction);
     }
 
     private INeuralNetwork<T> CreateCriticNetwork()
@@ -193,7 +193,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: 1,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, _options.LossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _options.LossFunction);
     }
 
     private void InitializeReplayBuffer()

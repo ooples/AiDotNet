@@ -161,7 +161,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture, _dqnOptions.LossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _dqnOptions.LossFunction);
     }
 
     /// <inheritdoc/>

@@ -141,7 +141,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
             outputSize: outputSize);
-        var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
         int previousSize = inputSize;
 
         // Simple feedforward approximation of convolutional VAE
@@ -164,7 +164,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
             outputSize: outputSize);
-        var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
         int previousSize = inputSize;
 
         // Reverse of encoder
@@ -195,7 +195,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
             outputSize: outputSize);
-        var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
 
         network.AddLayer(LayerType.Dense, _options.RNNHiddenSize, ActivationFunction.Tanh);
         network.AddLayer(LayerType.Dense, outputSize, ActivationFunction.Linear);
