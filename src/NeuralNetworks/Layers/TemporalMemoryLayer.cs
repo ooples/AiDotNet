@@ -184,6 +184,8 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
         PreviousState = Vector<T>.Empty();
 
         InitializeCellStates();
+
+        RegisterBuffer(CellStates, nameof(CellStates), PersistentTensorRole.Weights);
     }
 
     /// <summary>

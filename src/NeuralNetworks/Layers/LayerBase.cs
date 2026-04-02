@@ -2829,7 +2829,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// For most layers, the automatic registration is sufficient.
     /// </para>
     /// </remarks>
-    public virtual Tensor<T>[] GetTrainableParameters() => _registeredTensors.ToArray();
+    public virtual IReadOnlyList<Tensor<T>> GetTrainableParameters() => _registeredTensors;
 
     /// <summary>
     /// Replaces this layer's trainable parameter tensors with the provided tensors.
@@ -2844,13 +2844,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// to also update those fields.
     /// </para>
     /// </remarks>
-    public virtual void SetTrainableParameters(Tensor<T>[] parameters)
+    public virtual void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
     {
-        if (parameters.Length != _registeredTensors.Count)
+        if (parameters.Count != _registeredTensors.Count)
             throw new ArgumentException(
-                $"{GetType().Name} has {_registeredTensors.Count} registered parameters but received {parameters.Length}.");
+                $"{GetType().Name} has {_registeredTensors.Count} registered parameters but received {parameters.Count}.");
 
-        for (int i = 0; i < parameters.Length; i++)
+        for (int i = 0; i < parameters.Count; i++)
             _registeredTensors[i] = parameters[i];
     }
 

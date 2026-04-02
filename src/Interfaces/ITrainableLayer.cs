@@ -73,7 +73,7 @@ public interface ITrainableLayer<T> : ILayer<T>
     /// immediately uses the updated values in its next forward pass.
     /// </para>
     /// </remarks>
-    Tensor<T>[] GetTrainableParameters();
+    IReadOnlyList<Tensor<T>> GetTrainableParameters();
 
     /// <summary>
     /// Replaces this layer's trainable parameter tensors with the provided tensors.
@@ -94,7 +94,7 @@ public interface ITrainableLayer<T> : ILayer<T>
     /// it uses the new tensors exactly like the old ones — but advanced optimizers can now access
     /// all parameters across all layers as a single flat vector without copying.</para>
     /// </remarks>
-    void SetTrainableParameters(Tensor<T>[] parameters);
+    void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters);
 
     /// <summary>
     /// Clears all accumulated gradients on this layer's trainable parameters.

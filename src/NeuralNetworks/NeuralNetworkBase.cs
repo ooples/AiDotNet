@@ -2641,18 +2641,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <summary>
     /// Gets or lazily creates the contiguous parameter buffer from the current trainable parameters.
     /// </summary>
-    private ParameterBuffer<T>? GetOrCreateParameterBuffer(Tensor<T>[] trainableParams)
+    private ParameterBuffer<T>? GetOrCreateParameterBuffer(IReadOnlyList<Tensor<T>> trainableParams)
     {
-        if (trainableParams.Length == 0)
+        if (trainableParams.Count == 0)
             return null;
 
-        if (_parameterBuffer is not null && _parameterBuffer.Count == trainableParams.Length)
+        if (_parameterBuffer is not null && _parameterBuffer.Count == trainableParams.Count)
             return _parameterBuffer;
 
         // Build buffer from current parameter shapes
-        var shapes = new int[trainableParams.Length][];
-        for (int i = 0; i < trainableParams.Length; i++)
-            shapes[i] = trainableParams[i].Shape.ToArray();
+        var shapes = new int[trainableParams.Count][];
+        for (int i = 0; i < trainableParams.Count; i++)
+            shapes[i] = trainableParams[i]._shape;
 
         var buffer = new ParameterBuffer<T>(shapes);
 

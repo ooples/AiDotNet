@@ -29,7 +29,7 @@ public static class TapeTrainingStep<T>
 {
     // Level 1 cache: flattened parameter array from recursive walk
     [ThreadStatic]
-    private static Tensor<T>[]? _cachedParameters;
+    private static List<Tensor<T>>? _cachedParameters;
     [ThreadStatic]
     private static int _cachedVersion;
     [ThreadStatic]
@@ -102,8 +102,8 @@ public static class TapeTrainingStep<T>
     /// <param name="layers">Top-level layers to collect parameters from.</param>
     /// <param name="structureVersion">Optional version counter. When this changes, the cache
     /// is invalidated and the recursive walk runs again. Pass -1 to force refresh.</param>
-    /// <returns>Flat array of all trainable parameter tensors, deduplicated by reference identity.</returns>
-    public static Tensor<T>[] CollectParameters(IEnumerable<ILayer<T>> layers, int structureVersion = 0)
+    /// <returns>Read-only list of all trainable parameter tensors, deduplicated by reference identity. Zero allocation on cache hit.</returns>
+    public static IReadOnlyList<Tensor<T>> CollectParameters(IEnumerable<ILayer<T>> layers, int structureVersion = 0)
     {
         var layerList = layers as IList<ILayer<T>> ?? layers.ToList();
 
@@ -122,14 +122,12 @@ public static class TapeTrainingStep<T>
 
         CollectRecursive(layerList, parameters, seen);
 
-        var result = parameters.ToArray();
-
-        // Update cache
-        _cachedParameters = result;
+        // Update cache — List<T> implements IReadOnlyList<T>, zero-allocation return
+        _cachedParameters = parameters;
         _cachedVersion = structureVersion;
         _cachedLayerCount = layerList.Count;
 
-        return result;
+        return _cachedParameters;
     }
 
     /// <summary>

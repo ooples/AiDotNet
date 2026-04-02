@@ -250,6 +250,10 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         Connections = new Tensor<T>([inputSize, columnCount]);
 
         InitializeConnections();
+
+        // Connections are modified by Hebbian learning rules, not gradient descent.
+        // Register as buffer (serialized + GPU-persistent, NOT in GetTrainableParameters).
+        RegisterBuffer(Connections, nameof(Connections), PersistentTensorRole.Weights);
     }
 
     /// <summary>

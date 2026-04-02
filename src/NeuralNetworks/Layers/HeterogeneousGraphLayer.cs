@@ -282,6 +282,22 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
             bias.Fill(NumOps.Zero);
             _biases[nodeType] = bias;
         }
+
+        // Register all trainable parameters for gradient tape discovery
+        // Flatten dictionary values at registration time — edge types are known at construction
+        foreach (var (_, weight) in _edgeTypeWeights)
+            RegisterTrainableParameter(weight, PersistentTensorRole.Weights);
+        foreach (var (_, weight) in _selfLoopWeights)
+            RegisterTrainableParameter(weight, PersistentTensorRole.Weights);
+        foreach (var (_, bias2) in _biases)
+            RegisterTrainableParameter(bias2, PersistentTensorRole.Biases);
+        if (_basisMatrices is not null)
+            RegisterTrainableParameter(_basisMatrices, PersistentTensorRole.Weights);
+        if (_basisCoefficients is not null)
+        {
+            foreach (var (_, coeffs) in _basisCoefficients)
+                RegisterTrainableParameter(coeffs, PersistentTensorRole.Weights);
+        }
     }
 
     /// <summary>
