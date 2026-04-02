@@ -465,42 +465,35 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         Tensor<T> realLabels = CreateLabelTensor(batchSize, NumOps.One);
         Tensor<T> fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
 
-        // Train discriminator on real images
+        // Train discriminator with tape-based autodiff
+        Discriminator.Train(realImages, realLabels);
+        Discriminator.Train(fakeImages, fakeLabels);
 
-        // Train discriminator on fake images
-
-        // Compute total discriminator loss
-        T discriminatorLoss = NumOps.Add(realLoss, fakeLoss);
-        discriminatorLoss = NumOps.Divide(discriminatorLoss, NumOps.FromDouble(2.0)); // Average loss
+        // Compute discriminator loss for monitoring
+        var realPred = Discriminator.Predict(realImages);
+        var fakePred = Discriminator.Predict(fakeImages);
+        T realLoss = LossFunction.CalculateLoss(realPred.ToVector(), realLabels.ToVector());
+        T fakeLoss = LossFunction.CalculateLoss(fakePred.ToVector(), fakeLabels.ToVector());
+        T discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
         _lastDiscriminatorLoss = discriminatorLoss;
 
-        // ----- Train the generator -----
-
-        // Generate new fake images for generator training
+        // ----- Train the generator with tape -----
         Tensor<T> newFakeImages = GenerateImages(noise);
-
-        // For generator training, we want the discriminator to think fake images are real
         Tensor<T> allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
 
-        // Train the generator to fool the discriminator
+        // Generator wants discriminator to classify fakes as real
+        Generator.Train(noise, allRealLabels);
+
+        // Compute generator loss for monitoring
+        var genPred = Discriminator.Predict(newFakeImages);
+        T generatorLoss = LossFunction.CalculateLoss(genPred.ToVector(), allRealLabels.ToVector());
         _lastGeneratorLoss = generatorLoss;
 
-        // Calculate auxiliary losses if enabled
-        T auxiliaryLoss = NumOps.Zero;
-        if (UseAuxiliaryLoss)
-        {
-            var auxLoss = ComputeAuxiliaryLoss();
-            auxiliaryLoss = NumOps.Multiply(auxLoss, AuxiliaryLossWeight);
-        }
-
-        // Combine generator loss with auxiliary losses
-        var totalGeneratorLoss = NumOps.Add(generatorLoss, auxiliaryLoss);
-
-        // Track generator loss for monitoring
-        _generatorLosses.Add(totalGeneratorLoss);
+        // Track generator loss
+        _generatorLosses.Add(generatorLoss);
         if (_generatorLosses.Count > 100)
         {
-            _generatorLosses.RemoveAt(0); // Keep only recent losses
+            _generatorLosses.RemoveAt(0);
         }
 
         return (discriminatorLoss, generatorLoss);

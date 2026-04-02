@@ -570,24 +570,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// This reduces CPU-GPU synchronization overhead and improves performance.
     /// </para>
     /// </remarks>
-    public virtual IGpuTensor<T> BackpropagateGpuDeferred(
-        IGpuTensor<T> outputGradients,
-        GpuExecutionOptions? options = null)
-    {
-        var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
-        if (engine?.GetBackend() == null)
-        {
-            // Fallback to non-deferred if no GPU backend
-        }
-
-        var backend = engine.GetBackend() as IAsyncGpuBackend;
-        if (backend == null)
-        {
-        }
-
-        return backend.ExecuteDeferred(
-            options);
-    }
+    // BackpropagateGpuDeferred removed — tape-based autodiff handles GPU gradient computation.
 
     /// <summary>
     /// Updates all trainable parameters in the network using GPU-computed gradients.

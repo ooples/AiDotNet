@@ -364,11 +364,17 @@ public class WGAN<T> : NeuralNetworkBase<T>
             // Generate fake images
             Tensor<T> fakeImages = GenerateImages(noise);
 
-            // Train critic on real images (maximize score)
+            // Train critic with tape-based autodiff
+            var realLabels = CreateLabelTensor(realImages.Shape[0], NumOps.One);
+            var fakeLabels = CreateLabelTensor(fakeImages.Shape[0], NumOps.Zero);
+            Discriminator.Train(realImages, realLabels);
+            Discriminator.Train(fakeImages, fakeLabels);
 
-            // Train critic on fake images (minimize score)
-
-            // Wasserstein loss: E[D(real)] - E[D(fake)]
+            // Compute Wasserstein loss for monitoring: E[D(real)] - E[D(fake)]
+            var realPred = Discriminator.Predict(realImages);
+            var fakePred = Discriminator.Predict(fakeImages);
+            T realScore = NumOps.ToDouble(realPred.ToVector().Sum()) > 0 ? realPred.ToVector().Sum() : NumOps.Zero;
+            T fakeScore = NumOps.ToDouble(fakePred.ToVector().Sum()) > 0 ? fakePred.ToVector().Sum() : NumOps.Zero;
             T criticLoss = NumOps.Subtract(realScore, fakeScore);
 
             // We want to maximize this, so we negate for gradient descent
@@ -383,8 +389,12 @@ public class WGAN<T> : NeuralNetworkBase<T>
         // Average critic loss across iterations
         T avgCriticLoss = NumOps.Divide(totalCriticLoss, NumOps.FromDouble(_criticIterations));
 
-        // Train generator
+        // Train generator with tape
         Tensor<T> newNoise = GenerateRandomNoiseTensor(noise.Shape[0], Generator.Architecture.InputSize);
+        var genLabels = CreateLabelTensor(noise.Shape[0], NumOps.One);
+        Generator.Train(newNoise, genLabels);
+        var genPred = Discriminator.Predict(GenerateImages(newNoise));
+        T generatorLoss = LossFunction.CalculateLoss(genPred.ToVector(), genLabels.ToVector());
 
         // Track losses
         _criticLosses.Add(avgCriticLoss);
