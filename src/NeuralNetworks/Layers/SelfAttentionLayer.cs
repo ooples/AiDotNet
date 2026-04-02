@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 2, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITrainableLayer<T>
+public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets whether auxiliary loss (attention sparsity regularization) should be used during training.

@@ -55,7 +55,7 @@ public enum EmbeddingInputMode
 [LayerCategory(LayerCategory.Embedding)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "100, 16")]
-public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmbedding<T>, ITrainableLayer<T>
+public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmbedding<T>
 {
     /// <summary>
     /// The embedding tensor that stores vector representations for each token in the vocabulary.

@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, SupportsBackpropagation = false, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
-public class SynapticPlasticityLayer<T> : LayerBase<T>, ITrainableLayer<T>
+public class SynapticPlasticityLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The input tensor from the last forward pass.

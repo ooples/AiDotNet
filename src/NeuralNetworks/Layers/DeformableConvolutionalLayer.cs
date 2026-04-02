@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "8, 8, 1, 2, 3")]
-public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputationGraph<T>, ITrainableLayer<T>
+public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     #region Fields
 

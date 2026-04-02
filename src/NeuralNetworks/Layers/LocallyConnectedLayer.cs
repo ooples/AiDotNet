@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "4, 4, 1, 2, 3, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class LocallyConnectedLayer<T> : LayerBase<T>, ITrainableLayer<T>
+public class LocallyConnectedLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The weight tensors for the locally connected filters.

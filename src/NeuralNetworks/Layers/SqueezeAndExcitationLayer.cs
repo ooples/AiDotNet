@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IChainableComputationGraph<T>, ITrainableLayer<T>
+public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IChainableComputationGraph<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.

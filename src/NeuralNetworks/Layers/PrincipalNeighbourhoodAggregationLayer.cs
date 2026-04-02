@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 4", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 4, 4 }); for (int i = 0; i < 4; i++) { adj[0, i, i] = 1.0; if (i > 0) adj[0, i, i-1] = 1.0; if (i < 3) adj[0, i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
-public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, ITrainableLayer<T>
+public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;

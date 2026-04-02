@@ -29,7 +29,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 8", TestConstructorArgs = "4, 8, 2")]
-public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITrainableLayer<T>
+public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets whether auxiliary loss (attention regularization) should be used during training.

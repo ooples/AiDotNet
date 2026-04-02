@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, UsesSurrogateGradient = true, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 10, 4, 3")]
-public class DigitCapsuleLayer<T> : LayerBase<T>, ITrainableLayer<T>
+public class DigitCapsuleLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The weight tensor connecting input capsules to output capsules.

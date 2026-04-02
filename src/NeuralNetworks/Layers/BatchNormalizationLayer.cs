@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
-public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>, ITrainableLayer<T>
+public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     /// <summary>
     /// A small constant added to the variance for numerical stability.

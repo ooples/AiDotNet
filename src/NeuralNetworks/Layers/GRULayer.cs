@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, false, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class GRULayer<T> : LayerBase<T>, ITrainableLayer<T>
+public class GRULayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The weight tensors for the update gate (z), reset gate (r), and candidate hidden state (h).

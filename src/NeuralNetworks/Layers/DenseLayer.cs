@@ -45,7 +45,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
-public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITrainableLayer<T>
+public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets whether auxiliary loss (weight regularization) should be used during training.

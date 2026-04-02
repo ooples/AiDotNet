@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "1, 8, 8, 2, 3")]
-public class ConvolutionalLayer<T> : LayerBase<T>, ITrainableLayer<T>
+public class ConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Gets the depth (number of channels) of the input data.

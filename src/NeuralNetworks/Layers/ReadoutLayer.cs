@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
-public class ReadoutLayer<T> : LayerBase<T>, ITrainableLayer<T>
+public class ReadoutLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Tensor storing the weight parameters for connections between inputs and outputs.

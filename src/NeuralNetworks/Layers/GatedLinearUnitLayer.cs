@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Gating)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class GatedLinearUnitLayer<T> : LayerBase<T>, ITrainableLayer<T>
+public class GatedLinearUnitLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The weight tensor for the linear transformation path.

@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, new[] { 1, 4 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class LSTMLayer<T> : LayerBase<T>, ITrainableLayer<T>
+public class LSTMLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The size of each input vector (number of features).

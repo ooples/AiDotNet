@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 1", TestConstructorArgs = "8, 16")]
-public class TimeEmbeddingLayer<T> : LayerBase<T>, ITrainableLayer<T>
+public class TimeEmbeddingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The dimension of the sinusoidal embedding before MLP projection.

@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, NormalizesInput = true, IsStateful = true, ChangesShape = true, UsesSurrogateGradient = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
-public class SpikingLayer<T> : LayerBase<T>, ITrainableLayer<T>
+public class SpikingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The type of spiking neuron model to use.

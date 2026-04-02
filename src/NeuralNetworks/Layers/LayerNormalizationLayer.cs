@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = false, TestInputShape = "1, 4", TestConstructorArgs = "4")]
-public class LayerNormalizationLayer<T> : LayerBase<T>, ITrainableLayer<T>
+public class LayerNormalizationLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// A small value added to the variance for numerical stability.

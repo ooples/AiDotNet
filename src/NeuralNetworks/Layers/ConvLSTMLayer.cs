@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "new[] { 1, 4, 4, 1 }, 3, 2, 1, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class ConvLSTMLayer<T> : LayerBase<T>, ITrainableLayer<T>
+public class ConvLSTMLayer<T> : LayerBase<T>
 {
     private readonly int _kernelSize;
     private readonly int _filters;

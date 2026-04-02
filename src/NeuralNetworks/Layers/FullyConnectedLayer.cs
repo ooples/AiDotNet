@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class FullyConnectedLayer<T> : LayerBase<T>, ITrainableLayer<T>
+public class FullyConnectedLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The weight matrix connecting input neurons to output neurons.

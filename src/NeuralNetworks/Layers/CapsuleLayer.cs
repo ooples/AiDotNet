@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.Routing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, UsesSurrogateGradient = true, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 2, 4, 3")]
-public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITrainableLayer<T>
+public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets whether auxiliary loss (routing entropy regularization) should be used during training.

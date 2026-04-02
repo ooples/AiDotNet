@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
-public class InstanceNormalizationLayer<T> : LayerBase<T>, ITrainableLayer<T>
+public class InstanceNormalizationLayer<T> : LayerBase<T>
 {
     private readonly T _epsilon;
     private readonly int _numChannels;

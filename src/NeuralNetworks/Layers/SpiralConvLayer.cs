@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "8, 3", TestConstructorArgs = "3, 6, 3, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var s = new int[8, 3]; for (int i = 0; i < 8; i++) for (int j = 0; j < 3; j++) s[i, j] = (i * 2 + j + 1) % 8; ((AiDotNet.NeuralNetworks.Layers.SpiralConvLayer<double>)layer).SetSpiralIndices(s);")]
-public class SpiralConvLayer<T> : LayerBase<T>, ITrainableLayer<T>
+public class SpiralConvLayer<T> : LayerBase<T>
 {
     #region Properties
 

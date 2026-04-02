@@ -31,7 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class RBMLayer<T> : LayerBase<T>, ITrainableLayer<T>
+public class RBMLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Gets the number of units in the visible layer.

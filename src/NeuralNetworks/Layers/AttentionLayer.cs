@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IVectorActivationFunction<double>?)null")]
-public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITrainableLayer<T>
+public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// The weight tensor for the query transformation.

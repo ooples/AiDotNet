@@ -31,7 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.CrossModalAttention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 16", TestConstructorArgs = "16, 16, 2, 4")]
-public class CrossAttentionLayer<T> : LayerBase<T>, ITrainableLayer<T>
+public class CrossAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _queryDim;
     private readonly int _contextDim;
