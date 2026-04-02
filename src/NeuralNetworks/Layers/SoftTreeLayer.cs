@@ -108,6 +108,9 @@ public class SoftTreeLayer<T> : LayerBase<T>
 
     private void InitializeParameters(double scale)
     {
+        RegisterTrainableParameter(_splitWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_splitBiases, PersistentTensorRole.Biases);
+
         var random = RandomHelper.ThreadSafeRandom;
 
         // Initialize split weights using Gaussian initialization

@@ -414,6 +414,10 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
+        RegisterTrainableParameter(_transitionMatrix, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_startScores, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_endScores, PersistentTensorRole.Weights);
+
         // VECTORIZED: Initialize parameters with scaled random values
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_numClasses + _numClasses)));
         T half = NumOps.FromDouble(0.5);

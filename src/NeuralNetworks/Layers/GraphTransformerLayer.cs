@@ -334,6 +334,21 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _layerNorm1Bias = new Tensor<T>([_outputFeatures]);
         _layerNorm2Scale = new Tensor<T>([_outputFeatures]);
         _layerNorm2Bias = new Tensor<T>([_outputFeatures]);
+
+        // Register all trainable parameters for gradient tape discovery
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_ffnWeights1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_ffnWeights2, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_ffnBias1, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_ffnBias2, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_layerNorm1Scale, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_layerNorm1Bias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_layerNorm2Scale, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_layerNorm2Bias, PersistentTensorRole.Biases);
     }
 
     private void InitializeParameters()

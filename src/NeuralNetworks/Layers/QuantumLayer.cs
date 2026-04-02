@@ -131,6 +131,9 @@ public class QuantumLayer<T> : LayerBase<T>
         _circuitReal = new Tensor<T>([dimension, dimension]);
         _circuitImag = new Tensor<T>([dimension, dimension]);
 
+        RegisterTrainableParameter(_circuitReal, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_circuitImag, PersistentTensorRole.Weights);
+
         InitializeQuantumCircuit();
     }
 

@@ -471,6 +471,11 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeParameters()
     {
+        RegisterTrainableParameter(_localizationWeights1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_localizationBias1, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_localizationWeights2, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_localizationBias2, PersistentTensorRole.Biases);
+
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_localizationWeights1.Shape[0] + _localizationWeights1.Shape[1])));
         InitializeTensor(_localizationWeights1, scale);
         InitializeTensor(_localizationWeights2, scale);

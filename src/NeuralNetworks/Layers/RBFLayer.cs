@@ -503,6 +503,9 @@ public class RBFLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
+        RegisterTrainableParameter(_centers, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_widths, PersistentTensorRole.Weights);
+
         InitializeLayerWeights(_centers, _inputSize, _numCenters);
 
         // Widths are RBF-specific: random positive values, not Xavier
