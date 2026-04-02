@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -49,6 +50,7 @@ namespace AiDotNet.NeuralNetworks;
 public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
 {
     private readonly DeepBoltzmannMachineOptions _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -269,9 +271,9 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     public DeepBoltzmannMachine(
         NeuralNetworkArchitecture<T> architecture,
-        int epochs,
-        T learningRate,
+        int epochs = 10,
         double learningRateDecay = 1.0,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         IActivationFunction<T>? activationFunction = null,
         int batchSize = 32,
@@ -279,10 +281,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         DeepBoltzmannMachineOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new DeepBoltzmannMachineOptions();
         Options = _options;
         _epochs = epochs;
-        _learningRate = learningRate;
+        _learningRate = NumOps.FromDouble(_optimizer.GetCurrentLearningRate());
         _learningRateDecay = NumOps.FromDouble(learningRateDecay);
         _batchSize = batchSize;
         _cdSteps = cdSteps;
@@ -312,8 +315,8 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     public DeepBoltzmannMachine(
         NeuralNetworkArchitecture<T> architecture,
         int epochs,
-        T learningRate,
         double learningRateDecay = 1.0,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         IVectorActivationFunction<T>? vectorActivationFunction = null,
         int batchSize = 32,
@@ -321,10 +324,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         DeepBoltzmannMachineOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new DeepBoltzmannMachineOptions();
         Options = _options;
         _epochs = epochs;
-        _learningRate = learningRate;
+        _learningRate = NumOps.FromDouble(_optimizer.GetCurrentLearningRate());
         _learningRateDecay = NumOps.FromDouble(learningRateDecay);
         _batchSize = batchSize;
         _cdSteps = cdSteps;
@@ -768,7 +772,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         if (Layers.Count > 0)
         {
             SetTrainingMode(true);
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
             SetTrainingMode(false);
         }
         else

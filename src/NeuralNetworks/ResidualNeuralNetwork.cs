@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -52,6 +53,7 @@ namespace AiDotNet.NeuralNetworks;
 public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly ResidualNeuralNetworkOptions _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -288,16 +290,17 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
 
     public ResidualNeuralNetwork(
         NeuralNetworkArchitecture<T> architecture,
-        T? learningRate = default,
         int epochs = 10,
         int batchSize = 32,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         ResidualNeuralNetworkOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new ResidualNeuralNetworkOptions();
         Options = _options;
-        _learningRate = learningRate ?? NumOps.FromDouble(0.01);
+        _learningRate = NumOps.FromDouble(_optimizer.GetCurrentLearningRate());
         _epochs = epochs;
         _batchSize = batchSize;
 
@@ -689,7 +692,7 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
 
-        TrainWithTape(input, expectedOutput);
+        TrainWithTape(input, expectedOutput, _optimizer);
 
         SetTrainingMode(false);
     }
@@ -832,9 +835,9 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
         // Create a new instance with the cloned architecture and the same parameters
         return new ResidualNeuralNetwork<T>(
             Architecture,
-            _learningRate,
             _epochs,
             _batchSize,
+            _optimizer,
             LossFunction
         );
     }
