@@ -322,6 +322,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     private readonly List<ILayer<T>> _registeredSubLayers = new();
 
     /// <summary>
+    /// Non-trainable persistent state tensors registered via <see cref="RegisterBuffer"/>.
+    /// These are included in model serialization and GPU transfer but NOT in
+    /// <see cref="GetTrainableParameters"/> — they are not passed to the optimizer
+    /// or tracked by the gradient tape.
+    /// </summary>
+    /// <remarks>
+    /// <para>This is the equivalent of PyTorch's <c>nn.Module.register_buffer()</c>.</para>
+    /// <para>Examples: BatchNorm running mean/variance, positional encoding tables,
+    /// Hebbian/STDP connection weights, precomputed frequency tensors.</para>
+    /// </remarks>
+    private readonly List<(string Name, Tensor<T> Tensor)> _registeredBuffers = new();
+
+    /// <summary>
     /// Gets or sets the initialization strategy for this layer.
     /// </summary>
     /// <remarks>
@@ -2751,6 +2764,58 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         _registeredSubLayers.Add(subLayer);
     }
 
+    /// <summary>
+    /// Registers a non-trainable persistent tensor (buffer) with this layer.
+    /// Buffers are included in model serialization and GPU persistence but are NOT
+    /// returned by <see cref="GetTrainableParameters"/> — they are not passed to the
+    /// optimizer or tracked by the gradient tape during training.
+    /// </summary>
+    /// <param name="tensor">The tensor to register as a buffer.</param>
+    /// <param name="name">A unique name for this buffer within the layer, used for
+    /// serialization and diagnostics (e.g., "running_mean", "positional_encoding").</param>
+    /// <param name="role">The GPU persistence role hint. Defaults to
+    /// <see cref="PersistentTensorRole.Constant"/> for non-trainable state.</param>
+    /// <remarks>
+    /// <para>
+    /// This is the equivalent of PyTorch's <c>nn.Module.register_buffer(name, tensor)</c>.
+    /// Use this for:
+    /// <list type="bullet">
+    /// <item>Running statistics (BatchNorm mean/variance)</item>
+    /// <item>Precomputed constants (positional encodings, frequency tables)</item>
+    /// <item>Non-gradient-based learned state (Hebbian/STDP connection weights)</item>
+    /// <item>Cached computations that should persist across forward passes</item>
+    /// </list>
+    /// </para>
+    /// <para><b>Difference from RegisterTrainableParameter:</b>
+    /// <list type="bullet">
+    /// <item>Parameters: trained by optimizer via gradient tape, included in GetTrainableParameters</item>
+    /// <item>Buffers: NOT trained, NOT in GetTrainableParameters, but serialized and GPU-persistent</item>
+    /// </list>
+    /// </para>
+    /// <para><b>For Beginners:</b> Some tensors in a layer need to be saved with the model
+    /// and kept on the GPU, but they aren't weights that the optimizer adjusts during training.
+    /// For example, BatchNorm keeps a running average of the data it's seen — this average
+    /// needs to be saved and loaded with the model, but it's not something the optimizer
+    /// should try to change. Use RegisterBuffer for these kinds of tensors.</para>
+    /// </remarks>
+    protected void RegisterBuffer(Tensor<T> tensor, string name, PersistentTensorRole role = PersistentTensorRole.Constant)
+    {
+        if (tensor is null)
+            throw new ArgumentNullException(nameof(tensor));
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ArgumentException("Buffer name must not be empty.", nameof(name));
+
+        Engine.RegisterPersistentTensor(tensor, role);
+        _registeredBuffers.Add((name, tensor));
+    }
+
+    /// <summary>
+    /// Gets all registered buffers (non-trainable persistent tensors) for this layer.
+    /// Used by serialization and model state management.
+    /// </summary>
+    /// <returns>Read-only list of (name, tensor) pairs for all registered buffers.</returns>
+    public IReadOnlyList<(string Name, Tensor<T> Tensor)> GetRegisteredBuffers() => _registeredBuffers;
+
     #region ITrainableLayer<T> Implementation
 
     /// <summary>
@@ -3135,13 +3200,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
 
         if (disposing)
         {
-            // Unregister all persistent tensors from the engine
+            // Unregister all persistent tensors (parameters + buffers) from the engine
             // This releases GPU memory that was cached for these tensors
             foreach (var tensor in _registeredTensors)
             {
                 Engine.UnregisterPersistentTensor(tensor);
             }
             _registeredTensors.Clear();
+
+            foreach (var (_, tensor) in _registeredBuffers)
+            {
+                Engine.UnregisterPersistentTensor(tensor);
+            }
+            _registeredBuffers.Clear();
         }
 
         _disposed = true;
