@@ -748,6 +748,15 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITrainableLay
     }
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 2)
+            throw new ArgumentException($"DenseLayer expects 2 parameters (weights, biases), got {parameters.Length}.");
+        _weights = parameters[0];
+        _biases = parameters[1];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad()
     {
         _weightsGradient?.Fill(NumOps.Zero);

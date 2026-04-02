@@ -2539,9 +2539,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
         var engine = AiDotNetEngine.Current;
+
+        // Initialize parameter buffer BEFORE collecting params and running the forward pass.
+        // This replaces layer parameter tensors with buffer views on the first call.
+        // Subsequent calls reuse the existing buffer (views are already in place).
+        var initialParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+        var paramBuffer = GetOrCreateParameterBuffer(initialParams);
+
+        // Re-collect after buffer initialization — parameter tensor references may have changed
+        // if this was the first call (views replaced the originals).
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
 
-        // Forward + loss under tape
+        // Forward + loss under tape — uses the buffer-backed view tensors
         using var tape = new GradientTape<T>();
         var output = ForwardForTraining(input);
 
@@ -2550,16 +2559,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
         var lossTensor = engine.ReduceMean(squared, allAxes, keepDims: false);
 
-        // Compute gradients (tape is disposed after this block, so Step ops aren't recorded)
+        // Compute gradients keyed by the buffer view tensor references
         var grads = tape.ComputeGradients(lossTensor, trainableParams);
 
         T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
         LastLoss = lossValue;
 
-        // Resolve optimizer: use provided, or fall back to lazily-created default
+        // Resolve optimizer
         var opt = optimizer ?? GetOrCreateBaseOptimizer();
 
-        // Build context with re-evaluation support for second-order optimizers
+        // Build context with re-evaluation support and zero-copy buffer
         Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => ForwardForTraining(inp);
         Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> tgt)
         {
@@ -2568,9 +2577,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             var axes = Enumerable.Range(0, sq.Shape.Length).ToArray();
             return engine.ReduceMean(sq, axes, keepDims: false);
         }
-
-        // Attach contiguous parameter buffer for zero-copy flat access by second-order optimizers
-        var paramBuffer = GetOrCreateParameterBuffer(trainableParams);
 
         var context = new TapeStepContext<T>(
             trainableParams, grads, lossValue,
@@ -2632,6 +2638,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         // Copy current weights into the buffer
         buffer.CopyFrom(trainableParams);
+
+        // Replace layer parameter tensors with views into the contiguous buffer.
+        // This makes the buffer the single source of truth — in-place updates by
+        // first-order optimizers automatically reflect in the flat vector, and vice versa.
+        var views = buffer.CreateAllViews();
+        int viewIdx = 0;
+        foreach (var layer in Layers)
+        {
+            if (layer is ITrainableLayer<T> trainable)
+            {
+                var layerParams = trainable.GetTrainableParameters();
+                var layerViews = new Tensor<T>[layerParams.Length];
+                for (int i = 0; i < layerParams.Length; i++)
+                    layerViews[i] = views[viewIdx++];
+                trainable.SetTrainableParameters(layerViews);
+            }
+        }
 
         _parameterBuffer = buffer;
         return buffer;

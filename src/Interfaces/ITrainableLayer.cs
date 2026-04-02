@@ -76,6 +76,27 @@ public interface ITrainableLayer<T> : ILayer<T>
     Tensor<T>[] GetTrainableParameters();
 
     /// <summary>
+    /// Replaces this layer's trainable parameter tensors with the provided tensors.
+    /// Used by <see cref="AiDotNet.Tensors.Engines.Autodiff.ParameterBuffer{T}"/> to replace
+    /// independently-allocated tensors with views into a contiguous buffer.
+    /// </summary>
+    /// <param name="parameters">Replacement tensors, same count and shapes as
+    /// <see cref="GetTrainableParameters"/> returns. These become the layer's actual parameters —
+    /// the layer uses them in subsequent Forward calls.</param>
+    /// <remarks>
+    /// <para>
+    /// The replacement tensors must have the same shapes as the originals. They are typically
+    /// views into a <see cref="AiDotNet.Tensors.Engines.Autodiff.ParameterBuffer{T}"/>,
+    /// enabling zero-copy flat parameter access for second-order optimizers.
+    /// </para>
+    /// <para><b>For Beginners:</b> This swaps out the layer's weight and bias tensors for new ones
+    /// that share memory with a large contiguous buffer. The layer doesn't notice the difference —
+    /// it uses the new tensors exactly like the old ones — but advanced optimizers can now access
+    /// all parameters across all layers as a single flat vector without copying.</para>
+    /// </remarks>
+    void SetTrainableParameters(Tensor<T>[] parameters);
+
+    /// <summary>
     /// Clears all accumulated gradients on this layer's trainable parameters.
     /// </summary>
     /// <remarks>
