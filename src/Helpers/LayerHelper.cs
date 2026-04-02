@@ -1844,7 +1844,9 @@ public static class LayerHelper<T>
         else
         {
             // Default architecture with two hidden layers
-            layerSizes = new List<int> { inputSize, 128, 64, outputSize };
+            // Per Neftci et al. 2019: hidden spiking layers + non-spiking readout.
+            // Last SpikingLayer stays at hidden size; DenseLayer projects to outputSize.
+            layerSizes = new List<int> { inputSize, 128, 64 };
         }
 
         // Create layers

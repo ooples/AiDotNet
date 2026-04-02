@@ -256,6 +256,11 @@ public class SpikingLayer<T> : LayerBase<T>
     private Tensor<T> _membranePotential;
 
     /// <summary>
+    /// Gets the current membrane potential tensor (for output layer readout per spytorch).
+    /// </summary>
+    internal Tensor<T> MembranePotential => _membranePotential;
+
+    /// <summary>
     /// Countdown timer for refractory period for each output neuron.
     /// </summary>
     /// <remarks>
@@ -640,11 +645,14 @@ public class SpikingLayer<T> : LayerBase<T>
         _tau = tau;
         _refractoryPeriod = refractoryPeriod;
 
-        // Initialize weights with small random values as Tensor<T>
-        // CreateRandom gives [0,1], scale to [-0.1, 0.1]
-        // Initialize weights with Xavier-like init [-0.1, 0.1] using InitializeLayerWeights
-        _weights = new Tensor<T>([inputSize, outputSize]);
-        InitializeLayerWeights(_weights, inputSize, outputSize);
+        // Per Neftci et al. 2019: SNN weight init scaled by (1 - beta) / sqrt(fan_in).
+        // Standard Normal distribution ensures non-zero weight sums per row.
+        double beta = 1.0 - 1.0 / _tau;
+        double weightScale = 7.0 * (1.0 - beta) / Math.Sqrt(inputSize);
+        _weights = Engine.TensorRandomUniformRange<T>(
+            [inputSize, outputSize],
+            NumOps.FromDouble(-weightScale),
+            NumOps.FromDouble(weightScale));
 
         _bias = new Tensor<T>([outputSize]);
         _bias.Fill(NumOps.Zero);

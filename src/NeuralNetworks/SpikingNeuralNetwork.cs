@@ -415,25 +415,46 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         // and letting SpikingLayers accumulate membrane potential and generate spikes.
         // The output layer's spike rates over time form the final prediction.
 
-        List<Vector<T>> outputSpikeTrain = new List<Vector<T>>(_simulationSteps);
+        // Per Neftci et al. 2019: hidden spiking layers produce spikes over T time steps.
+        // The non-spiking readout (last DenseLayer) processes accumulated spike rates.
+        // Separate spiking layers from the readout layer.
+        int readoutIdx = -1;
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            if (Layers[i] is not Layers.SpikingLayer<T>) { readoutIdx = i; break; }
+        }
+
+        // Accumulate spiking layer outputs over time
+        int spikingOutputSize = readoutIdx >= 0
+            ? Layers[readoutIdx].GetInputShape()[0]
+            : Layers[^1].GetOutputShape()[0];
+        var accumSpikes = new T[spikingOutputSize];
 
         for (int step = 0; step < _simulationSteps; step++)
         {
-            // Forward through all layers — each SpikingLayer handles its own LIF
             Tensor<T> current = input;
-            for (int i = 0; i < Layers.Count; i++)
-            {
+            int lastSpikingIdx = readoutIdx >= 0 ? readoutIdx : Layers.Count;
+            for (int i = 0; i < lastSpikingIdx; i++)
                 current = Layers[i].Forward(current);
-            }
 
-            // Store output spikes from last layer
-            outputSpikeTrain.Add(current.ToVector());
+            var vec = current.ToVector();
+            for (int i = 0; i < Math.Min(spikingOutputSize, vec.Length); i++)
+                accumSpikes[i] = NumOps.Add(accumSpikes[i], vec[i]);
         }
 
-        // Aggregate spike train to final output (average spike rate)
-        Vector<T> finalOutput = AggregateSpikeTrainToOutput(outputSpikeTrain);
+        // Average spike rate
+        for (int i = 0; i < spikingOutputSize; i++)
+            accumSpikes[i] = NumOps.Divide(accumSpikes[i], NumOps.FromDouble(_simulationSteps));
 
-        return Tensor<T>.FromVector(finalOutput);
+        // Pass spike rates through non-spiking readout
+        var spikeRateTensor = Tensor<T>.FromVector(new Vector<T>(accumSpikes));
+        if (readoutIdx >= 0)
+        {
+            for (int i = readoutIdx; i < Layers.Count; i++)
+                spikeRateTensor = Layers[i].Forward(spikeRateTensor);
+        }
+
+        return spikeRateTensor;
     }
 
     /// <summary>
@@ -588,11 +609,9 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private void ApplySTDPLearning(List<List<Vector<T>>> layerSpikeHistory, Vector<T> outputError)
     {
-        // Learning rate for weight updates
-        T learningRate = NumOps.FromDouble(0.01);
-
-        // STDP time constants (in time steps)
-        int stdpWindow = 20; // How many time steps to consider for STDP
+        // Learning rate and STDP window from configurable options
+        T learningRate = NumOps.FromDouble(_options.ReadoutLearningRate);
+        int stdpWindow = _options.StdpWindow;
 
         // Process layers in reverse order (output to input)
         for (int layerIndex = Layers.Count - 1; layerIndex > 0; layerIndex--)

@@ -54,7 +54,7 @@ namespace AiDotNet.NeuralNetworks;
 public class LiquidStateMachine<T> : NeuralNetworkBase<T>
 {
     private readonly LiquidStateMachineOptions _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+    // Readout uses per-layer UpdateParameters with _options.ReadoutLearningRate
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
