@@ -197,6 +197,8 @@ public class MeshPoolLayer<T> : LayerBase<T>
 
         // Initialize importance weights in [-scale, scale] range
         _importanceWeights = Engine.TensorRandomUniformRange<T>([InputChannels], NumOps.Negate(scale), scale);
+
+        RegisterTrainableParameter(_importanceWeights, PersistentTensorRole.Weights);
     }
 
     #endregion

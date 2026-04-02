@@ -96,7 +96,7 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     /// This is critical for training a variational autoencoder.
     /// </para>
     /// </remarks>
-    public override bool SupportsTraining => true;
+    public override bool SupportsTraining => false; // Reparameterization trick computes state during forward, no trainable parameters
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.

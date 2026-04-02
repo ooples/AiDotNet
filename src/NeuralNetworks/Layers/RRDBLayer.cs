@@ -421,4 +421,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     }
 
     #endregion
+
+    /// <inheritdoc />
+    public override IReadOnlyList<ILayer<T>> GetSubLayers() => _rdbBlocks;
 }

@@ -95,7 +95,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// can learn correctly.
     /// </para>
     /// </remarks>
-    public override bool SupportsTraining => true;
+    public override bool SupportsTraining => false; // Precomputed constants, no trainable parameters
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PositionalEncodingLayer{T}"/> class with the specified maximum sequence length and embedding size.

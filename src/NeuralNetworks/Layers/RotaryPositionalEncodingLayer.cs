@@ -57,7 +57,7 @@ internal class RotaryPositionalEncodingLayer<T> : LayerBase<T>
     private readonly object _cacheLock = new();
 
     /// <inheritdoc />
-    public override bool SupportsTraining => true;
+    public override bool SupportsTraining => false; // Precomputed frequency caches, no trainable parameters
 
     /// <summary>
     /// Gets the head dimension this RoPE layer operates on.
