@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -286,22 +287,49 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         _valueNetwork.Train(batchStates, batchReturns);
         T valueLoss = _valueNetwork.GetLastLoss();
 
-        // --- Update policy network (policy gradient: -log_prob * advantage) ---
+        // Build advantages tensor and action data for engine ops
+        var advantagesTensor = new Tensor<T>([trajLen]);
+        for (int i = 0; i < trajLen; i++)
+            advantagesTensor[i] = advantages[i];
+
+        int[] actionIndices = _a2cOptions.IsContinuous ? Array.Empty<int>() : new int[trajLen];
+        Tensor<T>? actionsTensor = null;
+
+        if (_a2cOptions.IsContinuous)
+        {
+            actionsTensor = new Tensor<T>([trajLen, _a2cOptions.ActionSize]);
+            for (int i = 0; i < trajLen; i++)
+                for (int j = 0; j < _a2cOptions.ActionSize; j++)
+                    actionsTensor[i, j] = _trajectory.Actions[i][j];
+        }
+        else
+        {
+            for (int i = 0; i < trajLen; i++)
+                actionIndices[i] = ArgMax(_trajectory.Actions[i]);
+        }
+
+        // --- Update policy network (policy gradient via engine ops) ---
         var trainablePolicy = (NeuralNetworkBase<T>)_policyNetwork;
         T policyLoss = trainablePolicy.TrainWithCustomLoss(batchStates, policyOutput =>
         {
-            T totalPolicyLoss = NumOps.Zero;
-            for (int i = 0; i < trajLen; i++)
+            Tensor<T> logProbs;
+            if (_a2cOptions.IsContinuous)
             {
-                var logProb = ComputeLogProb(_trajectory.States[i], _trajectory.Actions[i]);
-                totalPolicyLoss = NumOps.Subtract(totalPolicyLoss,
-                    NumOps.Multiply(logProb, advantages[i]));
+                int actSize = _a2cOptions.ActionSize;
+                var means = Engine.TensorSlice(policyOutput, [0, 0], [trajLen, actSize]);
+                var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [trajLen, actSize * 2]);
+                logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(means, logStds, actionsTensor!);
             }
-            var avgLoss = NumOps.Divide(totalPolicyLoss, NumOps.FromDouble(trajLen));
+            else
+            {
+                logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(policyOutput, actionIndices);
+            }
 
-            var lossTensor = new Tensor<T>([1]);
-            lossTensor[0] = avgLoss;
-            return lossTensor;
+            // loss = -mean(logProbs * advantages)
+            var weighted = Engine.TensorMultiply(logProbs, advantagesTensor);
+            var allAxes = Enumerable.Range(0, weighted.Shape.Length).ToArray();
+            var mean = Engine.ReduceMean(weighted, allAxes, keepDims: false);
+            return Engine.TensorNegate(mean);
         });
 
         // Combined loss for monitoring
