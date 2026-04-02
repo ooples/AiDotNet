@@ -704,43 +704,7 @@ public class EAST<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        var output = Predict(input);
-        LastLoss = LossFunction.CalculateLoss(output.ToVector(), expectedOutput.ToVector());
-
-        var gradient = Tensor<T>.FromVector(
-            LossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector()));
-
-        if (Layers.Count >= 3)
-        {
-            // Split gradient by channels for parallel score/geometry heads
-            var scoreHead = Layers[^2];
-            var geometryHead = Layers[^1];
-            int scoreChannels = 1; // score map is single channel
-            int totalChannels = gradient.Shape.Length >= 2 ? gradient.Shape[1] : 1;
-            int geoChannels = totalChannels - scoreChannels;
-
-            var scoreGrad = SliceChannels(gradient, 0, scoreChannels);
-            var geoGrad = SliceChannels(gradient, scoreChannels, geoChannels);
-
-            // Backprop through both heads independently
-            var scoreFeatureGrad = scoreHead.Backward(scoreGrad);
-            var geoFeatureGrad = geometryHead.Backward(geoGrad);
-
-            // Sum gradients from both heads for the shared feature map
-            var featureGrad = AddTensors(scoreFeatureGrad, geoFeatureGrad);
-
-            // Continue backprop through shared backbone
-            for (int i = Layers.Count - 3; i >= 0; i--)
-                featureGrad = Layers[i].Backward(featureGrad);
-        }
-        else
-        {
-            // Fallback: sequential backprop for simple architectures
-            for (int i = Layers.Count - 1; i >= 0; i--)
-                gradient = Layers[i].Backward(gradient);
-        }
-
-        UpdateParameters(CollectGradients());
+        TrainWithTape(input, expectedOutput);
         SetTrainingMode(false);
     }
 

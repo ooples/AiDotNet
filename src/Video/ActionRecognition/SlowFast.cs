@@ -474,43 +474,9 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode.");
 
-        var prediction = Predict(input);
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
-
-        var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-
-        // Backward through fusion layers
-        var fusionGradient = outputGradientTensor;
-        for (int i = _fusionLayers.Count - 1; i >= 0; i--)
-        {
-            fusionGradient = _fusionLayers[i].Backward(fusionGradient);
-        }
-
-        // Split gradient for slow and fast pathways
-        var (slowGradient, fastGradient) = SplitGradient(fusionGradient);
-
-        // Backward through slow pathway
-        var slowCurrentGradient = slowGradient;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            slowCurrentGradient = Layers[i].Backward(slowCurrentGradient);
-        }
-
-        // Backward through fast pathway
-        var fastCurrentGradient = fastGradient;
-        for (int i = _fastLayers.Count - 1; i >= 0; i--)
-        {
-            fastCurrentGradient = _fastLayers[i].Backward(fastCurrentGradient);
-        }
-
-        // Update all parameters
-        var allLayers = new List<ILayer<T>>();
-        allLayers.AddRange(Layers);
-        allLayers.AddRange(_fastLayers);
-        allLayers.AddRange(_fusionLayers);
-        _optimizer?.UpdateParameters(allLayers);
+        SetTrainingMode(true);
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     /// <summary>

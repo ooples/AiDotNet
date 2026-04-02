@@ -1165,30 +1165,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         }
 
         SetTrainingMode(true);
-
-        // Forward pass
-        var output = Predict(input);
-
-        // Compute loss
-        LastLoss = LossFunction.CalculateLoss(output.ToVector(), expectedOutput.ToVector());
-
-        // Backward pass - compute gradients
-        var lossGradient = LossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector());
-        var gradient = Tensor<T>.FromVector(lossGradient);
-
-        // Propagate gradients backward through layers
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-
-        // Update embedding gradients
-        UpdateEmbeddingGradients(gradient);
-
-        // Apply optimizer update
-        var paramGradients = CollectParameterGradients();
-        UpdateParameters(paramGradients);
-
+        TrainWithTape(input, expectedOutput);
         SetTrainingMode(false);
     }
 
