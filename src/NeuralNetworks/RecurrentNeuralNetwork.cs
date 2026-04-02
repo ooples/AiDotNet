@@ -120,6 +120,7 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
         _options = options ?? new RecurrentNeuralNetworkOptions();
         Options = _options;
         _learningRate = NumOps.FromDouble(learningRate);
+        EnableDeterministicMode();
         InitializeRecurrentLayers();
     }
 
