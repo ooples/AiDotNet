@@ -216,6 +216,14 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
+        // BN layers must use eval mode (running stats) for batch_size=1.
+        // Per Ioffe & Szegedy 2015: BN gradient is exactly zero for N=1
+        // in training mode (variance=0). Eval mode preserves information flow.
+        foreach (var layer in Layers)
+        {
+            if (layer is BatchNormalizationLayer<T>)
+                layer.SetTrainingMode(false);
+        }
         TrainWithTape(input, expectedOutput);
         SetTrainingMode(false);
     }

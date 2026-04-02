@@ -2537,7 +2537,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             else
             {
                 // Fallback for networks without ITrainableLayer layers:
-                // forward, compute loss gradient, backpropagate, update with default lr
+                // forward, compute loss gradient, update with default lr
                 var output = Predict(input);
                 var lossGrad = DefaultLossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector());
                 var outputGradients = new Tensor<T>(output.Shape.ToArray(), lossGrad);
@@ -2545,7 +2545,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 foreach (var layer in Layers)
                 {
                     if (layer.SupportsTraining)
+                    {
                         layer.UpdateParameters(defaultLr);
+                        layer.ClearGradients();
+                    }
                 }
             }
         }

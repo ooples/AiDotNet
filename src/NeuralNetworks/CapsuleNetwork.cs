@@ -441,7 +441,10 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         foreach (var layer in Layers)
         {
             if (layer.SupportsTraining)
+            {
                 layer.UpdateParameters(lr);
+                layer.ClearGradients();
+            }
         }
     }
 

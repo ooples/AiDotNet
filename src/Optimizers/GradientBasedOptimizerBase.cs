@@ -1352,9 +1352,13 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             if (layer.SupportsTraining)
             {
                 layer.UpdateParameters(lr);
+                layer.ClearGradients();
             }
         }
     }
+
+    /// <inheritdoc />
+    public abstract void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients);
 
     /// <summary>
     /// Updates a matrix of parameters based on the calculated gradient.

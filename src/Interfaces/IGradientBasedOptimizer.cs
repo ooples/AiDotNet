@@ -128,6 +128,26 @@ public interface IGradientBasedOptimizer<T, TInput, TOutput> : IOptimizer<T, TIn
     void UpdateParameters(List<ILayer<T>> layers);
 
     /// <summary>
+    /// Applies tape-computed gradients to parameter tensors using this optimizer's update rule.
+    /// </summary>
+    /// <param name="parameters">The trainable parameter tensors (same references used in Forward).</param>
+    /// <param name="gradients">Gradient tensors keyed by parameter tensor identity, as returned by
+    /// <see cref="AiDotNet.Tensors.Engines.Autodiff.GradientTape{T}.ComputeGradients"/>.</param>
+    /// <remarks>
+    /// <para>
+    /// This is the PyTorch-style <c>optimizer.step()</c> for tape-based training. Each optimizer
+    /// applies its own update rule (Adam moments, SGD momentum, weight decay, etc.) directly
+    /// to the parameter tensors in-place. The optimizer maintains per-parameter state keyed by
+    /// tensor reference identity.
+    /// </para>
+    /// <para><b>For Beginners:</b> After the gradient tape figures out how to improve each parameter,
+    /// this method actually applies those improvements. Different optimizers apply them differently —
+    /// Adam uses adaptive learning rates per parameter, SGD uses a fixed rate, etc.
+    /// </para>
+    /// </remarks>
+    void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients);
+
+    /// <summary>
     /// Gets the gradients computed during the last optimization step.
     /// </summary>
     /// <remarks>

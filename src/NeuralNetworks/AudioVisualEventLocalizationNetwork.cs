@@ -1339,9 +1339,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-        var prediction = Predict(input);
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
+        TrainWithTape(input, expectedOutput, _options.LearningRate);
         SetTrainingMode(false);
     }
 
