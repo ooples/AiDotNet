@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.Routing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, UsesSurrogateGradient = true, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 2, 4, 3")]
-public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// Gets or sets whether auxiliary loss (routing entropy regularization) should be used during training.
@@ -941,4 +941,20 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </value>
     public override bool SupportsJitCompilation => true;
 
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_transformationMatrix, _bias];
+
+    /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
+        _transformationMatrix = parameters[0]; _bias = parameters[1];
+    }
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
+        _transformationMatrixGradient = null;
+        _biasGradient = null;
+    }
 }
