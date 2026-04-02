@@ -351,56 +351,32 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             var loss = NumOps.Multiply(tdError, tdError);
             totalLoss = NumOps.Add(totalLoss, loss);
 
-            // Backpropagate through mixing network
-            // TD loss gradient: d/dQ[loss] = d/dQ[(target - Q)^2] = -2 * (target - Q) = -2 * tdError
-            var mixingGradientVec = new Vector<T>(1);
-            mixingGradientVec[0] = NumOps.Multiply(NumOps.FromDouble(-2.0), tdError);
-            var mixingGradient = Tensor<T>.FromVector(mixingGradientVec);
+            // --- Train mixing network (MSE on Q_total target) ---
+            var targetTensor = new Tensor<T>([1, 1]);
+            targetTensor[0, 0] = target;
+            var mixInputTensor = Tensor<T>.FromVector(mixingInput, [1, mixingInput.Length]);
+            _mixingNetwork.Train(mixInputTensor, targetTensor);
 
-            // Get gradient w.r.t. mixing network inputs (agent Q-values) for gradient flow
-            // This should be obtained from the mixing network's input gradient after backprop
-            // For now, approximate using chain rule: dL/dQ_i = dL/dQ_total * dQ_total/dQ_i
-            // In QMIX, mixing network is monotonic, so gradient flows proportionally
-            var mixingInputGradient = ComputeMixingInputGradient(mixingInput, tdError);
-
-            // Manual parameter update for mixing network
+            // Enforce QMIX monotonicity: clamp mixing network weights to non-negative
             var mixingParams = _mixingNetwork.GetParameters();
-            var mixingGrads = _mixingNetwork.GetParameterGradients();
             for (int j = 0; j < mixingParams.Length; j++)
             {
-                mixingParams[j] = NumOps.Subtract(mixingParams[j],
-                    NumOps.Multiply(LearningRate, mixingGrads[j]));
-
-                // Enforce QMIX monotonicity: all mixing network weights must be non-negative
-                // This ensures that increasing any agent's Q-value increases the team Q-value
                 if (NumOps.LessThan(mixingParams[j], NumOps.Zero))
-                {
                     mixingParams[j] = NumOps.Zero;
-                }
             }
             _mixingNetwork.UpdateParameters(mixingParams);
 
-            // Backpropagate through agent networks using gradient from mixing network
+            // --- Train agent networks (each agent's Q-value toward its contribution) ---
             for (int i = 0; i < _options.NumAgents; i++)
             {
-                var agentGradientVec = new Vector<T>(_options.ActionSize);
+                var agentState = Tensor<T>.FromVector(agentStates[i], [1, _options.StateSize]);
+                var currentQ = _agentNetworks[i].Predict(agentState);
+                var agentTarget = currentQ.Clone();
                 int actionIdx = ArgMax(agentActions[i]);
-                // Use gradient flow from mixing network, not just tdError / NumAgents
-                T agentQGradient = mixingInputGradient[i];
-                agentGradientVec[actionIdx] = agentQGradient;
-
-                var stateTensor = Tensor<T>.FromVector(agentStates[i]);
-                var agentGradient = Tensor<T>.FromVector(agentGradientVec);
-
-                // Manual parameter update with learning rate
-                var agentParams = _agentNetworks[i].GetParameters();
-                var agentGrads = ((NeuralNetwork<T>)_agentNetworks[i]).GetParameterGradients();
-                for (int j = 0; j < agentParams.Length; j++)
-                {
-                    agentParams[j] = NumOps.Subtract(agentParams[j],
-                        NumOps.Multiply(LearningRate, agentGrads[j]));
-                }
-                _agentNetworks[i].UpdateParameters(agentParams);
+                // Each agent's target Q adjusts the selected action by proportional TD error
+                T agentContribution = NumOps.Divide(tdError, NumOps.FromDouble(_options.NumAgents));
+                agentTarget[actionIdx] = NumOps.Add(agentTarget[actionIdx], agentContribution);
+                _agentNetworks[i].Train(agentState, agentTarget);
             }
         }
 
