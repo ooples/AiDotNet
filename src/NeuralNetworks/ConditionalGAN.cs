@@ -244,25 +244,6 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     }
 
     /// <summary>
-    /// Runs Backpropagate on a network, handling batched [B, M] gradients by processing per-sample.
-    /// </summary>
-    private static Tensor<T> BackpropagateBatched(NeuralNetworkBase<T> network, Tensor<T> batchedGradient)
-    {
-        // Only split 2D [B, N] feed-forward gradients; leave higher-rank spatial tensors intact
-        if (batchedGradient.Rank != 2)
-            return network.Backpropagate(batchedGradient);
-
-        int batchSize = batchedGradient.Shape[0];
-        var results = new List<Tensor<T>>(batchSize);
-        for (int b = 0; b < batchSize; b++)
-        {
-            results.Add(network.Backpropagate(batchedGradient.GetSlice(b)));
-        }
-
-        return Tensor<T>.Stack([.. results]);
-    }
-
-    /// <summary>
     /// Predicts output by treating the input as noise and adding default conditions.
     /// </summary>
     /// <param name="input">Noise tensor of size <c>latentDim</c> (1D) or <c>[batch, latentDim]</c> (2D).
@@ -415,7 +396,6 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         var outputGradients = CalculateBinaryGradients(predictions, labels);
 
         // Backpropagate (handles batch -> per-sample for 1D networks)
-        BackpropagateBatched(Discriminator, outputGradients);
 
         // Update parameters using base class method
         UpdateDiscriminatorWithOptimizer();
@@ -441,7 +421,6 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         var outputGradients = CalculateBinaryGradients(discriminatorOutput, targetLabels);
 
         // Backpropagate through discriminator to get input gradients
-        var discriminatorInputGradients = BackpropagateBatched(Discriminator, outputGradients);
 
         // Extract gradients for the image part (not the condition part)
         // Handle both spatial (4D) and flattened (2D) gradient formats
@@ -524,7 +503,6 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         }
 
         // Backpropagate through generator (handles batch -> per-sample for 1D networks)
-        BackpropagateBatched(Generator, generatorGradients);
 
         // Update generator using base class method
         UpdateGeneratorWithOptimizer();

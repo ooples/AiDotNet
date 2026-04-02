@@ -158,42 +158,6 @@ public class PiecewiseLinearEncoding<T> : LayerBase<T>
         return NumOps.Compare(a, b) < 0 ? a : b;
     }
 
-    /// <summary>
-    /// Computes gradients for the backward pass.
-    /// </summary>
-    /// <param name="gradient">Gradient with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    public override Tensor<T> Backward(Tensor<T> gradient)
-    {
-        if (_inputCache == null)
-            throw new InvalidOperationException("Forward must be called before backward");
-
-        int batchSize = gradient.Shape[0];
-        var inputGrad = new Tensor<T>([batchSize, _numFeatures]);
-
-        // Reset boundary gradients using Engine
-        Engine.TensorFill(_binBoundaryGradients, NumOps.Zero);
-
-        // Compute gradients (simplified - full implementation would track bin assignments)
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < _numFeatures; f++)
-            {
-                var grad = NumOps.Zero;
-                int gradOffset = b * _numFeatures * _numBins + f * _numBins;
-
-                for (int bin = 0; bin < _numBins; bin++)
-                {
-                    grad = NumOps.Add(grad, gradient[gradOffset + bin]);
-                }
-
-                inputGrad[b * _numFeatures + f] = grad;
-            }
-        }
-
-        return inputGrad;
-    }
-
     /// <inheritdoc/>
     public override void UpdateParameters(T learningRate)
     {

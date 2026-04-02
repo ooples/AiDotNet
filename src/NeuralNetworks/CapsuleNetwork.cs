@@ -434,7 +434,6 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         LastLoss = totalLoss;
 
         // Backward pass — accumulates gradients in each layer
-        CalculateGradient(totalLoss);
 
         // Update parameters using per-layer gradient descent
         const double defaultLearningRate = 0.001;
@@ -503,43 +502,6 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         _lossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader) ?? new MarginLoss<T>();
-    }
-
-    /// <summary>
-    /// Calculates the gradient of the loss with respect to the network parameters.
-    /// </summary>
-    /// <param name="loss">The scalar loss value.</param>
-    /// <returns>A vector containing the gradients for all network parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method performs a backward pass through the network, computing gradients for each layer.
-    /// It starts from the output layer and moves backwards, accumulating gradients along the way.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like tracing back through the network to see how each part contributed to the final result.
-    /// 
-    /// Imagine you're trying to improve a recipe:
-    /// - You start with how the final dish turned out (the loss)
-    /// - You work backwards through each step of the recipe
-    /// - At each step, you figure out how changing that step would affect the final result
-    /// - You collect all these potential changes (gradients) to know how to improve the recipe
-    /// 
-    /// In a neural network, this process helps determine how to adjust each parameter to reduce the loss.
-    /// </para>
-    /// </remarks>
-    private Vector<T> CalculateGradient(T loss)
-    {
-        List<Tensor<T>> gradients = new List<Tensor<T>>();
-
-        // Backward pass through all layers
-        Tensor<T> currentGradient = new Tensor<T>([1], new Vector<T>(Enumerable.Repeat(loss, 1)));
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            currentGradient = Layers[i].Backward(currentGradient);
-            gradients.Insert(0, currentGradient);
-        }
-
-        // Flatten all gradients into a single vector
-        return new Vector<T>([.. gradients.SelectMany(g => g.ToVector())]);
     }
 
     /// <summary>

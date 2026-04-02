@@ -896,30 +896,6 @@ public class TemporalVAE<T> : VAEModelBase<T>
 
     #endregion
 
-    protected override void BackpropagateVAE(Tensor<T> lossGradient)
-    {
-        var grad = lossGradient;
-        grad = BackwardLayer(_outputConv, grad);
-        for (int i = _decoderTemporalLayers.Count - 1; i >= 0; i--)
-            grad = BackwardLayer(_decoderTemporalLayers[i], grad);
-        for (int i = _decoderSpatialLayers.Count - 1; i >= 0; i--)
-            grad = BackwardLayer(_decoderSpatialLayers[i], grad);
-        grad = BackwardLayer(_postQuantConv, grad);
-        BackwardLayer(_logVarConv, grad);
-        grad = BackwardLayer(_meanConv, grad);
-        for (int i = _encoderTemporalLayers.Count - 1; i >= 0; i--)
-            grad = BackwardLayer(_encoderTemporalLayers[i], grad);
-        for (int i = _encoderSpatialLayers.Count - 1; i >= 0; i--)
-            grad = BackwardLayer(_encoderSpatialLayers[i], grad);
-        BackwardLayer(_inputConv, grad);
-    }
-
-    private static Tensor<T> BackwardLayer(ILayer<T>? layer, Tensor<T> grad)
-    {
-        if (layer == null) return grad;
-        return layer.Backward(grad);
-    }
-
     protected override Vector<T> GetParameterGradients()
     {
         var gradients = new List<T>();

@@ -191,26 +191,5 @@ public class MishActivation<T> : ActivationFunctionBase<T>
         backend.Mish(input, output, size);
     }
 
-    /// <summary>
-    /// Calculates the Mish backward pass gradient on GPU.
-    /// </summary>
-    /// <param name="backend">The GPU backend to use for execution.</param>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="input">The input buffer from the forward pass.</param>
-    /// <param name="output">Not used for Mish (can be null). Mish backward uses forward input.</param>
-    /// <param name="gradInput">The output buffer to store the input gradient.</param>
-    /// <param name="size">The number of elements to process.</param>
-    /// <remarks>
-    /// Mish backward on GPU computes the gradient using the chain rule with the
-    /// derivative of the Mish function.
-    /// </remarks>
-    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input), "Mish backward requires the input from forward pass.");
-
-        backend.MishBackward(gradOutput, input, gradInput, size);
-    }
-
     #endregion
 }

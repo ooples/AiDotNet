@@ -49,26 +49,6 @@ public class MaskBCELoss<T>
 
         return _numOps.FromDouble(loss / predicted.Length);
     }
-
-    /// <summary>
-    /// Computes gradient of BCE loss.
-    /// </summary>
-    public Tensor<T> Backward(Tensor<T> predicted, Tensor<T> target)
-    {
-        var gradient = new Tensor<T>(predicted.Shape.ToArray());
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            double p = MathHelper.Clamp(_numOps.ToDouble(predicted[i]), _eps, 1 - _eps);
-            double t = _numOps.ToDouble(target[i]);
-
-            // d/dp [-(t*log(p) + (1-t)*log(1-p))] = -t/p + (1-t)/(1-p)
-            double grad = -t / p + (1 - t) / (1 - p);
-            gradient[i] = _numOps.FromDouble(grad / predicted.Length);
-        }
-
-        return gradient;
-    }
 }
 
 /// <summary>
@@ -119,44 +99,6 @@ public class MaskDiceLoss<T>
         double dice = (2 * intersection + _smooth) / (predSum + targetSum + _smooth);
 
         return _numOps.FromDouble(1 - dice);
-    }
-
-    /// <summary>
-    /// Computes gradient of Dice loss.
-    /// </summary>
-    public Tensor<T> Backward(Tensor<T> predicted, Tensor<T> target)
-    {
-        double intersection = 0;
-        double predSum = 0;
-        double targetSum = 0;
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            double p = _numOps.ToDouble(predicted[i]);
-            double t = _numOps.ToDouble(target[i]);
-
-            intersection += p * t;
-            predSum += p * p;
-            targetSum += t * t;
-        }
-
-        double numerator = 2 * intersection + _smooth;
-        double denominator = predSum + targetSum + _smooth;
-
-        var gradient = new Tensor<T>(predicted.Shape.ToArray());
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            double p = _numOps.ToDouble(predicted[i]);
-            double t = _numOps.ToDouble(target[i]);
-
-            // Quotient rule: d(Dice)/dp = (N' * D - N * D') / D^2
-            // where N' = 2*t, D' = 2*p
-            double grad = (2 * t * denominator - numerator * 2 * p) / (denominator * denominator);
-            gradient[i] = _numOps.FromDouble(-grad); // Negative because loss = 1 - Dice
-        }
-
-        return gradient;
     }
 }
 
@@ -210,36 +152,6 @@ public class MaskFocalLoss<T>
 
         return _numOps.FromDouble(loss / predicted.Length);
     }
-
-    /// <summary>
-    /// Computes gradient of focal loss.
-    /// </summary>
-    public Tensor<T> Backward(Tensor<T> predicted, Tensor<T> target)
-    {
-        var gradient = new Tensor<T>(predicted.Shape.ToArray());
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            double p = MathHelper.Clamp(_numOps.ToDouble(predicted[i]), _eps, 1 - _eps);
-            double t = _numOps.ToDouble(target[i]);
-
-            double pt = t * p + (1 - t) * (1 - p);
-            double alphaT = t * _alpha + (1 - t) * (1 - _alpha);
-
-            // Product rule: d/dp [(1-pt)^g * log(pt)]
-            // = d[(1-pt)^g]/dp * log(pt) + (1-pt)^g * d[log(pt)]/dp
-            // d[(1-pt)^g]/dp = g*(1-pt)^(g-1)*(-dpt/dp)  ← note negative sign
-            // d[log(pt)]/dp = (1/pt)*dpt/dp
-            double dpt_dp = 2 * t - 1;
-            double term1 = -_gamma * Math.Pow(1 - pt, _gamma - 1) * Math.Log(pt) * dpt_dp;
-            double term2 = Math.Pow(1 - pt, _gamma) * (1 / pt) * dpt_dp;
-
-            double grad = -alphaT * (term1 + term2);
-            gradient[i] = _numOps.FromDouble(grad / predicted.Length);
-        }
-
-        return gradient;
-    }
 }
 
 /// <summary>
@@ -282,25 +194,5 @@ public class CombinedMaskLoss<T>
         double dice = _numOps.ToDouble(_diceLoss.Compute(predicted, target));
 
         return _numOps.FromDouble(_bceWeight * bce + _diceWeight * dice);
-    }
-
-    /// <summary>
-    /// Computes gradient of combined loss.
-    /// </summary>
-    public Tensor<T> Backward(Tensor<T> predicted, Tensor<T> target)
-    {
-        var bceGrad = _bceLoss.Backward(predicted, target);
-        var diceGrad = _diceLoss.Backward(predicted, target);
-
-        var gradient = new Tensor<T>(predicted.Shape.ToArray());
-
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            double g = _bceWeight * _numOps.ToDouble(bceGrad[i]) +
-                       _diceWeight * _numOps.ToDouble(diceGrad[i]);
-            gradient[i] = _numOps.FromDouble(g);
-        }
-
-        return gradient;
     }
 }

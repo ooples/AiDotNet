@@ -176,14 +176,6 @@ public class AsymmDiTPredictor<T> : NoisePredictorBase<T>
         return offset + count;
     }
 
-    protected override void Backpropagate(Tensor<T> lossGradient)
-    {
-        var grad = _finalLayer.Backward(lossGradient);
-        for (int i = _blocks.Length - 1; i >= 0; i--)
-            grad = _blocks[i].Backward(grad);
-        _patchEmbed.Backward(grad);
-    }
-
     protected override Vector<T> GetParameterGradients()
     {
         var allGrads = new List<T>();

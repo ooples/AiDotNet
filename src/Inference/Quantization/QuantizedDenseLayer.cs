@@ -142,9 +142,6 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
         return activated;
     }
 
-    public override Tensor<float> Backward(Tensor<float> outputGradient)
-        => throw new NotSupportedException("QuantizedDenseLayer is inference-only.");
-
     public override void UpdateParameters(float learningRate)
         => throw new NotSupportedException("QuantizedDenseLayer is inference-only.");
 

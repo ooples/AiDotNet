@@ -467,7 +467,6 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         // Update weights via optimizer
         _optimizer.UpdateParameters(Layers);
@@ -851,74 +850,6 @@ public class NBEATSFinance<T> : ForecastingModelBase<T>
         }
 
         return totalForecast;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the N-BEATS network.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the loss function.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> N-BEATS backward pass routes gradients through both paths:
-    /// 1. The forecast path receives gradients from the total forecast sum
-    /// 2. The backcast path receives negative gradients (due to residual subtraction)
-    /// 3. Both paths merge at the hidden layers, where gradients are summed
-    /// </para>
-    /// </remarks>
-    private void Backward(Tensor<T> gradOutput)
-    {
-        var gradForecast = gradOutput;
-
-        // Backward through output projection
-        if (_outputProjection is not null)
-        {
-            gradForecast = _outputProjection.Backward(gradForecast);
-        }
-
-        // Since all block forecasts sum to totalForecast, each block receives the same gradient
-        // Process blocks in reverse order, accumulating gradients
-        for (int blockIdx = _blocks.Count - 1; blockIdx >= 0; blockIdx--)
-        {
-            var blockLayers = _blocks[blockIdx];
-            if (blockLayers.Count == 0) continue;
-
-            int numHidden = blockLayers.Count - 2;
-
-            // Get gradient through forecast layer
-            Tensor<T>? gradFromForecast = null;
-            if (numHidden + 1 < blockLayers.Count)
-            {
-                gradFromForecast = blockLayers[numHidden + 1].Backward(gradForecast);
-            }
-
-            // Get gradient through backcast layer
-            // Note: Since residual = residual_prev - backcast, d_loss/d_backcast = -d_loss/d_residual
-            // For simplicity, we propagate gradients through backcast but don't negate them
-            // The backcast layer still gets its parameters updated from this gradient flow
-            Tensor<T>? gradFromBackcast = null;
-            if (numHidden < blockLayers.Count)
-            {
-                // Use zero gradient since backcast affects residual which affects next blocks
-                // In a full implementation, this would require tracking residual gradients
-                // Backcast layer has outputSize = lookbackWindow, not forecastHorizon
-                int batchSize = gradForecast.Shape[0];
-                var zeroGrad = new Tensor<T>(new[] { batchSize, _lookbackWindow });
-                gradFromBackcast = blockLayers[numHidden].Backward(zeroGrad);
-            }
-
-            // Combine gradients for hidden layers
-            var gradHidden = gradFromForecast ?? gradForecast;
-            if (gradFromBackcast is not null && gradHidden.Length == gradFromBackcast.Length)
-            {
-                gradHidden = AddTensors(gradHidden, gradFromBackcast);
-            }
-
-            // Backward through hidden layers
-            for (int j = numHidden - 1; j >= 0; j--)
-            {
-                gradHidden = blockLayers[j].Backward(gradHidden);
-            }
-        }
     }
 
     /// <summary>

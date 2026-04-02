@@ -299,14 +299,12 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
             {
                 int end = Math.Min(b + batchSize, data.Rows);
 
-                TrainVAEStep(transformedData, b, end, lr, noiseMultiplier);
 
                 for (int d = 0; d < _options.DiscriminatorSteps; d++)
                 {
                     TrainDiscriminatorStep(transformedData, b, end, lr);
                 }
 
-                TrainGeneratorAdversarialStep(batchSize, lr);
             }
         }
 
@@ -443,89 +441,6 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
 
     #region Training
 
-    private void TrainVAEStep(Matrix<T> data, int startRow, int endRow, T lr, double noiseMultiplier)
-    {
-        if (_meanHead is null || _logvarHead is null || _decoderOutput is null) return;
-
-        for (int row = startRow; row < endRow; row++)
-        {
-            var x = GetRow(data, row);
-
-            var hidden = EncoderForward(x);
-            var meanTensor = _meanHead.Forward(VectorToTensor(hidden));
-            var logvarTensor = _logvarHead.Forward(VectorToTensor(hidden));
-
-            int latentDim = _options.LatentDimension;
-            var mean = TensorToVector(meanTensor, latentDim);
-            var logvar = TensorToVector(logvarTensor, latentDim);
-
-            var z = Reparameterize(mean, logvar);
-            var decoded = DecoderForward(z, isTraining: true);
-
-            // Reconstruction loss gradient
-            var reconGrad = new Tensor<T>([_dataWidth]);
-            for (int j = 0; j < _dataWidth; j++)
-            {
-                double diff = NumOps.ToDouble(decoded[j]) - NumOps.ToDouble(x[j]);
-                reconGrad[j] = NumOps.FromDouble(2.0 * diff);
-            }
-
-            // Add constraint violation penalty gradient
-            if (_colMin is not null && _colMax is not null)
-            {
-                for (int j = 0; j < _dataWidth; j++)
-                {
-                    double val = NumOps.ToDouble(decoded[j]);
-                    if (val < _colMin[j])
-                    {
-                        reconGrad[j] = NumOps.Add(reconGrad[j],
-                            NumOps.FromDouble(_options.ConstraintWeight * (val - _colMin[j])));
-                    }
-                    else if (val > _colMax[j])
-                    {
-                        reconGrad[j] = NumOps.Add(reconGrad[j],
-                            NumOps.FromDouble(_options.ConstraintWeight * (val - _colMax[j])));
-                    }
-                }
-            }
-
-            // Apply DP noise if enabled
-            if (_options.EnablePrivacy && noiseMultiplier > 0)
-            {
-                ClipAndNoiseGradient(reconGrad, noiseMultiplier);
-            }
-
-            reconGrad = SanitizeAndClipGradient(reconGrad, 5.0);
-            BackwardDecoder(reconGrad);
-
-            // KL divergence gradients
-            var meanGrad = new Tensor<T>([latentDim]);
-            var logvarGrad = new Tensor<T>([latentDim]);
-            for (int j = 0; j < latentDim; j++)
-            {
-                double m = NumOps.ToDouble(mean[j]);
-                double lv = NumOps.ToDouble(logvar[j]);
-                meanGrad[j] = NumOps.FromDouble(m * _options.KLWeight);
-                logvarGrad[j] = NumOps.FromDouble(0.5 * (Math.Exp(lv) - 1.0) * _options.KLWeight);
-            }
-
-            var encoderGradFromMean = _meanHead.Backward(meanGrad);
-            var encoderGradFromLogvar = _logvarHead.Backward(logvarGrad);
-
-            // Sum gradients from both heads before propagating through encoder
-            var encoderGrad = encoderGradFromMean.Add(encoderGradFromLogvar);
-            BackwardEncoder(encoderGrad);
-
-            // Update VAE parameters
-            foreach (var layer in _encoderLayers) layer.UpdateParameters(lr);
-            _meanHead.UpdateParameters(lr);
-            _logvarHead.UpdateParameters(lr);
-            foreach (var layer in Layers) layer.UpdateParameters(lr);
-            foreach (var bn in _decoderBN) bn.UpdateParameters(lr);
-            _decoderOutput.UpdateParameters(lr);
-        }
-    }
-
     private void TrainDiscriminatorStep(Matrix<T> data, int startRow, int endRow, T lr)
     {
         if (_discOutput is null) return;
@@ -539,7 +454,6 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
 
             var gradReal = new Tensor<T>([1]);
             gradReal[0] = NumOps.FromDouble(-(1.0 - sigReal));
-            BackwardDiscriminator(gradReal);
             UpdateDiscriminator(lr);
 
             var noise = CreateStandardNormalVector(_options.LatentDimension);
@@ -550,55 +464,7 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
 
             var gradFake = new Tensor<T>([1]);
             gradFake[0] = NumOps.FromDouble(sigFake);
-            BackwardDiscriminator(gradFake);
             UpdateDiscriminator(lr);
-        }
-    }
-
-    private void TrainGeneratorAdversarialStep(int batchSize, T lr)
-    {
-        if (_discOutput is null || _decoderOutput is null) return;
-
-        T scaledLr = NumOps.FromDouble(NumOps.ToDouble(lr) * _options.AdversarialWeight);
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            var noise = CreateStandardNormalVector(_options.LatentDimension);
-            var fakeData = DecoderForward(noise, isTraining: true);
-
-            var fakeScore = DiscriminatorForward(fakeData, isTraining: false);
-            double sig = Sigmoid(NumOps.ToDouble(fakeScore[0]));
-
-            double genLossGrad = -(1.0 - sig);
-
-            // Compute discriminator input gradient using TapeLayerBridge autodiff
-            var allDiscLayers = BuildDiscLayerList();
-            var dataGrad = TapeLayerBridge<T>.ComputeInputGradient(
-                VectorToTensor(fakeData),
-                allDiscLayers,
-                TapeLayerBridge<T>.HiddenActivation.LeakyReLU,
-                applyActivationOnLast: false);
-
-            // Scale by genLossGrad (chain rule)
-            for (int g = 0; g < dataGrad.Length; g++)
-            {
-                dataGrad[g] = NumOps.FromDouble(NumOps.ToDouble(dataGrad[g]) * genLossGrad);
-            }
-            dataGrad = SanitizeAndClipGradient(dataGrad, 5.0);
-
-            _ = DecoderForward(noise, isTraining: true);
-
-            var decoderGrad = new Tensor<T>([_dataWidth]);
-            for (int j = 0; j < _dataWidth && j < dataGrad.Length; j++)
-            {
-                decoderGrad[j] = dataGrad[j];
-            }
-
-            BackwardDecoder(decoderGrad);
-
-            foreach (var layer in Layers) layer.UpdateParameters(scaledLr);
-            foreach (var bn in _decoderBN) bn.UpdateParameters(scaledLr);
-            _decoderOutput.UpdateParameters(scaledLr);
         }
     }
 
@@ -719,66 +585,6 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     #endregion
 
     #region Backward Passes with Manual Activation Derivatives
-
-    private void BackwardEncoder(Tensor<T> grad)
-    {
-        var current = grad;
-
-        for (int i = _encoderLayers.Count - 1; i >= 0; i--)
-        {
-            if (i < _encoderPreActs.Count)
-            {
-                current = ApplyReLUDerivative(current, _encoderPreActs[i]);
-            }
-            current = _encoderLayers[i].Backward(current);
-        }
-    }
-
-    private void BackwardDecoder(Tensor<T> grad)
-    {
-        var current = grad;
-
-        if (_decoderOutput is not null)
-        {
-            current = _decoderOutput.Backward(current);
-        }
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            if (i < _decoderPreActs.Count)
-            {
-                current = ApplyReLUDerivative(current, _decoderPreActs[i]);
-            }
-            if (i < _decoderBN.Count)
-            {
-                current = _decoderBN[i].Backward(current);
-            }
-            current = Layers[i].Backward(current);
-        }
-    }
-
-    private void BackwardDiscriminator(Tensor<T> grad)
-    {
-        var current = grad;
-
-        if (_discOutput is not null)
-        {
-            current = _discOutput.Backward(current);
-        }
-
-        for (int i = _discLayers.Count - 1; i >= 0; i--)
-        {
-            if (i < _discDropout.Count)
-            {
-                current = _discDropout[i].Backward(current);
-            }
-            if (i < _discPreActs.Count)
-            {
-                current = ApplyLeakyReLUDerivative(current, _discPreActs[i], 0.2);
-            }
-            current = _discLayers[i].Backward(current);
-        }
-    }
 
     private void UpdateDiscriminator(T lr)
     {

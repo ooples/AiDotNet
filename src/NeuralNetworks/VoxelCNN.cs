@@ -223,26 +223,6 @@ public class VoxelCNN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs a backward pass through the network to compute gradients.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the output.</param>
-    /// <returns>The gradient of the loss with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass propagates gradients from the output back through each layer,
-    /// computing gradients for all trainable parameters.
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            outputGradient = Layers[i].Backward(outputGradient);
-        }
-        return outputGradient;
-    }
-
-    /// <summary>
     /// Generates predictions for the given input.
     /// </summary>
     /// <param name="input">The input voxel grid tensor.</param>

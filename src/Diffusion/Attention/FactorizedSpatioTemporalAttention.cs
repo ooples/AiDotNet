@@ -110,26 +110,6 @@ public class FactorizedSpatioTemporalAttention<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Backward through temporal attention
-        var temporalGrad = _temporalAttention.Backward(outputGradient);
-        var temporalNormGrad = _temporalNorm.Backward(temporalGrad);
-
-        // Add residual gradient
-        var afterTemporalGrad = AddTensors(outputGradient, temporalNormGrad);
-
-        // Backward through spatial attention
-        var spatialGrad = _spatialAttention.Backward(afterTemporalGrad);
-        var spatialNormGrad = _spatialNorm.Backward(spatialGrad);
-
-        return AddTensors(afterTemporalGrad, spatialNormGrad);
-    }
-
-    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         _spatialAttention.UpdateParameters(learningRate);

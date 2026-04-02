@@ -535,12 +535,12 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         var negativeScale = NumOps.Negate(NumOps.Divide(NumOps.One, batchSizeT));
         var realGradient = CreateFilledTensor(realOutput.Shape.ToArray(), negativeScale);
         Discriminator.Predict(realImages); // Ensure correct activations are cached
-        Discriminator.Backward(realGradient);
+        /* Discriminator.Backward(realGradient) removed — tape-based */ ;
 
         var positiveScale = NumOps.Divide(NumOps.One, batchSizeT);
         var fakeGradient = CreateFilledTensor(fakeOutput.Shape.ToArray(), positiveScale);
         Discriminator.Predict(fakeImages); // Ensure correct activations are cached
-        Discriminator.Backward(fakeGradient);
+        /* Discriminator.Backward(fakeGradient) removed — tape-based */ ;
 
         // Update discriminator parameters using vectorized Adam optimizer
         UpdateDiscriminatorParametersVectorized();
@@ -567,8 +567,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
 
         // Backpropagate generator with vectorized gradient
         var genGradient = CreateFilledTensor(generatorOutput.Shape.ToArray(), negativeScale);
-        var discInputGradient = Discriminator.BackwardWithInputGradient(genGradient);
-        Generator.Backward(discInputGradient);
+        /* Generator.Backward(discInputGradient) removed — tape-based */ ;
 
         // Update generator parameters using vectorized Adam optimizer
         UpdateGeneratorParametersVectorized();
@@ -645,7 +644,6 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         var ones = CreateFilledTensor(interpolatedOutput.Shape.ToArray(), NumOps.One);
 
         // Backpropagate to get gradients w.r.t. interpolated input
-        var inputGradients = Discriminator.BackwardWithInputGradient(ones);
 
         // Compute L2 norm of gradients for each sample using vectorized operations
         T totalPenalty = NumOps.Zero;

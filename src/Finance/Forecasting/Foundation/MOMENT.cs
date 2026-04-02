@@ -429,7 +429,6 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -879,46 +878,6 @@ public class MOMENT<T> : TimeSeriesFoundationModelBase<T>
             return _reconstructionHead.Forward(encoded);
 
         return encoded;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the MOMENT architecture.
-    /// </summary>
-    private Tensor<T> BackwardNative(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        bool addedBatchDim = false;
-        if (current.Rank == 1)
-        {
-            current = current.Reshape(new[] { 1, current.Length });
-            addedBatchDim = true;
-        }
-
-        // Backward through forecast head
-        if (_forecastHead is not null)
-            current = _forecastHead.Backward(current);
-
-        // Backward through final norm
-        if (_finalLayerNorm is not null)
-            current = _finalLayerNorm.Backward(current);
-
-        // Backward through transformer layers (reverse order)
-        for (int i = _transformerLayers.Count - 1; i >= 0; i--)
-        {
-            current = _transformerLayers[i].Backward(current);
-        }
-
-        // Backward through patch embedding
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Backward(current);
-
-        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-        {
-            current = current.Reshape(new[] { current.Shape[1] });
-        }
-
-        return current;
     }
 
     /// <summary>

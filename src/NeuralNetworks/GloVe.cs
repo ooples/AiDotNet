@@ -266,25 +266,6 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <summary>
-        /// Propagates error gradients backward through the model layers.
-        /// </summary>
-        /// <param name="outputGradient">The error signal from the loss function.</param>
-        /// <returns>The calculated gradient for the input.</returns>
-        /// <remarks>
-        /// <b>For Beginners:</b> This method traces mistakes back to their source. It figures 
-        /// out which word coordinates need to change to better match the real-world data.
-        /// </remarks>
-        public Tensor<T> Backward(Tensor<T> outputGradient)
-        {
-            for (int i = Layers.Count - 1; i >= 0; i--)
-            {
-                outputGradient = Layers[i].Backward(outputGradient);
-            }
-
-            return outputGradient;
-        }
-
-        /// <summary>
         /// Updates the internal weights and biases of the model.
         /// </summary>
         /// <param name="parameters">The new coordinates and scores for the model.</param>

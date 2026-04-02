@@ -409,48 +409,6 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
         return result;
     }
 
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastCompressed == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass");
-        }
-
-        int batchSize = _lastInput.Shape[0];
-        int dimension = _lastInput.Shape.Length > 1 ? _lastInput.Shape[1] : _lastInput.Length;
-
-        Matrix<T> gradMatrix = new Matrix<T>(batchSize, dimension);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < dimension; j++)
-            {
-                gradMatrix[i, j] = outputGradient[i * dimension + j];
-            }
-        }
-
-        T scalingFactor = NumOps.FromDouble(Alpha);
-        Matrix<T> gradTransformed = gradMatrix.Multiply(_decompressionMatrix.Transpose()).Multiply(scalingFactor);
-        _matrixMGradient = _lastCompressed.Transpose().Multiply(gradTransformed);
-        Matrix<T> gradCompressed = gradTransformed.Multiply(_matrixM.Transpose());
-        Matrix<T> moraInputGradient = gradCompressed.Multiply(_compressionMatrix.Transpose());
-
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        Tensor<T> inputGrad = new Tensor<T>(_lastInput.Shape.ToArray());
-        int idx = 0;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < dimension; j++)
-            {
-                T moraGrad = moraInputGradient[i, j];
-                inputGrad[idx] = NumOps.Add(baseInputGrad[idx], moraGrad);
-                idx++;
-            }
-        }
-
-        return inputGrad;
-    }
-
     public override void UpdateParameters(T learningRate)
     {
         if (_matrixMGradient == null)

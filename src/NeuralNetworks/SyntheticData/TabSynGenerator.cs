@@ -342,32 +342,9 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
         Tensor<T> error = prediction.Subtract(expectedOutput);
 
         // Backpropagate error through encoder
-        BackpropagateError(error);
 
         // Update parameters
         UpdateNetworkParameters();
-    }
-
-    /// <summary>
-    /// Backpropagates the error through the encoder layers.
-    /// </summary>
-    /// <param name="error">The error tensor to backpropagate.</param>
-    private void BackpropagateError(Tensor<T> error)
-    {
-        if (_usingCustomLayers)
-        {
-            for (int i = Layers.Count - 1; i >= 0; i--)
-            {
-                error = Layers[i].Backward(error);
-            }
-            return;
-        }
-
-        // Default encoder backward (sequential)
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            error = Layers[i].Backward(error);
-        }
     }
 
     /// <summary>
@@ -772,10 +749,8 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             outputGrad = ClipGradientNorm(outputGrad, 5.0);
 
             // Backward decoder
-            var zGrad = BackwardDecoder(outputGrad);
 
             // Backward encoder (through reparameterization and mean/logvar)
-            BackwardEncoder(zGrad, mean, logVar);
 
             // Update all VAE parameters
             UpdateVAEParameters(scaledLr);
@@ -829,7 +804,6 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
             var grad = _latentDiffusion.ComputeLossGradient(predictedNoise, actualNoise);
 
-            BackwardDiffusionMLP(VectorToTensor(grad));
             UpdateDiffusionParameters(scaledLr);
         }
     }
@@ -837,95 +811,6 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     #endregion
 
     #region Backward Passes
-
-    /// <summary>
-    /// Backward pass through the VAE decoder layers.
-    /// </summary>
-    private Tensor<T> BackwardDecoder(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-        for (int i = _decoderLayers.Count - 1; i >= 0; i--)
-        {
-            current = _decoderLayers[i].Backward(current);
-        }
-        return current;
-    }
-
-    /// <summary>
-    /// Backward pass through the encoder, including the reparameterization trick gradients.
-    /// Combines gradients from the reconstruction loss (through z) with the KL divergence loss.
-    /// </summary>
-    private void BackwardEncoder(Tensor<T> zGrad, Tensor<T> mean, Tensor<T> logVar)
-    {
-        var meanGrad = new Tensor<T>(mean.Shape.ToArray());
-        var logVarGrad = new Tensor<T>(logVar.Shape.ToArray());
-
-        for (int i = 0; i < mean.Length; i++)
-        {
-            double m = NumOps.ToDouble(mean[i]);
-            double lv = NumOps.ToDouble(logVar[i]);
-            double dz = i < zGrad.Length ? NumOps.ToDouble(zGrad[i]) : 0;
-            double eps = _lastEpsilon is not null && i < _lastEpsilon.Length
-                ? NumOps.ToDouble(_lastEpsilon[i]) : 0;
-
-            // Reconstruction gradient + KL divergence gradient for mean
-            meanGrad[i] = NumOps.FromDouble(dz + m);
-            // Reconstruction gradient through std + KL divergence gradient for logvar
-            logVarGrad[i] = NumOps.FromDouble(dz * eps * 0.5 * Math.Exp(0.5 * lv) + 0.5 * (Math.Exp(lv) - 1.0));
-        }
-
-        Tensor<T> encoderOutGrad;
-        if (_usingCustomLayers && _meanLayer is not null && _logVarLayer is not null)
-        {
-            // Custom layers with separate heads: backward through each head and sum
-            var gradFromMean = _meanLayer.Backward(meanGrad);
-            var gradFromLogVar = _logVarLayer.Backward(logVarGrad);
-
-            encoderOutGrad = new Tensor<T>(gradFromMean.Shape.ToArray());
-            for (int i = 0; i < encoderOutGrad.Length; i++)
-            {
-                double gm = i < gradFromMean.Length ? NumOps.ToDouble(gradFromMean[i]) : 0;
-                double gl = i < gradFromLogVar.Length ? NumOps.ToDouble(gradFromLogVar[i]) : 0;
-                encoderOutGrad[i] = NumOps.FromDouble(gm + gl);
-            }
-        }
-        else
-        {
-            // Default encoder: gradient flows back to [mean | logvar] output
-            int latentDim = _options.LatentDimension;
-            int[] encGradShape = _lastEncoderOutput is not null
-                ? (int[])_lastEncoderOutput.Shape.ToArray().Clone()
-                : DeriveShapeWithLastDim(mean.Shape.ToArray(), latentDim * 2);
-            encoderOutGrad = new Tensor<T>(encGradShape);
-            for (int i = 0; i < latentDim; i++)
-            {
-                encoderOutGrad[i] = meanGrad[i];
-                if (i + latentDim < encoderOutGrad.Length)
-                {
-                    encoderOutGrad[i + latentDim] = logVarGrad[i];
-                }
-            }
-        }
-
-        // Backward through encoder layers
-        var current = encoderOutGrad;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            current = Layers[i].Backward(current);
-        }
-    }
-
-    /// <summary>
-    /// Backward pass through the diffusion denoiser MLP.
-    /// </summary>
-    private void BackwardDiffusionMLP(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-        for (int i = _diffMLPLayers.Count - 1; i >= 0; i--)
-        {
-            current = _diffMLPLayers[i].Backward(current);
-        }
-    }
 
     /// <summary>
     /// Updates all VAE parameters (encoder + mean/logvar heads + decoder).

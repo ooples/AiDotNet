@@ -75,75 +75,6 @@ public class SimCLR<T> : SSLMethodBase<T>
         _augmentation = new SSLAugmentationPolicies<T>(_config.Seed);
     }
 
-    /// <inheritdoc />
-    protected override SSLStepResult<T> TrainStepCore(Tensor<T> batch, SSLAugmentationContext<T>? augmentationContext)
-    {
-        var batchSize = batch.Shape[0];
-
-        // Create two augmented views
-        Tensor<T> view1, view2;
-
-        if (augmentationContext?.PrecomputedView is not null)
-        {
-            // Use precomputed augmentations if provided
-            view1 = batch;
-            view2 = augmentationContext.PrecomputedView;
-        }
-        else
-        {
-            // Apply SimCLR augmentation
-            (view1, view2) = _augmentation.ApplySimCLR(batch);
-        }
-
-        // Forward pass through encoder
-        var h1 = _encoder.ForwardWithMemory(view1);
-        var h2 = _encoder.ForwardWithMemory(view2);
-
-        // Project to contrastive space
-        var projector = _projector ?? throw new InvalidOperationException("Projector has not been initialized.");
-        var z1 = projector.Project(h1);
-        var z2 = projector.Project(h2);
-
-        // Compute NT-Xent loss with gradients
-        var (loss, gradZ1, gradZ2) = _loss.ComputeLossWithGradients(z1, z2);
-
-        // Replay view1 forward to restore projector caches, then backward for gradZ1
-        // (view2 forward overwrites shared projector caches)
-        projector.Reset();
-        projector.Project(h1);
-        var gradH1 = projector.Backward(gradZ1);
-        // Capture view1 projector gradients before they are cleared by the next Backward()
-        var view1ProjGrads = projector.GetParameterGradients();
-        _encoder.Backpropagate(gradH1);
-
-        // Replay view2 forward to restore projector caches, then backward for gradZ2
-        projector.Reset();
-        projector.Project(h2);
-        var gradH2 = projector.Backward(gradZ2);
-        var view2ProjGrads = projector.GetParameterGradients();
-        _encoder.Backpropagate(gradH2);
-
-        // Accumulate projector gradients from both views
-        var projectorGradients = Engine.Add(view1ProjGrads, view2ProjGrads);
-
-        // Update parameters with learning rate
-        var learningRate = NumOps.FromDouble(GetEffectiveLearningRate());
-        var encoderGradients = _encoder.GetParameterGradients();
-
-        // Update with accumulated projector gradients
-        UpdateWithGradients(learningRate, encoderGradients, projectorGradients);
-
-        // Create result
-        var result = CreateStepResult(loss);
-        result.NumPositivePairs = batchSize;
-        result.NumNegativePairs = batchSize * (2 * batchSize - 2); // Each sample has 2N-2 negatives
-
-        // Add SimCLR-specific metrics
-        result.Metrics["embedding_norm"] = ComputeAverageNorm(z1);
-
-        return result;
-    }
-
     private void UpdateWithGradients(T learningRate, Vector<T> encoderGrads, Vector<T> projectorGrads)
     {
         // SGD update for encoder
@@ -213,5 +144,7 @@ public class SimCLR<T> : SSLMethodBase<T>
             encoderOutputDim, hiddenDim, projectionDim);
 
         return new SimCLR<T>(encoder, projector);
-    }
+    
+
+}
 }

@@ -404,7 +404,6 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
             var policyOutput = policyOutputTensor.ToVector();
             var policyGradient = ComputeA3CPolicyGradient(policyOutput, exp.action, advantage);
             var policyGradientTensor = Tensor<T>.FromVector(policyGradient);
-            localPolicy.Backpropagate(policyGradientTensor);
 
             // Compute value gradient
             var stateTensor2 = Tensor<T>.FromVector(exp.state);
@@ -416,7 +415,6 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
                 NumOps.Multiply(NumOps.FromDouble(2.0), valueDiff),
                 NumOps.FromDouble(trajectory.Count));
             var valueGradientTensor = Tensor<T>.FromVector(valueGradient);
-            localValue.Backpropagate(valueGradientTensor);
         }
 
         // Update global networks with local gradients

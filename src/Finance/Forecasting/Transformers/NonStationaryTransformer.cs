@@ -621,7 +621,6 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
         var predictions = Forward(input);
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
         _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
@@ -969,46 +968,6 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Performs the backward pass for gradient computation.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from the loss function.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The backward pass calculates how each parameter contributed
-    /// to the error. This information is then used by the optimizer to update the parameters.
-    /// The gradients flow backward through the network (hence "backpropagation").
-    /// </para>
-    /// </remarks>
-    private void Backward(Tensor<T> outputGradient)
-    {
-        var gradient = outputGradient;
-
-        // Backward through output projection
-        if (_outputProjection is not null)
-        {
-            gradient = _outputProjection.Backward(gradient);
-        }
-
-        // Backward through decoder layers (in reverse order)
-        for (int i = _decoderLayers.Count - 1; i >= 0; i--)
-        {
-            gradient = _decoderLayers[i].Backward(gradient);
-        }
-
-        // Backward through encoder layers (in reverse order)
-        for (int i = _encoderLayers.Count - 1; i >= 0; i--)
-        {
-            gradient = _encoderLayers[i].Backward(gradient);
-        }
-
-        // Backward through input projection
-        if (_inputProjection is not null)
-        {
-            gradient = _inputProjection.Backward(gradient);
-        }
     }
 
     /// <summary>

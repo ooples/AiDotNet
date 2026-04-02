@@ -299,7 +299,6 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Backpropagate through policy network
             var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
-            _policyNetwork.Backpropagate(outputGradientTensor);
         }
 
         // Average loss

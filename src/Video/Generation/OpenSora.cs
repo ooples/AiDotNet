@@ -404,38 +404,10 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         }
 
         // Backpropagate through the network
-        BackpropagateGradient(gradient);
 
         // Update parameters
         T lr = NumOps.FromDouble(0.0001);
         foreach (var layer in Layers) layer.UpdateParameters(lr);
-    }
-
-    /// <summary>
-    /// Backpropagates the gradient through the network layers.
-    /// </summary>
-    private void BackpropagateGradient(Tensor<T> gradient)
-    {
-        // Backpropagate through final layer
-        gradient = _finalLayer.Backward(gradient);
-
-        // Backpropagate through DiT blocks in reverse order
-        // Each DiT block consists of 3 layers: self-attention, FFN expand, FFN contract
-        // The layers internally handle activation gradient computation
-        // Backward through DiT blocks (in reverse order)
-        for (int i = _numLayers - 1; i >= 0; i--)
-        {
-            // Backward through FFN (residual adds gradient to both paths)
-            gradient = _ditFFN2[i].Backward(gradient);
-            gradient = _ditFFN1[i].Backward(gradient);
-
-            // Backward through attention (residual adds gradient to both paths)
-            gradient = _ditAttnProj[i].Backward(gradient);
-            gradient = _ditQKV[i].Backward(gradient);
-        }
-
-        // Backpropagate through patch embedding
-        _patchEmbed.Backward(gradient);
     }
 
     #endregion

@@ -266,7 +266,6 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
             var output = ForwardNative(input);
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
             _optimizer.UpdateParameters(Layers);
         }
         finally { SetTrainingMode(false); }
@@ -442,18 +441,6 @@ public class CSDI<T> : TimeSeriesFoundationModelBase<T>
 
         if (addedBatchDim && xt.Rank == 2 && xt.Shape[0] == 1) xt = xt.Reshape(new[] { xt.Shape[1] });
         return xt;
-    }
-
-    private Tensor<T> BackwardNative(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-        bool addedBatchDim = false;
-        if (current.Rank == 1) { current = current.Reshape(new[] { 1, current.Length }); addedBatchDim = true; }
-        if (_outputProjection is not null) current = _outputProjection.Backward(current);
-        for (int i = _residualLayers.Count - 1; i >= 0; i--) current = _residualLayers[i].Backward(current);
-        if (_inputProjection is not null) current = _inputProjection.Backward(current);
-        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1) current = current.Reshape(new[] { current.Shape[1] });
-        return current;
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)

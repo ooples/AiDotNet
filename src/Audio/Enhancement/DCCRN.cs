@@ -525,7 +525,6 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         // Backward pass
         var gradientVector = _lossFunction.CalculateDerivative(enhancedVector, cleanVector);
         var gradientTensor = Tensor<T>.FromVector(gradientVector, enhancedStft.Shape.ToArray());
-        BackwardNative(gradientTensor);
 
         // Update parameters via optimizer
         _optimizer?.UpdateParameters(Layers);
@@ -686,37 +685,6 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
         // Apply mask to input STFT
         return ApplyComplexMask(stft, mask);
-    }
-
-    /// <summary>
-    /// Backward pass through native layers.
-    /// </summary>
-    private void BackwardNative(Tensor<T> gradient)
-    {
-        var grad = gradient;
-
-        // Backward through mask
-        if (_maskLayer is null)
-            throw new InvalidOperationException("DCCRN mask layer not initialized. Call InitializeLayers first.");
-        grad = _maskLayer.Backward(grad);
-
-        // Backward through decoder
-        for (int i = _decoder.Count - 1; i >= 0; i--)
-        {
-            grad = _decoder[i].Backward(grad);
-        }
-
-        // Backward through LSTM
-        for (int i = _lstmLayers.Count - 1; i >= 0; i--)
-        {
-            grad = _lstmLayers[i].Backward(grad);
-        }
-
-        // Backward through encoder
-        for (int i = _encoder.Count - 1; i >= 0; i--)
-        {
-            grad = _encoder[i].Backward(grad);
-        }
     }
 
     /// <summary>

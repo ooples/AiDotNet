@@ -220,46 +220,6 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass for MSE loss.
-    /// </summary>
-    /// <param name="targets">Target values [batch_size, output_dim].</param>
-    /// <returns>Gradient with respect to numerical input [batch_size, num_numerical].</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The backward pass computes how to adjust the model weights
-    /// to reduce the loss. For MSE, the gradient is:
-    ///
-    /// d(MSE)/d(prediction) = 2 * (prediction - target) / n
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(Tensor<T> targets)
-    {
-        if (_predictionsCache == null || _clsOutputCache == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int batchSize = _predictionsCache.Shape[0];
-        int outputDim = _predictionsCache.Shape.Length > 1 ? _predictionsCache.Shape[1] : 1;
-
-        // Gradient of MSE: 2 * (predictions - targets) / n
-        var predictionGrad = new Tensor<T>(_predictionsCache.Shape.ToArray());
-        var scale = NumOps.FromDouble(2.0 / (batchSize * outputDim));
-
-        for (int i = 0; i < _predictionsCache.Length; i++)
-        {
-            var diff = NumOps.Subtract(_predictionsCache[i], targets[i]);
-            predictionGrad[i] = NumOps.Multiply(diff, scale);
-        }
-
-        // Backward through regression head
-        var clsGrad = _regressionHead.Backward(predictionGrad);
-
-        // Backward through backbone
-        return BackwardBackbone(clsGrad);
-    }
-
-    /// <summary>
     /// Performs a single training step using MSE loss.
     /// </summary>
     /// <param name="numericalFeatures">Numerical features tensor [batch_size, num_numerical].</param>
@@ -280,7 +240,6 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
         var loss = ComputeMSELoss(predictions, targets);
 
         // Backward pass
-        _ = Backward(targets);
 
         // Update parameters
         UpdateParameters(learningRate);

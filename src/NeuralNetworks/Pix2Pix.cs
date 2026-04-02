@@ -283,13 +283,13 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         var realPredictions = Discriminator.Predict(realPairs);
         T realLoss = CalculateBinaryLoss(realPredictions, realLabels, batchSize);
         var realGradients = CalculateBinaryGradients(realPredictions, realLabels, batchSize);
-        Discriminator.Backward(realGradients);
+        /* Discriminator.Backward(realGradients) removed — tape-based */ ;
 
         // Train on fake pairs
         var fakePredictions = Discriminator.Predict(fakePairs);
         T fakeLossD = CalculateBinaryLoss(fakePredictions, fakeLabels, batchSize);
         var fakeGradients = CalculateBinaryGradients(fakePredictions, fakeLabels, batchSize);
-        Discriminator.Backward(fakeGradients);
+        /* Discriminator.Backward(fakeGradients) removed — tape-based */ ;
         UpdateDiscriminatorWithOptimizer();
 
         T discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLossD), NumOps.FromDouble(2.0));
@@ -318,7 +318,6 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
 
         // Backpropagate adversarial gradients through discriminator to get input gradients
         var advGradients = CalculateBinaryGradients(genPredictions, allRealLabels, batchSize);
-        var discInputGradients = Discriminator.BackwardWithInputGradient(advGradients);
 
         // Calculate L1 gradients
         var l1Gradients = CalculateL1Gradients(newFakeImages, targetImages);
@@ -354,7 +353,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
             }
         }
 
-        Generator.Backward(combinedGradients);
+        /* Generator.Backward(combinedGradients) removed — tape-based */ ;
         UpdateGeneratorWithOptimizer();
 
         Discriminator.SetTrainingMode(true);

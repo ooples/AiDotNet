@@ -1398,15 +1398,6 @@ internal class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
         return Forward(inputs[0]);
     }
 
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Return gradient w.r.t. trend input (first half of concatenated gradient)
-        var dTrend = new Tensor<T>(new[] { _embeddingDim });
-        for (int i = 0; i < _embeddingDim && i < outputGradient.Length; i++)
-            dTrend[i] = outputGradient[i];
-        return dTrend;
-    }
-
     public AutoformerEncoderLayer(int embeddingDim, int numHeads, int movingAvgKernel,
         int autoCorrelationFactor, double dropoutRate, int seed)
         : base(new[] { embeddingDim }, new[] { embeddingDim * 2 })
@@ -1870,14 +1861,6 @@ internal class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBase<T>
             return output;
         }
         return Forward(inputs[0]);
-    }
-
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var dTrend = new Tensor<T>(new[] { _embeddingDim });
-        for (int i = 0; i < _embeddingDim && i < outputGradient.Length; i++)
-            dTrend[i] = outputGradient[i];
-        return dTrend;
     }
 
     public AutoformerDecoderLayer(int embeddingDim, int numHeads, int movingAvgKernel,

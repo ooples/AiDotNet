@@ -589,59 +589,6 @@ public class S5Layer<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null ||
-            _lastProjectedInput == null || _lastScanOutputReal == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int batchSize = _lastInput.Shape[0];
-        int seqLen = _lastInput.Shape[1];
-
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        var activationGrad = ApplyActivationDerivative(_lastOutput, grad3D);
-
-        // Output projection backward
-        var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
-        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
-
-        var scanFlat = _lastScanOutputReal.Reshape(batchSize * seqLen, _modelDimension);
-        _outputProjectionWeightsGradient = Engine.TensorMatMul(
-            scanFlat.Transpose([1, 0]), gradFlat);
-
-        var dScan = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
-            .Reshape(batchSize, seqLen, _modelDimension);
-
-        // Kernel-based backward (numerically stable)
-        var dProjected = KernelBasedMIMOBackward(dScan, _lastProjectedInput, batchSize, seqLen);
-
-        // Input projection backward
-        var dProjFlat = dProjected.Reshape(batchSize * seqLen, _modelDimension);
-        _inputProjectionBiasGradient = Engine.ReduceSum(dProjected, new int[] { 0, 1 });
-
-        var input2D = _lastInput.Reshape(batchSize * seqLen, _modelDimension);
-        _inputProjectionWeightsGradient = Engine.TensorMatMul(
-            input2D.Transpose([1, 0]), dProjFlat);
-
-        var inputGradFlat = Engine.TensorMatMul(
-            dProjFlat, _inputProjectionWeights.Transpose([1, 0]));
-        var inputGrad3D = inputGradFlat.Reshape(batchSize, seqLen, _modelDimension);
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return inputGrad3D.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return inputGrad3D.Reshape(_originalInputShape);
-
-        return inputGrad3D;
-    }
-
     /// <summary>
     /// Backward pass through the MIMO complex recurrent scan.
     /// </summary>

@@ -499,7 +499,6 @@ public class Mamba<T> : ForecastingModelBase<T>
 
         // Create 2D gradient tensor for backward pass
         var gradTensor = new Tensor<T>(new[] { 1, output.Length }, new Vector<T>(fullGradient));
-        Backward(gradTensor);
 
         _optimizer.UpdateParameters(Layers);
 
@@ -857,68 +856,6 @@ public class Mamba<T> : ForecastingModelBase<T>
         int seqDim = input.Shape[input.Rank - 2];
         int featureDim = input.Shape[input.Rank - 1];
         return input.Reshape(new[] { batchDims, seqDim, featureDim });
-    }
-
-    /// <summary>
-    /// Performs the backward pass for gradient computation.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of the loss with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The backward pass reverses the forward pass:
-    /// 1. Backprop through output DenseLayers (2D gradients)
-    /// 2. Reshape gradient to [batch, seqLen, modelDim] for MambaBlock backward
-    /// 3. Backprop through stacked MambaBlock layers (3D gradients)
-    /// 4. Reshape and backprop through input embedding DenseLayer
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var current = outputGradient;
-
-        // Ensure gradient is 2D [batch, outputDim] for the output DenseLayers
-        if (current.Rank == 1)
-        {
-            current = current.Reshape(new[] { 1, current.Length });
-        }
-
-        int batchSize = _lastForwardBatchSize;
-
-        // === Phase 3 backward: Output projection DenseLayers ===
-        if (_outputProjectionLayers is not null)
-        {
-            for (int i = _outputProjectionLayers.Count - 1; i >= 0; i--)
-            {
-                current = _outputProjectionLayers[i].Backward(current);
-            }
-        }
-
-        // === Phase 2 backward: MambaBlock layers ===
-        // Reshape from [batch, seqLen * modelDim] to [batch, seqLen, modelDim]
-        current = current.Reshape(new[] { batchSize, _lastForwardSeqLen, _modelDimension });
-
-        if (_mambaBlocks is not null)
-        {
-            for (int i = _mambaBlocks.Count - 1; i >= 0; i--)
-            {
-                current = _mambaBlocks[i].Backward(current);
-            }
-        }
-
-        // === Phase 1 backward: Input embedding DenseLayer ===
-        // Reshape [batch, seqLen, modelDim] -> [batch*seqLen, modelDim] for DenseLayer backward
-        int seqLen = current.Shape[1];
-        current = current.Reshape(new[] { batchSize * seqLen, _modelDimension });
-
-        if (_inputEmbedding is not null)
-        {
-            current = _inputEmbedding.Backward(current);
-        }
-
-        // Reshape back to [batch, seqLen, numFeatures]
-        current = current.Reshape(new[] { batchSize, seqLen, _numFeatures });
-
-        return current;
     }
 
     /// <summary>

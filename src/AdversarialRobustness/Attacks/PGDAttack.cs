@@ -3,6 +3,8 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AdversarialRobustness.Attacks;
@@ -97,8 +99,23 @@ public class PGDAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TO
         // Perform iterative PGD steps
         for (int iteration = 0; iteration < Options.Iterations; iteration++)
         {
-            // Compute gradient at current point
-            var gradient = ComputeGradient(adversarial, trueLabelIndex, input, targetModel);
+            // Compute exact gradient of loss w.r.t. input using tape-based autodiff
+            Vector<T> gradient;
+            {
+                var eng = AiDotNetEngine.Current;
+                var inputTensor = Tensor<T>.FromVector(perturbedInput);
+                var targetTensor = Tensor<T>.FromVector(vectorLabel);
+                using var tape = new GradientTape<T>();
+                var modelIn = ConversionsHelper.ConvertVectorToInput<T, TInput>(perturbedInput, referenceInput);
+                var output = targetModel.Predict(modelIn);
+                var outputTensor = Tensor<T>.FromVector(ConversionsHelper.ConvertToVector<T, TOutput>(output));
+                var diff = eng.TensorSubtract(outputTensor, targetTensor);
+                var squared = eng.TensorMultiply(diff, diff);
+                var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+                var loss = eng.ReduceMean(squared, allAxes, keepDims: false);
+                var grads = tape.ComputeGradients(loss, [inputTensor]);
+                gradient = grads.TryGetValue(inputTensor, out var g) ? g.ToVector() : new Vector<T>(perturbedInput.Length);
+            }
 
             // Compute perturbation: stepSize * sign(gradient)
             var signedGradient = SignVector(gradient);
@@ -181,72 +198,6 @@ public class PGDAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TO
         return Engine.Add<T>(original, perturbation);
     }
 
-    /// <summary>
-    /// Computes the gradient of the loss with respect to the input.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// When the target model implements <see cref="IInputGradientComputable{T}"/>, this method uses
-    /// analytic gradient computation via backpropagation, which is more accurate and efficient.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how changing each input dimension
-    /// affects the model's loss. With analytic gradients, we use the model's internal
-    /// backpropagation; otherwise, we approximate by testing small changes.</para>
-    /// </remarks>
-    private Vector<T> ComputeGradient(Vector<T> vectorInput, int trueLabel, TInput referenceInput, IFullModel<T, TInput, TOutput> targetModel)
-    {
-        // Determine which class to compute gradient for
-        var targetClass = Options.IsTargeted ? Options.TargetClass : trueLabel;
-
-        // Check if the model supports analytic gradients
-        if (targetModel is IInputGradientComputable<T> gradientComputable)
-        {
-            return ComputeAnalyticGradient(vectorInput, targetClass, referenceInput, targetModel, gradientComputable);
-        }
-
-        // Fallback to finite differences
-        return ComputeFiniteDifferenceGradient(vectorInput, targetClass, referenceInput, targetModel);
-    }
-
-    /// <summary>
-    /// Computes the gradient analytically using the model's backpropagation capabilities.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// For cross-entropy loss with softmax output, the gradient of the loss with respect to
-    /// the logits is: dL/dz = p - one_hot(target_class)
-    /// where p is the softmax probabilities.
-    /// </para>
-    /// <para>
-    /// This is then backpropagated through the model to get dL/dx (the input gradient).
-    /// </para>
-    /// </remarks>
-    private Vector<T> ComputeAnalyticGradient(
-        Vector<T> vectorInput,
-        int targetClass,
-        TInput referenceInput,
-        IFullModel<T, TInput, TOutput> targetModel,
-        IInputGradientComputable<T> gradientComputable)
-    {
-        // Get the model's output
-        var modelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(vectorInput, referenceInput);
-        var output = targetModel.Predict(modelInput);
-        var outputVector = ConversionsHelper.ConvertToVector<T, TOutput>(output);
-
-        // Compute softmax probabilities using vectorized Engine operation
-        var probabilities = Engine.Softmax<T>(outputVector);
-
-        // Compute gradient of cross-entropy loss w.r.t. logits: dL/dz = p - one_hot(target)
-        // Create one-hot vector for target class
-        var oneHot = Engine.FillZero<T>(outputVector.Length);
-        oneHot[targetClass] = NumOps.One;
-
-        // outputGradient = probabilities - oneHot
-        var outputGradient = Engine.Subtract<T>(probabilities, oneHot);
-
-        // Backpropagate to get input gradient
-        return gradientComputable.ComputeInputGradient(vectorInput, outputGradient);
-    }
 
     /// <summary>
     /// Computes the gradient using finite-difference approximation as a fallback.

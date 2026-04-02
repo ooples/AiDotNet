@@ -415,7 +415,6 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
         var gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
         var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape.ToArray());
 
-        BackwardNative(gradientTensor);
         _optimizer?.UpdateParameters(Layers);
 
         SetTrainingMode(false);
@@ -594,36 +593,6 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
         }
 
         return output;
-    }
-
-    private void BackwardNative(Tensor<T> gradient)
-    {
-        var grad = gradient;
-
-        if (_classifierLayer is not null)
-        {
-            grad = _classifierLayer.Backward(grad);
-        }
-
-        if (_poolingProjection is not null)
-        {
-            grad = _poolingProjection.Backward(grad);
-        }
-
-        for (int i = _transformerLayers.Count - 1; i >= 0; i--)
-        {
-            grad = _transformerLayers[i].Backward(grad);
-        }
-
-        for (int i = _featureProjection.Count - 1; i >= 0; i--)
-        {
-            grad = _featureProjection[i].Backward(grad);
-        }
-
-        for (int i = _featureEncoder.Count - 1; i >= 0; i--)
-        {
-            grad = _featureEncoder[i].Backward(grad);
-        }
     }
 
     private IEnumerable<ILayer<T>> GetAllLayers()

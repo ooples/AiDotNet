@@ -491,20 +491,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs a backward pass through the network to calculate gradients.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the network's output.</param>
-    /// <returns>The gradient of the loss with respect to the network's input.</returns>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            outputGradient = Layers[i].Backward(outputGradient);
-        }
-        return outputGradient;
-    }
-
-    /// <summary>
     /// Updates the parameters of all layers in the network.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters for the network.</param>

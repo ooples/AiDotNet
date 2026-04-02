@@ -118,7 +118,6 @@ public class OnlineEWC<T> : IContinualLearningStrategy<T>
         Guard.NotNull(taskData.targets);
 
         var currentParams = network.GetParameters();
-        var newFisher = ComputeFisherDiagonal(network, taskData.inputs, taskData.targets);
 
         if (_taskCount == 0)
         {
@@ -220,45 +219,6 @@ public class OnlineEWC<T> : IContinualLearningStrategy<T>
             _optimalParameters[i] = _numOps.Divide(totalContrib, denominator);
             _fisherDiagonal[i] = combinedFisher;
         }
-    }
-
-    /// <summary>
-    /// Computes the diagonal approximation of the Fisher Information Matrix.
-    /// </summary>
-    private Vector<T> ComputeFisherDiagonal(INeuralNetwork<T> network, Tensor<T> inputs, Tensor<T> targets)
-    {
-        var paramCount = network.ParameterCount;
-        var fisherDiag = new Vector<T>(paramCount);
-        var batchSize = inputs.Shape[0];
-
-        network.SetTrainingMode(true);
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            var singleInput = ExtractSample(inputs, i);
-            var singleTarget = ExtractSample(targets, i);
-
-            var output = network.ForwardWithMemory(singleInput);
-            var outputGrad = ComputeLogLikelihoodGradient(output, singleTarget);
-            network.Backpropagate(outputGrad);
-
-            var grads = network.GetParameterGradients();
-            for (int j = 0; j < paramCount; j++)
-            {
-                var squaredGrad = _numOps.Multiply(grads[j], grads[j]);
-                fisherDiag[j] = _numOps.Add(fisherDiag[j], squaredGrad);
-            }
-        }
-
-        // Average over batch
-        var batchSizeT = _numOps.FromDouble(batchSize);
-        for (int j = 0; j < paramCount; j++)
-        {
-            fisherDiag[j] = _numOps.Divide(fisherDiag[j], batchSizeT);
-        }
-
-        network.SetTrainingMode(false);
-        return fisherDiag;
     }
 
     /// <summary>

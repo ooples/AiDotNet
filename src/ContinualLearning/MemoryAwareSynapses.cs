@@ -101,7 +101,6 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
         Guard.NotNull(taskData.inputs);
 
         // Compute importance using output sensitivity (unsupervised)
-        var newOmega = ComputeOutputSensitivity(network, taskData.inputs);
 
         // Accumulate importance
         for (int i = 0; i < _omega.Length; i++)
@@ -172,53 +171,6 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
         _omega = new Vector<T>(0);
         _optimalParameters = new Vector<T>(0);
         _taskCount = 0;
-    }
-
-    /// <summary>
-    /// Computes the importance of each parameter based on output sensitivity.
-    /// </summary>
-    /// <remarks>
-    /// This is the key difference from EWC: we compute gradients of the output norm
-    /// with respect to parameters, not gradients of the loss.
-    /// </remarks>
-    private Vector<T> ComputeOutputSensitivity(INeuralNetwork<T> network, Tensor<T> inputs)
-    {
-        var paramCount = network.ParameterCount;
-        var omega = new Vector<T>(paramCount);
-        var batchSize = inputs.Shape[0];
-
-        network.SetTrainingMode(true);
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            var singleInput = ExtractSample(inputs, i);
-
-            // Forward pass
-            var output = network.ForwardWithMemory(singleInput);
-
-            // Compute gradient of squared L2 norm of output with respect to parameters
-            // d||F(x)||²/dθ = 2 * F(x) * dF(x)/dθ
-            var outputGrad = ComputeOutputNormGradient(output);
-            network.Backpropagate(outputGrad);
-
-            // Get parameter gradients and accumulate absolute values
-            var grads = network.GetParameterGradients();
-            for (int j = 0; j < paramCount; j++)
-            {
-                var absGrad = _numOps.Abs(grads[j]);
-                omega[j] = _numOps.Add(omega[j], absGrad);
-            }
-        }
-
-        // Average over batch
-        var batchSizeT = _numOps.FromDouble(batchSize);
-        for (int j = 0; j < paramCount; j++)
-        {
-            omega[j] = _numOps.Divide(omega[j], batchSizeT);
-        }
-
-        network.SetTrainingMode(false);
-        return omega;
     }
 
     /// <summary>

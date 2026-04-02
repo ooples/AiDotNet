@@ -203,21 +203,6 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the backward pass gradient for Leaky ReLU using GPU-accelerated fused operation.
-    /// </summary>
-    /// <param name="input">The input tensor that was used in the forward pass.</param>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method uses a single GPU kernel to compute the gradient,
-    /// which is faster than computing derivative and gradient multiplication separately.
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
-    {
-        return Engine.LeakyReluBackward(outputGradient, input, NumOps.ToDouble(_alpha));
-    }
-
-    /// <summary>
     /// Gets whether this activation function supports JIT compilation.
     /// </summary>
     /// <value>True because gradient computation is fully implemented in TensorOperations.LeakyReLU.</value>
@@ -275,27 +260,6 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     {
         float alpha = (float)NumOps.ToDouble(_alpha);
         backend.LeakyRelu(input, output, alpha, size);
-    }
-
-    /// <summary>
-    /// Calculates the Leaky ReLU backward pass gradient on GPU.
-    /// </summary>
-    /// <param name="backend">The GPU backend to use for execution.</param>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="input">The input buffer from the forward pass.</param>
-    /// <param name="output">Not used for LeakyReLU (can be null). LeakyReLU backward uses forward input.</param>
-    /// <param name="gradInput">The output buffer to store the input gradient.</param>
-    /// <param name="size">The number of elements to process.</param>
-    /// <remarks>
-    /// LeakyReLU backward on GPU: gradInput[i] = gradOutput[i] * (input[i] > 0 ? 1 : alpha)
-    /// </remarks>
-    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input), "LeakyReLU backward requires the input from forward pass.");
-
-        float alpha = (float)NumOps.ToDouble(_alpha);
-        backend.LeakyReluBackward(gradOutput, input, gradInput, alpha, size);
     }
 
     #endregion

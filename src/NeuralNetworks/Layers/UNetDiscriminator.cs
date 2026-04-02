@@ -287,43 +287,6 @@ public class UNetDiscriminator<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     #region Backward Pass
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _skipConnections == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var grad = outputGradient;
-
-        // Backward through final conv
-        grad = _convLast.Backward(grad);
-
-        // Backward through decoder
-        var skipGrads = new Tensor<T>[_numBlocks];
-        for (int i = _numBlocks - 1; i >= 0; i--)
-        {
-            var (mainGrad, skipGrad) = _decoderBlocks[i].BackwardWithSkip(grad);
-            grad = mainGrad;
-            skipGrads[_numBlocks - 1 - i] = skipGrad;
-        }
-
-        // Backward through encoder (combine with skip gradients)
-        // Skip gradients are at the encoder INPUT resolution (stored before encoder processes),
-        // so we must first backward through the encoder (giving gradient at input resolution),
-        // then add the skip gradient (both now at the same resolution).
-        for (int i = _numBlocks - 1; i >= 0; i--)
-        {
-            grad = _encoderBlocks[i].Backward(grad);
-            grad = AddTensors(grad, skipGrads[i]);
-        }
-
-        // Backward through initial conv activation and conv
-        grad = BackwardLeakyReLU(_convFirst.Forward(_lastInput), grad);
-        grad = _convFirst.Backward(grad);
-
-        return grad;
-    }
-
     #endregion
 
     #region Helper Methods
@@ -576,22 +539,6 @@ internal class UNetConvBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         return output;
     }
 
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _conv1Output == null || _conv1RawOutput == null || _conv2RawOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Backward through LeakyReLU after conv2 (use cached raw output)
-        var grad = BackwardLeakyReLU(_conv2RawOutput, outputGradient);
-        grad = _conv2.Backward(grad);
-
-        // Backward through LeakyReLU after conv1 (use cached raw output)
-        grad = BackwardLeakyReLU(_conv1RawOutput, grad);
-        grad = _conv1.Backward(grad);
-
-        return grad;
-    }
-
     private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
     {
         var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
@@ -777,12 +724,6 @@ internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         return x;
     }
 
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var (mainGrad, _) = BackwardWithSkip(outputGradient);
-        return mainGrad;
-    }
-
     public (Tensor<T> mainGrad, Tensor<T> skipGrad) BackwardWithSkip(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _upsampledInput == null || _conv1Output == null)
@@ -790,11 +731,9 @@ internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         // Backward through conv2 + LeakyReLU
         var grad = BackwardLeakyReLU(_conv2.Forward(_conv1Output), outputGradient);
-        grad = _conv2.Backward(grad);
 
         // Backward through conv1 + LeakyReLU
         grad = BackwardLeakyReLU(_conv1.Forward(_concatenated ?? _upsampledInput), grad);
-        grad = _conv1.Backward(grad);
 
         Tensor<T> skipGrad;
         Tensor<T> upsampleGrad;
@@ -815,7 +754,6 @@ internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         }
 
         // Backward through upsample
-        var inputGrad = _upsample.Backward(upsampleGrad);
 
         return (inputGrad, skipGrad);
     }

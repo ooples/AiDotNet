@@ -130,7 +130,6 @@ public class AveragedGEM<T> : IContinualLearningStrategy<T>
         var (memInputs, memTargets) = SampleFromEpisodicMemory();
 
         // Compute reference gradient on memory sample
-        var refGradient = ComputeReferenceGradient(network, memInputs, memTargets);
 
         // Check if gradient violates constraint
         var dotProduct = VectorHelper.DotProduct(gradients, refGradient);
@@ -282,22 +281,6 @@ public class AveragedGEM<T> : IContinualLearningStrategy<T>
         }
 
         return new Tensor<T>(newShape, data);
-    }
-
-    /// <summary>
-    /// Computes the reference gradient on memory samples.
-    /// </summary>
-    private Vector<T> ComputeReferenceGradient(INeuralNetwork<T> network, Tensor<T> inputs, Tensor<T> targets)
-    {
-        network.SetTrainingMode(true);
-
-        var output = network.ForwardWithMemory(inputs);
-        var outputGrad = ComputeLossGradient(output, targets);
-        network.Backpropagate(outputGrad);
-        var grads = network.GetParameterGradients();
-
-        network.SetTrainingMode(false);
-        return grads.Clone();
     }
 
 

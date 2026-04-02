@@ -537,7 +537,6 @@ public class TSDiff<T> : ForecastingModelBase<T>
         {
             fullGradient[i] = gradient[i];
         }
-        Backward(Tensor<T>.FromVector(new Vector<T>(fullGradient), output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -827,27 +826,6 @@ public class TSDiff<T> : ForecastingModelBase<T>
         }
 
         return current;
-    }
-
-    /// <summary>
-    /// Performs backpropagation through all layers.
-    /// </summary>
-    /// <param name="gradOutput">Gradient of loss with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Backpropagation computes gradients for learning.
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            grad = Layers[i].Backward(grad);
-        }
-
-        return grad;
     }
 
     /// <summary>

@@ -174,22 +174,6 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
         return input;
     }
 
-    /// <inheritdoc/>
-
-    /// <summary>
-    /// Computes the gradient of the loss with respect to the input on the GPU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The same output gradient, unchanged.</returns>
-    /// <remarks>
-    /// Since noise is added independently and doesn't depend on the input,
-    /// the gradient flows through unchanged during backpropagation.
-    /// </remarks>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        return outputGradient;
-    }
-
     /// <summary>
     /// Initializes a new instance of the <see cref="GaussianNoiseLayer{T}"/> class.
     /// </summary>
@@ -271,83 +255,6 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
         }
 
         return input; // During inference, no noise is added
-    }
-
-    /// <summary>
-    /// Performs the backward pass by passing the gradient unchanged.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass (backpropagation) of the Gaussian noise layer.
-    /// Since adding noise is a simple element-wise operation, the gradient flows through unchanged.
-    /// This means that during backpropagation, this layer simply passes the gradient as-is
-    /// to the previous layer without modifying it.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where error information flows back through the layer during training.
-    /// 
-    /// During the backward pass:
-    /// - The layer receives gradients (information about how to improve)
-    /// - Since noise was just added element-wise, gradients flow through directly
-    /// - No changes are made to the gradients
-    /// 
-    /// This is different from layers with parameters (like weights and biases):
-    /// - Those layers would compute how to adjust their parameters
-    /// - This layer has no parameters to adjust
-    /// 
-    /// The noise affected the forward pass, but during backpropagation,
-    /// the gradients flow through unmodified.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        // The gradient flows through unchanged
-        return outputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// Gaussian noise is added independently to the input during forward pass. During backward pass,
-    /// the gradient simply flows through unchanged because the noise doesn't depend on the input.
-    /// This is equivalent to an identity operation in the computation graph.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Create a simple computation graph where output = input + noise
-        // Since noise is independent, gradient just flows through
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-
-        // In autodiff terms, this is just an identity operation
-        // The forward pass adds noise, but noise doesn't depend on input, so gradient passes through
-        var outputNode = inputNode; // Identity for gradient purposes
-
-        // Set gradient and perform backward pass
-        outputNode.Gradient = outputGradient;
-
-        // For a simple identity operation, just return the gradient
-        return outputGradient;
     }
 
     /// <summary>

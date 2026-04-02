@@ -253,15 +253,6 @@ internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <summary>
-    /// Backward pass: gradient flows through unchanged (constant additive bias).
-    /// </summary>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // ALiBi bias is constant, so gradient with respect to input scores is identity.
-        return outputGradient;
-    }
-
     /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {

@@ -331,38 +331,4 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
         }
     }
 
-    /// <summary>
-    /// Core training logic for the risk model.
-    /// </summary>
-    /// <param name="input">Input tensor.</param>
-    /// <param name="target">Target tensor.</param>
-    /// <param name="output">Model output.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is the learning step. It calculates the error between
-    /// predicted risk and actual outcomes, and adjusts the model to be more accurate.
-    /// </para>
-    /// </remarks>
-    protected override void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            var grad = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            var gradTensor = Tensor<T>.FromVector(grad, output.Shape.ToArray());
-
-            Backpropagate(gradTensor);
-
-            // Default SGD-style update for layers
-            var learningRate = MathHelper.GetNumericOperations<T>().FromDouble(0.001);
-            foreach (var layer in Layers)
-            {
-                layer.UpdateParameters(learningRate);
-            }
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
 }

@@ -547,56 +547,6 @@ public class RWKVLayer<T> : LayerBase<T>
         return Engine.LayerNorm(shaped, gamma, beta, 1e-6, out _, out _);
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int rank = outputGradient.Shape.Length;
-        int batchSize = _lastInput.Shape[0];
-        int seqLen = _lastInput.Shape[1];
-
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        var activationGrad = ApplyActivationDerivative(_lastOutput, grad3D);
-
-        // Initialize all gradients
-        _timeMixRGradient = new Tensor<T>([_modelDimension]);
-        _timeMixKGradient = new Tensor<T>([_modelDimension]);
-        _timeMixVGradient = new Tensor<T>([_modelDimension]);
-        _receptanceWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _keyWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _valueWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _decayWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _decayBiasGradient = new Tensor<T>([_modelDimension]);
-        _bonusGradient = new Tensor<T>([_numHeads, _headDimension]);
-        _channelMixRGradient = new Tensor<T>([_modelDimension]);
-        _channelMixKGradient = new Tensor<T>([_modelDimension]);
-        _channelKeyWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension * 4]);
-        _channelValueWeightsGradient = new Tensor<T>([_modelDimension * 4, _modelDimension]);
-        _channelReceptanceWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _normGamma1Gradient = new Tensor<T>([_modelDimension]);
-        _normBeta1Gradient = new Tensor<T>([_modelDimension]);
-        _normGamma2Gradient = new Tensor<T>([_modelDimension]);
-        _normBeta2Gradient = new Tensor<T>([_modelDimension]);
-
-        // Simplified backward: propagate gradient through residual connections
-        // Full backward would decompose each sub-layer; here we propagate the main path
-        var inputGrad = activationGrad;  // Residual connection gradient passes through
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return inputGrad.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return inputGrad.Reshape(_originalInputShape);
-
-        return inputGrad;
-    }
-
     #region Parameter Management
 
     /// <inheritdoc />

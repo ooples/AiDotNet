@@ -230,68 +230,6 @@ public abstract class TabMBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through the TabM backbone.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from the prediction head [batch_size * num_members, last_hidden_dim].</param>
-    /// <returns>Gradient with respect to input features [batch_size, num_features].</returns>
-    protected Tensor<T> BackwardBackbone(Tensor<T> outputGradient)
-    {
-        var grad = outputGradient;
-
-        // Backward through hidden layers (reverse order)
-        for (int i = _hiddenLayers.Count - 1; i >= 0; i--)
-        {
-            var layer = _hiddenLayers[i];
-            var layerInput = _hiddenOutputsCache[i];
-
-            // Backward through ReLU activation
-            // Get the layer's output to determine which activations were positive
-            // Since we don't cache the pre-ReLU output, we use the post-ReLU (which is the next layer's input or final output)
-            // For ReLU: gradient = gradient * (output > 0)
-            var reluGrad = new Tensor<T>(grad.Shape.ToArray());
-            // We need to check against the original output before ReLU
-            // Actually, we need to check the input to the NEXT layer or the final output
-            // Let's use a simpler approach: backward through layer, then through ReLU of previous
-
-            grad = layer.Backward(grad);
-
-            // Apply ReLU derivative if not the first layer
-            if (i > 0)
-            {
-                var prevOutput = _hiddenOutputsCache[i];
-                for (int j = 0; j < grad.Length; j++)
-                {
-                    // ReLU derivative: 1 if input > 0, else 0
-                    // We need to check against the input that went into this layer (which is _hiddenOutputsCache[i])
-                    // But that has already been through ReLU of the previous layer
-                    // This is complex - let's simplify by just passing the gradient through
-                    // In a proper implementation, we'd cache pre-activation values
-                }
-            }
-        }
-
-        // Backward through feature embeddings if used
-        if (_featureEmbeddings != null && _embeddedInputCache != null)
-        {
-            int batchSize = grad.Shape[0];
-            int embedDim = Options.FeatureEmbeddingDimension;
-
-            // Note: grad is [batchSize, numFeatures * embedDim]
-            _featureEmbeddingsGrad = new Tensor<T>(_featureEmbeddings.Shape.ToArray());
-            _featureEmbeddingsGrad.Fill(NumOps.Zero);
-
-            var inputGrad = new Tensor<T>([batchSize, NumFeatures]);
-            inputGrad.Fill(NumOps.Zero);
-
-            // This is simplified - actual implementation needs original input
-            // For now, return zero gradients
-            return inputGrad;
-        }
-
-        return grad;
-    }
-
-    /// <summary>
     /// Averages predictions across ensemble members.
     /// </summary>
     /// <param name="memberOutputs">Per-member outputs [batch_size * num_members, output_dim].</param>

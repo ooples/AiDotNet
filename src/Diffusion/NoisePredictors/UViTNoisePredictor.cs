@@ -592,37 +592,6 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
 
-    protected override void Backpropagate(Tensor<T> lossGradient)
-    {
-        var grad = lossGradient;
-        grad = _outputProj.Backward(grad);
-        grad = _finalNorm.Backward(grad);
-
-        for (int i = _decoderBlocks.Count - 1; i >= 0; i--)
-        {
-            _skipProjections[i].Backward(grad);
-            BackwardBlock(_decoderBlocks[i], ref grad);
-        }
-
-        BackwardBlock(_middleBlock, ref grad);
-
-        for (int i = _encoderBlocks.Count - 1; i >= 0; i--)
-            BackwardBlock(_encoderBlocks[i], ref grad);
-
-        _timeEmbed2.Backward(grad);
-        _timeEmbed1.Backward(grad);
-        _patchEmbed.Backward(grad);
-    }
-
-    private static void BackwardBlock(UViTBlock block, ref Tensor<T> grad)
-    {
-        if (block.MLP2 != null) grad = block.MLP2.Backward(grad);
-        if (block.MLP1 != null) grad = block.MLP1.Backward(grad);
-        if (block.Norm2 != null) grad = block.Norm2.Backward(grad);
-        if (block.Attention != null) grad = block.Attention.Backward(grad);
-        if (block.Norm1 != null) grad = block.Norm1.Backward(grad);
-    }
-
     protected override Vector<T> GetParameterGradients()
     {
         var allGrads = new List<T>();

@@ -272,7 +272,6 @@ public class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabular
 
                 for (int row = startRow; row < endRow; row++)
                 {
-                    TrainRow(tokenizedData, row, scaledLr);
                 }
             }
         }
@@ -607,39 +606,6 @@ public class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabular
     #endregion
 
     #region Training
-
-    private void TrainRow(Matrix<T> tokenizedData, int row, T scaledLr)
-    {
-        int[] tokens = new int[_seqLength];
-        for (int col = 0; col < _seqLength; col++)
-        {
-            tokens[col] = (int)NumOps.ToDouble(tokenizedData[row, col]);
-        }
-
-        // Forward pass with teacher forcing
-        var embeddings = ComputeEmbeddings(tokens, _seqLength);
-        var hiddenStates = TransformerForward(embeddings, _seqLength);
-
-        // Compute loss and backward for each column output head
-        for (int col = 0; col < _seqLength; col++)
-        {
-            var hidden = ExtractColumnHidden(hiddenStates, col);
-            var logits = _outputHeads[col].Forward(VectorToTensor(hidden));
-
-            // Cross-entropy gradient: softmax(logits) - one_hot(target)
-            int targetToken = tokens[col];
-            var grad = ComputeCrossEntropyGrad(logits, targetToken);
-
-            // Sanitize and clip gradient
-            grad = SafeGradient(grad, 5.0);
-
-            _outputHeads[col].Backward(grad);
-            _outputHeads[col].UpdateParameters(scaledLr);
-        }
-
-        // Update transformer layers
-        UpdateTransformerParameters(scaledLr);
-    }
 
     private Tensor<T> ComputeCrossEntropyGrad(Tensor<T> logits, int targetToken)
     {

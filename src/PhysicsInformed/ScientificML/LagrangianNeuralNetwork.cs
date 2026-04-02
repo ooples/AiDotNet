@@ -293,22 +293,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         }
 
         /// <summary>
-        /// Performs a backward pass through the network to calculate gradients.
-        /// </summary>
-        /// <param name="outputGradient">The gradient of the loss with respect to the network's output.</param>
-        /// <returns>The gradient of the loss with respect to the network's input.</returns>
-        public Tensor<T> Backward(Tensor<T> outputGradient)
-        {
-            Tensor<T> gradient = outputGradient;
-            for (int i = Layers.Count - 1; i >= 0; i--)
-            {
-                gradient = Layers[i].Backward(gradient);
-            }
-
-            return gradient;
-        }
-
-        /// <summary>
         /// Trains the Lagrangian neural network using the provided input and expected output.
         /// </summary>
         /// <param name="input">The input tensor for training (state vectors [q, q̇]).</param>
@@ -343,7 +327,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             var outputGradient = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
             var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction.Shape.ToArray());
 
-            Backward(outputGradientTensor);
             _optimizer.UpdateParameters(Layers);
 
             IsTrainingMode = false;

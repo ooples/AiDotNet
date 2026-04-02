@@ -921,26 +921,6 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     }
 
     /// <summary>
-    /// Multi-output backward pass. Returns gradients per named input port.
-    /// Default delegates to single-input <see cref="Backward(Tensor{T})"/>.
-    /// </summary>
-    public virtual IReadOnlyDictionary<string, Tensor<T>> BackwardMulti(
-        IReadOnlyDictionary<string, Tensor<T>> outputGradients)
-    {
-        if (InputPorts.Count > 1)
-        {
-            throw new NotSupportedException(
-                $"{GetType().Name} has {InputPorts.Count} input ports but does not override " +
-                $"BackwardMulti. Override it to return gradients for: " +
-                $"{string.Join(", ", InputPorts.Select(p => p.Name))}.");
-        }
-
-        var grad = outputGradients.TryGetValue("output", out var g) ? g : outputGradients.Values.First();
-        var inputGrad = Backward(grad);
-        return new Dictionary<string, Tensor<T>> { ["input"] = inputGrad };
-    }
-
-    /// <summary>
     /// GPU multi-input forward pass. Default delegates to single-input ForwardGpu.
     /// </summary>
     public virtual IGpuTensor<T> ForwardGpu(IReadOnlyDictionary<string, IGpuTensor<T>> inputs)
@@ -955,23 +935,6 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
             $"{GetType().Name} does not override ForwardGpu(IReadOnlyDictionary).");
     }
 
-    /// <summary>
-    /// GPU multi-output backward pass. Default delegates to single-input BackwardGpu.
-    /// </summary>
-    public virtual IReadOnlyDictionary<string, IGpuTensor<T>> BackwardGpuMulti(
-        IReadOnlyDictionary<string, IGpuTensor<T>> outputGradients)
-    {
-        if (InputPorts.Count > 1)
-        {
-            throw new NotSupportedException(
-                $"{GetType().Name} has {InputPorts.Count} input ports but does not override " +
-                $"BackwardGpuMulti.");
-        }
-
-        var grad = outputGradients.TryGetValue("output", out var g) ? g : outputGradients.Values.First();
-        var inputGrad = BackwardGpu(grad);
-        return new Dictionary<string, IGpuTensor<T>> { ["input"] = inputGrad };
-    }
 
     /// <summary>
     /// Performs the forward pass of the layer.
@@ -1391,29 +1354,7 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         };
     }
 
-    /// <summary>
-    /// Performs the backward pass of the layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This abstract method must be implemented by derived classes to define the backward pass of the layer.
-    /// The backward pass propagates error gradients from the output of the layer back to its input,
-    /// and calculates gradients for any trainable parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
-    /// should change to reduce errors.
-    /// 
-    /// During the backward pass:
-    /// 1. The layer receives information about how its output contributed to errors
-    /// 2. It calculates how its parameters should change to reduce errors
-    /// 3. It calculates how its input should change, which will be used by earlier layers
-    /// 
-    /// This is the core of how neural networks learn from their mistakes during training.
-    /// </para>
-    /// </remarks>
-    public abstract Tensor<T> Backward(Tensor<T> outputGradient);
+    // Backward() removed — tape-based autodiff via ITrainableLayer<T> replaces manual backward.
 
     #region GPU Training Infrastructure
 
@@ -1508,38 +1449,6 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     {
         throw new NotSupportedException(
             $"GPU execution is not supported by {GetType().Name}. Use Forward() instead or check CanExecuteOnGpu first.");
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the layer on GPU.
-    /// </summary>
-    /// <param name="outputGradient">The GPU-resident gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The GPU-resident gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="NotSupportedException">Thrown when the layer does not support GPU training.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method performs the layer's backward computation entirely on GPU, including:
-    /// <list type="bullet">
-    /// <item><description>Computing input gradients to pass to previous layers</description></item>
-    /// <item><description>Computing and storing weight gradients on GPU (for layers with trainable parameters)</description></item>
-    /// <item><description>Computing and storing bias gradients on GPU</description></item>
-    /// </list>
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like Backward() but runs entirely on GPU.
-    /// 
-    /// During GPU training:
-    /// 1. Output gradients come in (on GPU)
-    /// 2. Input gradients are computed (stay on GPU)
-    /// 3. Weight/bias gradients are computed and stored (on GPU)
-    /// 4. Input gradients are returned for the previous layer
-    /// 
-    /// All data stays on GPU - no CPU round-trips needed!
-    /// </para>
-    /// </remarks>
-    public virtual IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        throw new NotSupportedException(
-            $"GPU backward pass is not supported by {GetType().Name}. Use Backward() instead or check CanTrainOnGpu first.");
     }
 
     /// <summary>
@@ -2886,40 +2795,6 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         return true;
     }
 
-    /// <summary>
-    /// Applies the layer's activation function backward pass on GPU using the activation's own GPU method.
-    /// </summary>
-    /// <param name="backend">The GPU backend to use for execution.</param>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="input">The input buffer from the forward pass (needed for some activations).</param>
-    /// <param name="output">The output buffer from the forward pass (needed for some activations).</param>
-    /// <param name="gradInput">The buffer to store the input gradient.</param>
-    /// <param name="size">The number of elements to process.</param>
-    /// <returns>True if the backward pass was applied on GPU; false if no activation or GPU not supported.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method follows the Open/Closed Principle by delegating to the activation function's
-    /// own GPU backward implementation. Each activation function knows what it needs:
-    /// - ReLU, GELU, Swish, LeakyReLU, SiLU, Mish, etc.: Need the input from forward pass
-    /// - Sigmoid, Tanh: Need the output from forward pass
-    /// - ELU: Needs both input and output from forward pass
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> During training, we need to compute how the activation affects
-    /// the gradients. Each activation function handles this differently, and by delegating
-    /// to the activation's BackwardGpu method, we don't need to know the details here.
-    /// </para>
-    /// </remarks>
-    protected bool ApplyActivationBackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
-    {
-        if (ScalarActivation is not { SupportsGpuTraining: true })
-        {
-            return false;
-        }
-
-        ScalarActivation.BackwardGpu(backend, gradOutput, input, output, gradInput, size);
-        return true;
-    }
 
     #endregion
 

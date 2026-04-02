@@ -286,19 +286,6 @@ public abstract class MambularBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through the backbone.
-    /// </summary>
-    protected Tensor<T> BackwardBackbone(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-        for (int i = _mlpLayers.Count - 1; i >= 0; i--)
-        {
-            grad = _mlpLayers[i].Backward(grad);
-        }
-        return grad;
-    }
-
-    /// <summary>
     /// Updates all parameters.
     /// </summary>
     public virtual void UpdateParameters(T learningRate)

@@ -227,19 +227,6 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <summary>
-        /// Propagates error gradients backward for learning.
-        /// </summary>
-        public Tensor<T> Backward(Tensor<T> outputGradient)
-        {
-            for (int i = Layers.Count - 1; i >= 0; i--)
-            {
-                outputGradient = Layers[i].Backward(outputGradient);
-            }
-
-            return outputGradient;
-        }
-
-        /// <summary>
         /// Updates all trainable weights in the FastText model.
         /// </summary>
         public override void UpdateParameters(Vector<T> parameters)

@@ -435,7 +435,6 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -737,35 +736,6 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         }
 
         return totalForecast;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the N-HiTS network.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the NHiTSFinance model, Backward propagates gradients backward. This teaches the NHiTSFinance architecture how to adjust its weights.
-    /// </para>
-    /// </remarks>
-    private void Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        if (_outputProjection is not null)
-        {
-            grad = _outputProjection.Backward(grad);
-        }
-
-        for (int i = _stackBlocks.Count - 1; i >= 0; i--)
-        {
-            foreach (var blockLayers in _stackBlocks[i])
-            {
-                for (int j = blockLayers.Count - 1; j >= 0; j--)
-                {
-                    grad = blockLayers[j].Backward(grad);
-                }
-            }
-        }
     }
 
     /// <summary>

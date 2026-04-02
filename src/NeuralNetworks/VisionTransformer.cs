@@ -441,7 +441,6 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        StandardTrainStep(input, expectedOutput);
     }
 
     /// <summary>

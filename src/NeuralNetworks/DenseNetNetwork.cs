@@ -245,21 +245,6 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
         return output;
     }
 
-    /// <summary>
-    /// Performs backward propagation through the network.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the output.</param>
-    /// <returns>The gradient of the loss with respect to the input.</returns>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        Tensor<T> gradient = outputGradient;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-        return gradient;
-    }
-
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {

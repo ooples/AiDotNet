@@ -842,34 +842,6 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         return tensor.Rank == 4 ? tensor : AddBatchDimension(tensor);
     }
 
-    private void BackwardPass(Tensor<T> gradient)
-    {
-        var outputConv = _outputConv ?? throw new InvalidOperationException("Output convolution has not been initialized.");
-        gradient = outputConv.Backward(gradient);
-
-        for (int i = _imageDecoder.Count - 1; i >= 0; i--)
-        {
-            gradient = _imageDecoder[i].Backward(gradient);
-        }
-
-        // Backward through transformer blocks (in reverse order)
-        for (int i = _numTransformerBlocks - 1; i >= 0; i--)
-        {
-            // Backward through FFN (contract then expand)
-            gradient = _transformerFFN[i * 2 + 1].Backward(gradient);
-            gradient = _transformerFFN[i * 2].Backward(gradient);
-
-            // Backward through attention projection and QKV
-            gradient = _transformerProj[i].Backward(gradient);
-            gradient = _transformerQKV[i].Backward(gradient);
-        }
-
-        for (int i = _imageEncoder.Count - 1; i >= 0; i--)
-        {
-            gradient = _imageEncoder[i].Backward(gradient);
-        }
-    }
-
     #endregion
 
     #region Abstract Implementation

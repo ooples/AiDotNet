@@ -86,65 +86,6 @@ public class BarlowTwins<T> : SSLMethodBase<T>
         _augmentation = new SSLAugmentationPolicies<T>(_config.Seed);
     }
 
-    /// <inheritdoc />
-    protected override SSLStepResult<T> TrainStepCore(Tensor<T> batch, SSLAugmentationContext<T>? augmentationContext)
-    {
-        var batchSize = batch.Shape[0];
-
-        // Create two augmented views
-        var (view1, view2) = _augmentation.ApplySimCLR(batch);
-
-        // Forward pass for view 1
-        var h1 = _encoder.ForwardWithMemory(view1);
-        var projector = _projector ?? throw new InvalidOperationException("Projector has not been initialized.");
-        var z1 = projector.Project(h1);
-
-        // Forward pass for view 2
-        var h2 = _encoder.ForwardWithMemory(view2);
-        var z2 = projector.Project(h2);
-
-        // Compute Barlow Twins loss with gradients
-        var (loss, gradZ1, gradZ2) = _loss.ComputeLossWithGradients(z1, z2);
-
-        // Replay forward for view 1 to restore projector caches before backward
-        // (view 2 forward overwrites shared projector caches)
-        projector.Reset();
-        projector.Project(h1);
-        var gradH1 = projector.Backward(gradZ1);
-        // Capture view1 projector gradients before they are cleared by the next Backward()
-        var view1ProjGrads = projector.GetParameterGradients();
-        _encoder.Backpropagate(gradH1);
-
-        // Replay forward for view 2 to restore projector caches before backward
-        projector.Reset();
-        projector.Project(h2);
-        var gradH2 = projector.Backward(gradZ2);
-        // Capture view2 projector gradients
-        var view2ProjGrads = projector.GetParameterGradients();
-        _encoder.Backpropagate(gradH2);
-
-        // Accumulate projector gradients from both views before updating
-        var combinedProjGrads = Engine.Add(view1ProjGrads, view2ProjGrads);
-
-        // Update parameters
-        var learningRate = NumOps.FromDouble(GetEffectiveLearningRate());
-        UpdateParameters(learningRate, combinedProjGrads);
-
-        // Compute cross-correlation for monitoring
-        var crossCorr = _loss.ComputeCrossCorrelation(z1, z2, batchSize);
-
-        // Create result
-        var result = CreateStepResult(loss);
-        result.NumPositivePairs = batchSize;
-        result.NumNegativePairs = 0; // No negatives in Barlow Twins
-
-        // Add Barlow Twins-specific metrics
-        result.Metrics["off_diagonal_sum"] = _loss.OffDiagonalSum(crossCorr);
-        result.Metrics["lambda"] = NumOps.FromDouble(Lambda);
-
-        return result;
-    }
-
     private void UpdateParameters(T learningRate, Vector<T> accumulatedProjGrads)
     {
         // Update encoder
@@ -187,5 +128,7 @@ public class BarlowTwins<T> : SSLMethodBase<T>
         };
 
         return new BarlowTwins<T>(encoder, projector, config);
-    }
+    
+
+}
 }

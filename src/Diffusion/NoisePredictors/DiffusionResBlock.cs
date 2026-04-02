@@ -1,3 +1,4 @@
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -225,47 +226,6 @@ public class DiffusionResBlock<T> : LayerBase<T>
     /// Called by UNetNoisePredictor to propagate gradients through the time MLP.
     /// </summary>
     public Tensor<T>? GetTimeEmbedGradient() => _timeEmbedGradient;
-
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        _timeEmbedGradient = null;
-
-        // Residual add: gradient flows to both main branch and skip branch
-        // Main branch backward (reverse of forward):
-        // Forward: norm1 → SiLU → conv1 → (+timeProj) → norm2 → SiLU → conv2
-        // Backward: conv2 → SiLU' → norm2 → (time grad split) → conv1 → SiLU' → norm1
-        var mainGrad = _conv2.Backward(outputGradient);
-        if (_preSiLU2 is not null)
-            mainGrad = ApplySiLUBackward(_preSiLU2, mainGrad);
-        mainGrad = _norm2.Backward(mainGrad);
-
-        // Time conditioning backward: the time projection was ADDED to h,
-        // so its gradient is the same as mainGrad at this point (before conv1).
-        // Propagate back through _timeMlp to get the time embed gradient.
-        if (_timeEmbedDim > 0 && _lastForwardUsedTime)
-        {
-            // mainGrad shape: [B, outChannels, H, W]
-            // Time projection was broadcast from [B, outChannels, 1, 1]
-            // Sum over spatial dimensions to get [B, outChannels] gradient
-            var timeGrad = Engine.ReduceSum(mainGrad, new[] { 2, 3 }, keepDims: false);
-            _timeEmbedGradient = _timeMlp.Backward(timeGrad);
-        }
-
-        mainGrad = _conv1.Backward(mainGrad);
-        // SiLU backward: d/dx[x*sigmoid(x)] = sigmoid(x) + x*sigmoid(x)*(1-sigmoid(x))
-        if (_preSiLU1 is not null)
-            mainGrad = ApplySiLUBackward(_preSiLU1, mainGrad);
-        mainGrad = _norm1.Backward(mainGrad);
-
-        // Skip branch
-        var skipGrad = _skipConv is not null
-            ? _skipConv.Backward(outputGradient)
-            : outputGradient;
-
-        // Sum gradients from both paths
-        return Engine.TensorAdd(mainGrad, skipGrad);
-    }
 
     private Tensor<T> ApplySiLU(Tensor<T> x)
     {

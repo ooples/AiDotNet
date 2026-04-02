@@ -285,7 +285,6 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
 
             var gradientTensor = Tensor<T>.FromVector(gradient);
-            _transformerNetwork.Backpropagate(gradientTensor);
 
             // Vectorized SGD using parameter gradients from backprop
             var parameters = _transformerNetwork.GetParameters();
@@ -428,15 +427,6 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
         return gradient;
     }
 
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        var gradientsTensor = Tensor<T>.FromVector(gradients);
-        _transformerNetwork.Backpropagate(gradientsTensor);
-
-        // Optimizer weight update happens via backpropagation in the network
-        // The gradients have already been applied during Backpropagate()
-    }
-
     public override void SaveModel(string filepath)
     {
         var data = Serialize();
@@ -447,6 +437,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var data = System.IO.File.ReadAllBytes(filepath);
         Deserialize(data);
-    }
-}
+    
 
+}
+}

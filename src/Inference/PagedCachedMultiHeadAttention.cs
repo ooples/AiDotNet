@@ -732,11 +732,6 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
         _alibiLayer?.ResetState();
     }
 
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        throw new NotSupportedException($"{nameof(PagedCachedMultiHeadAttention<T>)} is intended for inference-time usage only.");
-    }
-
     public override void UpdateParameters(T learningRate)
     {
         throw new NotSupportedException($"{nameof(PagedCachedMultiHeadAttention<T>)} is intended for inference-time usage only.");

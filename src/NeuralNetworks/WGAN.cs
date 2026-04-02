@@ -365,10 +365,8 @@ public class WGAN<T> : NeuralNetworkBase<T>
             Tensor<T> fakeImages = GenerateImages(noise);
 
             // Train critic on real images (maximize score)
-            T realScore = TrainCriticBatch(realImages, isReal: true);
 
             // Train critic on fake images (minimize score)
-            T fakeScore = TrainCriticBatch(fakeImages, isReal: false);
 
             // Wasserstein loss: E[D(real)] - E[D(fake)]
             T criticLoss = NumOps.Subtract(realScore, fakeScore);
@@ -387,7 +385,6 @@ public class WGAN<T> : NeuralNetworkBase<T>
 
         // Train generator
         Tensor<T> newNoise = GenerateRandomNoiseTensor(noise.Shape[0], Generator.Architecture.InputSize);
-        T generatorLoss = TrainGeneratorBatch(newNoise);
 
         // Track losses
         _criticLosses.Add(avgCriticLoss);
@@ -429,113 +426,6 @@ public class WGAN<T> : NeuralNetworkBase<T>
         // Vectorized weight clipping using Engine.Clamp
         var clippedParameters = Engine.Clamp(parameters, clipMin, clipMax);
         Critic.UpdateParameters(clippedParameters);
-    }
-
-    /// <summary>
-    /// Trains the critic on a batch of images.
-    /// </summary>
-    /// <param name="images">The tensor containing images to train on.</param>
-    /// <param name="isReal">True if the images are real, false if they are generated.</param>
-    /// <returns>The average critic score for this batch.</returns>
-    private T TrainCriticBatch(Tensor<T> images, bool isReal)
-    {
-        Critic.SetTrainingMode(true);
-
-        // Forward pass through critic
-        var criticScores = Critic.Predict(images);
-
-        // Calculate average score using vectorized reduction
-        int batchSize = images.Shape[0];
-        T avgScore = NumOps.Divide(Engine.TensorSum(criticScores), NumOps.FromDouble(batchSize));
-
-        // Create predicted scores from tensor (extract first column) and labels using vectorized fill
-        // Labels: +1 for real samples, -1 for fake samples (Wasserstein convention)
-        var predictedScores = new Vector<T>(batchSize);
-        T labelValue = isReal ? NumOps.One : NumOps.Negate(NumOps.One);
-
-        // Extract scores from tensor to vector (column 0)
-        for (int i = 0; i < batchSize; i++)
-        {
-            predictedScores[i] = criticScores[i, 0];
-        }
-        var labels = Engine.Fill<T>(batchSize, labelValue);
-
-        // Use the loss function to calculate gradients
-        // WassersteinLoss.CalculateDerivative returns -labels[i] / n
-        // For real (label=+1): gradient = -1/n (want to maximize score)
-        // For fake (label=-1): gradient = +1/n (want to minimize score)
-        var derivativeVector = _lossFunction.CalculateDerivative(predictedScores, labels);
-
-        // Convert gradient vector back to tensor for backpropagation
-        var gradients = new Tensor<T>(criticScores.Shape.ToArray());
-        for (int i = 0; i < batchSize; i++)
-        {
-            gradients[i, 0] = derivativeVector[i];
-        }
-
-        // Backpropagate
-        Critic.Backpropagate(gradients);
-
-        // Update parameters using optimizer
-        UpdateCriticWithOptimizer();
-
-        return avgScore;
-    }
-
-    /// <summary>
-    /// Trains the generator to fool the critic.
-    /// </summary>
-    /// <param name="noise">The tensor containing noise vectors.</param>
-    /// <returns>The generator loss value.</returns>
-    private T TrainGeneratorBatch(Tensor<T> noise)
-    {
-        Generator.SetTrainingMode(true);
-
-        // Generate fake images
-        var generatedImages = Generator.Predict(noise);
-
-        // Get critic scores for generated images
-        var criticScores = Critic.Predict(generatedImages);
-
-        // Create predicted scores and labels vectors for loss function
-        // For generator training, we want to maximize critic score on fakes
-        // Use label +1 (treating fakes as "should be real") to get gradient -1/n
-        // This minimizes the negative of the score, i.e., maximizes the score
-        int batchSize = noise.Shape[0];
-        var predictedScores = new Vector<T>(batchSize);
-
-        // Extract scores from tensor to vector (column 0)
-        for (int i = 0; i < batchSize; i++)
-        {
-            predictedScores[i] = criticScores[i, 0];
-        }
-        var labels = Engine.Fill<T>(batchSize, NumOps.One); // Want to maximize score (be more "real")
-
-        // Calculate loss using the loss function: -mean(predicted * labels)
-        // With labels = +1: loss = -mean(predicted), minimizing this maximizes scores
-        T loss = _lossFunction.CalculateLoss(predictedScores, labels);
-
-        // Use the loss function to calculate gradients
-        // WassersteinLoss.CalculateDerivative with label=+1 returns -1/n
-        var derivativeVector = _lossFunction.CalculateDerivative(predictedScores, labels);
-
-        // Convert gradient vector back to tensor for backpropagation
-        var gradients = new Tensor<T>(criticScores.Shape.ToArray());
-        for (int i = 0; i < batchSize; i++)
-        {
-            gradients[i, 0] = derivativeVector[i];
-        }
-
-        // Backpropagate through critic to get gradients for generator output
-        var criticInputGradients = Critic.BackwardWithInputGradient(gradients);
-
-        // Backpropagate through generator
-        Generator.Backpropagate(criticInputGradients);
-
-        // Update generator parameters using optimizer
-        UpdateGeneratorWithOptimizer();
-
-        return loss;
     }
 
     /// <summary>

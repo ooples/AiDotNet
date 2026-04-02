@@ -162,23 +162,6 @@ public class TanhActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>
     }
 
     /// <summary>
-    /// Calculates the backward pass gradient for Tanh using GPU-accelerated fused operation.
-    /// </summary>
-    /// <param name="input">The input tensor that was used in the forward pass.</param>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method uses a single GPU kernel to compute the gradient,
-    /// which is faster than computing derivative and gradient multiplication separately.
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
-    {
-        // Tanh backward uses forward output: grad = gradOutput * (1 - output^2)
-        var tanhOutput = Activate(input);
-        return Engine.TanhBackward(outputGradient, tanhOutput);
-    }
-
-    /// <summary>
     /// Gets whether this activation function supports JIT compilation.
     /// </summary>
     /// <value>True because Tanh gradient computation is fully implemented and tested.</value>
@@ -233,27 +216,6 @@ public class TanhActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>
     public override void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
     {
         backend.Tanh(input, output, size);
-    }
-
-    /// <summary>
-    /// Calculates the Tanh backward pass gradient on GPU.
-    /// </summary>
-    /// <param name="backend">The GPU backend to use for execution.</param>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="input">Not used for Tanh (can be null). Tanh backward uses forward output.</param>
-    /// <param name="output">The output buffer from the forward pass.</param>
-    /// <param name="gradInput">The output buffer to store the input gradient.</param>
-    /// <param name="size">The number of elements to process.</param>
-    /// <remarks>
-    /// Tanh backward on GPU: gradInput[i] = gradOutput[i] * (1 - output[i]^2)
-    /// Note: Tanh backward uses the forward output, not the input.
-    /// </remarks>
-    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
-    {
-        if (output == null)
-            throw new ArgumentNullException(nameof(output), "Tanh backward requires the output from forward pass.");
-
-        backend.TanhBackward(gradOutput, output, gradInput, size);
     }
 
     #endregion

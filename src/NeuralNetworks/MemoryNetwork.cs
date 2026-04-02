@@ -749,36 +749,6 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs backpropagation through the memory network.
-    /// </summary>
-    /// <param name="outputGradients">The gradients from the output layer.</param>
-    private void BackpropagateMemoryNetwork(Tensor<T> outputGradients)
-    {
-        // Start with output gradients
-        Tensor<T> gradients = outputGradients;
-
-        // Backpropagate through output layers (fourth quarter)
-        for (int i = Layers.Count - 1; i >= 3 * Layers.Count / 4; i--)
-        {
-            gradients = Layers[i].Backward(gradients);
-        }
-
-        // Split gradients for memory reading and input encoding paths
-        // In a real implementation, we would calculate:
-        // - gradients for memory attention
-        // - gradients for memory content
-        // - gradients for input encoding
-
-        // For simplicity, we'll just continue backpropagation through all previous layers
-        for (int i = 3 * Layers.Count / 4 - 1; i >= 0; i--)
-        {
-            gradients = Layers[i].Backward(gradients);
-        }
-
-        // The result is that all layers now have their gradients computed and stored internally
-    }
-
-    /// <summary>
     /// Updates the memory network parameters based on calculated gradients.
     /// </summary>
     private void UpdateMemoryNetworkParameters()

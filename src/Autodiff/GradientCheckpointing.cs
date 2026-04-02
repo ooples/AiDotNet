@@ -106,7 +106,6 @@ public static class GradientCheckpointing<T>
         try
         {
             // Create a wrapper node that will trigger recomputation during backward
-            var checkpointNode = CreateCheckpointNode(context, output);
 
             return checkpointNode;
         }
@@ -160,8 +159,6 @@ public static class GradientCheckpointing<T>
 
             context.MultiOutputs = outputs.ToList();
 
-            var checkpointNodes = outputs.Select((output, index) =>
-                CreateCheckpointNode(context, output, index)).ToList();
 
             return checkpointNodes;
         }
@@ -171,112 +168,6 @@ public static class GradientCheckpointing<T>
         }
     }
 
-    /// <summary>
-    /// Creates a checkpoint node that wraps the output and handles recomputation.
-    /// </summary>
-    private static ComputationNode<T> CreateCheckpointNode(
-        CheckpointContext<T> context,
-        ComputationNode<T> output,
-        int outputIndex = 0)
-    {
-        // Create a pass-through node that triggers recomputation on backward
-        var checkpointNode = new ComputationNode<T>(output.Value)
-        {
-            Parents = new List<ComputationNode<T>> { output },
-            OperationType = OperationType.Custom,
-            RequiresGradient = output.RequiresGradient,
-            BackwardFunction = (grad) => RecomputeAndBackward(context, grad, outputIndex)
-        };
-
-        // Register a synthetic "checkpoint" op on the active Tensors tape so that
-        // ComputeGradients() can trace through the checkpoint boundary.
-        var tape = GradientTape<T>.Current;
-        if (tape is not null && output.Value is not null)
-        {
-            var inputTensors = context.Inputs
-                .Where(i => i.Value != null)
-                .Select(i => i.Value!)
-                .ToArray();
-
-            tape.Record(new TapeEntry<T>(
-                "checkpoint",
-                inputTensors,
-                checkpointNode.Value,
-                (gradOutput, inputs, _, _, eng, grads) =>
-                {
-                    RecomputeAndBackward(context, gradOutput, outputIndex);
-                    for (int i = 0; i < context.Inputs.Count && i < inputs.Length; i++)
-                    {
-                        var inputGrad = context.Inputs[i].Gradient;
-                        if (inputGrad is not null)
-                        {
-                            if (grads.TryGetValue(inputs[i], out var existing))
-                                eng.TensorAddInPlace(existing, inputGrad);
-                            else
-                                grads[inputs[i]] = inputGrad;
-                        }
-                    }
-                }));
-        }
-
-        return checkpointNode;
-    }
-
-    /// <summary>
-    /// Recomputes the forward pass and executes backward during gradient computation.
-    /// </summary>
-    private static void RecomputeAndBackward(
-        CheckpointContext<T> context,
-        Tensor<T> outputGrad,
-        int outputIndex)
-    {
-        // Restore input values from saved tensors
-        foreach (var kvp in context.SavedTensors)
-        {
-            var inputNode = kvp.Key;
-            var savedValue = kvp.Value;
-            inputNode.Value = savedValue.Clone();
-        }
-
-        // Recompute forward pass using ComputationNode backward
-        {
-            // Recompute forward pass
-            ComputationNode<T> recomputedOutput;
-            if (context.Function != null)
-            {
-                recomputedOutput = context.Function();
-            }
-            else if (context.MultiOutputs != null && outputIndex < context.MultiOutputs.Count)
-            {
-                recomputedOutput = context.MultiOutputs[outputIndex];
-            }
-            else
-            {
-                return;
-            }
-
-            // Set the gradient on the recomputed output
-            recomputedOutput.Gradient = outputGrad;
-
-            // Perform backward pass on the recomputed graph
-            recomputedOutput.Backward();
-
-            // Propagate gradients back to original inputs
-            foreach (var input in context.Inputs)
-            {
-                if (input.Gradient == null && context.SavedTensors.ContainsKey(input))
-                {
-                    // Find the corresponding recomputed input and copy its gradient
-                    var recomputedInput = context.Inputs.FirstOrDefault(i =>
-                        ReferenceEquals(i, input));
-                    if (recomputedInput?.Gradient != null)
-                    {
-                        input.Gradient = recomputedInput.Gradient.Clone();
-                    }
-                }
-            }
-        }
-    }
 
     /// <summary>
     /// Creates a sequential checkpoint that divides a sequence of layers into segments.

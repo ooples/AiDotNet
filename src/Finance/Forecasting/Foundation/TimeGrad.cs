@@ -323,7 +323,6 @@ public class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(predSlice.ToVector(), targetSlice.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(predSlice.ToVector(), targetSlice.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, predicted.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -724,54 +723,6 @@ public class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
             predicted = _outputProjection.Forward(predicted);
 
         return (predicted, noise);
-    }
-
-    private Tensor<T> BackwardNative(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        bool addedBatchDim = false;
-        if (current.Rank == 1)
-        {
-            current = current.Reshape(new[] { 1, current.Length });
-            addedBatchDim = true;
-        }
-
-        if (_outputProjection is not null)
-            current = _outputProjection.Backward(current);
-
-        for (int i = _denoisingLayers.Count - 1; i >= 0; i--)
-            current = _denoisingLayers[i].Backward(current);
-
-        // The denoising input is [x_t | hidden_state | timestep], so only the hidden_state
-        // portion of the gradient should be backpropagated through the RNN encoder.
-        if (_rnnEncoder is not null)
-        {
-            int hiddenDim = _hiddenDimension;
-            int forecastLen = _forecastHorizon;
-            int gradLen = current.Rank > 1 ? current.Shape[^1] : current.Length;
-
-            if (gradLen > forecastLen + 1 && hiddenDim <= gradLen - forecastLen - 1)
-            {
-                // Slice hidden state gradient: skip x_t (forecastLen), take hiddenDim
-                var hiddenGrad = current.Rank > 1
-                    ? new Tensor<T>(new[] { current.Shape[0], hiddenDim })
-                    : new Tensor<T>(new[] { hiddenDim });
-                int srcOffset = current.Rank > 1 ? forecastLen : forecastLen;
-                for (int i = 0; i < hiddenDim; i++)
-                    hiddenGrad.Data.Span[i] = current[srcOffset + i];
-                current = _rnnEncoder.Backward(hiddenGrad);
-            }
-            else
-            {
-                current = _rnnEncoder.Backward(current);
-            }
-        }
-
-        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-            current = current.Reshape(new[] { current.Shape[1] });
-
-        return current;
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)

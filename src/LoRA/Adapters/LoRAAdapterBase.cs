@@ -234,40 +234,6 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     }
 
     /// <summary>
-    /// Performs the backward pass through both layers.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass propagates gradients through both the LoRA layer and (if not frozen)
-    /// the base layer. The input gradients from both paths are summed.
-    /// </para>
-    /// <para><b>For Beginners:</b> During learning, this figures out how to improve both layers:
-    /// - Always updates the LoRA layer (that's what we're training)
-    /// - Only updates the base layer if it's not frozen
-    /// - Combines the gradients from both paths to tell earlier layers how to improve
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Backward through LoRA layer
-        Tensor<T> loraInputGrad = _loraLayer.Backward(outputGradient);
-
-        // Backward through base layer
-        // Note: Input gradients are always computed; base parameter updates are skipped in UpdateParameters if frozen
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        // Sum input gradients (vectorized)
-        Tensor<T> inputGrad = Engine.TensorAdd(loraInputGrad, baseInputGrad);
-
-        // Update parameter gradients vector
-        UpdateParameterGradientsFromLayers();
-
-        return inputGrad;
-    }
-
-    /// <summary>
     /// Updates parameters using the specified learning rate.
     /// </summary>
     /// <param name="learningRate">The learning rate for parameter updates.</param>

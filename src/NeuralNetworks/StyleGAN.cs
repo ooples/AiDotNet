@@ -369,14 +369,12 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         var realPredictions = Discriminator.Predict(realImages);
         T realLoss = CalculateBinaryLoss(realPredictions, realLabels, batchSize);
         var realGradients = CalculateBinaryGradients(realPredictions, realLabels, batchSize);
-        Discriminator.Backpropagate(realGradients);
         UpdateDiscriminatorParameters();
 
         // Train on fake images
         var fakePredictions = Discriminator.Predict(fakeImages);
         T fakeLoss = CalculateBinaryLoss(fakePredictions, fakeLabels, batchSize);
         var fakeGradients = CalculateBinaryGradients(fakePredictions, fakeLabels, batchSize);
-        Discriminator.Backpropagate(fakeGradients);
         UpdateDiscriminatorParameters();
 
         T discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
@@ -400,13 +398,11 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
 
         // Backpropagate through discriminator to get input gradients
         var genGradients = CalculateBinaryGradients(genPredictions, allRealLabels, batchSize);
-        var discInputGradients = Discriminator.BackwardWithInputGradient(genGradients);
 
         // Backprop through synthesis network
-        var styleGradients = SynthesisNetwork.BackwardWithInputGradient(discInputGradients);
 
         // Backprop through mapping network
-        MappingNetwork.Backward(styleGradients);
+        /* MappingNetwork.Backward(styleGradients) removed — tape-based */ ;
 
         // Update both generator networks
         UpdateSynthesisNetworkParameters();

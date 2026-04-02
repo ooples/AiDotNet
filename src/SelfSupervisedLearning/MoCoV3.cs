@@ -107,75 +107,6 @@ public class MoCoV3<T> : SSLMethodBase<T>
         };
     }
 
-    /// <inheritdoc />
-    protected override SSLStepResult<T> TrainStepCore(Tensor<T> batch, SSLAugmentationContext<T>? augmentationContext)
-    {
-        var batchSize = batch.Shape[0];
-
-        // Create two augmented views
-        var (view1, view2) = _augmentation.ApplySimCLR(batch);
-
-        // Forward pass for view 1 through online encoder
-        var h1 = _encoder.ForwardWithMemory(view1);
-        var projector = _projector ?? throw new InvalidOperationException("Projector has not been initialized.");
-        var z1 = projector.Project(h1);
-        var q1 = _predictor?.Project(z1) ?? z1;
-
-        // Forward pass for view 2 through online encoder
-        var h2 = _encoder.ForwardWithMemory(view2);
-        var z2 = _projector.Project(h2);
-        var q2 = _predictor?.Project(z2) ?? z2;
-
-        // Forward pass through momentum encoder (no gradients)
-        var hk1 = _momentumEncoder.Encode(view1);
-        var momentumProjector = _momentumProjector ?? throw new InvalidOperationException("Momentum projector has not been initialized.");
-        var k1 = momentumProjector.Project(hk1);
-
-        var hk2 = _momentumEncoder.Encode(view2);
-        var k2 = _momentumProjector.Project(hk2);
-
-        // Detach keys (stop gradient)
-        k1 = StopGradient<T>.Detach(k1);
-        k2 = StopGradient<T>.Detach(k2);
-
-        // Compute symmetric loss with gradients: L = loss(q1, k2) + loss(q2, k1)
-        var (loss1, gradQ1, _) = _loss.ComputeLossInBatchWithGradients(q1, k2);
-        var (loss2, gradQ2, _) = _loss.ComputeLossInBatchWithGradients(q2, k1);
-        var loss = NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Add(loss1, loss2));
-
-        // Scale gradients by 0.5 (symmetric loss averaging)
-        var half = NumOps.FromDouble(0.5);
-        gradQ1 = ScaleGradient(gradQ1, half);
-        gradQ2 = ScaleGradient(gradQ2, half);
-
-        // Backward pass through predictor (if present) and projector for view 1
-        var gradZ1 = _predictor?.Backward(gradQ1) ?? gradQ1;
-        var gradH1 = projector.Backward(gradZ1);
-        _encoder.Backpropagate(gradH1);
-
-        // Backward pass through predictor (if present) and projector for view 2
-        var gradZ2 = _predictor?.Backward(gradQ2) ?? gradQ2;
-        var gradH2 = _projector.Backward(gradZ2);
-        _encoder.Backpropagate(gradH2);
-
-        // Update momentum encoder
-        _momentumEncoder.UpdateFromMainEncoder(_encoder);
-
-        // Update online encoder parameters
-        var learningRate = NumOps.FromDouble(GetEffectiveLearningRate());
-        UpdateParameters(learningRate);
-
-        // Create result
-        var result = CreateStepResult(loss);
-        result.NumPositivePairs = batchSize * 2; // Symmetric loss
-        result.NumNegativePairs = batchSize * (batchSize - 1) * 2;
-        result.Metrics["momentum"] = NumOps.FromDouble(_momentumEncoder.Momentum);
-        result.Metrics["loss_1_to_2"] = loss1;
-        result.Metrics["loss_2_to_1"] = loss2;
-
-        return result;
-    }
-
     private void UpdateParameters(T learningRate)
     {
         // Update encoder
@@ -231,5 +162,7 @@ public class MoCoV3<T> : SSLMethodBase<T>
             baseMomentum, 1.0, epochNumber, totalEpochs);
 
         _momentumEncoder.SetMomentum(newMomentum);
-    }
+    
+
+}
 }

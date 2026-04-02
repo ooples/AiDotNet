@@ -473,8 +473,6 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         );
 
         // Update networks (simplified - in practice would use proper optimizers)
-        UpdatePolicyNetwork(batchIndices);
-        UpdateValueNetwork(batchIndices);
 
         return totalLoss;
     }
@@ -519,116 +517,6 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             }
             return entropy;
         }
-    }
-
-    private void UpdatePolicyNetwork(List<int> batchIndices)
-    {
-        // PPO clipped objective update
-        var params_ = _policyNetwork.GetParameters();
-
-        // Compute policy gradients using PPO clipped objective
-        foreach (var idx in batchIndices)
-        {
-            var state = _trajectory.States[idx];
-            var action = _trajectory.Actions[idx];
-            var advantage = (_trajectory.Advantages ?? throw new InvalidOperationException("Advantages has not been initialized."))[idx];
-            var oldLogProb = (_trajectory.LogProbs ?? throw new InvalidOperationException("LogProbs has not been initialized."))[idx];
-
-            // Forward pass to get current policy probabilities
-            var stateTensor = Tensor<T>.FromVector(state);
-            var currentProbs = _policyNetwork.Predict(stateTensor).ToVector();
-
-            // Compute log probability of selected action under current policy
-            // For discrete actions: log(prob[action])
-            int selectedAction = 0;
-            for (int i = 0; i < action.Length; i++)
-            {
-                if (NumOps.GreaterThan(action[i], NumOps.Zero))
-                {
-                    selectedAction = i;
-                    break;
-                }
-            }
-
-            // Clamp probability to avoid log(0)
-            var currentProb = currentProbs[selectedAction];
-            var clampedProb = MathHelper.Clamp(currentProb, NumOps.FromDouble(1e-8), NumOps.One);
-            var currentLogProb = NumOps.FromDouble(Math.Log(NumOps.ToDouble(clampedProb)));
-
-            // Compute importance sampling ratio: π_θ(a|s) / π_θ_old(a|s)
-            // ratio = exp(log(π_θ) - log(π_θ_old))
-            var logRatio = NumOps.Subtract(currentLogProb, oldLogProb);
-            var ratio = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logRatio)));
-
-            // PPO clipped objective:
-            // L^CLIP = E[min(r_t * A_t, clip(r_t, 1-ε, 1+ε) * A_t)]
-            var epsilonValue = NumOps.ToDouble(_ppoOptions.ClipEpsilon);
-            var clippedRatio = MathHelper.Clamp(ratio,
-                NumOps.FromDouble(1.0 - epsilonValue),
-                NumOps.FromDouble(1.0 + epsilonValue));
-
-            var obj1 = NumOps.Multiply(ratio, advantage);
-            var obj2 = NumOps.Multiply(clippedRatio, advantage);
-
-            // Take minimum of clipped and unclipped objectives
-            var policyLoss = NumOps.LessThan(obj1, obj2) ? obj1 : obj2;
-
-            // Gradient is negative of loss (for gradient ascent)
-            var gradOutput = new Vector<T>(currentProbs.Length);
-            for (int i = 0; i < gradOutput.Length; i++)
-            {
-                // Only apply gradient to selected action
-                if (i == selectedAction)
-                {
-                    gradOutput[i] = NumOps.Negate(policyLoss);
-                }
-                else
-                {
-                    gradOutput[i] = NumOps.Zero;
-                }
-            }
-
-            var gradTensor = Tensor<T>.FromVector(gradOutput);
-            _policyNetwork.Backpropagate(gradTensor);
-        }
-
-        // Apply gradients (vectorized)
-        var grads = _policyNetwork.GetParameters();
-        var scaledGrads = Engine.Multiply(grads, _ppoOptions.PolicyLearningRate);
-        params_ = (Vector<T>)Engine.Add(params_, scaledGrads);
-
-        _policyNetwork.UpdateParameters(params_);
-    }
-
-    private void UpdateValueNetwork(List<int> batchIndices)
-    {
-        // Simplified gradient update
-        var params_ = _valueNetwork.GetParameters();
-
-        foreach (var idx in batchIndices)
-        {
-            var state = _trajectory.States[idx];
-            var targetReturn = (_trajectory.Returns ?? throw new InvalidOperationException("Returns has not been initialized."))[idx];
-
-            var stateTensor = Tensor<T>.FromVector(state);
-            var valueOutputTensor = _valueNetwork.Predict(stateTensor);
-            var valueOutput = valueOutputTensor.ToVector();
-            var predicted = valueOutput[0];
-
-            var target = new Vector<T>(1);
-            target[0] = targetReturn;
-
-            // Convert to vectors for loss function
-            var gradientVector = _ppoOptions.ValueLossFunction.CalculateDerivative(valueOutput, target);
-            var gradTensor = Tensor<T>.FromVector(gradientVector);
-            _valueNetwork.Backpropagate(gradTensor);
-        }
-
-        var grads = _valueNetwork.GetParameters();
-        var scaledGrads = Engine.Multiply(grads, _ppoOptions.ValueLearningRate);
-        params_ = (Vector<T>)Engine.Subtract(params_, scaledGrads);
-
-        _valueNetwork.UpdateParameters(params_);
     }
 
     /// <inheritdoc/>

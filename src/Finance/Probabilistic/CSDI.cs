@@ -529,7 +529,6 @@ public class CSDI<T> : ForecastingModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(maskedOutput.ToVector(), maskedNoise.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, maskedOutput.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -812,29 +811,6 @@ public class CSDI<T> : ForecastingModelBase<T>
         }
 
         return current;
-    }
-
-    /// <summary>
-    /// Performs backpropagation through all layers.
-    /// </summary>
-    /// <param name="gradOutput">Gradient of the loss with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Backpropagation computes gradients for each layer
-    /// by propagating the loss gradient backwards. This is how the network learns:
-    /// gradients tell each parameter how to change to reduce the loss.
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            grad = Layers[i].Backward(grad);
-        }
-
-        return grad;
     }
 
     /// <summary>

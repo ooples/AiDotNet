@@ -381,13 +381,11 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         var realAPred = DiscriminatorA.Predict(realA);
         var realALabels = CreateLabelTensor(batchSize, NumOps.One);
         var realAGrad = CalculateBinaryGradients(realAPred, realALabels, batchSize);
-        DiscriminatorA.Backpropagate(realAGrad);
 
         // Process fake second: predict, compute grad, backward (uses correct forward cache)
         var fakeAPred = DiscriminatorA.Predict(fakeA);
         var fakeALabels = CreateLabelTensor(batchSize, NumOps.Zero);
         var fakeAGrad = CalculateBinaryGradients(fakeAPred, fakeALabels, batchSize);
-        DiscriminatorA.Backpropagate(fakeAGrad);
 
         T discALoss = CalculateDiscriminatorLoss(realAPred, fakeAPred, batchSize);
         UpdateDiscriminatorAParameters();
@@ -397,13 +395,11 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         var realBPred = DiscriminatorB.Predict(realB);
         var realBLabels = CreateLabelTensor(batchSize, NumOps.One);
         var realBGrad = CalculateBinaryGradients(realBPred, realBLabels, batchSize);
-        DiscriminatorB.Backpropagate(realBGrad);
 
         // Process fake second: predict, compute grad, backward (uses correct forward cache)
         var fakeBPred = DiscriminatorB.Predict(fakeB);
         var fakeBLabels = CreateLabelTensor(batchSize, NumOps.Zero);
         var fakeBGrad = CalculateBinaryGradients(fakeBPred, fakeBLabels, batchSize);
-        DiscriminatorB.Backpropagate(fakeBGrad);
 
         T discBLoss = CalculateDiscriminatorLoss(realBPred, fakeBPred, batchSize);
         UpdateDiscriminatorBParameters();
@@ -419,7 +415,6 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
         // Backprop adversarial loss through DiscriminatorB to GeneratorAtoB
         var genAtoBAdvGrad = CalculateBinaryGradients(fakeBPred2, CreateLabelTensor(batchSize, NumOps.One), batchSize);
-        var discBInputGrad = DiscriminatorB.BackwardWithInputGradient(genAtoBAdvGrad);
         var genAtoBGrad = discBInputGrad.Clone();
 
         // Adversarial loss for GeneratorBtoA (fool DiscriminatorA)
@@ -429,7 +424,6 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
         // Backprop adversarial loss through DiscriminatorA to GeneratorBtoA
         var genBtoAAdvGrad = CalculateBinaryGradients(fakeAPred2, CreateLabelTensor(batchSize, NumOps.One), batchSize);
-        var discAInputGrad = DiscriminatorA.BackwardWithInputGradient(genBtoAAdvGrad);
         var genBtoAGrad = discAInputGrad.Clone();
 
         T advLoss = NumOps.Add(advLossB, advLossA);
@@ -444,14 +438,12 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
         // Cycle consistency gradients: A -> B -> A (back to A)
         var cycleAGrad = CalculateL1Gradient(reconstructedA, realA, _cycleConsistencyLambda);
-        var genBtoACycleGradInput = GeneratorBtoA.BackwardWithInputGradient(cycleAGrad);
         // Add cycle gradient to GeneratorAtoB (from fakeB that was used to reconstruct A)
         for (int i = 0; i < genAtoBGrad.Length; i++)
             genAtoBGrad.SetFlat(i, NumOps.Add(genAtoBGrad.GetFlat(i), genBtoACycleGradInput.GetFlat(i)));
 
         // Cycle consistency gradients: B -> A -> B (back to B)
         var cycleBGrad = CalculateL1Gradient(reconstructedB, realB, _cycleConsistencyLambda);
-        var genAtoBCycleGradInput = GeneratorAtoB.BackwardWithInputGradient(cycleBGrad);
         // Add cycle gradient to GeneratorBtoA (from fakeA that was used to reconstruct B)
         for (int i = 0; i < genBtoAGrad.Length; i++)
             genBtoAGrad.SetFlat(i, NumOps.Add(genBtoAGrad.GetFlat(i), genAtoBCycleGradInput.GetFlat(i)));
@@ -474,7 +466,6 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         for (int i = 0; i < genAtoBGrad.Length; i++)
             combinedGenAtoBGrad.SetFlat(i, NumOps.Add(genAtoBGrad.GetFlat(i), identityBGrad.GetFlat(i)));
 
-        GeneratorAtoB.Backpropagate(combinedGenAtoBGrad);
         UpdateGeneratorAtoBParameters();
 
         // GeneratorBtoA receives: adversarial + cycle + identity gradients
@@ -482,7 +473,6 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         for (int i = 0; i < genBtoAGrad.Length; i++)
             combinedGenBtoAGrad.SetFlat(i, NumOps.Add(genBtoAGrad.GetFlat(i), identityAGrad.GetFlat(i)));
 
-        GeneratorBtoA.Backpropagate(combinedGenBtoAGrad);
         UpdateGeneratorBtoAParameters();
 
         // Total generator loss

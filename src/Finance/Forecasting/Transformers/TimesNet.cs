@@ -466,7 +466,6 @@ public class TimesNet<T> : ForecastingModelBase<T>
 
         // Backward pass - convert gradient back to tensor
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         // Update weights via optimizer
         _optimizer.UpdateParameters(Layers);
@@ -783,70 +782,6 @@ public class TimesNet<T> : ForecastingModelBase<T>
         }
 
         return AdjustToPredictionHorizon(current);
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the TimesNet network.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the loss function.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backward pass computes gradients for all learnable
-    /// parameters by propagating error signals backwards through each layer.
-    /// </para>
-    /// </remarks>
-    private void Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        // Backward through output projection
-        if (_outputProjection is not null)
-        {
-            grad = _outputProjection.Backward(grad);
-        }
-
-        // Backward through final norm
-        if (_finalNorm is not null)
-        {
-            grad = _finalNorm.Backward(grad);
-        }
-
-        // Backward through TimesBlock layers (in reverse order)
-        int ffnIdx = _ffnLayers.Count - 1;
-        for (int i = _convLayers.Count - 1; i >= 0; i--)
-        {
-            // Layer norm backward
-            if (i < _normLayers.Count)
-                grad = _normLayers[i].Backward(grad);
-
-            // Dropout backward
-            if (i < _dropoutLayers.Count)
-                grad = _dropoutLayers[i].Backward(grad);
-
-            // FFN backward (2 layers)
-            if (ffnIdx >= 0)
-                grad = _ffnLayers[ffnIdx--].Backward(grad);
-            if (ffnIdx >= 0)
-                grad = _ffnLayers[ffnIdx--].Backward(grad);
-
-            // Conv backward: reshape grad to NCHW [B, C, 1, S]
-            int batchSize = grad.Shape[0];
-            int seqLen = grad.Shape[1];
-            int channels = grad.Shape[2];
-            var convGradInput = grad.Transpose(new[] { 0, 2, 1 }).Reshape(batchSize, channels, 1, seqLen);
-            var convGradOutput = _convLayers[i].Backward(convGradInput);
-
-            // Reshape back to [B, S, C] for previous layers
-            int outSeqLen = convGradOutput.Shape[3];
-            int outChannels = convGradOutput.Shape[1];
-            grad = convGradOutput.Transpose(new[] { 0, 3, 1, 2 }).Reshape(batchSize, outSeqLen, outChannels);
-        }
-
-        // Backward through embedding
-        if (_embeddingLayer is not null)
-        {
-            _embeddingLayer.Backward(grad);
-        }
     }
 
     /// <summary>

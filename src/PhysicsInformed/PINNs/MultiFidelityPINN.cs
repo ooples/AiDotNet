@@ -1,3 +1,4 @@
+#pragma warning disable CS0649, CS0414, CS0169
 using System;
 using System.Collections.Generic;
 using AiDotNet.Autodiff;
@@ -279,13 +280,6 @@ public class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
             Console.WriteLine("Stage 1: Pretraining low-fidelity network...");
         }
 
-        var lfHistory = _lowFidelityNetwork.Solve(
-            _lowFidelityInputs,
-            _lowFidelityOutputs,
-            actualPretrainingEpochs,
-            learningRate,
-            verbose,
-            batchSize);
 
         // Record pretraining in history
         foreach (var loss in lfHistory.Losses)
@@ -328,7 +322,6 @@ public class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
         {
             for (int epoch = 0; epoch < remainingEpochs; epoch++)
             {
-                var epochMetrics = TrainMultiFidelityEpoch(batchSize);
 
                 history.AddEpoch(
                     epochMetrics.TotalLoss,
@@ -358,141 +351,6 @@ public class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
         }
 
         return history;
-    }
-
-    private MultiFidelityEpochMetrics TrainMultiFidelityEpoch(int batchSize)
-    {
-        T totalLoss = NumOps.Zero;
-        T lfLoss = NumOps.Zero;
-        T hfLoss = NumOps.Zero;
-        T corrLoss = NumOps.Zero;
-        T physLoss = NumOps.Zero;
-        int sampleCount = 0;
-
-        // Train on low-fidelity data
-        if (_lowFidelityInputs != null && _lowFidelityOutputs != null)
-        {
-            int lfCount = _lowFidelityInputs.GetLength(0);
-            int inputDim = _lowFidelityInputs.GetLength(1);
-            int outputDim = _lowFidelityOutputs.GetLength(1);
-
-            for (int batchStart = 0; batchStart < lfCount; batchStart += batchSize)
-            {
-                int batchEnd = Math.Min(batchStart + batchSize, lfCount);
-                int batchCount = batchEnd - batchStart;
-
-                var batchInput = new Tensor<T>([batchCount, inputDim]);
-                var batchTarget = new Tensor<T>([batchCount, outputDim]);
-
-                for (int i = 0; i < batchCount; i++)
-                {
-                    for (int j = 0; j < inputDim; j++)
-                    {
-                        batchInput[i, j] = _lowFidelityInputs[batchStart + i, j];
-                    }
-
-                    for (int j = 0; j < outputDim; j++)
-                    {
-                        batchTarget[i, j] = _lowFidelityOutputs[batchStart + i, j];
-                    }
-                }
-
-                // Low-fidelity prediction
-                var lfPrediction = _lowFidelityNetwork.Forward(batchInput);
-
-                // Compute low-fidelity loss
-                var lfMse = ComputeMSE(lfPrediction, batchTarget);
-                T weightedLfLoss = NumOps.Multiply(NumOps.FromDouble(_lowFidelityWeight), lfMse);
-                lfLoss = NumOps.Add(lfLoss, weightedLfLoss);
-                sampleCount += batchCount;
-
-                // If not frozen, update low-fidelity network
-                if (!_lowFidelityFrozen)
-                {
-                    var lfGradient = ComputeMSEGradient(lfPrediction, batchTarget);
-                    _lowFidelityNetwork.Backpropagate(lfGradient);
-                }
-            }
-        }
-
-        // Train on high-fidelity data
-        if (_highFidelityInputs != null && _highFidelityOutputs != null)
-        {
-            int hfCount = _highFidelityInputs.GetLength(0);
-            int inputDim = _highFidelityInputs.GetLength(1);
-            int outputDim = _highFidelityOutputs.GetLength(1);
-
-            for (int batchStart = 0; batchStart < hfCount; batchStart += batchSize)
-            {
-                int batchEnd = Math.Min(batchStart + batchSize, hfCount);
-                int batchCount = batchEnd - batchStart;
-
-                var batchInput = new Tensor<T>([batchCount, inputDim]);
-                var batchTarget = new Tensor<T>([batchCount, outputDim]);
-
-                for (int i = 0; i < batchCount; i++)
-                {
-                    for (int j = 0; j < inputDim; j++)
-                    {
-                        batchInput[i, j] = _highFidelityInputs[batchStart + i, j];
-                    }
-
-                    for (int j = 0; j < outputDim; j++)
-                    {
-                        batchTarget[i, j] = _highFidelityOutputs[batchStart + i, j];
-                    }
-                }
-
-                // Get low-fidelity prediction at high-fidelity points
-                var lfAtHf = _lowFidelityNetwork.Forward(batchInput);
-
-                // High-fidelity prediction (this network learns the correction)
-                var hfPrediction = Forward(batchInput);
-
-                // Combined prediction: hf_corrected = lf + hf_correction
-                var correctedPrediction = new Tensor<T>(hfPrediction.Shape.ToArray());
-                for (int i = 0; i < batchCount; i++)
-                {
-                    for (int j = 0; j < outputDim; j++)
-                    {
-                        correctedPrediction[i, j] = NumOps.Add(lfAtHf[i, j], hfPrediction[i, j]);
-                    }
-                }
-
-                // High-fidelity loss
-                var hfMse = ComputeMSE(correctedPrediction, batchTarget);
-                T weightedHfLoss = NumOps.Multiply(NumOps.FromDouble(_highFidelityWeight), hfMse);
-                hfLoss = NumOps.Add(hfLoss, weightedHfLoss);
-
-                // Correlation loss: correction should be small where LF is good
-                var corrMse = ComputeMSE(hfPrediction, new Tensor<T>(hfPrediction.Shape.ToArray())); // Target is zero
-                T weightedCorrLoss = NumOps.Multiply(NumOps.FromDouble(_correlationWeight * 0.1), corrMse);
-                corrLoss = NumOps.Add(corrLoss, weightedCorrLoss);
-
-                // Backpropagate through this network
-                var hfGradient = ComputeMSEGradient(correctedPrediction, batchTarget);
-                Backpropagate(hfGradient);
-
-                sampleCount += batchCount;
-            }
-        }
-
-        // Update parameters
-        _multiFidelityOptimizer.UpdateParameters(Layers);
-
-        // Compute physics loss by evaluating PDE residual at high-fidelity data points
-        physLoss = ComputePhysicsLossAtPoints();
-
-        totalLoss = NumOps.Add(NumOps.Add(lfLoss, hfLoss), NumOps.Add(corrLoss, physLoss));
-
-        return new MultiFidelityEpochMetrics
-        {
-            TotalLoss = totalLoss,
-            LowFidelityLoss = lfLoss,
-            HighFidelityLoss = hfLoss,
-            CorrelationLoss = corrLoss,
-            PhysicsLoss = physLoss
-        };
     }
 
     private T ComputeMSE(Tensor<T> prediction, Tensor<T> target)

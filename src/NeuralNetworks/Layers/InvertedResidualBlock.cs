@@ -371,69 +371,6 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
     }
 
     /// <summary>
-    /// Performs the backward pass of the Inverted Residual Block.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the output.</param>
-    /// <returns>The gradient of the loss with respect to the input.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput is null || _lastDwOut is null || _lastDwBnOut is null ||
-            _lastProjectOut is null || _lastProjectBnOut is null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        Tensor<T> grad = outputGradient;
-        Tensor<T>? gradToInput = null;
-
-        // If we have a residual connection, gradient flows to both paths
-        if (_useResidual)
-        {
-            gradToInput = grad;
-        }
-
-        // Backward through projection (no activation)
-        var gradProjectBn = _projectBn.Backward(grad);
-        var gradProjectConv = _projectConv.Backward(gradProjectBn);
-        grad = gradProjectConv;
-
-        // Backward through SE (if used)
-        // Note: SE layer expects NHWC format, so transpose gradients
-        if (_useSE && _se is not null && _lastDwActOut is not null)
-        {
-            // Transpose gradient from NCHW to NHWC for SE backward
-            var gradNHWC = TransposeNCHWToNHWC(grad);
-            var seGrad = _se.Backward(gradNHWC);
-            // Transpose gradient back from NHWC to NCHW
-            grad = TransposeNHWCToNCHW(seGrad);
-        }
-
-        // Backward through depthwise conv activation
-        grad = ApplyBlockActivationDerivative(_lastDwBnOut, grad);
-
-        // Backward through depthwise conv BN and conv
-        var gradDwBn = _dwBn.Backward(grad);
-        var gradDwConv = _dwConv.Backward(gradDwBn);
-        grad = gradDwConv;
-
-        // Backward through expansion (if used)
-        if (_hasExpansion && _expandConv is not null && _expandBn is not null && _lastExpandBnOut is not null)
-        {
-            grad = ApplyBlockActivationDerivative(_lastExpandBnOut, grad);
-            var gradExpandBn = _expandBn.Backward(grad);
-            grad = _expandConv.Backward(gradExpandBn);
-        }
-
-        // Combine gradients if we have residual connection
-        if (gradToInput is not null)
-        {
-            return AddTensors(grad, gradToInput);
-        }
-
-        return grad;
-    }
-
-    /// <summary>
     /// Updates the parameters of all sub-layers.
     /// </summary>
     /// <param name="learningRate">The learning rate for parameter updates.</param>

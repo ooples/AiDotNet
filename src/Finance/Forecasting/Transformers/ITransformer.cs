@@ -599,7 +599,6 @@ public class ITransformer<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        Backward(Tensor<T>.FromVector(outputGradient, prediction.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -981,39 +980,6 @@ public class ITransformer<T> : ForecastingModelBase<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Performs the backward pass to compute gradients for training.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of the loss with respect to the output.</param>
-    /// <returns>Gradient of the loss with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The backward pass calculates how each parameter contributed
-    /// to the prediction error. Gradients flow backward through:
-    /// </para>
-    /// <para>
-    /// <list type="number">
-    /// <item>Output projection</item>
-    /// <item>Layer normalization</item>
-    /// <item>Each transformer encoder (in reverse order)</item>
-    /// <item>Variate embedding</item>
-    /// </list>
-    /// </para>
-    /// <para>
-    /// This is called "backpropagation" and is the foundation of neural network training.
-    /// The gradients tell the optimizer how to adjust parameters to reduce error.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var gradient = outputGradient;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-        return gradient;
     }
 
     /// <summary>

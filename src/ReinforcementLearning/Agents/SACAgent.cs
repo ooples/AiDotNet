@@ -268,10 +268,8 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
             var batch = _replayBuffer.Sample(_sacOptions.BatchSize);
 
             // Update Q-networks
-            var qLoss = UpdateCritics(batch);
 
             // Update policy
-            var policyLoss = UpdateActor(batch);
 
             // Update temperature (alpha)
             if (_sacOptions.AutoTuneTemperature)
@@ -289,129 +287,6 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         LossHistory.Add(avgLoss);
 
         return avgLoss;
-    }
-
-    private T UpdateCritics(List<Experience<T, Vector<T>, Vector<T>>> batch)
-    {
-        T totalQLoss = NumOps.Zero;
-
-        foreach (var exp in batch)
-        {
-            // Compute target Q-value
-            var nextStateTensor = Tensor<T>.FromVector(exp.NextState);
-            var nextPolicyOutputTensor = _policyNetwork.Predict(nextStateTensor);
-            var nextPolicyOutput = nextPolicyOutputTensor.ToVector();
-            var (nextAction, nextLogProb) = SampleAction(nextPolicyOutput, training: true);
-
-            // Concatenate next state and next action for Q-networks
-            var nextStateAction = ConcatenateStateAction(exp.NextState, nextAction);
-
-            // Target Q = min(Q1_target, Q2_target) using MathHelper
-            var nextStateActionTensor = Tensor<T>.FromVector(nextStateAction);
-            var q1TargetTensor = _q1TargetNetwork.Predict(nextStateActionTensor);
-            var q1Target = q1TargetTensor.ToVector()[0];
-            var q2TargetTensor = _q2TargetNetwork.Predict(nextStateActionTensor);
-            var q2Target = q2TargetTensor.ToVector()[0];
-            var minQTarget = MathHelper.Min<T>(q1Target, q2Target);
-
-            // Add entropy term
-            var alpha = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(_logAlpha)));
-            var targetValue = NumOps.Subtract(minQTarget, NumOps.Multiply(alpha, nextLogProb));
-
-            // Bellman backup
-            T targetQ;
-            if (exp.Done)
-            {
-                targetQ = exp.Reward;
-            }
-            else
-            {
-                targetQ = NumOps.Add(exp.Reward,
-                    NumOps.Multiply(DiscountFactor, targetValue));
-            }
-
-            // Update both Q-networks
-            var stateAction = ConcatenateStateAction(exp.State, exp.Action);
-
-            // Q1 update
-            var stateActionTensor1 = Tensor<T>.FromVector(stateAction);
-            var q1PredTensor = _q1Network.Predict(stateActionTensor1);
-            var q1Pred = q1PredTensor.ToVector()[0];
-            var q1Target_vec = new Vector<T>(1) { [0] = targetQ };
-            var q1Pred_vec = new Vector<T>(1) { [0] = q1Pred };
-            var q1Loss = _sacOptions.QLossFunction.CalculateLoss(q1Pred_vec, q1Target_vec);
-
-            // Q2 update
-            var stateActionTensor2 = Tensor<T>.FromVector(stateAction);
-            var q2PredTensor = _q2Network.Predict(stateActionTensor2);
-            var q2Pred = q2PredTensor.ToVector()[0];
-            var q2Pred_vec = new Vector<T>(1) { [0] = q2Pred };
-            var q2Loss = _sacOptions.QLossFunction.CalculateLoss(q2Pred_vec, q1Target_vec);
-
-            totalQLoss = NumOps.Add(totalQLoss, NumOps.Add(q1Loss, q2Loss));
-
-            // Backprop Q1
-            var q1Grad = _sacOptions.QLossFunction.CalculateDerivative(q1Pred_vec, q1Target_vec);
-            var q1GradTensor = Tensor<T>.FromVector(q1Grad);
-            _q1Network.Backpropagate(q1GradTensor);
-
-            // Backprop Q2
-            var q2Grad = _sacOptions.QLossFunction.CalculateDerivative(q2Pred_vec, q1Target_vec);
-            var q2GradTensor = Tensor<T>.FromVector(q2Grad);
-            _q2Network.Backpropagate(q2GradTensor);
-        }
-
-        // Apply gradients to Q-networks
-        UpdateNetworkParameters(_q1Network, _sacOptions.QLearningRate);
-        UpdateNetworkParameters(_q2Network, _sacOptions.QLearningRate);
-
-        return NumOps.Divide(totalQLoss, NumOps.FromDouble(batch.Count * 2));
-    }
-
-    private T UpdateActor(List<Experience<T, Vector<T>, Vector<T>>> batch)
-    {
-        T totalPolicyLoss = NumOps.Zero;
-
-        foreach (var exp in batch)
-        {
-            // Sample action from current policy
-            var stateTensor = Tensor<T>.FromVector(exp.State);
-            var policyOutputTensor = _policyNetwork.Predict(stateTensor);
-            var policyOutput = policyOutputTensor.ToVector();
-            var (action, logProb) = SampleAction(policyOutput, training: true);
-
-            // Compute Q-values using MathHelper for min
-            var stateAction = ConcatenateStateAction(exp.State, action);
-            var stateActionTensor1 = Tensor<T>.FromVector(stateAction);
-            var q1Tensor = _q1Network.Predict(stateActionTensor1);
-            var q1 = q1Tensor.ToVector()[0];
-            var stateActionTensor2 = Tensor<T>.FromVector(stateAction);
-            var q2Tensor = _q2Network.Predict(stateActionTensor2);
-            var q2 = q2Tensor.ToVector()[0];
-            var minQ = MathHelper.Min<T>(q1, q2);
-
-            // Policy loss: alpha * log_prob - Q
-            var alpha = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(_logAlpha)));
-            var policyLoss = NumOps.Subtract(
-                NumOps.Multiply(alpha, logProb),
-                minQ
-            );
-
-            totalPolicyLoss = NumOps.Add(totalPolicyLoss, policyLoss);
-
-            // Compute policy gradient using reparameterization trick
-            // Gradient is: ∇θ [α log π(a|s) - Q(s,a)]
-            var outputGradient = ComputeSACPolicyGradient(
-                policyOutput, action, alpha, logProb, minQ);
-
-            var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
-            _policyNetwork.Backpropagate(outputGradientTensor);
-        }
-
-        // Apply gradients to policy network
-        UpdateNetworkParameters(_policyNetwork, _sacOptions.PolicyLearningRate);
-
-        return NumOps.Divide(totalPolicyLoss, NumOps.FromDouble(batch.Count));
     }
 
 

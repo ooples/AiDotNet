@@ -157,23 +157,6 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>, IOutputDerivative
     }
 
     /// <summary>
-    /// Calculates the backward pass gradient for Sigmoid using GPU-accelerated fused operation.
-    /// </summary>
-    /// <param name="input">The input tensor that was used in the forward pass.</param>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method uses a single GPU kernel to compute the gradient,
-    /// which is faster than computing derivative and gradient multiplication separately.
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
-    {
-        // Sigmoid backward uses forward output: grad = gradOutput * output * (1 - output)
-        var sigmoidOutput = Activate(input);
-        return Engine.SigmoidBackward(outputGradient, sigmoidOutput);
-    }
-
-    /// <summary>
     /// Gets whether this activation function supports JIT compilation.
     /// </summary>
     /// <value>True because Sigmoid gradient computation is fully implemented and tested.</value>
@@ -228,27 +211,6 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>, IOutputDerivative
     public override void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
     {
         backend.Sigmoid(input, output, size);
-    }
-
-    /// <summary>
-    /// Calculates the Sigmoid backward pass gradient on GPU.
-    /// </summary>
-    /// <param name="backend">The GPU backend to use for execution.</param>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="input">Not used for Sigmoid (can be null). Sigmoid backward uses forward output.</param>
-    /// <param name="output">The output buffer from the forward pass.</param>
-    /// <param name="gradInput">The output buffer to store the input gradient.</param>
-    /// <param name="size">The number of elements to process.</param>
-    /// <remarks>
-    /// Sigmoid backward on GPU: gradInput[i] = gradOutput[i] * output[i] * (1 - output[i])
-    /// Note: Sigmoid backward uses the forward output, not the input.
-    /// </remarks>
-    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
-    {
-        if (output == null)
-            throw new ArgumentNullException(nameof(output), "Sigmoid backward requires the output from forward pass.");
-
-        backend.SigmoidBackward(gradOutput, output, gradInput, size);
     }
 
     #endregion

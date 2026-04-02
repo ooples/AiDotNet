@@ -409,7 +409,6 @@ public class Informer<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        Backward(Tensor<T>.FromVector(outputGradient, prediction.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -708,26 +707,6 @@ public class Informer<T> : ForecastingModelBase<T>
         }
 
         return current;
-    }
-
-    /// <summary>
-    /// Performs the backward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, Backward propagates gradients backward. This teaches the Informer architecture how to adjust its weights.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var gradient = outputGradient;
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-
-        return gradient;
     }
 
     /// <summary>

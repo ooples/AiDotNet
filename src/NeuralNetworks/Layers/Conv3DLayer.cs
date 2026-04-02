@@ -1,3 +1,4 @@
+#pragma warning disable CS0649, CS0414, CS0169
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -678,111 +679,6 @@ public class Conv3DLayer<T> : LayerBase<T>, ITrainableLayer<T>
     #region Backward Pass
 
     /// <summary>
-    /// Performs the backward pass to compute gradients for training.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to this layer's output.</param>
-    /// <returns>The gradient of the loss with respect to this layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when Forward has not been called.</exception>
-    /// <remarks>
-    /// <para>
-    /// The backward pass routes to either manual or autodiff implementation based on the
-    /// <see cref="LayerBase{T}.UseAutodiff"/> property.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to this layer's output.</param>
-    /// <returns>The gradient of the loss with respect to this layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass computes:
-    /// 1. Activation derivative applied to output gradient
-    /// 2. Input gradient using Engine.Conv3DBackwardInput
-    /// 3. Kernel gradient using Engine.Conv3DBackwardKernel
-    /// 4. Bias gradient by summing over batch and spatial dimensions
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastPreActivation == null || _lastOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Handle any-rank gradient: reshape to match _lastOutput rank before ApplyActivationDerivative
-        bool hasBatch = _lastInput.Rank == 5;
-        Tensor<T> outGrad5D = (outputGradient.Rank == 4 && _lastOutput.Rank == 5)
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2], outputGradient.Shape[3])
-            : outputGradient;
-
-        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outGrad5D);
-
-        Tensor<T> batchedDelta = hasBatch
-            ? delta
-            : (delta.Rank == 4
-                ? delta.Reshape(1, delta.Shape[0], delta.Shape[1], delta.Shape[2], delta.Shape[3])
-                : delta);
-
-        Tensor<T> batchedInput = hasBatch
-            ? _lastInput
-            : _lastInput.Reshape(1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2], _lastInput.Shape[3]);
-
-        var inputGrad = Engine.Conv3DBackwardInput(
-            batchedDelta,
-            _kernels,
-            batchedInput.Shape.ToArray(),
-            [Stride, Stride, Stride],
-            [Padding, Padding, Padding],
-            [1, 1, 1]);
-
-        _kernelsGradient = Engine.Conv3DBackwardKernel(
-            batchedDelta,
-            batchedInput,
-            _kernels.Shape.ToArray(),
-            [Stride, Stride, Stride],
-            [Padding, Padding, Padding],
-            [1, 1, 1]);
-
-        _biasesGradient = ComputeBiasGradient(batchedDelta);
-
-        if (!hasBatch && inputGrad.Rank == 5 && inputGrad.Shape[0] == 1)
-        {
-            return inputGrad.Reshape(inputGrad.Shape[1], inputGrad.Shape[2], inputGrad.Shape[3], inputGrad.Shape[4]);
-        }
-
-        return inputGrad;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to this layer's output.</param>
-    /// <returns>The gradient of the loss with respect to this layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. It's useful for:
-    /// - Verifying gradient correctness
-    /// - Rapid prototyping with custom modifications
-    /// - Research and experimentation
-    /// </para>
-    /// <para>
-    /// Currently falls back to manual implementation as Conv3D autodiff is pending integration.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        // Conv3D autodiff operations are pending full integration
-        // Fall back to manual implementation for now
-        return BackwardManual(outputGradient);
-    }
-
-    /// <summary>
     /// Computes the bias gradient by summing gradients over batch and spatial dimensions.
     /// </summary>
     /// <param name="delta">The gradient tensor [batch, channels, depth, height, width].</param>
@@ -1070,40 +966,6 @@ public class Conv3DLayer<T> : LayerBase<T>, ITrainableLayer<T>
     #endregion
 
     #region GPU Training Methods
-
-    /// <summary>
-    /// Performs the backward pass on GPU tensors.
-    /// </summary>
-    /// <param name="outputGradient">GPU tensor containing the gradient of the loss with respect to the output.</param>
-    /// <returns>GPU tensor containing the gradient of the loss with respect to the input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        // CPU fallback: download gradient, run Backward(), upload result
-        var outputGradCpu = outputGradient.ToTensor();
-        var inputGradCpu = Backward(outputGradCpu);
-
-        // Upload gradient buffers to GPU for UpdateParametersGpu
-        if (_kernelsGradient is not null)
-        {
-            _gpuKernelsGradient?.Dispose();
-            _gpuKernelsGradient = new GpuTensor<T>(backend, _kernelsGradient, GpuTensorRole.Gradient);
-        }
-
-        if (_biasesGradient is not null)
-        {
-            _gpuBiasesGradient?.Dispose();
-            _gpuBiasesGradient = new GpuTensor<T>(backend, _biasesGradient, GpuTensorRole.Gradient);
-        }
-
-        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
-    }
 
     /// <summary>
     /// Updates parameters on GPU using the configured optimizer.

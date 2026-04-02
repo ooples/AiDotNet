@@ -268,7 +268,7 @@ public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
                         output.ToVector(), preprocessedLabels.ToVector()));
                     var grad = LossFunction.CalculateDerivative(output.ToVector(), preprocessedLabels.ToVector());
                     var gt = Tensor<T>.FromVector(grad);
-                    for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
+                    // Backward removed — tape-based training handles gradients
                     _optimizer.UpdateParameters(Layers);
 
                     progress?.Report(new NERTrainingProgress

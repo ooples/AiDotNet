@@ -264,36 +264,6 @@ public class AttentiveTransformer<T> : LayerBase<T>
         return NumOps.Divide(totalEntropy, NumOps.FromDouble(batchSize));
     }
 
-    /// <summary>
-    /// Performs the backward pass through the Attentive Transformer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient flowing back.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_attentionMaskCache == null || _sparsemaxInputCache == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        // Backward through Sparsemax
-        var sparsemaxGrad = _sparsemax.Backward(outputGradient, _attentionMaskCache, axis: 1);
-
-        // Backward through prior scales multiplication (element-wise)
-        // If z = x * y, then dL/dx = dL/dz * y
-        var scaledGrad = _priorScalesCache != null
-            ? Engine.TensorMultiply(sparsemaxGrad, _priorScalesCache)
-            : sparsemaxGrad;
-
-        // Backward through batch normalization
-        var bnGrad = _bnLayer.Backward(scaledGrad);
-
-        // Backward through FC layer
-        var inputGrad = _fcLayer.Backward(bnGrad);
-
-        return inputGrad;
-    }
-
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {

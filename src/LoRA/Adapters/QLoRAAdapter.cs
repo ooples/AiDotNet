@@ -705,37 +705,6 @@ public class QLoRAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through both layers (only updates LoRA if base is frozen).
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// For QLoRA, the base layer is typically frozen (only LoRA is trained).
-    /// The backward pass:
-    /// 1. Computes gradients for LoRA layer (always)
-    /// 2. Skips base layer gradient computation (if frozen)
-    /// 3. Propagates input gradients back
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is where learning happens, but only for the LoRA adapter!
-    /// Since the base layer is compressed and frozen, we only update the small LoRA matrices.
-    /// This is what makes QLoRA so efficient - we're only training a tiny fraction of parameters.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Use base class backward pass (handles frozen base layer correctly)
-        Tensor<T> inputGradient = base.Backward(outputGradient);
-
-        // Clear dequantized weight cache to save memory
-        // Will be recomputed in next forward pass if needed
-        _dequantizedWeights = null;
-
-        return inputGradient;
-    }
-
-    /// <summary>
     /// Merges the LoRA adaptation into the base layer and returns a quantized merged layer.
     /// </summary>
     /// <returns>A new DenseLayer with LoRA weights merged and quantized.</returns>

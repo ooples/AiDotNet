@@ -672,41 +672,6 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         return output;
     }
 
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput is null || _lastPreActivations is null)
-            return new Tensor<T>(new[] { _kernelSize });
-
-        int numPositions = _lastNumPositions;
-        _kernelGradients = new Tensor<T>(_kernels.Shape.ToArray());
-        _biasGradients = new Tensor<T>(_biases.Shape.ToArray());
-        var inputGrad = new Tensor<T>(new[] { _lastInput.Length });
-
-        for (int outChannel = 0; outChannel < _outputChannels; outChannel++)
-        {
-            T dChannel = NumOps.Divide(outputGradient[outChannel], NumOps.FromDouble(numPositions));
-
-            for (int pos = 0; pos < numPositions; pos++)
-            {
-                T preAct = _lastPreActivations[outChannel, pos];
-                T dRelu = NumOps.GreaterThan(preAct, NumOps.Zero) ? dChannel : NumOps.Zero;
-
-                _biasGradients[outChannel] = NumOps.Add(_biasGradients[outChannel], dRelu);
-
-                for (int k = 0; k < _kernelSize && (pos + k) < _lastInput.Length; k++)
-                {
-                    int kernelIdx = outChannel * _kernelSize + k;
-                    _kernelGradients[kernelIdx] = NumOps.Add(_kernelGradients[kernelIdx],
-                        NumOps.Multiply(dRelu, _lastInput[pos + k]));
-                    inputGrad[pos + k] = NumOps.Add(inputGrad[pos + k],
-                        NumOps.Multiply(dRelu, _kernels[kernelIdx]));
-                }
-            }
-        }
-
-        return inputGrad;
-    }
-
     public override void UpdateParameters(T learningRate)
     {
         if (_kernelGradients is null || _biasGradients is null) return;

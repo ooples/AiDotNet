@@ -86,54 +86,6 @@ public class AutodiffGradientHelper<T>
     }
 
     /// <summary>
-    /// Computes the gradient of the model output with respect to the input.
-    /// </summary>
-    /// <param name="input">The input tensor.</param>
-    /// <param name="outputIndex">Index of the output to compute gradients for.</param>
-    /// <returns>Gradient tensor with the same shape as input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method:
-    /// 1. Creates a GradientTape to record operations
-    /// 2. Wraps your input in a ComputationNode and tells the tape to watch it
-    /// 3. Runs your model (recorded to the tape)
-    /// 4. Computes gradients using reverse-mode autodiff
-    ///
-    /// The result shows how each input element affects the specified output.
-    ///
-    /// Under the hood, this uses the chain rule of calculus applied automatically
-    /// through all the recorded operations.
-    /// </para>
-    /// </remarks>
-    public Tensor<T> ComputeGradient(Tensor<T> input, int outputIndex = 0)
-    {
-        // Create input node
-        var inputNode = TensorOperations<T>.Variable(input, "input", requiresGradient: true);
-
-        // Run model forward pass
-        var outputNode = _modelFunction(inputNode);
-
-        // Create one-hot gradient for target output
-        var outputGrad = new Tensor<T>(outputNode.Value.Shape.ToArray());
-        if (outputIndex < outputNode.Value.Length)
-        {
-            outputGrad[outputIndex] = NumOps.One;
-        }
-
-        // Set the output gradient and compute backward via ComputationNode graph
-        outputNode.Gradient = outputGrad;
-        outputNode.Backward();
-
-        // Return input gradients
-        if (inputNode.Gradient != null)
-        {
-            return inputNode.Gradient;
-        }
-
-        return new Tensor<T>(input.Shape.ToArray());
-    }
-
-    /// <summary>
     /// Computes gradients for a vector input.
     /// </summary>
     /// <param name="input">The input vector.</param>
@@ -164,50 +116,6 @@ public class AutodiffGradientHelper<T>
         }
 
         return new Vector<T>(gradient);
-    }
-
-    /// <summary>
-    /// Computes gradients with respect to multiple watched nodes.
-    /// </summary>
-    /// <param name="inputNodes">Dictionary of named input nodes to watch.</param>
-    /// <param name="modelOutput">Function that produces output given input nodes.</param>
-    /// <param name="outputIndex">Index of the output to compute gradients for.</param>
-    /// <returns>Dictionary mapping node names to their gradients.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Sometimes you want gradients with respect to multiple
-    /// things at once (e.g., both input features and model parameters). This method
-    /// lets you watch multiple nodes and get all their gradients in one backward pass.
-    ///
-    /// This is more efficient than computing gradients separately because we only
-    /// need one forward pass and one backward pass for all gradients.
-    ///
-    /// Example use case: Computing gradients for both input and layer activations
-    /// to understand what the network is doing at different levels.
-    /// </para>
-    /// </remarks>
-    public Dictionary<string, Tensor<T>> ComputeMultipleGradients(
-        Dictionary<string, ComputationNode<T>> inputNodes,
-        Func<Dictionary<string, ComputationNode<T>>, ComputationNode<T>> modelOutput,
-        int outputIndex = 0)
-    {
-        // Run forward pass
-        var outputNode = modelOutput(inputNodes);
-
-        // Backward through the ComputationNode graph
-        outputNode.Backward();
-
-        // Collect gradients from input nodes
-        var result = new Dictionary<string, Tensor<T>>();
-        foreach (var kvp in inputNodes)
-        {
-            if (kvp.Value.Gradient is not null)
-            {
-                result[kvp.Key] = kvp.Value.Gradient;
-            }
-        }
-
-        return result;
     }
 
     /// <summary>

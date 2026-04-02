@@ -285,55 +285,6 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         return deltaResultTensor.Reshape(batchSize, outputSize);
     }
 
-
-    /// <summary>
-    /// Performs the backward pass through both layers, computing gradients for LoHa matrices.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass computes gradients using the chain rule for Hadamard products:
-    ///
-    /// dL/dA[r] = input^T * (dL/doutput ⊙ B[r]) * scaling
-    /// dL/dB[r] = (input * A[r]) ⊙ dL/doutput * scaling
-    /// dL/dinput = base_gradient + sum over rank of (dL/doutput ⊙ B[r]) * A[r]^T * scaling
-    ///
-    /// The Hadamard product gradient rule: d/dx (f ⊙ g) = df ⊙ g + f ⊙ dg
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the learning phase for LoHa. It computes:
-    ///
-    /// 1. How to adjust each A[i] matrix to reduce error
-    /// 2. How to adjust each B[i] matrix to reduce error
-    /// 3. What gradient to send to earlier layers
-    ///
-    /// The math is more complex than standard LoRA because Hadamard products have different
-    /// derivative rules than matrix multiplication, but the idea is the same: figure out
-    /// how each parameter contributed to the error and adjust accordingly.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastBaseOutput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass");
-        }
-
-        // Backward through base layer
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        // Compute LoHa gradients
-        Tensor<T> lohaInputGrad = ComputeLoHaGradients(outputGradient);
-
-        // Sum input gradients
-        Tensor<T> inputGrad = Engine.TensorAdd(lohaInputGrad, baseInputGrad);
-
-        // Update parameter gradients vector
-        UpdateParameterGradientsFromMatrices();
-
-        return inputGrad;
-    }
-
     /// <summary>
     /// Computes gradients for LoHa matrices A and B using Hadamard product gradient rules.
     /// </summary>

@@ -499,38 +499,6 @@ public class GPT4TS<T> : TimeSeriesFoundationModelBase<T>
         return current;
     }
 
-    private Tensor<T> BackwardNative(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        bool addedBatchDim = false;
-        if (current.Rank == 1)
-        {
-            current = current.Reshape(new[] { 1, current.Length });
-            addedBatchDim = true;
-        }
-
-        if (_taskHead is not null)
-            current = _taskHead.Backward(current);
-
-        if (!_freezeBackbone)
-        {
-            if (_finalLayerNorm is not null)
-                current = _finalLayerNorm.Backward(current);
-
-            for (int i = _backboneLayers.Count - 1; i >= 0; i--)
-                current = _backboneLayers[i].Backward(current);
-        }
-
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Backward(current);
-
-        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-            current = current.Reshape(new[] { current.Shape[1] });
-
-        return current;
-    }
-
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession == null)

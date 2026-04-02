@@ -342,20 +342,6 @@ internal class RotaryPositionalEncodingLayer<T> : LayerBase<T>
         return RotateTensor(input, 0);
     }
 
-    /// <summary>
-    /// Backward pass applies inverse rotation (orthogonal transpose).
-    /// </summary>
-    /// <param name="outputGradient">Gradient tensor with same shape as forward output.</param>
-    /// <returns>Gradient with inverse rotation applied.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        int rank = outputGradient.Shape.Length;
-        int seqLen = rank >= 2 ? outputGradient.Shape[rank - 2] : outputGradient.Shape[0];
-        EnsureCacheLength(seqLen);
-
-        return InverseRotateTensor(outputGradient, 0);
-    }
-
     /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {

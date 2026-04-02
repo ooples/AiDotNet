@@ -262,9 +262,6 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
         return output.Reshape(outputShape);
     }
 
-    public override Tensor<float> Backward(Tensor<float> outputGradient)
-        => throw new NotSupportedException("QuantizedAttentionLayer is inference-only.");
-
     public override void UpdateParameters(float learningRate)
         => throw new NotSupportedException("QuantizedAttentionLayer is inference-only.");
 

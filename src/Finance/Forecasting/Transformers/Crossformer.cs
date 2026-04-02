@@ -439,7 +439,6 @@ public class Crossformer<T> : ForecastingModelBase<T>
 
         // Backward pass - convert gradient back to tensor
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         // Update weights via optimizer
         _optimizer.UpdateParameters(Layers);
@@ -738,58 +737,6 @@ public class Crossformer<T> : ForecastingModelBase<T>
         }
 
         return AdjustToPredictionHorizon(current);
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the Crossformer network.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the loss function.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backward pass computes gradients for all learnable
-    /// parameters by propagating error signals backwards through each layer.
-    /// </para>
-    /// </remarks>
-    private void Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        // Backward through output projection
-        if (_outputProjection is not null)
-        {
-            grad = _outputProjection.Backward(grad);
-        }
-
-        // Backward through final norm
-        if (_finalNorm is not null)
-        {
-            grad = _finalNorm.Backward(grad);
-        }
-
-        // Backward through TSA layers (in reverse order)
-        for (int i = _crossTimeAttentionLayers.Count - 1; i >= 0; i--)
-        {
-            // Dropout backward
-            if (i < _dropoutLayers.Count)
-            {
-                grad = _dropoutLayers[i].Backward(grad);
-            }
-
-            // Cross-Dimension Attention backward
-            if (i < _crossDimAttentionLayers.Count)
-            {
-                grad = _crossDimAttentionLayers[i].Backward(grad);
-            }
-
-            // Cross-Time Attention backward
-            grad = _crossTimeAttentionLayers[i].Backward(grad);
-        }
-
-        // Backward through DSE
-        if (_dseLayer is not null)
-        {
-            _dseLayer.Backward(grad);
-        }
     }
 
     /// <summary>

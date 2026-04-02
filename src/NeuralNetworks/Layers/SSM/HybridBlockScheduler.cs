@@ -260,55 +260,6 @@ public class HybridBlockScheduler<T> : LayerBase<T>
         return result.Reshape(_originalInputShape);
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastNormedInputs == null ||
-            _lastBlockOutputs == null || _lastResiduals == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int rank = outputGradient.Shape.Length;
-        int batchSize = _lastInput.Shape[0];
-        int seqLen = _lastInput.Shape[1];
-
-        var grad = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, seqLen, _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        // Apply activation derivative
-        grad = ApplyActivationDerivative(_lastOutput!, grad);
-
-        _normGammaGradients = new Tensor<T>[_blocks.Length];
-        _normBetaGradients = new Tensor<T>[_blocks.Length];
-
-        // Backward through blocks in reverse order
-        for (int i = _blocks.Length - 1; i >= 0; i--)
-        {
-            // Residual: grad flows directly + through block
-            var blockGrad = _blocks[i].Backward(grad);
-
-            // Backward through RMSNorm
-            var normGrad = BackwardRMSNorm(blockGrad, _lastResiduals[i], _normGammas[i],
-                batchSize, seqLen, out var dGamma, out var dBeta);
-
-            _normGammaGradients[i] = dGamma;
-            _normBetaGradients[i] = dBeta;
-
-            // Residual gradient: add norm gradient to direct gradient
-            grad = Engine.TensorAdd(grad, normGrad);
-        }
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return grad.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return grad.Reshape(_originalInputShape);
-
-        return grad;
-    }
-
     private Tensor<T> ApplyRMSNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta,
         int batchSize, int seqLen)
     {

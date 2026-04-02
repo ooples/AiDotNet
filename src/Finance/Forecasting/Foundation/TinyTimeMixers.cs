@@ -382,7 +382,6 @@ public class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -635,46 +634,6 @@ public class TinyTimeMixers<T> : TimeSeriesFoundationModelBase<T>
         // Output head
         if (_outputHead is not null)
             current = _outputHead.Forward(current);
-
-        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-        {
-            current = current.Reshape(new[] { current.Shape[1] });
-        }
-
-        return current;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the TTM architecture.
-    /// </summary>
-    private Tensor<T> BackwardNative(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        bool addedBatchDim = false;
-        if (current.Rank == 1)
-        {
-            current = current.Reshape(new[] { 1, current.Length });
-            addedBatchDim = true;
-        }
-
-        // Output head backward
-        if (_outputHead is not null)
-            current = _outputHead.Backward(current);
-
-        // Final norm backward
-        if (_finalLayerNorm is not null)
-            current = _finalLayerNorm.Backward(current);
-
-        // Mixer layers backward (reverse order)
-        for (int i = _mixerLayers.Count - 1; i >= 0; i--)
-        {
-            current = _mixerLayers[i].Backward(current);
-        }
-
-        // Patch embedding backward
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Backward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
         {

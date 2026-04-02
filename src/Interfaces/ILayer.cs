@@ -144,36 +144,7 @@ public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider, IWeightLoa
     /// </remarks>
     bool CanExecuteOnGpu { get; }
 
-    /// <summary>
-    /// Calculates gradients during the backward pass of backpropagation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <b>Deprecation notice:</b> Manual backward passes are being replaced by tape-based
-    /// automatic differentiation via <see cref="AiDotNet.Tensors.Engines.Autodiff.GradientTape{T}"/>.
-    /// Layers implementing <see cref="ITrainableLayer{T}"/> expose their weight tensors for
-    /// tape-tracked gradient computation, eliminating the need for hand-written backward methods.
-    ///
-    /// <b>For Beginners:</b> During training, neural networks learn by adjusting their parameters.
-    /// To know how to adjust them, we need to calculate how much each parameter affects the error.
-    ///
-    /// This method handles the "backward pass" where error information flows backward through the network.
-    /// It takes the gradient (direction of error) from the next layer and calculates:
-    /// 1. How to update this layer's parameters
-    /// 2. What gradient to pass to the previous layer
-    ///
-    /// Think of it like tracing back through a series of decisions to figure out which ones led to a mistake.
-    ///
-    /// <b>Migration:</b> New code should use <c>GradientTape</c> instead:
-    /// <code>
-    /// using var tape = new GradientTape&lt;T&gt;();
-    /// var output = layer.Forward(input);    // Recorded by engine
-    /// var loss = computeLoss(output, target);
-    /// var grads = tape.ComputeGradients(loss, layer.GetTrainableParameters());
-    /// </code>
-    /// </remarks>
-    Tensor<T> Backward(Tensor<T> outputGradient);
+    // Backward() removed — use GradientTape-based autodiff via ITrainableLayer<T> instead.
 
     /// <summary>
     /// Updates the layer's parameters using the specified learning rate.

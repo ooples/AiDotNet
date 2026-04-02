@@ -327,7 +327,6 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 
         for (int layer = _lstmLayers.Count - 1; layer >= 0; layer--)
         {
-            var dInput = _lstmLayers[layer].Backward(dHidden);
             var lstmGradients = _lstmLayers[layer].LastGradients;
             if (lstmGradients is not null)
             {
@@ -812,14 +811,6 @@ internal class DeepARLstmCellTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     /// Stored gradients from last backward pass, accessible by the model's training loop.
     /// </summary>
     public Dictionary<string, Tensor<T>>? LastGradients { get; private set; }
-
-    public override Tensor<T> Backward(Tensor<T> dHidden)
-    {
-        LastGradients = BackwardInternal(dHidden);
-        if (LastGradients.TryGetValue("input_gradient", out var dInput))
-            return dInput;
-        return new Tensor<T>(new[] { _inputSize });
-    }
 
     private Dictionary<string, Tensor<T>> BackwardInternal(Tensor<T> dHidden)
     {

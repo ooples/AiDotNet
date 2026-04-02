@@ -259,7 +259,6 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -492,35 +491,6 @@ public class SimMTM<T> : TimeSeriesFoundationModelBase<T>
 
         if (_forecastHead is not null)
             current = _forecastHead.Forward(current);
-
-        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-            current = current.Reshape(new[] { current.Shape[1] });
-
-        return current;
-    }
-
-    private Tensor<T> BackwardNative(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        bool addedBatchDim = false;
-        if (current.Rank == 1)
-        {
-            current = current.Reshape(new[] { 1, current.Length });
-            addedBatchDim = true;
-        }
-
-        if (_forecastHead is not null)
-            current = _forecastHead.Backward(current);
-
-        if (_reconstructionHead is not null)
-            current = _reconstructionHead.Backward(current);
-
-        for (int i = _transformerLayers.Count - 1; i >= 0; i--)
-            current = _transformerLayers[i].Backward(current);
-
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Backward(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });

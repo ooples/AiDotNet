@@ -190,16 +190,6 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
         return offset + count;
     }
 
-    protected override void Backpropagate(Tensor<T> lossGradient)
-    {
-        var grad = _finalLayer.Backward(lossGradient);
-        for (int i = _singleBlocks.Length - 1; i >= 0; i--)
-            grad = _singleBlocks[i].Backward(grad);
-        for (int i = _doubleBlocks.Length - 1; i >= 0; i--)
-            grad = _doubleBlocks[i].Backward(grad);
-        _patchEmbed.Backward(grad);
-    }
-
     protected override Vector<T> GetParameterGradients()
     {
         var allGrads = new List<T>();

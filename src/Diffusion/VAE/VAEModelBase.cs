@@ -478,7 +478,6 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
                 predicted.ToVector(), target.ToVector());
             var lossGradTensor = new Tensor<T>(predicted.Shape.ToArray(), lossGrad);
 
-            BackpropagateVAE(lossGradTensor);
 
             var gradients = GetParameterGradients();
 
@@ -572,18 +571,6 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
 
         // Reverse-mode AD: compute gradients for all trainable parameters
         return tape.ComputeGradients(loss, trainableParams);
-    }
-
-    /// <summary>
-    /// Backpropagates the loss gradient through the VAE's encoder/decoder layers.
-    /// Override in derived classes to implement layer-by-layer gradient computation.
-    /// </summary>
-    /// <param name="lossGradient">Gradient of the loss w.r.t. the VAE output.</param>
-    protected virtual void BackpropagateVAE(Tensor<T> lossGradient)
-    {
-        throw new NotSupportedException(
-            $"{GetType().Name} does not implement BackpropagateVAE. " +
-            "Override this method to enable layer-level gradient computation.");
     }
 
     /// <summary>

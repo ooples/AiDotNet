@@ -492,7 +492,6 @@ public class TFT<T> : ForecastingModelBase<T>
 
         // Backward pass - convert gradient back to tensor
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         // Update weights via optimizer
         _optimizer.UpdateParameters(Layers);
@@ -797,57 +796,6 @@ public class TFT<T> : ForecastingModelBase<T>
         }
 
         return AdjustToPredictionHorizon(current);
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the TFT network.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the loss function.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backward pass computes gradients for all learnable
-    /// parameters by propagating error signals backwards through each layer.
-    /// </para>
-    /// </remarks>
-    private void Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        // Backward through output projection
-        if (_outputProjection is not null)
-        {
-            grad = _outputProjection.Backward(grad);
-        }
-
-        // Backward through final norm
-        if (_finalNorm is not null)
-        {
-            grad = _finalNorm.Backward(grad);
-        }
-
-        // Backward through attention
-        if (_attentionLayer is not null)
-        {
-            grad = _attentionLayer.Backward(grad);
-        }
-
-        // Backward through GRN layers (in reverse order)
-        for (int i = _grnLayers.Count - 1; i >= 0; i--)
-        {
-            grad = _grnLayers[i].Backward(grad);
-        }
-
-        // Backward through LSTM
-        if (_lstmEncoder is not null)
-        {
-            grad = _lstmEncoder.Backward(grad);
-        }
-
-        // Backward through variable selection
-        if (_useVariableSelection && _encoderVariableSelection is not null)
-        {
-            _encoderVariableSelection.Backward(grad);
-        }
     }
 
     /// <summary>

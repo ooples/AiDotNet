@@ -466,10 +466,8 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         Tensor<T> fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
 
         // Train discriminator on real images
-        T realLoss = TrainDiscriminatorBatch(realImages, realLabels);
 
         // Train discriminator on fake images
-        T fakeLoss = TrainDiscriminatorBatch(fakeImages, fakeLabels);
 
         // Compute total discriminator loss
         T discriminatorLoss = NumOps.Add(realLoss, fakeLoss);
@@ -485,7 +483,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         Tensor<T> allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
 
         // Train the generator to fool the discriminator
-        T generatorLoss = TrainGeneratorBatch(noise, newFakeImages, allRealLabels);
         _lastGeneratorLoss = generatorLoss;
 
         // Calculate auxiliary losses if enabled
@@ -542,61 +539,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         Engine.TensorFill(tensor, value);
 
         return tensor;
-    }
-
-    /// <summary>
-    /// Trains the generator to create images that can fool the discriminator using tensor operations.
-    /// </summary>
-    /// <param name="noise">The tensor containing noise vectors used as input to the generator.</param>
-    /// <param name="generatedImages">The tensor containing images generated from the noise.</param>
-    /// <param name="targetLabels">The tensor containing target labels (typically all 1's).</param>
-    /// <returns>The batch loss value for this training step.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method trains the Generator network to create images that the Discriminator will classify
-    /// as real. It uses efficient tensor operations to process entire batches of data in parallel.
-    /// During this process, the Discriminator's weights are frozen as we're only training the Generator.
-    /// The generator's goal is to create images that receive high "real" scores from the discriminator.
-    /// </para>
-    /// <para><b>For Beginners:</b> This efficiently teaches the generator to create convincing fake images.
-    /// 
-    /// The tensor-based generator training:
-    /// - Processes batches of noise vectors to generate fake images
-    /// - Passes these fake images through the discriminator
-    /// - Calculates how well the fake images fooled the discriminator
-    /// - Updates only the generator's parameters to create more convincing images
-    /// 
-    /// This optimized approach is essential for effective GAN training.
-    /// </para>
-    /// </remarks>
-    private T TrainGeneratorBatch(Tensor<T> noise, Tensor<T> generatedImages, Tensor<T> targetLabels)
-    {
-        // Ensure generator is in training mode and discriminator is not (we don't want to update discriminator)
-        Generator.SetTrainingMode(true);
-        Discriminator.SetTrainingMode(false); // Freeze discriminator weights
-
-        // Forward pass through discriminator with generated images
-        Tensor<T> discriminatorOutput = Discriminator.Predict(generatedImages);
-
-        // Calculate generator loss - we want the discriminator to classify fake images as real
-        T loss = CalculateBatchLoss(discriminatorOutput, targetLabels);
-
-        // Calculate gradients for discriminator output
-        Tensor<T> outputGradients = CalculateBatchGradients(discriminatorOutput, targetLabels);
-
-        // Backpropagate through discriminator to get gradients at its input (which is the generator's output)
-        Tensor<T> discriminatorInputGradients = Discriminator.Backpropagate(outputGradients);
-
-        // Backpropagate through generator using the gradients from discriminator
-        Generator.Backpropagate(discriminatorInputGradients);
-
-        // Update generator parameters
-        UpdateNetworkParameters(Generator);
-
-        // Re-enable training mode for discriminator for future training steps
-        Discriminator.SetTrainingMode(true);
-
-        return loss;
     }
 
     /// <summary>
@@ -864,10 +806,8 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         var fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
 
         // Train discriminator on real images using tensor operations
-        var realLoss = TrainDiscriminatorBatch(expectedOutput, realLabels);
 
         // Train discriminator on fake images using tensor operations
-        var fakeLoss = TrainDiscriminatorBatch(fakeImages, fakeLabels);
 
         // Compute average discriminator loss
         var discriminatorLoss = NumOps.Add(realLoss, fakeLoss);
@@ -880,7 +820,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         var allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
 
         // Train generator to fool discriminator using tensor operations
-        var generatorLoss = TrainGeneratorBatch(input, allRealLabels);
         _lastGeneratorLoss = generatorLoss;
 
         // Calculate auxiliary losses if enabled
@@ -902,109 +841,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         }
 
         LastLoss = totalGeneratorLoss;
-    }
-
-    /// <summary>
-    /// Trains the discriminator on a batch of images using tensor operations.
-    /// </summary>
-    /// <param name="images">The tensor containing images to train on.</param>
-    /// <param name="labels">The tensor containing labels (real or fake).</param>
-    /// <returns>The loss value for this training step.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method trains the Discriminator network on a batch of images using tensor operations
-    /// throughout. It computes predictions, calculates loss, and updates weights using backpropagation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This teaches the discriminator to spot real vs. fake images.
-    /// 
-    /// The process:
-    /// - The discriminator examines a batch of images
-    /// - It tries to guess which ones are real and which are fake
-    /// - It calculates how wrong it was (the loss)
-    /// - It adjusts its internal parameters to make better predictions
-    /// 
-    /// The tensor-based implementation makes this much more efficient.
-    /// </para>
-    /// </remarks>
-    private T TrainDiscriminatorBatch(Tensor<T> images, Tensor<T> labels)
-    {
-        // Ensure discriminator is in training mode
-        Discriminator.SetTrainingMode(true);
-
-        // Forward pass - get predictions for the batch
-        var predictions = Discriminator.Predict(images);
-
-        // Calculate loss
-        var loss = CalculateBatchLoss(predictions, labels);
-
-        // Calculate gradients for backpropagation
-        var outputGradients = CalculateBatchGradients(predictions, labels);
-
-        // Backpropagate through the discriminator
-        Discriminator.Backpropagate(outputGradients);
-
-        // Update discriminator parameters
-        UpdateNetworkParameters(Discriminator);
-
-        return loss;
-    }
-
-    /// <summary>
-    /// Trains the generator to create images that can fool the discriminator.
-    /// </summary>
-    /// <param name="noise">The tensor containing noise vectors.</param>
-    /// <param name="targetLabels">The tensor containing target labels (1's for "real").</param>
-    /// <returns>The loss value for this training step.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method trains the Generator to create images that fool the Discriminator using tensor operations.
-    /// It passes generated images through the discriminator and trains the generator to maximize
-    /// the discriminator's "real" classification score.
-    /// </para>
-    /// <para><b>For Beginners:</b> This teaches the generator to create more convincing fake images.
-    /// 
-    /// The process:
-    /// - The generator creates fake images from noise
-    /// - The discriminator evaluates these images
-    /// - The generator's goal is to create images the discriminator thinks are real
-    /// - The generator adjusts its parameters to create more convincing images
-    /// 
-    /// The tensor-based implementation makes this training much more efficient.
-    /// </para>
-    /// </remarks>
-    private T TrainGeneratorBatch(Tensor<T> noise, Tensor<T> targetLabels)
-    {
-        // Ensure generator is in training mode
-        Generator.SetTrainingMode(true);
-
-        // Temporarily freeze discriminator weights during generator training
-        Discriminator.SetTrainingMode(false);
-
-        // Generate fake images
-        var generatedImages = Generator.Predict(noise);
-
-        // Pass fake images through discriminator
-        var discriminatorOutput = Discriminator.Predict(generatedImages);
-
-        // Calculate loss - we want the discriminator to classify fake images as real
-        var loss = CalculateBatchLoss(discriminatorOutput, targetLabels);
-
-        // Calculate gradients for discriminator output
-        var outputGradients = CalculateBatchGradients(discriminatorOutput, targetLabels);
-
-        // Backpropagate through discriminator (keeping its weights frozen)
-        var discriminatorInputGradients = Discriminator.Backpropagate(outputGradients);
-
-        // Backpropagate through generator
-        Generator.Backpropagate(discriminatorInputGradients);
-
-        // Update generator parameters
-        UpdateNetworkParameters(Generator);
-
-        // Restore discriminator to training mode
-        Discriminator.SetTrainingMode(true);
-
-        return loss;
     }
 
     /// <summary>
@@ -1991,7 +1827,6 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
         // Run backward pass through discriminator layers to compute input gradient
         // The discriminator's Backward method will propagate gradients back to the input
-        var inputGradient = Discriminator.BackwardWithInputGradient(outputGradient);
 
         // Restore original training mode
         Discriminator.SetTrainingMode(originalMode);

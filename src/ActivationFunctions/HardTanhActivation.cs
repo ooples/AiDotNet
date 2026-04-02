@@ -173,27 +173,5 @@ public class HardTanhActivation<T> : ActivationFunctionBase<T>
         backend.Hardtanh(input, output, -1.0f, 1.0f, size);
     }
 
-    /// <summary>
-    /// Calculates the HardTanh backward pass gradient on GPU.
-    /// </summary>
-    /// <param name="backend">The GPU backend to use for execution.</param>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="input">The input buffer from the forward pass.</param>
-    /// <param name="output">Not used for HardTanh (can be null). HardTanh backward uses forward input.</param>
-    /// <param name="gradInput">The output buffer to store the input gradient.</param>
-    /// <param name="size">The number of elements to process.</param>
-    /// <remarks>
-    /// HardTanh backward on GPU:
-    /// - For -1 &lt; input &lt; 1: gradInput[i] = gradOutput[i]
-    /// - Otherwise: gradInput[i] = 0
-    /// </remarks>
-    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input), "HardTanh backward requires the input from forward pass.");
-
-        backend.HardtanhBackward(gradOutput, input, gradInput, -1.0f, 1.0f, size);
-    }
-
     #endregion
 }

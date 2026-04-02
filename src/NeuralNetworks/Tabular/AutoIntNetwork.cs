@@ -173,16 +173,7 @@ public class AutoIntNetwork<T> : NeuralNetworkBase<T>
         LastLoss = _lossFunction.CalculateLoss(currentOutput.ToVector(), expectedOutput.ToVector());
         Vector<T> lossGrad = _lossFunction.CalculateDerivative(currentOutput.ToVector(), expectedOutput.ToVector());
         Tensor<T> error = Tensor<T>.FromVector(lossGrad, currentOutput.Shape.ToArray());
-        BackpropagateError(error);
         UpdateNetworkParameters();
-    }
-
-    private void BackpropagateError(Tensor<T> error)
-    {
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            error = Layers[i].Backward(error);
-        }
     }
 
     private void UpdateNetworkParameters()

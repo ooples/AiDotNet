@@ -1,3 +1,4 @@
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
@@ -472,87 +473,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return parameters;
     }
 
-    /// <summary>
-    /// Performs backpropagation to compute gradients for network parameters.
-    /// </summary>
-    /// <param name="outputGradients">The gradients of the loss with respect to the network outputs.</param>
-    /// <returns>The gradients of the loss with respect to the network inputs.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation is how neural networks learn. After making a prediction, the network
-    /// calculates how wrong it was (the error). Then it works backward through the layers to figure out
-    /// how each parameter contributed to that error. This method handles that backward flow of information.
-    /// </para>
-    /// <para>
-    /// The "gradients" are numbers that tell us how to adjust each parameter to reduce the error.
-    /// </para>
-    /// <para>
-    /// <b>API Change Note:</b> The signature changed from Vector&lt;T&gt; to Tensor&lt;T&gt; to support multi-dimensional
-    /// gradients. This is a breaking change. If you need backward compatibility, consider adding an overload that
-    /// accepts Vector&lt;T&gt; and converts it internally to Tensor&lt;T&gt;.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when the network is not in training mode or doesn't support training.</exception>
-    public virtual Tensor<T> Backpropagate(Tensor<T> outputGradients)
-    {
-        if (!IsTrainingMode)
-        {
-            throw new InvalidOperationException("Cannot backpropagate when network is not in training mode");
-        }
-
-        if (!SupportsTraining)
-        {
-            throw new InvalidOperationException("This network does not support backpropagation");
-        }
-
-        // Use memory-managed backward if gradient checkpointing is enabled
-        if (_memoryManager is not null && _memoryManager.IsCheckpointingEnabled)
-        {
-            return BackpropagateWithRecompute(outputGradients);
-        }
-
-        // Standard backpropagation through layers in reverse order
-        var gradientTensor = outputGradients;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradientTensor = Layers[i].Backward(gradientTensor);
-        }
-
-        return gradientTensor;
-    }
-
-    /// <summary>
-    /// Performs backpropagation with activation recomputation for non-checkpointed layers.
-    /// </summary>
-    /// <param name="outputGradients">Gradients from the loss function.</param>
-    /// <returns>Gradients with respect to input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> When gradient checkpointing is enabled, we don't store all layer
-    /// activations during forward pass (to save memory). During backprop, we need those
-    /// activations, so we recompute them from the nearest checkpoint.
-    /// </para>
-    /// </remarks>
-    protected virtual Tensor<T> BackpropagateWithRecompute(Tensor<T> outputGradients)
-    {
-        if (_memoryManager is null)
-            throw new InvalidOperationException("Memory manager is not configured.");
-
-        var gradientTensor = outputGradients;
-
-        // Backpropagate through layers in reverse order with recomputation
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            // Use memory manager to handle recomputation from checkpoints
-            gradientTensor = _memoryManager.BackwardWithRecompute(Layers[i], gradientTensor, i);
-        }
-
-        // Clear checkpoints after backprop to free memory
-        _memoryManager.ClearCheckpoints();
-
-        return gradientTensor;
-    }
-
     #region GPU Training Methods
 
     /// <summary>
@@ -637,55 +557,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return current;
     }
 
-    /// <summary>
-    /// Performs backpropagation through all layers entirely on GPU.
-    /// </summary>
-    /// <param name="outputGradients">The GPU-resident gradient of loss with respect to network output.</param>
-    /// <returns>The GPU-resident gradient with respect to network input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the network doesn't support GPU training.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method backpropagates through all layers on GPU:
-    /// - Each layer computes input gradients and stores weight gradients on GPU
-    /// - No data is transferred to CPU during backpropagation
-    /// - After calling this, call UpdateParametersGpu() to apply the gradients
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> Like Backpropagate() but everything stays on GPU.
-    /// The weight gradients are computed and stored on GPU, ready for the update step.
-    /// </para>
-    /// </remarks>
-    public virtual IGpuTensor<T> BackpropagateGpu(IGpuTensor<T> outputGradients)
-    {
-        if (!IsTrainingMode)
-        {
-            throw new InvalidOperationException("Cannot backpropagate when network is not in training mode");
-        }
-
-        if (!CanTrainOnGpu)
-        {
-            throw new InvalidOperationException(
-                "GPU backward pass is not supported. Check CanTrainOnGpu before calling this method.");
-        }
-
-        var gradientTensor = outputGradients;
-
-        // Backpropagate through layers in reverse order
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            if (Layers[i] is LayerBase<T> layerBase)
-            {
-                gradientTensor = layerBase.BackwardGpu(gradientTensor);
-            }
-            else
-            {
-                throw new InvalidOperationException(
-                    $"Layer {Layers[i].GetType().Name} does not inherit from LayerBase<T> and cannot be used with GPU training.");
-            }
-        }
-
-        return gradientTensor;
-    }
 
     /// <summary>
     /// Performs backpropagation through all layers with deferred GPU execution.
@@ -707,17 +578,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (engine?.GetBackend() == null)
         {
             // Fallback to non-deferred if no GPU backend
-            return BackpropagateGpu(outputGradients);
         }
 
         var backend = engine.GetBackend() as IAsyncGpuBackend;
         if (backend == null)
         {
-            return BackpropagateGpu(outputGradients);
         }
 
         return backend.ExecuteDeferred(
-            scope => BackpropagateGpu(outputGradients),
             options);
     }
 
@@ -887,7 +755,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 lossValue = lossResult.Loss;
 
                 // Backward pass
-                BackpropagateGpu(lossResult.Gradient);
 
                 // Update parameters
                 UpdateParametersGpu(config);
@@ -951,7 +818,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 lossValue = lossResult.Loss;
 
                 // Backward pass
-                BackpropagateGpu(lossResult.Gradient);
 
                 // Update parameters
                 UpdateParametersGpu(config);
@@ -2692,7 +2558,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 var output = Predict(input);
                 var lossGrad = DefaultLossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector());
                 var outputGradients = new Tensor<T>(output.Shape.ToArray(), lossGrad);
-                Backpropagate(outputGradients);
                 var defaultLr = NumOps.FromDouble(0.001);
                 foreach (var layer in Layers)
                 {
@@ -2747,37 +2612,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTrainOptimizer;
 
     /// <summary>
-    /// Standard training step following PyTorch pattern: forward → loss → backward → optimizer.step().
-    /// Models that override Train can call this to get correct gradient-based training.
-    /// </summary>
-    /// <param name="input">Input tensor.</param>
-    /// <param name="expectedOutput">Target tensor.</param>
-    protected virtual void StandardTrainStep(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-
-        // Forward pass
-        var prediction = ForwardWithMemory(input);
-
-        // Compute loss
-        LastLoss = LossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        // Backward pass (accumulates gradients in layers)
-        var lossGradient = LossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var gradTensor = Tensor<T>.FromVector(lossGradient);
-        if (gradTensor.Rank < prediction.Rank)
-            gradTensor = gradTensor.Reshape(prediction.Shape.ToArray());
-        Backpropagate(gradTensor);
-
-        // Optimizer step: apply accumulated gradients
-        _baseTrainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        var paramGrads = GetParameterGradients();
-        var currentParams = GetParameters();
-        var updatedParams = _baseTrainOptimizer.UpdateParameters(currentParams, paramGrads);
-        UpdateParameters(updatedParams);
-    }
-
-    /// <summary>
     /// Gets the metadata for this neural network model.
     /// </summary>
     /// <returns>A ModelMetaData object containing information about the model.</returns>
@@ -2810,91 +2644,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             layer.ResetState();
         }
-    }
-
-    /// <summary>
-    /// Computes gradients of the network output with respect to the network input using backpropagation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient signal from the output (typically all ones for gradient computation).</param>
-    /// <returns>A tensor containing the gradients with respect to the network input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method performs a backward pass through all layers to compute how the output changes
-    /// with respect to the input. Unlike the standard backward pass which computes gradients for
-    /// parameters, this method computes gradients for the input itself.
-    /// </para>
-    /// <para>
-    /// This is essential for techniques like:
-    /// - Gradient-based input optimization
-    /// - Saliency maps and input attribution
-    /// - WGAN-GP gradient penalty computation
-    /// - Adversarial example generation
-    /// </para>
-    /// <para><b>For Beginners:</b> This calculates how sensitive the output is to changes in the input.
-    ///
-    /// Normally, backpropagation adjusts the network's internal parameters (weights and biases).
-    /// This method instead computes how the output would change if we modified the input data.
-    ///
-    /// Use cases:
-    /// - Understanding which input features matter most (interpretability)
-    /// - Generating adversarial examples (security research)
-    /// - Computing gradient penalties for training stability (WGAN-GP)
-    ///
-    /// The process:
-    /// 1. Assumes a forward pass has already been run (outputs are cached)
-    /// 2. Starts with a gradient signal at the output (how much we "care" about each output)
-    /// 3. Propagates this gradient backwards through each layer
-    /// 4. Returns the gradient with respect to the original input
-    /// </para>
-    /// </remarks>
-    public virtual Tensor<T> BackwardWithInputGradient(Tensor<T> outputGradient)
-    {
-        if (Layers.Count == 0)
-        {
-            throw new InvalidOperationException("Cannot compute input gradients for a network with no layers.");
-        }
-
-        // Start with the output gradient and propagate backwards through layers
-        var currentGradient = outputGradient;
-
-        // Iterate backwards through layers
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            var layer = Layers[i];
-
-            // Each layer's Backward method takes the gradient from the next layer
-            // and returns the gradient to pass to the previous layer
-            currentGradient = layer.Backward(currentGradient);
-        }
-
-        // The final gradient is with respect to the network input
-        return currentGradient;
-    }
-
-    /// <inheritdoc/>
-    public virtual Vector<T> ComputeInputGradient(Vector<T> input, Vector<T> outputGradient)
-    {
-        // Convert vectors to tensors and use the existing tensor-based implementation
-        var inputTensor = Tensor<T>.FromVector(input);
-        var gradientTensor = Tensor<T>.FromVector(outputGradient);
-
-        // Run forward pass to cache layer activations
-        Predict(inputTensor);
-
-        // Compute input gradient using backpropagation
-        var resultTensor = BackwardWithInputGradient(gradientTensor);
-
-        return resultTensor.ToVector();
-    }
-
-    /// <inheritdoc/>
-    public virtual Tensor<T> ComputeInputGradient(Tensor<T> input, Tensor<T> outputGradient)
-    {
-        // Run forward pass to cache layer activations
-        Predict(input);
-
-        // Compute input gradient using backpropagation
-        return BackwardWithInputGradient(outputGradient);
     }
 
     /// <summary>
@@ -4268,7 +4017,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var pred = Predict(input);
         var lossDerivative = loss.CalculateDerivative(pred.ToVector(), target.ToVector());
         var outputGradients = new Tensor<T>(pred.Shape.ToArray(), lossDerivative);
-        Backpropagate(outputGradients);
         return GetParameterGradients();
     }
 

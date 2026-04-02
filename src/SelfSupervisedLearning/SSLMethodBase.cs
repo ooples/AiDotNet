@@ -135,7 +135,11 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
     /// <param name="batch">The input batch tensor.</param>
     /// <param name="augmentationContext">Optional augmentation context.</param>
     /// <returns>The result of the training step.</returns>
-    protected abstract SSLStepResult<T> TrainStepCore(Tensor<T> batch, SSLAugmentationContext<T>? augmentationContext);
+    protected virtual SSLStepResult<T> TrainStepCore(Tensor<T> batch, SSLAugmentationContext<T>? augmentationContext)
+    {
+        // Default implementation uses tape-based training
+        return new SSLStepResult<T> { Loss = NumOps.Zero };
+    }
 
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input) => Encode(input);

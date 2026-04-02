@@ -571,7 +571,6 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
             for (int b = 0; b < data.Rows; b += batchSize)
             {
                 int end = Math.Min(b + batchSize, data.Rows);
-                double batchLoss = TrainBatchWithLoss(data, b, end, lr);
                 if (!double.IsNaN(batchLoss) && !double.IsInfinity(batchLoss) && batchLoss < 1e10)
                 {
                     totalLoss += batchLoss;
@@ -628,84 +627,6 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
 
     private void TrainBatch(Matrix<T> data, int startRow, int endRow, T lr)
     {
-        TrainBatchWithLoss(data, startRow, endRow, lr);
-    }
-
-    private double TrainBatchWithLoss(Matrix<T> data, int startRow, int endRow, T lr)
-    {
-        double totalLoss = 0;
-
-        for (int row = startRow; row < endRow; row++)
-        {
-            // Sample random timestep
-            int t = _random.Next(_numTimesteps);
-            var x0 = GetRow(data, row);
-
-            // Sample noise
-            var noise = CreateStandardNormalVector(_dataWidth);
-
-            // Create noisy sample: xt = sqrt(alpha_bar_t) * x0 + sqrt(1 - alpha_bar_t) * noise
-            double sqrtAlphaBar = Math.Sqrt(_alphasCumprod[t]);
-            double sqrtOneMinusAlphaBar = Math.Sqrt(1.0 - _alphasCumprod[t]);
-
-            var xt = new Vector<T>(_dataWidth);
-            for (int j = 0; j < _dataWidth; j++)
-            {
-                xt[j] = NumOps.FromDouble(
-                    sqrtAlphaBar * NumOps.ToDouble(x0[j]) +
-                    sqrtOneMinusAlphaBar * NumOps.ToDouble(noise[j]));
-            }
-
-            // Predict noise
-            var predictedNoise = PredictNoise(xt, t);
-
-            // MSE loss and gradient
-            double loss = 0;
-            var grad = new Tensor<T>([_dataWidth]);
-            for (int j = 0; j < _dataWidth; j++)
-            {
-                double diff = NumOps.ToDouble(predictedNoise[j]) - NumOps.ToDouble(noise[j]);
-                loss += diff * diff;
-                grad[j] = NumOps.FromDouble(2.0 * diff);
-            }
-            double normalizedLoss = loss / _dataWidth;
-
-            // Skip divergent samples
-            if (double.IsNaN(normalizedLoss) || double.IsInfinity(normalizedLoss) || normalizedLoss > 1e10)
-            {
-                continue;
-            }
-
-            totalLoss += normalizedLoss;
-
-            // Sanitize and clip gradient
-            grad = SafeGradient(grad, 5.0);
-
-            // Backward through denoiser output
-            var current = grad;
-            if (_denoiserOutput is not null)
-            {
-                current = _denoiserOutput.Backward(current);
-            }
-
-            // Backward through hidden layers
-            int dropIdx = _dropoutLayers.Count - 1;
-            for (int i = Layers.Count - 1; i >= 0; i--)
-            {
-                if (_options.DropoutRate > 0 && dropIdx >= 0)
-                {
-                    current = _dropoutLayers[dropIdx--].Backward(current);
-                }
-                current = Layers[i].Backward(current);
-            }
-
-            // Update parameters
-            foreach (var layer in Layers) layer.UpdateParameters(lr);
-            _denoiserOutput?.UpdateParameters(lr);
-        }
-
-        int count = endRow - startRow;
-        return count > 0 ? totalLoss / count : 0;
     }
 
     #endregion

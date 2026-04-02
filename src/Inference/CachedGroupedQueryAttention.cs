@@ -395,14 +395,6 @@ internal class CachedGroupedQueryAttention<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        return new Tensor<T>(_lastInput.Shape.ToArray());
-    }
-
-    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         // Simplified for inference-focused layer

@@ -187,25 +187,6 @@ public class EntmoidActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
-    /// Computes the backward pass gradient for entmoid.
-    /// </summary>
-    /// <param name="input">Input tensor from forward pass.</param>
-    /// <param name="outputGradient">Gradient flowing back from next layer.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    public override Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
-    {
-        var deriv = Derivative(input);
-        var result = new Tensor<T>(input.Shape.ToArray());
-
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i] = NumOps.Multiply(deriv[i], outputGradient[i]);
-        }
-
-        return result;
-    }
-
-    /// <summary>
     /// Gets whether this activation function supports JIT compilation.
     /// </summary>
     public override bool SupportsJitCompilation => false;
@@ -231,14 +212,6 @@ public class EntmoidActivation<T> : ActivationFunctionBase<T>
     /// Applies the entmoid activation function on GPU.
     /// </summary>
     public override void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
-    {
-        throw new NotSupportedException("Entmoid activation does not yet support GPU training.");
-    }
-
-    /// <summary>
-    /// Calculates the entmoid backward pass gradient on GPU.
-    /// </summary>
-    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
     {
         throw new NotSupportedException("Entmoid activation does not yet support GPU training.");
     }

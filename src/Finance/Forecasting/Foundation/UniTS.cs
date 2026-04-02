@@ -474,7 +474,6 @@ public class UniTS<T> : ForecastingModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -746,28 +745,6 @@ public class UniTS<T> : ForecastingModelBase<T>
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
-        }
-
-        return current;
-    }
-
-    /// <summary>
-    /// Performs the backward pass for gradient computation.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of the loss with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The backward pass computes gradients for all trainable
-    /// layers (embedding, convolution, transformer, and output head) to update their weights.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var current = outputGradient;
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            current = Layers[i].Backward(current);
         }
 
         return current;

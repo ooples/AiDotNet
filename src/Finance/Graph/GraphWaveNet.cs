@@ -597,7 +597,6 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(output.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -925,22 +924,6 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
         }
 
         return current;
-    }
-
-    /// <summary>
-    /// Performs backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the GraphWaveNet model, Backward propagates gradients backward. This teaches the GraphWaveNet architecture how to adjust its weights.
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-            grad = Layers[i].Backward(grad);
-        return grad;
     }
 
     /// <summary>

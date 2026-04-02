@@ -254,56 +254,6 @@ public class DiffusionAttention<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through the attention layer.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        bool isImageFormat = _lastInput.Shape.Length == 4;
-        Tensor<T> grad = outputGradient;
-
-        if (isImageFormat)
-        {
-            int batchSize = outputGradient.Shape[0];
-            int channels = outputGradient.Shape[1];
-            int height = outputGradient.Shape[2];
-            int width = outputGradient.Shape[3];
-            int sequenceLength = height * width;
-
-            // Reshape gradient to sequence format
-            grad = outputGradient.Transpose(new[] { 0, 2, 3, 1 }).Reshape(batchSize, sequenceLength, channels);
-        }
-
-        // Backward through the attention layer that was used
-        Tensor<T> inputGrad;
-        if (_usedFlashAttention)
-        {
-            inputGrad = _flashAttention.Backward(grad);
-        }
-        else
-        {
-            inputGrad = _standardAttention.Backward(grad);
-        }
-
-        // Reshape back to image format if needed
-        if (isImageFormat)
-        {
-            int batchSize = _lastInput.Shape[0];
-            int channels = _lastInput.Shape[1];
-            int height = _lastInput.Shape[2];
-            int width = _lastInput.Shape[3];
-
-            inputGrad = inputGrad.Reshape(batchSize, height, width, channels).Transpose(new[] { 0, 3, 1, 2 });
-        }
-
-        return inputGrad;
-    }
-
-    /// <summary>
     /// Updates parameters using computed gradients.
     /// </summary>
     public override void UpdateParameters(T learningRate)
@@ -527,43 +477,6 @@ public class DiffusionCrossAttention<T> : LayerBase<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through cross-attention.
-    /// </summary>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        bool isImageFormat = _lastInput.Shape.Length == 4;
-        Tensor<T> grad = outputGradient;
-
-        if (isImageFormat)
-        {
-            int batchSize = outputGradient.Shape[0];
-            int channels = outputGradient.Shape[1];
-            int height = outputGradient.Shape[2];
-            int width = outputGradient.Shape[3];
-            int sequenceLength = height * width;
-
-            grad = outputGradient.Transpose(new[] { 0, 2, 3, 1 }).Reshape(batchSize, sequenceLength, channels);
-        }
-
-        var inputGrad = _crossAttention.Backward(grad);
-
-        if (isImageFormat)
-        {
-            int batchSize = _lastInput.Shape[0];
-            int channels = _lastInput.Shape[1];
-            int height = _lastInput.Shape[2];
-            int width = _lastInput.Shape[3];
-
-            inputGrad = inputGrad.Reshape(batchSize, height, width, channels).Transpose(new[] { 0, 3, 1, 2 });
-        }
-
-        return inputGrad;
     }
 
     /// <summary>

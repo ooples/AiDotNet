@@ -207,18 +207,6 @@ public class IntersampleAttention<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Backward pass through intersample attention.
-    /// </summary>
-    /// <param name="gradient">Gradient from upstream.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    public override Tensor<T> Backward(Tensor<T> gradient)
-    {
-        // Simplified backward - in full implementation would backprop through attention
-        var inputGrad = _outputProjection.Backward(gradient);
-        return inputGrad;
-    }
-
-    /// <summary>
     /// Updates parameters.
     /// </summary>
     public override void UpdateParameters(T learningRate)

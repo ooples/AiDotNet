@@ -450,42 +450,6 @@ public class VAEEncoder<T> : LayerBase<T>
         return (first, second);
     }
 
-    /// <summary>
-    /// Performs the backward pass through the encoder.
-    /// </summary>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Split gradient for mean and logVar paths
-        var (meanGrad, logVarGrad) = SplitChannels(outputGradient, _latentChannels);
-
-        // Backward through quant conv (mean path only)
-        meanGrad = _quantConv.Backward(meanGrad);
-
-        // Backward through mean and logVar convs
-        var normGradMean = _meanConv.Backward(meanGrad);
-        var normGradLogVar = _logVarConv.Backward(logVarGrad);
-
-        // Combine gradients
-        var normGrad = Engine.TensorAdd(normGradMean, normGradLogVar);
-
-        // Backward through SiLU and normalization
-        normGrad = ApplySiLUDerivative(_normOutOutput!, normGrad);
-        normGrad = _normOut.Backward(normGrad);
-
-        // Backward through middle blocks
-        normGrad = _midBlocks[1].Backward(normGrad);
-        normGrad = _midBlocks[0].Backward(normGrad);
-
-        // Backward through down blocks
-        for (int i = _downBlocks.Length - 1; i >= 0; i--)
-        {
-            normGrad = _downBlocks[i].Backward(normGrad);
-        }
-
-        // Backward through input conv
-        return _inputConv.Backward(normGrad);
-    }
-
     private Tensor<T> ApplySiLUDerivative(Tensor<T> input, Tensor<T> gradient)
     {
         var output = new Tensor<T>(input.Shape.ToArray());

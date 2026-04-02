@@ -631,36 +631,6 @@ public class StandardVAE<T> : VAEModelBase<T>
     #region Layer-Level Backpropagation
 
     /// <inheritdoc />
-    protected override void BackpropagateVAE(Tensor<T> lossGradient)
-    {
-        var grad = lossGradient;
-
-        // Decoder backward (reverse)
-        grad = BackwardLayer(_outputConv, grad);
-        for (int i = _decoderLayers.Count - 1; i >= 0; i--)
-            grad = BackwardLayer(_decoderLayers[i], grad);
-
-        // Latent space backward
-        grad = BackwardLayer(_postQuantConv, grad);
-        grad = BackwardLayer(_quantConv, grad);
-        // Mean/logVar paths share the same gradient from the latent
-        BackwardLayer(_logVarConv, grad);
-        grad = BackwardLayer(_meanConv, grad);
-
-        // Encoder backward (reverse)
-        for (int i = _encoderLayers.Count - 1; i >= 0; i--)
-            grad = BackwardLayer(_encoderLayers[i], grad);
-
-        BackwardLayer(_inputConv, grad);
-    }
-
-    private static Tensor<T> BackwardLayer(ILayer<T>? layer, Tensor<T> grad)
-    {
-        if (layer == null) return grad;
-        return layer.Backward(grad);
-    }
-
-    /// <inheritdoc />
     protected override Vector<T> GetParameterGradients()
     {
         var gradients = new List<T>();

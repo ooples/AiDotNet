@@ -79,36 +79,6 @@ public class Sparsemax<T>
     }
 
     /// <summary>
-    /// Computes the gradient of the sparsemax function for backpropagation.
-    /// </summary>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="sparsemaxOutput">The output from the forward pass.</param>
-    /// <param name="axis">The axis along which sparsemax was applied.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// The Jacobian of sparsemax is: ∂sparsemax/∂z = diag(s) - s s^T / ||s||₁
-    /// where s is the support (non-zero elements) indicator.
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(Tensor<T> gradOutput, Tensor<T> sparsemaxOutput, int axis = -1)
-    {
-        // Handle negative axis
-        if (axis < 0)
-        {
-            axis = gradOutput.Rank + axis;
-        }
-
-        // Create gradient tensor
-        var gradInput = new Tensor<T>(gradOutput.Shape.ToArray());
-
-        // Process each slice along the axis
-        ProcessGradientAlongAxis(gradOutput, sparsemaxOutput, gradInput, axis);
-
-        return gradInput;
-    }
-
-    /// <summary>
     /// Applies sparsemax to a 1D vector (single slice).
     /// </summary>
     private Vector<T> SparsemaxVector(Vector<T> z)

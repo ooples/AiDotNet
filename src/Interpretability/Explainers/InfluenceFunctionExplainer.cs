@@ -378,47 +378,6 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
     }
 
     /// <summary>
-    /// Computes gradient of loss with respect to model parameters.
-    /// </summary>
-    private Vector<T> ComputeGradient(Vector<T> input, Vector<T> target)
-    {
-        if (_gradientFunction != null)
-        {
-            return _gradientFunction(input, target);
-        }
-
-        if (_network != null)
-        {
-            // Use neural network's backpropagation
-            var inputTensor = Tensor<T>.FromRowMatrix(new Matrix<T>(new[] { input }));
-
-            // Forward pass with memory
-            _network.SetTrainingMode(true);
-            var output = _network.ForwardWithMemory(inputTensor);
-
-            // Compute loss gradient
-            var prediction = output.ToVector();
-            var lossValue = _lossFunction(prediction, target);
-
-            // MSE gradient: 2 * (pred - target) — vectorized
-            var outputGradVec = (Vector<T>)Engine.Multiply(
-                Engine.Subtract(prediction, target), NumOps.FromDouble(2.0));
-
-            var outputGradTensor = Tensor<T>.FromVector(outputGradVec).Reshape(1, outputGradVec.Length);
-
-            // Backpropagate
-            _network.Backpropagate(outputGradTensor);
-            var parameterGradients = _network.GetParameterGradients();
-
-            _network.SetTrainingMode(false);
-            return parameterGradients;
-        }
-
-        // Numerical gradients as fallback
-        return ComputeNumericalGradients(input, target);
-    }
-
-    /// <summary>
     /// Computes numerical gradients using finite differences.
     /// </summary>
     /// <remarks>

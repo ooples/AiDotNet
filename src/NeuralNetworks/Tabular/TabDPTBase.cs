@@ -235,38 +235,6 @@ public abstract class TabDPTBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through the backbone network.
-    /// </summary>
-    protected Tensor<T> BackwardBackbone(Tensor<T> gradient)
-    {
-        // Backward through final norm
-        var grad = _finalNorm.Backward(gradient);
-
-        // Backward through MLP layers
-        for (int i = _mlpLayers.Length - 1; i >= 0; i--)
-        {
-            grad = _mlpLayers[i].Backward(grad);
-        }
-
-        // Backward through feature attention if present
-        if (_featureAttention != null)
-        {
-            grad = _featureAttention.Backward(grad);
-        }
-
-        // Backward through transformer blocks
-        for (int i = _transformerBlocks.Length - 1; i >= 0; i--)
-        {
-            grad = _transformerBlocks[i].Backward(grad);
-        }
-
-        // Backward through feature projection
-        grad = _featureProjection.Backward(grad);
-
-        return grad;
-    }
-
-    /// <summary>
     /// Creates one-hot encoding for categorical features.
     /// </summary>
     private Tensor<T> CreateOneHotEncoding(Matrix<int> categoricalIndices, int featureIndex, int cardinality)
@@ -585,18 +553,6 @@ public abstract class TabDPTBase<T>
         private static Tensor<TBlock> MatMul(Tensor<TBlock> input, Tensor<TBlock> weights)
         {
             return AiDotNetEngine.Current.TensorMatMul(input, weights);
-        }
-
-        public Tensor<TBlock> Backward(Tensor<TBlock> gradient)
-        {
-            // Simplified backward pass
-            var grad = _ff2.Backward(gradient);
-            grad = _ff1.Backward(grad);
-
-            // Add residual gradient
-            grad = AiDotNetEngine.Current.TensorAdd(grad, gradient);
-
-            return grad;
         }
 
         public void UpdateParameters(TBlock learningRate)

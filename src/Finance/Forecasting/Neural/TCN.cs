@@ -479,7 +479,6 @@ public class TCN<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -758,58 +757,6 @@ public class TCN<T> : ForecastingModelBase<T>
         }
 
         return current;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the TCN.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation for TCN with residual connections:
-    /// - Gradients flow both through the block AND around it (via residual)
-    /// - This helps train very deep networks
-    /// </para>
-    /// </remarks>
-    private void Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        // Backward through output projection
-        if (_outputProjection is not null)
-        {
-            grad = _outputProjection.Backward(grad);
-        }
-
-        // Backward through TCN blocks in reverse order
-        for (int i = _tcnBlocks.Count - 1; i >= 0; i--)
-        {
-            var block = _tcnBlocks[i];
-
-            // For residual connections, gradient flows both through block and around it
-            var blockGrad = grad;
-
-            // Backward through block layers in reverse order
-            for (int j = block.Count - 1; j >= 0; j--)
-            {
-                blockGrad = block[j].Backward(blockGrad);
-            }
-
-            // If using residual connections, add the direct gradient path
-            if (_useResidualConnections)
-            {
-                grad = AddTensors(blockGrad, grad);
-            }
-            else
-            {
-                grad = blockGrad;
-            }
-        }
-
-        // Backward through input projection
-        if (_inputProjection is not null)
-        {
-            _ = _inputProjection.Backward(grad);
-        }
     }
 
     /// <summary>

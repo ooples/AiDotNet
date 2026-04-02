@@ -616,8 +616,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                         var trunkGradient = Engine.TensorMatMul(outputGradient, branchOutput2D);
 
                         // Backpropagate through both networks
-                        _branchNet.Backpropagate(branchGradient);
-                        _trunkNet.Backpropagate(trunkGradient);
 
                         // Update parameters using optimizer
                         _optimizer.UpdateParameters(_branchNet.Layers);

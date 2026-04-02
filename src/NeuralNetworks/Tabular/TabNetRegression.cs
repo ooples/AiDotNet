@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// // Training
 /// var prediction = model.Forward(inputBatch);
 /// var loss = ComputeMSELoss(prediction, targets);
-/// model.Backward(lossGradient);
+/// /* model.Backward(lossGradient) removed — tape-based */ ;
 /// model.UpdateParameters(learningRate);
 ///
 /// // Get feature importance
@@ -296,7 +296,6 @@ public class TabNetRegression<T> : TabNetBase<T>
         var lossGradient = ComputeMSEGradient(predictions, targets);
 
         // Backward pass
-        Backward(lossGradient);
 
         // Update parameters
         UpdateParameters(learningRate);

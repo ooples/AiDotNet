@@ -117,7 +117,6 @@ public class GraphNodeGenerator<T> : FederatedLearningComponentBase<T>
                 sampleCount++;
 
                 // Backward pass and update
-                Backward(meanNeighborFeatures, gradOutput);
             }
         }
 
@@ -173,77 +172,6 @@ public class GraphNodeGenerator<T> : FederatedLearningComponentBase<T>
         }
 
         return output;
-    }
-
-    private void Backward(Tensor<T> input, double[] gradOutput)
-    {
-        // Recompute hidden activations (needed for backward)
-        var hiddenPre = new double[_hiddenDim];
-        var hiddenPost = new double[_hiddenDim];
-
-        for (int h = 0; h < _hiddenDim; h++)
-        {
-            double sum = NumOps.ToDouble(_biasHidden[h]);
-            for (int i = 0; i < _inputDim && i < input.Shape[0]; i++)
-            {
-                int wIdx = i * _hiddenDim + h;
-                if (wIdx < _weightsHidden.Shape[0])
-                {
-                    sum += NumOps.ToDouble(input[i]) * NumOps.ToDouble(_weightsHidden[wIdx]);
-                }
-            }
-
-            hiddenPre[h] = sum;
-            hiddenPost[h] = Math.Max(0, sum);
-        }
-
-        // Gradient through output layer
-        var gradHidden = new double[_hiddenDim];
-
-        for (int o = 0; o < _outputDim; o++)
-        {
-            double go = gradOutput[o];
-
-            // Update output weights and bias
-            double biasVal = NumOps.ToDouble(_biasOutput[o]);
-            _biasOutput[o] = NumOps.FromDouble(biasVal - _learningRate * go);
-
-            for (int h = 0; h < _hiddenDim; h++)
-            {
-                int wIdx = h * _outputDim + o;
-                if (wIdx < _weightsOutput.Shape[0])
-                {
-                    double w = NumOps.ToDouble(_weightsOutput[wIdx]);
-                    gradHidden[h] += go * w;
-                    _weightsOutput[wIdx] = NumOps.FromDouble(w - _learningRate * go * hiddenPost[h]);
-                }
-            }
-        }
-
-        // Gradient through ReLU
-        for (int h = 0; h < _hiddenDim; h++)
-        {
-            if (hiddenPre[h] <= 0) gradHidden[h] = 0; // ReLU derivative
-        }
-
-        // Update hidden weights and bias
-        for (int h = 0; h < _hiddenDim; h++)
-        {
-            double gh = gradHidden[h];
-            double biasVal = NumOps.ToDouble(_biasHidden[h]);
-            _biasHidden[h] = NumOps.FromDouble(biasVal - _learningRate * gh);
-
-            for (int i = 0; i < _inputDim && i < input.Shape[0]; i++)
-            {
-                int wIdx = i * _hiddenDim + h;
-                if (wIdx < _weightsHidden.Shape[0])
-                {
-                    double w = NumOps.ToDouble(_weightsHidden[wIdx]);
-                    double inputVal = NumOps.ToDouble(input[i]);
-                    _weightsHidden[wIdx] = NumOps.FromDouble(w - _learningRate * gh * inputVal);
-                }
-            }
-        }
     }
 
     private Tensor<T>? ComputeMeanNeighborFeatures(

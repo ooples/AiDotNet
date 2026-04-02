@@ -342,48 +342,6 @@ public abstract class TabNetBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through the TabNet model.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of the loss with respect to the output.</param>
-    /// <returns>Gradient with respect to the input.</returns>
-    public virtual Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Backward through output layer
-        var aggregatedGrad = _outputLayer.Backward(outputGradient);
-
-        // Initialize input gradient accumulator
-        Tensor<T>? inputGrad = null;
-
-        // Backward through decision steps (reverse order)
-        for (int step = Options.NumDecisionSteps - 1; step >= 0; step--)
-        {
-            // Apply ReLU derivative
-            var stepOutput = _stepOutputs[step];
-            var stepGrad = ApplyReLUDerivative(aggregatedGrad, stepOutput);
-
-            // Backward through Feature Transformer
-            var maskedInputGrad = _featureTransformers[step].Backward(stepGrad);
-
-            // Backward through mask (gradient flows to input through attention)
-            var attentionMask = _stepAttentionMasks[step];
-            var unmaskGrad = ApplyMaskBackward(maskedInputGrad, attentionMask);
-
-            // Accumulate input gradient
-            if (inputGrad == null)
-            {
-                inputGrad = unmaskGrad;
-            }
-            else
-            {
-                inputGrad = AddTensors(inputGrad, unmaskGrad);
-            }
-        }
-
-        // Backward through initial batch normalization
-        return _initialBN.Backward(inputGrad ?? throw new InvalidOperationException("No gradients computed"));
-    }
-
-    /// <summary>
     /// Computes the sparsity regularization loss.
     /// </summary>
     /// <returns>The total sparsity loss across all decision steps.</returns>

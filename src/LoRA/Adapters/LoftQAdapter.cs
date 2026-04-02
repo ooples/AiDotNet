@@ -846,32 +846,6 @@ public class LoftQAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass (only updates LoRA if base is frozen).
-    /// </summary>
-    /// <param name="outputGradient">Gradient from next layer.</param>
-    /// <returns>Gradient for previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Training works exactly like QLoRA:
-    /// - Only LoRA parameters are updated (if base is frozen)
-    /// - Gradients flow through both paths
-    /// - Memory efficient because base stays frozen
-    ///
-    /// The benefit of LoftQ appears in faster convergence and better final accuracy,
-    /// not in the training process itself.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        Tensor<T> inputGradient = base.Backward(outputGradient);
-
-        // Clear dequantized weight cache
-        _dequantizedWeights = null;
-
-        return inputGradient;
-    }
-
-    /// <summary>
     /// Merges LoRA adaptation into base layer and returns merged layer.
     /// </summary>
     /// <returns>New DenseLayer with merged and optionally quantized weights.</returns>

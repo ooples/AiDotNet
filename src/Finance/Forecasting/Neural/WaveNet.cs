@@ -433,7 +433,6 @@ public class WaveNet<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -757,68 +756,6 @@ public class WaveNet<T> : ForecastingModelBase<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through WaveNet.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation in WaveNet flows through:
-    /// - Output layers
-    /// - All skip connections (summed)
-    /// - Each block's residual and skip paths
-    /// </para>
-    /// </remarks>
-    private void Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        // Backward through output layers
-        if (_output2 is not null)
-        {
-            grad = _output2.Backward(grad);
-        }
-
-        if (_output1 is not null)
-        {
-            grad = _output1.Backward(grad);
-        }
-
-        // Backward through WaveNet blocks in reverse
-        var skipGrad = grad;
-
-        for (int i = _waveNetBlocks.Count - 1; i >= 0; i--)
-        {
-            var block = _waveNetBlocks[i];
-            if (block.Count < 4) continue;
-
-            // Backward through dropout if present
-            if (block.Count > 4)
-            {
-                grad = block[4].Backward(grad);
-            }
-
-            // Skip layer backward
-            var skipLayerGrad = block[3].Backward(skipGrad);
-
-            // Residual layer backward
-            var residualLayerGrad = block[2].Backward(grad);
-
-            // Gated activation backward - simplified
-            // In full implementation, would need to handle element-wise multiply gradient
-            var gatedGrad = AddTensors(skipLayerGrad, residualLayerGrad);
-
-            // Gate and filter backward
-            block[1].Backward(gatedGrad);
-            grad = block[0].Backward(gatedGrad);
-        }
-
-        // Backward through input projection
-        if (_inputProjection is not null)
-        {
-            _ = _inputProjection.Backward(grad);
-        }
     }
 
     /// <summary>

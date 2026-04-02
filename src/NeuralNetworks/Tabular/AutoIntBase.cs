@@ -266,58 +266,6 @@ public abstract class AutoIntBase<T>
         return mlpOutput;
     }
 
-    /// <summary>
-    /// Performs the backward pass through the backbone.
-    /// </summary>
-    protected Tensor<T> BackwardBackbone(Tensor<T> gradOutput)
-    {
-        if (_embeddedFeaturesCache == null)
-        {
-            throw new InvalidOperationException("Forward must be called before backward.");
-        }
-
-        var grad = gradOutput;
-        for (int i = _mlpLayers.Count - 1; i >= 0; i--)
-        {
-            grad = _mlpLayers[i].Backward(grad);
-        }
-
-        int batchSize = _embeddedFeaturesCache.Shape[0];
-        int embeddingDim = Options.EmbeddingDimension;
-
-        // Unflatten gradients back to [batch, features, embeddingDim]
-        var gradEmbedded = new Tensor<T>(new[] { batchSize, TotalFeatures, embeddingDim });
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < TotalFeatures * embeddingDim; i++)
-            {
-                gradEmbedded[b * TotalFeatures * embeddingDim + i] =
-                    grad[b * TotalFeatures * embeddingDim + i];
-            }
-        }
-
-        // Backprop through interacting layers
-        for (int i = _interactingLayers.Count - 1; i >= 0; i--)
-        {
-            gradEmbedded = _interactingLayers[i].Backward(gradEmbedded);
-        }
-
-        AccumulateEmbeddingGradients(gradEmbedded);
-
-        // Return flattened gradient for compatibility with callers
-        var gradFlat = new Tensor<T>(new[] { batchSize, TotalFeatures * embeddingDim });
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < TotalFeatures * embeddingDim; i++)
-            {
-                gradFlat[b * TotalFeatures * embeddingDim + i] =
-                    gradEmbedded[b * TotalFeatures * embeddingDim + i];
-            }
-        }
-
-        return gradFlat;
-    }
-
     private void AccumulateEmbeddingGradients(Tensor<T> gradEmbedded)
     {
         // Reset gradients

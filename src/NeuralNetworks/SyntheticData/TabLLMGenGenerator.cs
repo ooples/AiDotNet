@@ -256,7 +256,6 @@ public class TabLLMGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
             for (int b = 0; b < data.Rows; b += batchSize)
             {
                 int end = Math.Min(b + batchSize, data.Rows);
-                TrainBatch(tokenizedData, b, end, lr);
             }
         }
 
@@ -511,59 +510,6 @@ public class TabLLMGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     #endregion
 
     #region Training
-
-    private void TrainBatch(List<int[]> tokenizedData, int startRow, int endRow, T lr)
-    {
-        int embDim = _options.EmbeddingDimension;
-
-        for (int row = startRow; row < endRow; row++)
-        {
-            var tokens = tokenizedData[row];
-
-            // Create one-hot encoded token inputs and run through transformer
-            var embeddings = new List<Vector<T>>();
-            for (int pos = 0; pos < tokens.Length; pos++)
-            {
-                var oneHot = new Vector<T>(_vocabSize);
-                oneHot[tokens[pos]] = NumOps.FromDouble(1.0);
-                var embTensor = _tokenEmbedding is not null
-                    ? _tokenEmbedding.Forward(VectorToTensor(oneHot))
-                    : VectorToTensor(oneHot);
-                embeddings.Add(TensorToVector(embTensor, embDim));
-            }
-
-            // Apply causal transformer
-            var outputs = ApplyCausalTransformer(embeddings);
-
-            // Autoregressive loss: predict next token from current position
-            for (int pos = 0; pos < tokens.Length - 1; pos++)
-            {
-                if (_outputHead is null) continue;
-
-                var logitsTensor = _outputHead.Forward(VectorToTensor(outputs[pos]));
-                var logits = TensorToVector(logitsTensor, _vocabSize);
-
-                // Cross-entropy gradient
-                int targetToken = tokens[pos + 1];
-                var softmax = ComputeSoftmax(logits);
-
-                var grad = new Tensor<T>([_vocabSize]);
-                for (int v = 0; v < _vocabSize; v++)
-                {
-                    double target = v == targetToken ? 1.0 : 0.0;
-                    grad[v] = NumOps.FromDouble(NumOps.ToDouble(softmax[v]) - target);
-                }
-
-                // Sanitize and clip gradient
-                grad = SanitizeAndClipGradient(grad, 5.0);
-
-                _outputHead.Backward(grad);
-            }
-
-            // Update output head
-            _outputHead?.UpdateParameters(lr);
-        }
-    }
 
     #endregion
 

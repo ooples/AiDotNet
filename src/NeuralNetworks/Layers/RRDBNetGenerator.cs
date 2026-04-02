@@ -379,54 +379,6 @@ public class RRDBNetGenerator<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     #region Backward Pass
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _conv1Output == null || _rrdbOutputs == null || _upsampleOutputs == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var grad = outputGradient;
-
-        // Backward through final conv
-        grad = _convLast.Backward(grad);
-
-        // Backward through HR conv + activation
-        grad = BackwardLeakyReLU(_hrConv.Forward(_upsampleOutputs[^1]), grad);
-        grad = _hrConv.Backward(grad);
-
-        // Backward through upsampling stages (in reverse)
-        for (int i = _upsampleConvs.Length - 1; i >= 0; i--)
-        {
-            // Backward through LeakyReLU after PixelShuffle
-            grad = BackwardLeakyReLU(_upsampleOutputs[i * 2], grad);
-
-            // Backward through PixelShuffle
-            grad = _pixelShuffleLayers[i].Backward(grad);
-
-            // Backward through upsample conv
-            grad = _upsampleConvs[i].Backward(grad);
-        }
-
-        // Backward through global residual: grad flows to both trunk and conv1
-        var trunkGrad = grad;
-        var conv1ResidualGrad = grad;
-
-        // Backward through trunk conv
-        var rrdbGrad = _trunkConv.Backward(trunkGrad);
-
-        // Backward through RRDB blocks (in reverse)
-        for (int i = _rrdbBlocks.Length - 1; i >= 0; i--)
-        {
-            rrdbGrad = _rrdbBlocks[i].Backward(rrdbGrad);
-        }
-
-        // Combine gradients at conv1 output
-        var combinedGrad = AddTensors(rrdbGrad, conv1ResidualGrad);
-
-        // Backward through first conv
-        return _convFirst.Backward(combinedGrad);
-    }
-
     #endregion
 
     #region Helper Methods

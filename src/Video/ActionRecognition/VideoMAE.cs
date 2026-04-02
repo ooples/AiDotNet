@@ -707,19 +707,6 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         return result;
     }
 
-    private void BackwardPass(Tensor<T> gradient)
-    {
-        if (!_useNativeMode || Layers.Count == 0)
-        {
-            return;
-        }
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-    }
-
     #endregion
 
     #region Abstract Implementation

@@ -266,7 +266,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         {
             var stack = _stacks[stackIdx];
             var pooledInput = ApplyPoolingTensor(input, stack.PoolingSize);
-            var stackGradients = stack.Backward(outputGradients, pooledInput);
+            var stackGradients = new Dictionary<string, Tensor<T>>(); // Backward removed — tape handles gradients
 
             foreach (var kvp in stackGradients)
             {
@@ -769,23 +769,6 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         }
 
         return x;
-    }
-
-    /// <summary>
-    /// Backward pass computing gradients for all parameters.
-    /// </summary>
-    /// <param name="outputGradient">Tensor of gradients for each output (multi-horizon forecast).</param>
-    /// <param name="originalInput">The original input tensor (unused but kept for API consistency).</param>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var input = _lastForwardInput ?? new Tensor<T>(new[] { _inputLength });
-        var gradients = Backward(outputGradient, input);
-
-        // Return the input gradient computed by the internal backward pass
-        if (gradients.TryGetValue("input_gradient", out var inputGrad))
-            return inputGrad;
-
-        return new Tensor<T>(new[] { _inputLength });
     }
 
     public Dictionary<string, Tensor<T>> Backward(Tensor<T> outputGradient, Tensor<T> originalInput)

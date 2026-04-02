@@ -157,41 +157,12 @@ public class NODERegression<T> : NODEBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass for MSE loss.
-    /// </summary>
-    public Tensor<T> Backward(Tensor<T> targets)
-    {
-        if (_predictionsCache == null || _backboneOutputCache == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int batchSize = _predictionsCache.Shape[0];
-        int outputDim = _predictionsCache.Shape.Length > 1 ? _predictionsCache.Shape[1] : 1;
-
-        // Gradient of MSE: 2 * (predictions - targets) / n
-        var predictionGrad = new Tensor<T>(_predictionsCache.Shape.ToArray());
-        var scale = NumOps.FromDouble(2.0 / (batchSize * outputDim));
-
-        for (int i = 0; i < _predictionsCache.Length; i++)
-        {
-            predictionGrad[i] = NumOps.Multiply(
-                NumOps.Subtract(_predictionsCache[i], targets[i]),
-                scale);
-        }
-
-        var backboneGrad = _regressionHead.Backward(predictionGrad);
-        return BackwardBackbone(backboneGrad);
-    }
-
-    /// <summary>
     /// Performs a single training step.
     /// </summary>
     public T TrainStep(Tensor<T> features, Tensor<T> targets, T learningRate)
     {
         var predictions = Forward(features);
         var loss = ComputeMSELoss(predictions, targets);
-        _ = Backward(targets);
         UpdateParameters(learningRate);
         ResetState();
 

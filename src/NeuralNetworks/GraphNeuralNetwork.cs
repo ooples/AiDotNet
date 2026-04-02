@@ -1,3 +1,4 @@
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Layers;
@@ -836,78 +837,6 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         SetTrainingMode(false);
     }
 
-    /// <summary>
-    /// Trains the Graph Neural Network directly on graph data.
-    /// </summary>
-    /// <param name="nodeFeatures">A tensor containing features for each node in the graph.</param>
-    /// <param name="adjacencyMatrix">A tensor representing the connections between nodes in the graph.</param>
-    /// <param name="expectedOutput">The expected output tensor for the given graph input.</param>
-    /// <remarks>
-    /// <para>
-    /// This method provides a more direct interface for training the network on graph data by explicitly
-    /// accepting node features and adjacency matrix as separate parameters. This is often more intuitive
-    /// than combining them into a single input tensor.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is a more straightforward way to train your graph neural network.
-    /// 
-    /// Instead of combining node information and connection information into one input,
-    /// you can provide them separately:
-    /// - nodeFeatures: Information about each node (e.g., user profiles in a social network)
-    /// - adjacencyMatrix: Information about connections (e.g., who is friends with whom)
-    /// - expectedOutput: What the network should predict for this graph
-    /// 
-    /// The network then learns to make predictions based on both the node attributes
-    /// and how nodes are connected to each other.
-    /// </para>
-    /// </remarks>
-    public void TrainGraph(Tensor<T> nodeFeatures, Tensor<T> adjacencyMatrix, Tensor<T> expectedOutput)
-    {
-        if (!IsTrainingMode)
-        {
-            SetTrainingMode(true);
-        }
-
-        // Forward pass with graph data
-        Tensor<T> prediction = PredictGraph(nodeFeatures, adjacencyMatrix);
-
-        // Calculate main loss
-        var flattenedPredictions = prediction.ToVector();
-        var flattenedExpected = expectedOutput.ToVector();
-        var loss = new MeanSquaredErrorLoss<T>().CalculateLoss(flattenedPredictions, flattenedExpected);
-
-        // Add auxiliary loss if enabled
-        if (UseAuxiliaryLoss)
-        {
-            T auxLoss = ComputeAuxiliaryLoss();
-            T weightedAuxLoss = NumOps.Multiply(AuxiliaryLossWeight, auxLoss);
-            loss = NumOps.Add(loss, weightedAuxLoss);
-        }
-
-        // Calculate output gradients
-        var outputGradients = new MeanSquaredErrorLoss<T>().CalculateDerivative(flattenedPredictions, flattenedExpected);
-
-        // Back-propagate the gradients
-        Vector<T> backpropGradients = Backpropagate(Tensor<T>.FromVector(outputGradients)).ToVector();
-
-        // Get parameter gradients
-        Vector<T> parameterGradients = GetParameterGradients();
-
-        // Apply gradient clipping
-        parameterGradients = ClipGradient(parameterGradients);
-
-        // Reuse optimizer across calls to preserve Adam momentum state
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = DefaultTrainLearningRate });
-
-        // Get current parameters
-        Vector<T> currentParameters = GetParameters();
-
-        // Update parameters
-        Vector<T> updatedParameters = _trainOptimizer.UpdateParameters(currentParameters, parameterGradients);
-
-        // Apply updated parameters
-        UpdateParameters(updatedParameters);
-    }
 
     /// <summary>
     /// Gets metadata about the Graph Neural Network model.

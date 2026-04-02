@@ -1092,41 +1092,6 @@ public class VideoCLIP<T> : NeuralNetworkBase<T>
         return result;
     }
 
-    private void BackwardPass(Tensor<T> gradient)
-    {
-        // Backpropagate through video encoder path
-        gradient = _videoProjection.Backward(gradient);
-
-        foreach (var layer in _temporalTransformer.AsEnumerable().Reverse())
-        {
-            gradient = layer.Backward(gradient);
-        }
-
-        foreach (var layer in _videoEncoder.AsEnumerable().Reverse())
-        {
-            gradient = layer.Backward(gradient);
-        }
-
-        // Backpropagate through text encoder path
-        _textProjection.Backward(gradient);
-
-        // Text transformer layers in reverse
-        int numLayers = _textTransformerQKV.Count;
-        for (int layer = numLayers - 1; layer >= 0; layer--)
-        {
-            // FFN backward
-            _textTransformerFFN2[layer].Backward(gradient);
-            _textTransformerFFN1[layer].Backward(gradient);
-
-            // Attention backward
-            _textTransformerAttnProj[layer].Backward(gradient);
-            _textTransformerQKV[layer].Backward(gradient);
-        }
-
-        // Note: Embedding tables gradients are accumulated during forward pass
-        // and would be updated separately in a full implementation
-    }
-
     #endregion
 
     #region Abstract Implementation

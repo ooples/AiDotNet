@@ -327,7 +327,6 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             var gradient = new Vector<T>(_options.ActionSize);
             gradient[actionIndex] = tdError;
             var gradTensor = Tensor<T>.FromVector(gradient);
-            _onlineNetwork.Backpropagate(gradTensor);
 
             // Update weights using learning rate
             var parameters = _onlineNetwork.GetParameters();
@@ -558,7 +557,6 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         var gradient = loss.CalculateDerivative(output, target);
 
         var gradientTensor = Tensor<T>.FromVector(gradient);
-        _onlineNetwork.Backpropagate(gradientTensor);
 
         return gradient;
     }

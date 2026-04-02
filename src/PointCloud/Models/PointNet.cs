@@ -313,19 +313,6 @@ public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointClou
         return x;
     }
 
-    public override Tensor<T> Backpropagate(Tensor<T> outputGradient)
-    {
-        Tensor<T> gradient = outputGradient;
-
-        // Backpropagate through layers in reverse order
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-
-        return gradient;
-    }
-
     public Vector<T> ExtractGlobalFeatures(Tensor<T> pointCloud)
     {
         bool originalMode = IsTrainingMode;

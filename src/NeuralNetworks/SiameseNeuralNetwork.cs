@@ -283,19 +283,6 @@ namespace AiDotNet.NeuralNetworks
         }
 
         /// <summary>
-        /// Propagates error signal backward through the shared encoder layers.
-        /// </summary>
-        public Tensor<T> Backward(Tensor<T> outputGradient)
-        {
-            for (int i = Layers.Count - 1; i >= 0; i--)
-            {
-                outputGradient = Layers[i].Backward(outputGradient);
-            }
-
-            return outputGradient;
-        }
-
-        /// <summary>
         /// Updates the shared parameters of the dual encoders.
         /// </summary>
         public override void UpdateParameters(Vector<T> parameters)

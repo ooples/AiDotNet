@@ -267,37 +267,9 @@ public class TabTransformerNetwork<T> : NeuralNetworkBase<T>
         Tensor<T> error = prediction.Subtract(expectedOutput);
 
         // Backpropagate error through network
-        BackpropagateError(error);
 
         // Update network parameters
         UpdateNetworkParameters();
-    }
-
-    /// <summary>
-    /// Backpropagates the error through the network layers.
-    /// </summary>
-    /// <param name="error">The error tensor to backpropagate.</param>
-    /// <remarks>
-    /// <para>
-    /// This method propagates the error backwards through each layer of the network, allowing each layer
-    /// to compute its local gradients.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is how the network learns from its mistakes.
-    ///
-    /// The backpropagation process:
-    /// 1. Starts with the error at the output layer
-    /// 2. Moves backwards through each layer
-    /// 3. Each layer figures out how much it contributed to the error
-    /// 4. This information is used to update the network's parameters
-    /// </para>
-    /// </remarks>
-    private void BackpropagateError(Tensor<T> error)
-    {
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            error = Layers[i].Backward(error);
-        }
     }
 
     /// <summary>

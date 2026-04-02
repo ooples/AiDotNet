@@ -193,7 +193,7 @@ public abstract class TransformerNERBase<T> : SequenceLabeling.SequenceLabelingN
                         output.ToVector(), preprocessedLabels.ToVector()));
                     var grad = LossFunction.CalculateDerivative(output.ToVector(), preprocessedLabels.ToVector());
                     var gt = Tensor<T>.FromVector(grad);
-                    for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
+                    // Backward removed — tape-based training handles gradients
                     _optimizer.UpdateParameters(Layers);
 
                     progress?.Report(new NERTrainingProgress

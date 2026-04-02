@@ -1008,111 +1008,6 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         _lastTimeEmbed = timeEmbed;
     }
 
-    /// <inheritdoc />
-    protected override void Backpropagate(Tensor<T> lossGradient)
-    {
-        var grad = lossGradient;
-        var numOps = NumOps;
-
-        // Output convolution backward
-        grad = BackwardLayer(_outputConv, grad);
-
-        // Decoder backward (reverse order)
-        // During forward, decoder blocks concatenate skip connections along channel axis.
-        // Backward: after ResBlock backward, gradient has shape matching concatenated input.
-        // Split it: first part is decoder gradient, second part is skip gradient for encoder.
-        var skipGrads = new Dictionary<int, Tensor<T>>(); // encoder block index → skip gradient
-        int skipCount = _lastSkips?.Count ?? 0;
-        int skipIdx = skipCount - 1;
-
-        for (int i = _decoderBlocks.Count - 1; i >= 0; i--)
-        {
-            var block = _decoderBlocks[i];
-            if (block.Upsample != null)
-            {
-                grad = BackwardLayer(block.Upsample, grad);
-            }
-            else
-            {
-                grad = BackwardLayer(block.CrossAttentionBlock, grad);
-                grad = BackwardLayer(block.AttentionBlock, grad);
-                grad = BackwardLayer(block.ResBlock, grad);
-
-                // Split gradient for skip connection if this block had one
-                if (skipIdx >= 0 && _lastSkips is not null)
-                {
-                    int skipChannels = _lastSkips[skipIdx].Shape[1];
-                    int decoderChannels = grad.Shape[1] - skipChannels;
-
-                    if (decoderChannels > 0 && grad.Shape[1] > decoderChannels)
-                    {
-                        // Split along channel axis: [decoder_channels, skip_channels]
-                        var splitGrads = SplitChannels(grad, decoderChannels, skipChannels);
-                        grad = splitGrads.decoder;
-
-                        // Find the encoder block that produced this skip
-                        int encoderIdx = FindEncoderBlockForSkip(skipIdx);
-                        if (encoderIdx >= 0)
-                            skipGrads[encoderIdx] = splitGrads.skip;
-                    }
-                    skipIdx--;
-                }
-            }
-        }
-
-        // Middle backward (reverse order)
-        for (int i = _middleBlocks.Count - 1; i >= 0; i--)
-        {
-            var block = _middleBlocks[i];
-            grad = BackwardLayer(block.CrossAttentionBlock, grad);
-            grad = BackwardLayer(block.AttentionBlock, grad);
-            grad = BackwardLayer(block.ResBlock, grad);
-        }
-
-        // Encoder backward (reverse order) — add skip gradients from decoder
-        for (int i = _encoderBlocks.Count - 1; i >= 0; i--)
-        {
-            var block = _encoderBlocks[i];
-            if (block.Downsample != null)
-            {
-                grad = BackwardLayer(block.Downsample, grad);
-            }
-            else
-            {
-                // Add skip connection gradient if this encoder block had a skip
-                if (skipGrads.TryGetValue(i, out var skipGrad))
-                {
-                    // Accumulate: grad += skipGrad (both same shape)
-                    if (grad.Length == skipGrad.Length)
-                    {
-                        for (int k = 0; k < grad.Length; k++)
-                            grad[k] = numOps.Add(grad[k], skipGrad[k]);
-                    }
-                }
-
-                grad = BackwardLayer(block.CrossAttentionBlock, grad);
-                grad = BackwardLayer(block.AttentionBlock, grad);
-                grad = BackwardLayer(block.ResBlock, grad);
-            }
-        }
-
-        // Input convolution backward
-        BackwardLayer(_inputConv, grad);
-
-        // Time embedding MLP backward
-        // DiffusionResBlock stores time_embed gradients internally.
-        // Accumulate from all ResBlocks and backprop through MLP.
-        if (_lastTimeEmbed is not null && _timeEmbedMlp1 is not null && _timeEmbedMlp2 is not null)
-        {
-            var timeGrad = AccumulateTimeEmbedGradients();
-            if (timeGrad is not null)
-            {
-                timeGrad = _timeEmbedMlp2.Backward(timeGrad);
-                _timeEmbedMlp1.Backward(timeGrad);
-            }
-        }
-    }
-
     private (Tensor<T> decoder, Tensor<T> skip) SplitChannels(Tensor<T> grad, int decoderChannels, int skipChannels)
     {
         // Split along axis 1 (channel dimension): grad [B, C_dec+C_skip, H, W]
@@ -1193,12 +1088,6 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         foreach (var block in _decoderBlocks) AccumulateFromBlock(block.ResBlock);
 
         return accumulated;
-    }
-
-    private static Tensor<T> BackwardLayer(ILayer<T>? layer, Tensor<T> grad)
-    {
-        if (layer == null) return grad;
-        return layer.Backward(grad);
     }
 
     /// <inheritdoc />

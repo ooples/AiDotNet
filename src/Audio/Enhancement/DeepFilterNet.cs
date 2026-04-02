@@ -524,7 +524,6 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         // Backward pass and update
         var gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
         var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape.ToArray());
-        BackwardNative(gradientTensor);
 
         _optimizer?.UpdateParameters(Layers);
 
@@ -609,44 +608,6 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
         // Combine DF coefficients and gains
         return CombineOutputs(dfCoeffs, gains);
-    }
-
-    /// <summary>
-    /// Backward pass through native layers.
-    /// </summary>
-    private void BackwardNative(Tensor<T> gradient)
-    {
-        var grad = gradient;
-
-        // Backward through gain layer
-        if (_gainLayer is not null)
-        {
-            grad = _gainLayer.Backward(grad);
-        }
-
-        // Backward through decoder
-        for (int i = _decoder.Count - 1; i >= 0; i--)
-        {
-            grad = _decoder[i].Backward(grad);
-        }
-
-        // Backward through DF layers
-        for (int i = _dfLayers.Count - 1; i >= 0; i--)
-        {
-            grad = _dfLayers[i].Backward(grad);
-        }
-
-        // Backward through GRU layers
-        for (int i = _gruLayers.Count - 1; i >= 0; i--)
-        {
-            grad = _gruLayers[i].Backward(grad);
-        }
-
-        // Backward through encoder
-        for (int i = _erbEncoder.Count - 1; i >= 0; i--)
-        {
-            grad = _erbEncoder[i].Backward(grad);
-        }
     }
 
     /// <summary>

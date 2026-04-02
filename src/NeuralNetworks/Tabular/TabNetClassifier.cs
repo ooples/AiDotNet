@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// var probabilities = model.Forward(inputBatch);
 /// var loss = model.ComputeCrossEntropyLoss(probabilities, targets);
 /// var gradient = model.ComputeCrossEntropyGradient(probabilities, targets);
-/// model.Backward(gradient);
+/// /* model.Backward(gradient) removed — tape-based */ ;
 /// model.UpdateParameters(learningRate);
 ///
 /// // Prediction
@@ -406,7 +406,6 @@ public class TabNetClassifier<T> : TabNetBase<T>
         var lossGradient = ComputeCrossEntropyGradient(probabilities, targets);
 
         // Backward pass
-        Backward(lossGradient);
 
         // Update parameters
         UpdateParameters(learningRate);

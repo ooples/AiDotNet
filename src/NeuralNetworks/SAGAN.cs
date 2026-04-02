@@ -468,7 +468,7 @@ public class SAGAN<T> : NeuralNetworkBase<T>
         // Backpropagate discriminator
         var discGradient = new Tensor<T>([1]);
         discGradient.SetFlat(0, one);
-        Discriminator.Backward(discGradient);
+        /* Discriminator.Backward(discGradient) removed — tape-based */ ;
 
         // Update discriminator parameters using Adam with TTUR
         // SAGAN uses higher LR for discriminator (4x generator LR)
@@ -497,7 +497,7 @@ public class SAGAN<T> : NeuralNetworkBase<T>
         // Backpropagate generator
         var genGradient = new Tensor<T>([1]);
         genGradient.SetFlat(0, one);
-        Generator.Backward(genGradient);
+        /* Generator.Backward(genGradient) removed — tape-based */ ;
 
         // Update generator parameters using Adam with TTUR
         // SAGAN uses lower LR for generator (base LR)

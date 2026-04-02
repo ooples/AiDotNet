@@ -1,3 +1,4 @@
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -1624,72 +1625,6 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
         }
 
         return new Tensor<T>(output, [numPoints, 4]);
-    }
-
-    public override Tensor<T> Backpropagate(Tensor<T> outputGradient)
-    {
-        if (_lastDensityRaw == null || _lastRgbRaw == null || _lastPositions == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward.");
-        }
-        if (_densityOutputLayer == null || _featureLayer == null || _colorOutputLayer == null)
-        {
-            throw new InvalidOperationException("InstantNGP layers are not initialized.");
-        }
-        if (outputGradient.Shape.Length != 2 || outputGradient.Shape[1] != 4)
-        {
-            throw new ArgumentException("Output gradient must have shape [N, 4].", nameof(outputGradient));
-        }
-
-        int numPoints = _lastDensityRaw.Shape[0];
-        var rgbGrad = new T[numPoints * 3];
-        var densityGrad = new T[numPoints];
-        for (int i = 0; i < numPoints; i++)
-        {
-            int baseIdx = i * 4;
-            rgbGrad[i * 3] = outputGradient.Data.Span[baseIdx];
-            rgbGrad[i * 3 + 1] = outputGradient.Data.Span[baseIdx + 1];
-            rgbGrad[i * 3 + 2] = outputGradient.Data.Span[baseIdx + 2];
-            densityGrad[i] = outputGradient.Data.Span[baseIdx + 3];
-        }
-
-        var rgbGradTensor = new Tensor<T>(rgbGrad, [numPoints, 3]);
-        var densityGradTensor = new Tensor<T>(densityGrad, [numPoints, 1]);
-        var rgbRawGrad = ApplySigmoidGradient(_lastRgbRaw, rgbGradTensor);
-        var densityRawGrad = ApplySoftplusGradient(_lastDensityRaw, densityGradTensor);
-
-        Tensor<T> gradColor = _colorOutputLayer.Backward(rgbRawGrad);
-        for (int i = _colorLayers.Count - 1; i >= 0; i--)
-        {
-            gradColor = _colorLayers[i].Backward(gradColor);
-        }
-
-        var gradFeatures = new T[numPoints * _featureDim];
-        int colorStride = _featureDim + 3;
-        for (int i = 0; i < numPoints; i++)
-        {
-            int colorBase = i * colorStride;
-            int featureBase = i * _featureDim;
-            for (int f = 0; f < _featureDim; f++)
-            {
-                gradFeatures[featureBase + f] = gradColor.Data.Span[colorBase + f];
-            }
-        }
-
-        var gradFeatureTensor = new Tensor<T>(gradFeatures, [numPoints, _featureDim]);
-        var gradFromFeatures = _featureLayer.Backward(gradFeatureTensor);
-        var gradFromDensity = _densityOutputLayer.Backward(densityRawGrad);
-        var gradDensityHidden = AddTensors(gradFromFeatures, gradFromDensity);
-
-        Tensor<T> gradHash = gradDensityHidden;
-        for (int i = _densityLayers.Count - 1; i >= 0; i--)
-        {
-            gradHash = _densityLayers[i].Backward(gradHash);
-        }
-
-        _lastHashFeatureGradients = gradHash;
-
-        return new Tensor<T>(new T[numPoints * 6], [numPoints, 6]);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)

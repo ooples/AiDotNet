@@ -92,37 +92,6 @@ public class GatedFeatureLearningUnit<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Backward pass through the GFLU.
-    /// </summary>
-    /// <param name="gradient">Gradient from upstream [batchSize, outputDim].</param>
-    /// <returns>Gradient with respect to input [batchSize, inputDim].</returns>
-    public override Tensor<T> Backward(Tensor<T> gradient)
-    {
-        if (_transformedCache == null || _gateCache == null)
-        {
-            throw new InvalidOperationException("Forward must be called before backward");
-        }
-
-        // Gradient for transformed: dL/dtransformed = dL/dout * gate
-        var transformedGrad = Engine.TensorMultiply(gradient, _gateCache);
-
-        // Gradient for gate: dL/dgate = dL/dout * transformed
-        var gateGrad = Engine.TensorMultiply(gradient, _transformedCache);
-
-        // Gradient through sigmoid: dL/dlogits = dL/dgate * gate * (1 - gate)
-        var ones = Tensor<T>.CreateDefault(_gateCache.Shape.ToArray(), NumOps.One);
-        var sigmoidDeriv = Engine.TensorMultiply(_gateCache, Engine.TensorSubtract(ones, _gateCache));
-        var gateLogitsGrad = Engine.TensorMultiply(gateGrad, sigmoidDeriv);
-
-        // Backprop through both layers
-        var inputGrad1 = _featureTransform.Backward(transformedGrad);
-        var inputGrad2 = _gateTransform.Backward(gateLogitsGrad);
-
-        // Sum gradients
-        return Engine.TensorAdd(inputGrad1, inputGrad2);
-    }
-
-    /// <summary>
     /// Gets the current gate values (for interpretability).
     /// </summary>
     public Tensor<T>? GetGateValues() => _gateCache;

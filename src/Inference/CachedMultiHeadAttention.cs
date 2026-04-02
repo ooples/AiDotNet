@@ -468,33 +468,6 @@ internal class CachedMultiHeadAttention<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs backward pass (training mode only, cache not used).
-    /// </summary>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        var activationGradient = ApplyActivationDerivative(_lastOutput, outputGradient);
-
-        // Standard backward pass (no cache during training)
-        // Implementation similar to MultiHeadAttentionLayer
-        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
-
-        // Simplified gradient computation
-        // In practice, use autodiff or detailed manual gradient
-        _queryWeightsGradient = new Matrix<T>(_queryWeights.Rows, _queryWeights.Columns);
-        _keyWeightsGradient = new Matrix<T>(_keyWeights.Rows, _keyWeights.Columns);
-        _valueWeightsGradient = new Matrix<T>(_valueWeights.Rows, _valueWeights.Columns);
-        _outputWeightsGradient = new Matrix<T>(_outputWeights.Rows, _outputWeights.Columns);
-        _outputBiasGradient = activationGradient.Sum([0, 1]).ToVector();
-
-        return inputGradient;
-    }
-
-    /// <summary>
     /// Updates parameters using computed gradients.
     /// </summary>
     public override void UpdateParameters(T learningRate)

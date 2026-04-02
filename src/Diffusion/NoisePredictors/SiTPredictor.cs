@@ -176,15 +176,6 @@ public class SiTPredictor<T> : NoisePredictorBase<T>
         return offset + count;
     }
 
-    protected override void Backpropagate(Tensor<T> lossGradient)
-    {
-        var (_, embed, blocks, final_) = EnsureInitialized();
-        var grad = final_.Backward(lossGradient);
-        for (int i = blocks.Length - 1; i >= 0; i--)
-            grad = blocks[i].Backward(grad);
-        embed.Backward(grad);
-    }
-
     protected override Vector<T> GetParameterGradients()
     {
         var (_, embed, blocks, final_) = EnsureInitialized();

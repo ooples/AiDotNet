@@ -275,34 +275,6 @@ public class FeatureTransformer<T> : LayerBase<T>
         return current;
     }
 
-    /// <summary>
-    /// Performs the backward pass through the Feature Transformer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var currentGrad = outputGradient;
-
-        // Backward through step-specific layers (in reverse order)
-        for (int i = _numStepSpecificLayers - 1; i >= 0; i--)
-        {
-            // TODO: Implement GLU backward and BN backward properly
-            // For now, simplified backward pass
-            currentGrad = _stepBNLayers[i].Backward(currentGrad);
-            currentGrad = _stepFCLayers[i].Backward(currentGrad);
-        }
-
-        // Backward through shared layers (in reverse order)
-        for (int i = _numSharedLayers - 1; i >= 0; i--)
-        {
-            currentGrad = _sharedBNLayers[i].Backward(currentGrad);
-            currentGrad = _sharedFCLayers[i].Backward(currentGrad);
-        }
-
-        return currentGrad;
-    }
-
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {

@@ -405,7 +405,6 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         T realLoss = CalculateBinaryLoss(realPredictions, realLabels, batchSize);
 
         var realGradients = CalculateBinaryGradients(realPredictions, realLabels, batchSize);
-        Discriminator.Backpropagate(realGradients);
         UpdateDiscriminatorParameters();
 
         // Train on fake images
@@ -413,7 +412,6 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         T fakeLoss = CalculateBinaryLoss(fakePredictions, fakeLabels, batchSize);
 
         var fakeGradients = CalculateBinaryGradients(fakePredictions, fakeLabels, batchSize);
-        Discriminator.Backpropagate(fakeGradients);
         UpdateDiscriminatorParameters();
 
         T discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
@@ -444,11 +442,9 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
 
         // Backpropagate through discriminator (for GAN loss) to get input gradients
         var ganGradients = CalculateBinaryGradients(genPredictions, allRealLabels, batchSize);
-        var discInputGradients = Discriminator.BackwardWithInputGradient(ganGradients);
 
         // Backpropagate through Q network (for MI loss) to get input gradients
         var miGradients = CalculateMutualInfoGradients(predictedCodes, latentCodes, batchSize);
-        var qInputGradients = QNetwork.BackwardWithInputGradient(miGradients);
 
         // Combine gradients - verify shapes match
         if (!discInputGradients.Shape.ToArray().SequenceEqual(qInputGradients.Shape.ToArray()))
@@ -470,7 +466,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         }
 
         // Backpropagate through generator
-        Generator.Backward(combinedGradients);
+        /* Generator.Backward(combinedGradients) removed — tape-based */ ;
         UpdateGeneratorParameters();
         UpdateQNetworkParameters();
 

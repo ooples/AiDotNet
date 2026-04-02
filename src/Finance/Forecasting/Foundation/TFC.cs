@@ -277,7 +277,6 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = NumOps.Add(forecastLoss, contrastiveLoss);
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -577,55 +576,6 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
 
         if (_forecastHead is not null)
             current = _forecastHead.Forward(current);
-
-        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-            current = current.Reshape(new[] { current.Shape[1] });
-
-        return current;
-    }
-
-    private Tensor<T> BackwardNative(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        bool addedBatchDim = false;
-        if (current.Rank == 1)
-        {
-            current = current.Reshape(new[] { 1, current.Length });
-            addedBatchDim = true;
-        }
-
-        if (_forecastHead is not null)
-            current = _forecastHead.Backward(current);
-
-        if (_projectionHead is not null)
-            current = _projectionHead.Backward(current);
-
-        // Scale gradient for dual-encoder averaging
-        var scaledGrad = new Tensor<T>(current.Shape.ToArray());
-        for (int i = 0; i < current.Length; i++)
-            scaledGrad.Data.Span[i] = NumOps.Divide(current[i], NumOps.FromDouble(2.0));
-
-        // Backward through frequency encoder
-        var freqGrad = scaledGrad;
-        for (int i = _freqEncoderLayers.Count - 1; i >= 0; i--)
-            freqGrad = _freqEncoderLayers[i].Backward(freqGrad);
-
-        if (_freqInputProjection is not null)
-            freqGrad = _freqInputProjection.Backward(freqGrad);
-
-        // Backward through time encoder
-        var timeGrad = scaledGrad;
-        for (int i = _timeEncoderLayers.Count - 1; i >= 0; i--)
-            timeGrad = _timeEncoderLayers[i].Backward(timeGrad);
-
-        if (_timeInputProjection is not null)
-            timeGrad = _timeInputProjection.Backward(timeGrad);
-
-        // Sum gradients from both paths
-        current = new Tensor<T>(timeGrad.Shape.ToArray());
-        for (int i = 0; i < timeGrad.Length && i < freqGrad.Length; i++)
-            current.Data.Span[i] = NumOps.Add(timeGrad[i], freqGrad[i]);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });

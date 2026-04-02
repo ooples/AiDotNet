@@ -486,7 +486,6 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(predictedScore.ToVector(), trueScore.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictedScore.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -782,28 +781,6 @@ public class ScoreGrad<T> : ForecastingModelBase<T>
         }
 
         return current;
-    }
-
-    /// <summary>
-    /// Performs backpropagation through all layers.
-    /// </summary>
-    /// <param name="gradOutput">Gradient of loss with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the ScoreGrad model, Backward propagates gradients backward. This teaches the ScoreGrad architecture how to adjust its weights.
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            grad = Layers[i].Backward(grad);
-        }
-
-        return grad;
     }
 
     /// <summary>

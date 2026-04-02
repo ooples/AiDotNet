@@ -161,21 +161,6 @@ public class GELUActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
-    /// Calculates the backward pass gradient for GELU using GPU-accelerated fused operation.
-    /// </summary>
-    /// <param name="input">The input tensor that was used in the forward pass.</param>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method uses a single GPU kernel to compute the gradient,
-    /// which is faster than computing derivative and gradient multiplication separately.
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
-    {
-        return Engine.GeluBackward(outputGradient, input);
-    }
-
-    /// <summary>
     /// Gets whether this activation function supports JIT compilation.
     /// </summary>
     /// <value>True because gradient computation is implemented.</value>
@@ -233,26 +218,6 @@ public class GELUActivation<T> : ActivationFunctionBase<T>
     public override void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)
     {
         backend.Gelu(input, output, size);
-    }
-
-    /// <summary>
-    /// Calculates the GELU backward pass gradient on GPU.
-    /// </summary>
-    /// <param name="backend">The GPU backend to use for execution.</param>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="input">The input buffer from the forward pass.</param>
-    /// <param name="output">Not used for GELU (can be null). GELU backward uses forward input.</param>
-    /// <param name="gradInput">The output buffer to store the input gradient.</param>
-    /// <param name="size">The number of elements to process.</param>
-    /// <remarks>
-    /// GELU backward on GPU computes the gradient using the original input values.
-    /// </remarks>
-    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input), "GELU backward requires the input from forward pass.");
-
-        backend.GeluBackward(gradOutput, input, gradInput, size);
     }
 
     #endregion

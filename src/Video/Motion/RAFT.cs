@@ -584,37 +584,6 @@ public class RAFT<T> : OpticalFlowBase<T>
         return result;
     }
 
-    private void BackwardPass(Tensor<T> gradient)
-    {
-        ThrowIfNotInitialized();
-
-        var upsampleConv = _upsampleConv ?? throw new InvalidOperationException("Upsample conv not initialized.");
-        var deltaFlowHead = _deltaFlowHead ?? throw new InvalidOperationException("Delta flow head not initialized.");
-        var flowHead = _flowHead ?? throw new InvalidOperationException("Flow head not initialized.");
-        var gruConvH = _gruConvH ?? throw new InvalidOperationException("GRU conv H not initialized.");
-        var gruConvR = _gruConvR ?? throw new InvalidOperationException("GRU conv R not initialized.");
-        var gruConvZ = _gruConvZ ?? throw new InvalidOperationException("GRU conv Z not initialized.");
-        var correlationConv = _correlationConv ?? throw new InvalidOperationException("Correlation conv not initialized.");
-
-        gradient = upsampleConv.Backward(gradient);
-        gradient = deltaFlowHead.Backward(gradient);
-        gradient = flowHead.Backward(gradient);
-        gradient = gruConvH.Backward(gradient);
-        gradient = gruConvR.Backward(gradient);
-        gradient = gruConvZ.Backward(gradient);
-        gradient = correlationConv.Backward(gradient);
-
-        for (int i = _contextEncoder.Count - 1; i >= 0; i--)
-        {
-            gradient = _contextEncoder[i].Backward(gradient);
-        }
-
-        for (int i = _featureEncoder.Count - 1; i >= 0; i--)
-        {
-            gradient = _featureEncoder[i].Backward(gradient);
-        }
-    }
-
     #endregion
 
     #region Abstract Implementation

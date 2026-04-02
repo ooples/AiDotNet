@@ -106,26 +106,7 @@ public interface INeuralNetwork<T> : IFullModel<T, Tensor<T>, Tensor<T>>, ILayer
     /// <returns>The output tensor from the network.</returns>
     Tensor<T> ForwardWithMemory(Tensor<T> input);
 
-    /// <summary>
-    /// Performs backpropagation to compute gradients for all parameters.
-    /// </summary>
-    /// <remarks>
-    /// This method propagates error gradients backward through the network,
-    /// computing how much each parameter contributed to the error.
-    ///
-    /// <b>For Beginners:</b> This is how the network learns from its mistakes.
-    ///
-    /// After making a prediction:
-    /// 1. We calculate the error (how wrong was the prediction?)
-    /// 2. Backpropagate sends this error backwards through layers
-    /// 3. Each layer calculates "how much did I contribute to this error?"
-    /// 4. These calculations (gradients) tell us how to adjust each weight
-    ///
-    /// This must be called after ForwardWithMemory() to have activations available.
-    /// </remarks>
-    /// <param name="outputGradients">Gradients of the loss with respect to network outputs.</param>
-    /// <returns>Gradients with respect to the input (for chaining networks).</returns>
-    Tensor<T> Backpropagate(Tensor<T> outputGradients);
+    // Backpropagate() removed — use GradientTape-based autodiff via TrainWithTape instead.
 
     /// <summary>
     /// Gets the gradients computed during the most recent backpropagation.

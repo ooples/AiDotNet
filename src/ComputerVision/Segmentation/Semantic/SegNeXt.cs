@@ -452,32 +452,6 @@ public class SegNeXt<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     }
 
     /// <summary>
-    /// Propagates gradients backward through all layers from decoder to encoder.
-    /// </summary>
-    /// <param name="gradient">The loss gradient tensor.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation calculates how much each weight contributed to the
-    /// prediction error, working backward from the decoder output through the MSCAN encoder.
-    /// These gradients are then used by AdamW to adjust weights and improve future predictions.
-    /// </para>
-    /// </remarks>
-    private void BackwardPass(Tensor<T> gradient)
-    {
-        if (!_useNativeMode || Layers.Count == 0)
-        {
-            return;
-        }
-
-        if (gradient.Rank == 3) gradient = AddBatchDimension(gradient);
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-    }
-
-    /// <summary>
     /// Adds a batch dimension to an unbatched [C, H, W] tensor, producing [1, C, H, W].
     /// </summary>
     /// <param name="tensor">An unbatched image tensor.</param>

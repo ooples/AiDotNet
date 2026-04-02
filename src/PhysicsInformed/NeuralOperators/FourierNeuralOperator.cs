@@ -355,7 +355,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                         var outputGradientVector = lossFunction.CalculateDerivative(prediction.ToVector(), target.ToVector());
                         var outputGradient = new Tensor<T>(prediction.Shape.ToArray(), outputGradientVector);
 
-                        Backpropagate(outputGradient);
 
                         var gradients = GetGradients();
                         var parameters = GetParameters();
@@ -637,48 +636,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                     index += layerParameterCount;
                 }
             }
-        }
-
-        public override Tensor<T> Backpropagate(Tensor<T> outputGradients)
-        {
-            if (!IsTrainingMode)
-            {
-                throw new InvalidOperationException("Cannot backpropagate when network is not in training mode");
-            }
-
-            if (!SupportsTraining)
-            {
-                throw new InvalidOperationException("This network does not support backpropagation");
-            }
-
-            if (Layers.Count < 2)
-            {
-                throw new InvalidOperationException("FourierNeuralOperator requires lift and projection layers.");
-            }
-
-            var liftLayer = Layers[0] as NeuralNetworks.Layers.DenseLayer<T>;
-            var projectLayer = Layers[Layers.Count - 1] as NeuralNetworks.Layers.DenseLayer<T>;
-
-            if (liftLayer == null || projectLayer == null)
-            {
-                throw new InvalidOperationException("FourierNeuralOperator expects DenseLayer lift and projection layers.");
-            }
-
-            int batchSize = outputGradients.Shape[0];
-            int[] spatialShape = outputGradients.Shape.ToArray().Skip(2).ToArray();
-
-            var flatOutputGradients = FlattenPointwiseInput(outputGradients, spatialShape);
-            var projectionGradients = projectLayer.Backward(flatOutputGradients);
-            var currentGradient = UnflattenPointwiseOutput(projectionGradients, batchSize, spatialShape);
-
-            for (int i = _fourierLayers.Count - 1; i >= 0; i--)
-            {
-                currentGradient = _fourierLayers[i].Backward(currentGradient);
-            }
-
-            var flatLiftGradients = FlattenPointwiseInput(currentGradient, spatialShape);
-            var liftGradients = liftLayer.Backward(flatLiftGradients);
-            return UnflattenPointwiseOutput(liftGradients, batchSize, spatialShape);
         }
 
         /// <summary>
@@ -1021,20 +978,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
             _lastPreActivation = combined;
             return _activation.Activate(combined);
-        }
-
-        public override Tensor<T> Backward(Tensor<T> outputGradient)
-        {
-            if (_lastInput == null || _lastPreActivation == null)
-            {
-                throw new InvalidOperationException("Forward pass must be called before backward pass.");
-            }
-
-            var activationGradient = _activation.Backward(_lastPreActivation, outputGradient);
-            var pointwiseInputGradient = ComputePointwiseGradients(_lastInput, activationGradient);
-            var spectralInputGradient = ComputeSpectralGradients(_lastInput, activationGradient);
-
-            return AddTensors(pointwiseInputGradient, spectralInputGradient);
         }
 
         private Tensor<T> ComputePointwiseGradients(Tensor<T> input, Tensor<T> activationGradient)

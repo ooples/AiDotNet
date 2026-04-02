@@ -1,3 +1,4 @@
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -406,145 +407,6 @@ public class DecoderLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Computes the gradient of the loss with respect to the inputs on the GPU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the decoder input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        if (_gpuNormalized1 == null || _gpuNormalized2 == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
-
-        // Backward through norm3
-        IGpuTensor<T> grad = InvokeBackwardGpu(_norm3, outputGradient, gpuEngine);
-
-        // Gradient through residual3: add to both branches
-        // Backward through FFN2
-        IGpuTensor<T> ffOutputGrad = InvokeBackwardGpu(_feedForward2, grad, gpuEngine);
-
-        // Backward through FFN1
-        IGpuTensor<T> ffHiddenGrad = InvokeBackwardGpu(_feedForward1, ffOutputGrad, gpuEngine);
-
-        // Add residual gradient from norm3
-        var norm2Grad = gpuEngine.AddGpu(ffHiddenGrad, grad);
-
-        // Backward through norm2
-        grad = InvokeBackwardGpu(_norm2, norm2Grad, gpuEngine);
-
-        // Gradient through residual2: add to both branches
-        // Backward through cross-attention
-        IGpuTensor<T> crossAttnGrad = InvokeBackwardGpu(_crossAttention, grad, gpuEngine);
-
-        // Add residual gradient from norm2
-        var norm1Grad = gpuEngine.AddGpu(crossAttnGrad, grad);
-
-        // Backward through norm1
-        grad = InvokeBackwardGpu(_norm1, norm1Grad, gpuEngine);
-
-        // Gradient through residual1: add to both branches
-        // Backward through self-attention
-        IGpuTensor<T> selfAttnGrad = InvokeBackwardGpu(_selfAttention, grad, gpuEngine);
-
-        // Add residual gradient to get final input gradient
-        var inputGrad = gpuEngine.AddGpu(selfAttnGrad, grad);
-
-        return inputGrad;
-    }
-
-    /// <summary>
-    /// Helper method to invoke BackwardGpu on a sublayer using reflection.
-    /// </summary>
-    private static IGpuTensor<T> InvokeBackwardGpu(LayerBase<T> layer, IGpuTensor<T> grad, DirectGpuTensorEngine gpuEngine)
-    {
-        var layerType = layer.GetType();
-        var backwardGpuMethod = layerType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
-
-        if (backwardGpuMethod != null)
-        {
-            return (IGpuTensor<T>)(backwardGpuMethod.Invoke(layer, new object[] { grad })
-                ?? throw new InvalidOperationException("BackwardGpu returned null."));
-        }
-        else
-        {
-            // Fallback to CPU backward
-            var cpuGrad = grad.ToTensor();
-            var cpuResult = layer.Backward(cpuGrad);
-            return gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
-        }
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the decoder layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>A concatenated tensor containing gradients for both the input and the encoder output.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method calculates how much each part of the input and the encoder output
-    /// contributed to the error. It's used during training to update the layer's parameters. The method expects
-    /// the forward pass to have been called first, as it uses information stored during the forward pass.</para>
-    /// <para>The returned tensor is a concatenation of two gradients: the gradient with respect to the input
-    /// and the gradient with respect to the encoder output. Use the <see cref="LastBackwardGradients"/> property
-    /// to access these gradients separately.</para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastEncoderOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var (inputGradient, encoderOutputGradient) = BackwardInternal(outputGradient);
-        _lastInputGradient = inputGradient;
-        _lastEncoderOutputGradient = encoderOutputGradient;
-
-        // Concatenate the input gradient and encoder output gradient
-        return Tensor<T>.Concatenate(new[] { inputGradient, encoderOutputGradient }, 1);
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation by delegating to the autodiff implementations
-    /// of the constituent layers (AttentionLayer, LayerNormalizationLayer, FeedForwardLayer).
-    /// Each sublayer will use its own autodiff implementation if available.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastEncoderOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Composite layer: just call Backward on each sublayer with UseAutodiff enabled
-        // The sublayers will handle their own autodiff if they support it
-        var (inputGradient, encoderOutputGradient) = BackwardInternal(outputGradient);
-        _lastInputGradient = inputGradient;
-        _lastEncoderOutputGradient = encoderOutputGradient;
-
-        // Concatenate the input gradient and encoder output gradient
-        return Tensor<T>.Concatenate(new[] { inputGradient, encoderOutputGradient }, 1);
-    }
-
-    /// <summary>
     /// Gets the most recent gradients calculated during the backward pass.
     /// </summary>
     /// <returns>A tuple containing the gradient with respect to the input and the gradient with respect to the encoder output.</returns>
@@ -592,19 +454,12 @@ public class DecoderLayer<T> : LayerBase<T>
         }
 
         // Backward through Norm3 first (output = Norm3(residual + ff))
-        var dNorm3 = _norm3.Backward(grad3D);
 
         // Backward through FFN (reverse order: projection then expansion)
-        var dFF2 = _feedForward2.Backward(dNorm3);
-        var dNormalized2 = _feedForward1.Backward(dFF2);
         dNormalized2 = dNormalized2.Add(dNorm3); // Residual connection gradient
-        var dNorm2 = _norm2.Backward(dNormalized2);
 
-        var dCrossAttention = _crossAttention.Backward(dNorm2);
         var dNormalized1 = dCrossAttention.Add(dNorm2);
-        var dNorm1 = _norm1.Backward(dNormalized1);
 
-        var dSelfAttention = _selfAttention.Backward(dNorm1);
         var dInput = dSelfAttention.Add(dNorm1);
 
         // Encoder output gradient: use the cross-attention gradient (same as dCrossAttention)

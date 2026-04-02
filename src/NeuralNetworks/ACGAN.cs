@@ -271,7 +271,6 @@ public class ACGAN<T> : NeuralNetworkBase<T>
 
         // Backpropagate for real images
         var realGradients = CalculateDiscriminatorGradients(realDiscOutput, realLabels, isReal: true, batchSize);
-        Discriminator.Backpropagate(realGradients);
         UpdateDiscriminatorWithOptimizer();
 
         // Train discriminator on fake images
@@ -283,7 +282,6 @@ public class ACGAN<T> : NeuralNetworkBase<T>
 
         // Backpropagate for fake images
         var fakeGradients = CalculateDiscriminatorGradients(fakeDiscOutput, fakeLabels, isReal: false, batchSize);
-        Discriminator.Backpropagate(fakeGradients);
         UpdateDiscriminatorWithOptimizer();
 
         // Total discriminator loss
@@ -308,8 +306,7 @@ public class ACGAN<T> : NeuralNetworkBase<T>
 
         // Backpropagate through discriminator to get input gradients, then through generator
         var genGradients = CalculateDiscriminatorGradients(genDiscOutput, fakeLabels, isReal: true, batchSize);
-        var discInputGradients = Discriminator.BackwardWithInputGradient(genGradients);
-        Generator.Backward(discInputGradients);
+        /* Generator.Backward(discInputGradients) removed — tape-based */ ;
         UpdateGeneratorWithOptimizer();
 
         // Track losses

@@ -595,7 +595,6 @@ public class DCRNN<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(prediction.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, prediction.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -963,63 +962,6 @@ public class DCRNN<T> : ForecastingModelBase<T>
         }
 
         return current;
-    }
-
-    /// <summary>
-    /// Performs backpropagation through all layers.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the DCRNN model, Backward propagates gradients backward. This teaches the DCRNN architecture how to adjust its weights.
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            var layer = Layers[i];
-
-            // Before GRU backward, if gradient is 2D but GRU expects 3D, reshape
-            // This reverses what we did in forward where we flattened 3D to 2D after GRU
-            if (layer is GRULayer<T> && grad.Rank == 2)
-            {
-                int totalElements = grad.Length;
-                int hidden = _hiddenDimension;
-                if (totalElements % hidden == 0)
-                {
-                    int seqLen = totalElements / hidden;
-                    grad = grad.Reshape(new[] { 1, seqLen, hidden });
-                }
-            }
-
-            grad = layer.Backward(grad);
-
-            // After GRU backward, if gradient is 3D but previous layer was Dense, flatten to 2D
-            // This reverses what we did in forward where we reshaped 2D to 3D before GRU
-            if (layer is GRULayer<T> && grad.Rank == 3 && i > 0 && Layers[i - 1] is DenseLayer<T>)
-            {
-                int batch = grad.Shape[0];
-                int seqLen = grad.Shape[1];
-                int hidden = grad.Shape[2];
-                int totalElements = batch * seqLen * hidden;
-                int denseFeatures = _numNodes * _hiddenDimension;
-
-                if (totalElements % denseFeatures == 0)
-                {
-                    int denseBatch = totalElements / denseFeatures;
-                    grad = grad.Reshape(new[] { denseBatch, denseFeatures });
-                }
-                else
-                {
-                    // Fallback: flatten to 2D
-                    grad = grad.Reshape(new[] { batch * seqLen, hidden });
-                }
-            }
-        }
-
-        return grad;
     }
 
     /// <summary>

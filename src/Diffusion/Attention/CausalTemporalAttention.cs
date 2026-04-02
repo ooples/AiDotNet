@@ -1,3 +1,4 @@
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
@@ -115,15 +116,6 @@ public class CausalTemporalAttention<T> : LayerBase<T>
     {
         _hasForwardRun = true;
         return _causalAttention.Forward(input);
-    }
-
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (!_hasForwardRun)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        return _causalAttention.Backward(outputGradient);
     }
 
     /// <inheritdoc />

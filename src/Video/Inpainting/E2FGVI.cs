@@ -365,7 +365,6 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         }
 
         // Backpropagate
-        BackpropagateGradient(gradient);
 
         // Update parameters
         T lr = NumOps.FromDouble(0.0001);
@@ -403,44 +402,6 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         }
 
         return mask;
-    }
-
-    /// <summary>
-    /// Backpropagates the gradient through all network layers.
-    /// </summary>
-    private void BackpropagateGradient(Tensor<T> gradient)
-    {
-        // Backpropagate through output head
-        gradient = _outputHead.Backward(gradient);
-
-        // Backpropagate through decoder
-        for (int i = _decoder.Count - 1; i >= 0; i--)
-        {
-            gradient = _decoder[i].Backward(gradient);
-        }
-
-        // Backpropagate through transformer
-        for (int i = _transformer.Count - 1; i >= 0; i--)
-        {
-            gradient = _transformer[i].Backward(gradient);
-        }
-
-        // Backpropagate through propagation layers
-        for (int i = _propagation.Count - 1; i >= 0; i--)
-        {
-            gradient = _propagation[i].Backward(gradient);
-        }
-
-        // Backpropagate through encoder
-        for (int i = _encoder.Count - 1; i >= 0; i--)
-        {
-            gradient = _encoder[i].Backward(gradient);
-        }
-
-        // Note: _flowNet and _flowHead are NOT used in the Predict forward pass.
-        // They are only used in EstimateBidirectionalFlow for multi-frame inpainting.
-        // Training the flow network requires a separate training routine with flow-specific
-        // loss functions (e.g., endpoint error, photometric consistency).
     }
 
     #endregion

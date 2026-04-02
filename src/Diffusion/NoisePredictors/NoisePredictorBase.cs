@@ -426,7 +426,6 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
         var lossGradTensor = new Tensor<T>(predicted.Shape.ToArray(), lossGrad);
 
         // Backpropagate through all layers
-        Backpropagate(lossGradTensor);
 
         // Extract parameter gradients from layers
         return GetParameterGradients();
@@ -469,18 +468,6 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
 
         // Reverse-mode AD: compute gradients for all trainable parameters
         return tape.ComputeGradients(loss, trainableParams);
-    }
-
-    /// <summary>
-    /// Backpropagates the loss gradient through the noise predictor's layers.
-    /// Override in derived classes to implement layer-by-layer gradient computation.
-    /// </summary>
-    /// <param name="lossGradient">Gradient of the loss w.r.t. the output.</param>
-    protected virtual void Backpropagate(Tensor<T> lossGradient)
-    {
-        throw new NotSupportedException(
-            $"{GetType().Name} does not implement Backpropagate. " +
-            "Override this method to enable layer-level gradient computation.");
     }
 
     /// <summary>

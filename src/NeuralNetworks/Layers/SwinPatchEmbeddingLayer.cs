@@ -149,45 +149,6 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
         return normalized;
     }
 
-    /// <summary>
-    /// Performs the backward pass.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from the next layer.</param>
-    /// <returns>Gradient for the input.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        int batch = outputGradient.Shape[0];
-        int numPatches = outputGradient.Shape[1];
-
-        // Backward through layer norm
-        var normGrad = _norm.Backward(outputGradient);
-
-        // Reshape back to conv output shape: [batch, embedDim, patchH, patchW]
-        int patchH = PatchGridHeight;
-        int patchW = PatchGridWidth;
-        var convGrad = new Tensor<T>([batch, _embedDim, patchH, patchW]);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int h = 0; h < patchH; h++)
-            {
-                for (int w = 0; w < patchW; w++)
-                {
-                    int seqIdx = h * patchW + w;
-                    for (int c = 0; c < _embedDim; c++)
-                    {
-                        convGrad[b, c, h, w] = normGrad[b, seqIdx, c];
-                    }
-                }
-            }
-        }
-
-        // Backward through projection conv
-        var inputGrad = _projection.Backward(convGrad);
-
-        return inputGrad;
-    }
-
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {

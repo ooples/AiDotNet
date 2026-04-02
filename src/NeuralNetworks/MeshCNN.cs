@@ -372,20 +372,6 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs backward pass through the network.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of loss with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            outputGradient = Layers[i].Backward(outputGradient);
-        }
-        return outputGradient;
-    }
-
-    /// <summary>
     /// Generates predictions for the given input.
     /// </summary>
     /// <param name="input">Edge features tensor.</param>

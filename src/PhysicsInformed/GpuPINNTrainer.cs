@@ -170,13 +170,6 @@ public class GpuPINNTrainer<T>
         {
             // Use the PINN's built-in Solve method for training
             // The GPU acceleration comes from the tensor operations in the layers
-            var pinnHistory = _pinn.Solve(
-                dataInputs,
-                dataOutputs,
-                epochs,
-                learningRate,
-                verbose,
-                _options.BatchSizeGpu);
 
             // Copy results to GPU-aware history and track memory growth
             foreach (var loss in pinnHistory.Losses)

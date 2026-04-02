@@ -232,21 +232,6 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs a backward pass through the network.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of loss with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var currentGradient = outputGradient;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            currentGradient = Layers[i].Backward(currentGradient);
-        }
-        return currentGradient;
-    }
-
-    /// <summary>
     /// Updates the parameters of all layers in the network.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters for the network.</param>
@@ -329,7 +314,6 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
 
             // Compute gradient and backward pass
             var gradient = ComputeGradient(logits, task.Labels, task.TrainIndices, task.NumClasses);
-            Backward(gradient);
 
             // Update parameters
             foreach (var layer in Layers)
@@ -590,7 +574,6 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
             gradOutput = gradOutput.Reshape(predictions.Shape.ToArray());
         }
 
-        Backward(gradOutput);
 
         Vector<T> parameterGradients = GetParameterGradients();
         Vector<T> currentParameters = GetParameters();

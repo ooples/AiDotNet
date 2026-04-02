@@ -183,24 +183,6 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
         return TensorOperations<T>.Softmax(input);
     }
 
-    /// <summary>
-    /// Calculates the backward pass gradient for Softmax.
-    /// </summary>
-    /// <param name="input">The input tensor.</param>
-    /// <param name="outputGradient">The output gradient.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    public override Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
-    {
-        // For Softmax, we need the output (probabilities) to calculate the gradient efficiently.
-        // If we don't have it cached, we must recompute it.
-        // Ideally, Backward should accept 'output' as an optional argument, but for now we recompute.
-        // NOTE: In ActivationLayer, we could optimize this by passing cached output if available,
-        // but standard Interface only takes input.
-
-        var output = Activate(input);
-        return Engine.SoftmaxBackward(outputGradient, output);
-    }
-
     #region GPU Training Support
 
     /// <summary>
@@ -228,28 +210,6 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
     {
         // Treat as single vector: batchSize=1, features=size
         backend.Softmax(input, output, 1, size);
-    }
-
-    /// <summary>
-    /// Calculates the Softmax backward pass gradient on GPU.
-    /// </summary>
-    /// <param name="backend">The GPU backend to use for execution.</param>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="input">Not used for Softmax backward (can be null). Softmax backward uses forward output.</param>
-    /// <param name="output">The output buffer from the forward pass (softmax probabilities). Required.</param>
-    /// <param name="gradInput">The output buffer to store the input gradient.</param>
-    /// <param name="size">The number of elements (features) to process.</param>
-    /// <remarks>
-    /// Softmax backward computes: gradInput[i] = output[i] * (gradOutput[i] - sum(gradOutput[j] * output[j]))
-    /// This is the efficient Jacobian-vector product for softmax.
-    /// </remarks>
-    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
-    {
-        if (output == null)
-            throw new ArgumentNullException(nameof(output), "Softmax backward requires the output (probabilities) from forward pass.");
-
-        // Treat as single vector: batchSize=1, features=size
-        backend.SoftmaxBackward(gradOutput, output, gradInput, 1, size);
     }
 
     #endregion

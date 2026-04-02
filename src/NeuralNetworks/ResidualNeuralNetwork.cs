@@ -694,63 +694,6 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
         SetTrainingMode(false);
     }
 
-    /// <summary>
-    /// Trains for multiple epochs with batching. Used internally by PredictionModelBuilder
-    /// for production training workflows with full epoch/batch control.
-    /// </summary>
-    private void TrainEpochs(Tensor<T> input, Tensor<T> expectedOutput, int epochs, int batchSize)
-    {
-        // Normalize to 2D [batch, features] if needed
-        if (input.Rank == 1)
-            input = input.Reshape([1, input.Shape[0]]);
-        if (expectedOutput.Rank == 1)
-            expectedOutput = expectedOutput.Reshape([1, expectedOutput.Shape[0]]);
-
-        SetTrainingMode(true);
-
-        for (int epoch = 0; epoch < epochs; epoch++)
-        {
-            for (int batchStart = 0; batchStart < input.Shape[0]; batchStart += batchSize)
-            {
-                int batchEnd = Math.Min(batchStart + batchSize, input.Shape[0]);
-
-                Tensor<T> batchX;
-                Tensor<T> batchY;
-                if (input.Shape[0] == 1 || batchEnd - batchStart == input.Shape[0])
-                {
-                    batchX = input;
-                    batchY = expectedOutput;
-                }
-                else
-                {
-                    batchX = input.Slice(batchStart, 0, batchEnd, input.Shape[1]);
-                    batchY = expectedOutput.Slice(batchStart, 0, batchEnd, expectedOutput.Shape[1]);
-                }
-
-                // Single forward/backward per batch sample
-                int actualBatchSize = batchEnd - batchStart;
-                for (int i = 0; i < actualBatchSize; i++)
-                {
-                    var x = Tensor<T>.FromVector(batchX.GetRow(i));
-                    var y = batchY.GetRow(i);
-
-                    var prediction = ForwardWithMemory(x);
-                    var predVector = prediction.ToVector();
-
-                    LastLoss = LossFunction.CalculateLoss(predVector, y);
-                    var grad = LossFunction.CalculateDerivative(predVector, y);
-                    Backpropagate(Tensor<T>.FromVector(grad));
-
-                    foreach (var layer in Layers.Where(l => l.SupportsTraining && l.ParameterCount > 0))
-                    {
-                        layer.UpdateParameters(_learningRate);
-                    }
-                }
-            }
-        }
-
-        SetTrainingMode(false);
-    }
 
     /// <summary>
     /// Gets metadata about the Residual Neural Network model.

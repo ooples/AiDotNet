@@ -1,3 +1,4 @@
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -350,74 +351,6 @@ public class GroupNormalizationLayer<T> : LayerBase<T>, ITrainableLayer<T>
         return result;
     }
 
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastMean == null || _lastVariance == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Flatten gradient to 4D the same way forward flattened input
-        int rank = outputGradient.Shape.Length;
-        Tensor<T> grad4D;
-
-        if (rank == 3)
-        {
-            grad4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
-        }
-        else if (rank <= 4)
-        {
-            grad4D = outputGradient;
-        }
-        else
-        {
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 3; d++)
-                flatBatch *= outputGradient.Shape[d];
-            grad4D = outputGradient.Reshape(flatBatch, outputGradient.Shape[rank - 3], outputGradient.Shape[rank - 2], outputGradient.Shape[rank - 1]);
-        }
-
-        // Get input with batch dimension for backward pass
-        Tensor<T> input4D;
-        if (_lastInput.Shape.Length == 3)
-        {
-            input4D = _lastInput.Reshape(1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2]);
-        }
-        else if (_lastInput.Shape.Length <= 4)
-        {
-            input4D = _lastInput;
-        }
-        else
-        {
-            int flatBatch = 1;
-            for (int d = 0; d < _lastInput.Shape.Length - 3; d++)
-                flatBatch *= _lastInput.Shape[d];
-            input4D = _lastInput.Reshape(flatBatch, _lastInput.Shape[_lastInput.Shape.Length - 3], _lastInput.Shape[_lastInput.Shape.Length - 2], _lastInput.Shape[_lastInput.Shape.Length - 1]);
-        }
-
-        // Use Engine for GPU/CPU accelerated backward pass
-        var inputGradient = Engine.GroupNormBackward(
-            grad4D,
-            input4D,
-            _numGroups,
-            _gamma,
-            _lastMean,
-            _lastVariance,
-            NumOps.ToDouble(_epsilon),
-            out var gradGamma,
-            out var gradBeta);
-
-        _gammaGradient = gradGamma;
-        _betaGradient = gradBeta;
-
-        // Restore to original input shape
-        if (_originalInputShape != null && _originalInputShape.Length != inputGradient.Shape.Length)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-        return _addedBatchDimension
-            ? inputGradient.Reshape(inputGradient.Shape[1], inputGradient.Shape[2], inputGradient.Shape[3])
-            : inputGradient;
-    }
-
     public override void UpdateParameters(T learningRate)
     {
         if (_gammaGradient == null || _betaGradient == null)
@@ -525,43 +458,6 @@ public class GroupNormalizationLayer<T> : LayerBase<T>, ITrainableLayer<T>
             NumOps.ToDouble(_epsilon));
 
         return outputNode;
-    }
-
-    /// <summary>
-    /// GPU-resident backward pass for group normalization layer.
-    /// Computes gradients for gamma and beta parameters.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output (GPU tensor).</param>
-    /// <returns>The gradient of the loss with respect to the layer's input (GPU tensor).</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        if (_gpuLastInput == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        // Use CPU backward pass for gradient computation as fallback
-        var outputGradCpu = outputGradient.ToTensor();
-
-        // Clear existing gradients
-        _gammaGradient = null;
-        _betaGradient = null;
-
-        // Perform CPU backward to compute gradients
-        var inputGradCpu = Backward(outputGradCpu);
-
-        // Upload gradients to GPU
-        if (_gammaGradient != null)
-            _gpuGammaGradient = new GpuTensor<T>(backend, _gammaGradient, GpuTensorRole.Gradient);
-        if (_betaGradient != null)
-            _gpuBetaGradient = new GpuTensor<T>(backend, _betaGradient, GpuTensorRole.Gradient);
-
-        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
     }
 
     /// <summary>

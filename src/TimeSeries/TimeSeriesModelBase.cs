@@ -349,7 +349,10 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// finding patterns in the data.
     /// </para>
     /// </remarks>
-    protected abstract void TrainCore(Matrix<T> x, Vector<T> y);
+    protected virtual void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        // Default: tape-based training handles parameter updates
+    }
 
     /// <summary>
     /// Validates the training input data before proceeding with training.

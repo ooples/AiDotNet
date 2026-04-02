@@ -477,7 +477,6 @@ public class DeepAR<T> : ForecastingModelBase<T>
         {
             // Backward pass
             var gradient = ComputeGradient(output, target);
-            Backward(gradient);
 
             // Update weights via optimizer
             _optimizer.UpdateParameters(Layers);
@@ -833,47 +832,6 @@ public class DeepAR<T> : ForecastingModelBase<T>
         // Combine mu and sigma into output
         // For simplicity, return mu as point forecast; sigma used in sampling
         return mu;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the DeepAR network.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the loss function.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backward pass computes gradients for all learnable
-    /// parameters by propagating error signals backwards through each layer.
-    /// This enables the model to learn from its mistakes.
-    /// </para>
-    /// </remarks>
-    private void Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        // Backward through distribution heads
-        // Forward returns mu only, so propagate gradients through mu projection.
-        if (_muProjection is not null)
-        {
-            grad = _muProjection.Backward(grad);
-        }
-
-        // Backward through layer normalization
-        if (_layerNorm is not null)
-        {
-            grad = _layerNorm.Backward(grad);
-        }
-
-        // Backward through LSTM layers (in reverse order)
-        for (int i = _lstmLayers.Count - 1; i >= 0; i--)
-        {
-            grad = _lstmLayers[i].Backward(grad);
-        }
-
-        // Backward through input projection
-        if (_inputProjection is not null)
-        {
-            _inputProjection.Backward(grad);
-        }
     }
 
     /// <summary>

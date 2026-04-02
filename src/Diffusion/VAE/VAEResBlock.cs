@@ -271,48 +271,6 @@ public class VAEResBlock<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through the residual block.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of loss with respect to output.</param>
-    /// <returns>Gradient of loss with respect to input.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _norm1Output == null || _silu1Output == null ||
-            _conv1Output == null || _norm2Output == null || _silu2Output == null ||
-            _conv2Output == null || _skipOutput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        // Gradient flows through both main path and skip connection
-        var mainGradient = outputGradient;
-        var skipGradient = outputGradient;
-
-        // Backward through skip connection
-        Tensor<T> skipInputGrad;
-        if (_skipConv != null)
-        {
-            skipInputGrad = _skipConv.Backward(skipGradient);
-        }
-        else
-        {
-            skipInputGrad = skipGradient;
-        }
-
-        // Backward through main path: conv2 -> SiLU -> norm2 -> conv1 -> SiLU -> norm1
-        var conv2Grad = _conv2.Backward(mainGradient);
-        var silu2Grad = ApplySiLUDerivative(_norm2Output, conv2Grad);
-        var norm2Grad = _norm2.Backward(silu2Grad);
-
-        var conv1Grad = _conv1.Backward(norm2Grad);
-        var silu1Grad = ApplySiLUDerivative(_norm1Output, conv1Grad);
-        var norm1Grad = _norm1.Backward(silu1Grad);
-
-        // Sum gradients from main path and skip connection
-        return Engine.TensorAdd(norm1Grad, skipInputGrad);
-    }
-
-    /// <summary>
     /// Updates all learnable parameters using gradient descent.
     /// </summary>
     /// <param name="learningRate">The learning rate for the update.</param>

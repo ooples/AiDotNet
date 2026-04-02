@@ -203,26 +203,5 @@ public class SoftPlusActivation<T> : ActivationFunctionBase<T>
         backend.Softplus(input, output, size);
     }
 
-    /// <summary>
-    /// Calculates the SoftPlus backward pass gradient on GPU.
-    /// </summary>
-    /// <param name="backend">The GPU backend to use for execution.</param>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="input">The input buffer from the forward pass.</param>
-    /// <param name="output">Not used for SoftPlus (can be null). SoftPlus backward uses forward input.</param>
-    /// <param name="gradInput">The output buffer to store the input gradient.</param>
-    /// <param name="size">The number of elements to process.</param>
-    /// <remarks>
-    /// SoftPlus backward on GPU: gradInput[i] = gradOutput[i] * sigmoid(input[i])
-    /// The derivative of SoftPlus is the sigmoid function.
-    /// </remarks>
-    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input), "SoftPlus backward requires the input from forward pass.");
-
-        backend.SoftplusBackward(gradOutput, input, gradInput, size);
-    }
-
     #endregion
 }

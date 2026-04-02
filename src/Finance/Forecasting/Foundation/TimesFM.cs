@@ -554,7 +554,6 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -990,49 +989,6 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         }
 
         return Engine.TensorAdd(a, b);
-    }
-
-    /// <summary>
-    /// Performs the backward pass through TimesFM.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the loss function.</param>
-    /// <returns>Gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation through transformers:
-    /// 1. Gradient flows back through output projection
-    /// 2. Then back through each transformer layer (in reverse order)
-    /// 3. Finally through embeddings to the input
-    ///
-    /// This updates all weights to reduce prediction error.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        // Output projection backward
-        if (_outputProjection is not null)
-            current = _outputProjection.Backward(current);
-
-        // Final layer norm backward
-        if (_finalLayerNorm is not null)
-            current = _finalLayerNorm.Backward(current);
-
-        // Transformer layers backward (reverse order)
-        for (int i = _transformerLayers.Count - 1; i >= 0; i--)
-        {
-            current = _transformerLayers[i].Backward(current);
-        }
-
-        // Position embedding backward (simplified - skip for now as positions are fixed)
-        // Note: In full implementation, learned position embeddings would be updated here
-
-        // Patch embedding backward
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Backward(current);
-
-        return current;
     }
 
     #endregion

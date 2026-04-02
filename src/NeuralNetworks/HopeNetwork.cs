@@ -205,50 +205,6 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs a backward pass through the Hope architecture.
-    /// Propagates gradients through recurrent layers, context flow, and CMS blocks.
-    /// </summary>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var gradient = outputGradient;
-
-        // Backprop through output layer
-        if (_outputLayer != null)
-        {
-            gradient = _outputLayer.Backward(gradient);
-        }
-
-        // Backprop through recurrent layers (in reverse)
-        for (int i = _numRecurrentLayers - 1; i >= 0; i--)
-        {
-            gradient = _recurrentLayers[i].Backward(gradient);
-        }
-
-        // Backprop through context flow levels (applied after CMS blocks in forward pass)
-        // Context flow blended with the output of CMS blocks, so we propagate gradients through
-        for (int level = _inContextLearningLevels - 1; level >= 0; level--)
-        {
-            // Compute and accumulate context flow gradients for this level
-            var contextGrad = _contextFlow.ComputeContextGradients(gradient.ToVector(), level);
-            var contextTensor = new Tensor<T>(new[] { _hiddenDim }, contextGrad);
-
-            // Add context gradient to current upstream gradient (blending was additive in forward)
-            gradient = AddTensors(gradient, contextTensor);
-        }
-
-        // Backprop through CMS blocks in reverse order (no modulo - proper chain rule)
-        // Each block receives the accumulated gradient from the previous block
-        for (int i = _numCMSLevels - 1; i >= 0; i--)
-        {
-            // Pass combined gradient to this CMS block's backward
-            gradient = _cmsBlocks[i].Backward(gradient);
-            // gradient now contains the downstream gradient for the next (previous) block
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
     /// Applies self-modification to input based on meta-state.
     /// Implements self-referential optimization.
     /// </summary>

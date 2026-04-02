@@ -351,23 +351,6 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs a backward pass to compute gradients.
-    /// </summary>
-    /// <param name="lossGradient">Gradient of the loss with respect to network output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    public Tensor<T> Backward(Tensor<T> lossGradient)
-    {
-        Tensor<T> gradient = lossGradient;
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
     /// Updates network parameters using the optimizer.
     /// </summary>
     /// <param name="learningRate">Learning rate for parameter updates.</param>
@@ -423,7 +406,6 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
                 var lossGrad = _lossFunction.CalculateDerivative(output.ToVector(), target);
                 var lossGradTensor = new Tensor<T>(lossGrad.ToArray(), output.Shape.ToArray());
 
-                Backward(lossGradTensor);
                 UpdateParameters(learningRate);
             }
 

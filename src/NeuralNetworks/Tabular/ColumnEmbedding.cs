@@ -177,64 +177,6 @@ public class ColumnEmbedding<T>
     }
 
     /// <summary>
-    /// Computes gradients for column embeddings by summing upstream gradients across the batch dimension.
-    /// </summary>
-    /// <remarks>
-    /// Each call accumulates into the stored gradients. Call <see cref="ResetGradients"/>
-    /// before starting a new accumulation window (e.g., before the next optimizer step)
-    /// to avoid stale gradients from previous passes.
-    /// </remarks>
-    /// <param name="gradient">Gradient from upstream [batchSize, numColumns, embeddingDim].</param>
-    public void Backward(Tensor<T> gradient)
-    {
-        if (!_learnable) return;
-
-        if (gradient.Shape.Length < 3)
-            throw new ArgumentException(
-                $"Gradient must be at least rank-3 [..., numColumns, embeddingDim], but got rank {gradient.Shape.Length}.");
-
-        int numCols = gradient.Shape[^2];
-        int embDim = gradient.Shape[^1];
-
-        if (embDim != _embeddingDim)
-        {
-            throw new ArgumentException(
-                $"Gradient embedding dimension ({embDim}) does not match column embedding dimension ({_embeddingDim}).");
-        }
-
-        if (numCols > _numColumns)
-        {
-            throw new ArgumentException(
-                $"Gradient column count ({numCols}) exceeds embedding column count ({_numColumns}).");
-        }
-
-        // Compute total batch elements (all dims except last two)
-        int totalBatchElements = 1;
-        for (int i = 0; i < gradient.Shape.Length - 2; i++)
-        {
-            totalBatchElements *= gradient.Shape[i];
-        }
-
-        int stride = numCols * embDim;
-
-        // Accumulate gradients from all batch elements
-        for (int c = 0; c < numCols; c++)
-        {
-            for (int d = 0; d < embDim; d++)
-            {
-                var gradSum = NumOps.Zero;
-                for (int b = 0; b < totalBatchElements; b++)
-                {
-                    int gradIdx = b * stride + c * embDim + d;
-                    gradSum = NumOps.Add(gradSum, gradient[gradIdx]);
-                }
-                _embeddingGradients[c * _embeddingDim + d] = NumOps.Add(
-                    _embeddingGradients[c * _embeddingDim + d], gradSum);
-            }
-        }
-    }
-
-    /// <summary>
     /// Updates embeddings via gradient descent using the gradients computed by <see cref="Backward"/>.
     /// </summary>
     /// <param name="learningRate">Step size for the gradient descent update.</param>

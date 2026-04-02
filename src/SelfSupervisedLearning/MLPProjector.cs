@@ -194,39 +194,6 @@ public class MLPProjector<T> : IProjectorHead<T>
     }
 
     /// <inheritdoc />
-    public Tensor<T> Backward(Tensor<T> gradients)
-    {
-        if (gradients is null) throw new ArgumentNullException(nameof(gradients));
-        if (_lastInput is null) throw new InvalidOperationException("Forward must be called before Backward");
-
-        var grad = gradients;
-
-        // Backward through optional BatchNorm 2
-        if (_useBatchNormOnOutput && _preActivation2 is not null)
-        {
-            var gamma2 = _gamma2 ?? throw new InvalidOperationException("Gamma2 has not been initialized.");
-            (grad, _gradGamma2, _gradBeta2) = BatchNormBackward(grad, _preActivation2, gamma2);
-        }
-
-        // Backward through Layer 2
-        var postRelu1 = _postRelu1 ?? throw new InvalidOperationException("Post-ReLU activations not available. Forward must be called before Backward.");
-        (grad, _gradWeight2, _gradBias2) = LinearBackward(grad, postRelu1, _weight2);
-
-        // Backward through ReLU
-        var postBatchNorm1 = _postBatchNorm1 ?? throw new InvalidOperationException("Post-BatchNorm activations not available. Forward must be called before Backward.");
-        grad = ReLUBackward(grad, postBatchNorm1);
-
-        // Backward through BatchNorm 1
-        var preActivation1 = _preActivation1 ?? throw new InvalidOperationException("Pre-activation values not available. Forward must be called before Backward.");
-        (grad, _gradGamma1, _gradBeta1) = BatchNormBackward(grad, preActivation1, _gamma1);
-
-        // Backward through Layer 1
-        (grad, _gradWeight1, _gradBias1) = LinearBackward(grad, _lastInput, _weight1);
-
-        return grad;
-    }
-
-    /// <inheritdoc />
     public Vector<T> GetParameters()
     {
         var paramList = new List<T>();

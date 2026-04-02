@@ -230,7 +230,6 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             var outputGradients = LossFunction.CalculateDerivative(currentQValues, targetQValues);
             var gradientsTensor = Tensor<T>.FromVector(outputGradients);
-            _qNetwork.Backpropagate(gradientsTensor);
 
             // Extract parameter gradients from network layers (not output-space gradients)
             var parameterGradients = _qNetwork.GetParameterGradients();
@@ -372,7 +371,6 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         var gradient = loss.CalculateDerivative(output, target);
 
         var gradientTensor = Tensor<T>.FromVector(gradient);
-        _qNetwork.Backpropagate(gradientTensor);
 
         return gradient;
     }

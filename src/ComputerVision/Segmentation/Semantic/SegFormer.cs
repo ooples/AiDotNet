@@ -478,35 +478,6 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     }
 
     /// <summary>
-    /// Propagates gradients backward through all layers from decoder to encoder.
-    /// </summary>
-    /// <param name="gradient">The loss gradient tensor computed from the difference between
-    /// predicted and expected outputs.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation is how neural networks learn. After comparing the model's
-    /// prediction to the correct answer, this method works backward through every layer — from the
-    /// decoder output all the way back to the first encoder layer — calculating how much each weight
-    /// contributed to the error. These gradients are then used by the optimizer to adjust the weights
-    /// and improve future predictions.
-    /// </para>
-    /// </remarks>
-    private void BackwardPass(Tensor<T> gradient)
-    {
-        if (!_useNativeMode || Layers.Count == 0)
-        {
-            return;
-        }
-
-        if (gradient.Rank == 3) gradient = AddBatchDimension(gradient);
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-    }
-
-    /// <summary>
     /// Adds a batch dimension to an unbatched [C, H, W] tensor, producing [1, C, H, W].
     /// </summary>
     /// <param name="tensor">An unbatched image tensor with shape [channels, height, width].</param>

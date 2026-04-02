@@ -501,22 +501,6 @@ public abstract class SAINTBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through the backbone.
-    /// </summary>
-    protected Tensor<T> BackwardBackbone(Tensor<T> gradOutput)
-    {
-        // Backward through MLP layers
-        var grad = gradOutput;
-        for (int i = _mlpLayers.Count - 1; i >= 0; i--)
-        {
-            grad = _mlpLayers[i].Backward(grad);
-        }
-
-        // For simplicity, return the gradient (full backward through attention is complex)
-        return grad;
-    }
-
-    /// <summary>
     /// Updates all parameters.
     /// </summary>
     public virtual void UpdateParameters(T learningRate)

@@ -269,45 +269,6 @@ public class ObliviousDecisionTree<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Backward pass through the oblivious decision tree.
-    /// </summary>
-    /// <param name="gradient">Gradient with respect to output [batchSize, outputDim].</param>
-    /// <returns>Gradient with respect to input [batchSize, inputDim].</returns>
-    public override Tensor<T> Backward(Tensor<T> gradient)
-    {
-        if (_inputCache == null || _leafProbabilitiesCache == null)
-        {
-            throw new InvalidOperationException("Forward must be called before backward");
-        }
-
-        int batchSize = _inputCache.Shape[0];
-        var inputGrad = new Tensor<T>([batchSize, _inputDim]);
-
-        // Reset gradients using Engine
-        Engine.TensorFill(_featureSelectionGrad, NumOps.Zero);
-        Engine.TensorFill(_thresholdsGrad, NumOps.Zero);
-        Engine.TensorFill(_leafValuesGrad, NumOps.Zero);
-
-        // Gradient for leaf values
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int leaf = 0; leaf < _numLeaves; leaf++)
-            {
-                var leafProb = _leafProbabilitiesCache[b * _numLeaves + leaf];
-                for (int o = 0; o < _outputDim; o++)
-                {
-                    _leafValuesGrad[leaf * _outputDim + o] = NumOps.Add(
-                        _leafValuesGrad[leaf * _outputDim + o],
-                        NumOps.Multiply(leafProb, gradient[b * _outputDim + o]));
-                }
-            }
-        }
-
-        // Simplified input gradient (full implementation would backprop through soft selections)
-        return inputGrad;
-    }
-
-    /// <summary>
     /// Gets feature importance based on selection weights.
     /// </summary>
     public Vector<T> GetFeatureImportance()

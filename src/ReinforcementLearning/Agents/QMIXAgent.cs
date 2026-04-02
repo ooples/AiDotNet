@@ -356,7 +356,6 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             var mixingGradientVec = new Vector<T>(1);
             mixingGradientVec[0] = NumOps.Multiply(NumOps.FromDouble(-2.0), tdError);
             var mixingGradient = Tensor<T>.FromVector(mixingGradientVec);
-            _mixingNetwork.Backpropagate(mixingGradient);
 
             // Get gradient w.r.t. mixing network inputs (agent Q-values) for gradient flow
             // This should be obtained from the mixing network's input gradient after backprop
@@ -392,7 +391,6 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
                 var stateTensor = Tensor<T>.FromVector(agentStates[i]);
                 var agentGradient = Tensor<T>.FromVector(agentGradientVec);
-                ((NeuralNetwork<T>)_agentNetworks[i]).Backpropagate(agentGradient);
 
                 // Manual parameter update with learning rate
                 var agentParams = _agentNetworks[i].GetParameters();
@@ -795,22 +793,6 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         return gradient;
     }
 
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        var gradientsTensor = Tensor<T>.FromVector(gradients);
-        ((NeuralNetwork<T>)_agentNetworks[0]).Backpropagate(gradientsTensor);
-
-        // Manual parameter update with learning rate
-        var agentParams = _agentNetworks[0].GetParameters();
-        var agentGrads = ((NeuralNetwork<T>)_agentNetworks[0]).GetParameterGradients();
-        for (int i = 0; i < agentParams.Length; i++)
-        {
-            agentParams[i] = NumOps.Subtract(agentParams[i],
-                NumOps.Multiply(learningRate, agentGrads[i]));
-        }
-        _agentNetworks[0].UpdateParameters(agentParams);
-    }
-
     public override void SaveModel(string filepath)
     {
         if (string.IsNullOrWhiteSpace(filepath))
@@ -836,5 +818,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var data = System.IO.File.ReadAllBytes(filepath);
         Deserialize(data);
-    }
+    
+
+}
 }

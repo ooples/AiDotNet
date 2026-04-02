@@ -769,14 +769,6 @@ public class AudioVAE<T> : VAEModelBase<T>
 
     #endregion
 
-    protected override void BackpropagateVAE(Tensor<T> lossGradient)
-    {
-        var grad = lossGradient;
-        if (_latentToDecoder != null) grad = _latentToDecoder.Backward(grad);
-        if (_logVarProjection != null) _logVarProjection.Backward(grad);
-        if (_muProjection != null) _muProjection.Backward(grad);
-    }
-
     protected override Vector<T> GetParameterGradients()
     {
         var allGrads = new List<T>();

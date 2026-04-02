@@ -188,28 +188,6 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
             $"operations not compatible with computation graphs.");
     }
 
-    /// <summary>
-    /// Calculates the backward pass gradient for this activation function.
-    /// </summary>
-    /// <param name="input">The input tensor that was used in the forward pass.</param>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// Default implementation assumes element-wise activation.
-    /// Returns: Derivative(input) * outputGradient (element-wise).
-    /// </para>
-    /// </remarks>
-    public virtual Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
-    {
-        // Default behavior: Element-wise multiplication of derivative and gradient
-        // This works for ReLU, Sigmoid, Tanh, etc.
-        // Derived classes like Softmax MUST override this.
-
-        var derivative = Derivative(input);
-        return Engine.TensorMultiply(derivative, outputGradient);
-    }
-
     #region GPU Training Support
 
     /// <summary>
@@ -252,34 +230,6 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
             $"{GetType().Name} does not support GPU-resident training. " +
             $"SupportsGpuTraining = {SupportsGpuTraining}. " +
             "Use the CPU-based Activate() method instead or implement GPU support in the derived class.");
-    }
-
-    /// <summary>
-    /// Calculates the backward pass gradient on GPU.
-    /// </summary>
-    /// <param name="backend">The GPU backend to use for execution.</param>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="input">The input buffer from the forward pass (needed for ReLU, GELU, Swish, LeakyReLU).</param>
-    /// <param name="output">The output buffer from the forward pass (needed for Sigmoid, Tanh).</param>
-    /// <param name="gradInput">The output buffer to store the input gradient.</param>
-    /// <param name="size">The number of elements to process.</param>
-    /// <exception cref="NotSupportedException">
-    /// Thrown because this activation function does not support GPU execution.
-    /// Override this method in derived classes to provide GPU support.
-    /// </exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> During training, we need to compute gradients to update the network.
-    /// The default implementation throws an exception because most activation functions
-    /// need to provide their own GPU backward kernel implementation.
-    /// </para>
-    /// </remarks>
-    public virtual void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
-    {
-        throw new NotSupportedException(
-            $"{GetType().Name} does not support GPU-resident backward pass. " +
-            $"SupportsGpuTraining = {SupportsGpuTraining}. " +
-            "Use the CPU-based Backward() method instead or implement GPU support in the derived class.");
     }
 
     #endregion

@@ -108,17 +108,6 @@ public class TemporalConvolution<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var convGrad = _conv.Backward(outputGradient);
-        var normGrad = _norm.Backward(convGrad);
-        return AddTensors(outputGradient, normGrad);
-    }
-
-    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         _conv.UpdateParameters(learningRate);

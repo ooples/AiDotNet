@@ -464,28 +464,6 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs backpropagation through the layer.
-    /// </summary>
-    /// <remarks>
-    /// Backpropagation uses the normalized weights (applied during Forward) to ensure
-    /// gradients correspond to the actual weights used in the forward pass. After
-    /// computing gradients, the original weights are restored.
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        try
-        {
-            // Backpropagate through inner layer using normalized weights
-            return _innerLayer.Backward(outputGradient);
-        }
-        finally
-        {
-            // Always restore original weights after Backward
-            RestoreOriginalWeights();
-        }
-    }
-
-    /// <summary>
     /// Updates the parameters of the inner layer.
     /// </summary>
     public override void UpdateParameters(T learningRate)
@@ -656,41 +634,6 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         {
             // Always restore original weights after export
             _innerLayer.SetParameters(originalParams);
-        }
-    }
-
-    /// <summary>
-    /// GPU-resident backward pass for spectral normalization layer.
-    /// Delegates to the inner layer's BackwardGpu method.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output (GPU tensor).</param>
-    /// <returns>The gradient of the loss with respect to the layer's input (GPU tensor).</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        try
-        {
-            // Backpropagate through inner layer using normalized weights
-            if (_innerLayer is LayerBase<T> innerBase && innerBase.SupportsGpuTraining)
-            {
-                return innerBase.BackwardGpu(outputGradient);
-            }
-
-            // Fall back to CPU backward if inner layer doesn't support GPU training
-            if (Engine is not DirectGpuTensorEngine gpuEngine)
-                throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-            var backend = gpuEngine.GetBackend();
-            if (backend == null)
-                throw new InvalidOperationException("GPU backend unavailable.");
-
-            var outputGradCpu = outputGradient.ToTensor();
-            var inputGradCpu = Backward(outputGradCpu);
-            return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
-        }
-        finally
-        {
-            // Always restore original weights after Backward
-            RestoreOriginalWeights();
         }
     }
 

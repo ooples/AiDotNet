@@ -183,22 +183,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         }
 
         /// <summary>
-        /// Performs a backward pass through the network (backpropagation).
-        /// </summary>
-        /// <param name="outputGradient">Gradient of the loss with respect to network output.</param>
-        /// <returns>Gradient of the loss with respect to input.</returns>
-        public Tensor<T> Backward(Tensor<T> outputGradient)
-        {
-            Tensor<T> gradient = outputGradient;
-            for (int i = Layers.Count - 1; i >= 0; i--)
-            {
-                gradient = Layers[i].Backward(gradient);
-            }
-
-            return gradient;
-        }
-
-        /// <summary>
         /// Computes dx/dt = f_known(x, t) + NN(x, t).
         /// </summary>
         public T[] ComputeDerivative(T[] state, T time)
@@ -420,7 +404,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             // Step 3: Backward pass - compute gradients
             var outputGradient = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
             var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-            Backward(outputGradientTensor);
 
             // Step 4: Update parameters
             _optimizer.UpdateParameters(Layers);

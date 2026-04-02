@@ -96,7 +96,6 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
         _optimalParameters.Add(currentParams.Clone());
 
         // Compute the diagonal of the Fisher Information Matrix
-        var fisherDiag = ComputeFisherDiagonal(network, taskData.inputs, taskData.targets);
         _fisherDiagonals.Add(fisherDiag);
     }
 
@@ -181,52 +180,6 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
     {
         _fisherDiagonals.Clear();
         _optimalParameters.Clear();
-    }
-
-    /// <summary>
-    /// Computes the diagonal approximation of the Fisher Information Matrix.
-    /// </summary>
-    private Vector<T> ComputeFisherDiagonal(INeuralNetwork<T> network, Tensor<T> inputs, Tensor<T> targets)
-    {
-        var paramCount = network.ParameterCount;
-        var fisherDiag = new Vector<T>(paramCount);
-        var batchSize = inputs.Shape[0];
-
-        network.SetTrainingMode(true);
-
-        // Accumulate squared gradients over the dataset
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Get single sample (simplified - assumes batch dimension is first)
-            var singleInput = ExtractSample(inputs, i);
-            var singleTarget = ExtractSample(targets, i);
-
-            // Forward pass with memory
-            var output = network.ForwardWithMemory(singleInput);
-
-            // Compute gradient with respect to log-likelihood
-            // For classification, this is typically the gradient of cross-entropy
-            var outputGrad = ComputeLogLikelihoodGradient(output, singleTarget);
-            network.Backpropagate(outputGrad);
-
-            // Get parameter gradients and square them
-            var grads = network.GetParameterGradients();
-            for (int j = 0; j < paramCount; j++)
-            {
-                var squaredGrad = _numOps.Multiply(grads[j], grads[j]);
-                fisherDiag[j] = _numOps.Add(fisherDiag[j], squaredGrad);
-            }
-        }
-
-        // Average over the batch
-        var batchSizeT = _numOps.FromDouble(batchSize);
-        for (int j = 0; j < paramCount; j++)
-        {
-            fisherDiag[j] = _numOps.Divide(fisherDiag[j], batchSizeT);
-        }
-
-        network.SetTrainingMode(false);
-        return fisherDiag;
     }
 
     /// <summary>

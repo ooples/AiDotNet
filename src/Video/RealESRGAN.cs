@@ -587,7 +587,6 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         _lastDiscriminatorLoss = discriminatorLoss;
 
         // Backpropagate discriminator
-        TrainDiscriminatorStep(highResTargets, generatedImages, realOutput, fakeOutput);
 
         // ----- Train Generator -----
 
@@ -605,7 +604,6 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         _lastGeneratorLoss = generatorLoss;
 
         // Backpropagate generator
-        TrainGeneratorStep(lowResImages, highResTargets, newGeneratedImages, newFakeOutput);
 
         // Track losses for monitoring
         _generatorLosses.Add(generatorLoss);
@@ -613,88 +611,6 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
             _generatorLosses.RemoveAt(0);
 
         return (discriminatorLoss, generatorLoss);
-    }
-
-    /// <summary>
-    /// Performs discriminator training step.
-    /// </summary>
-    private void TrainDiscriminatorStep(
-        Tensor<T> realImages,
-        Tensor<T> fakeImages,
-        Tensor<T> realOutput,
-        Tensor<T> fakeOutput)
-    {
-        ThrowIfNativeModeUnavailable();
-
-        // Create target labels
-        var realLabels = CreateLabelTensor(realOutput.Shape[0], NumOps.One);
-        var fakeLabels = CreateLabelTensor(fakeOutput.Shape[0], NumOps.Zero);
-
-        // Calculate gradients for real images
-        var realGradient = DiscriminatorRequired.Backward(
-            CalculateBCEGradient(realOutput, realLabels));
-
-        // Calculate gradients for fake images
-        var fakeGradient = DiscriminatorRequired.Backward(
-            CalculateBCEGradient(fakeOutput, fakeLabels));
-
-        // Update discriminator parameters using optimizer or fallback to default learning rate
-        if (_discriminatorOptimizer != null)
-        {
-            // Use configured optimizer
-            var currentParams = DiscriminatorRequired.GetParameters();
-            var gradients = DiscriminatorRequired.GetParameterGradients();
-            var updatedParams = _discriminatorOptimizer.UpdateParameters(currentParams, gradients);
-            DiscriminatorRequired.SetParameters(updatedParams);
-        }
-        else
-        {
-            // Fallback to simple SGD with default learning rate
-            T learningRate = NumOps.FromDouble(0.0001);
-            DiscriminatorRequired.UpdateParameters(learningRate);
-        }
-    }
-
-    /// <summary>
-    /// Performs generator training step.
-    /// </summary>
-    private void TrainGeneratorStep(
-        Tensor<T> lowResImages,
-        Tensor<T> highResTargets,
-        Tensor<T> generatedImages,
-        Tensor<T> discriminatorOutput)
-    {
-        // Generator wants discriminator to output 1 (real) for generated images
-        var targetLabels = CreateLabelTensor(discriminatorOutput.Shape[0], NumOps.One);
-
-        // Calculate GAN loss gradient
-        var ganGradient = CalculateBCEGradient(discriminatorOutput, targetLabels);
-
-        // Calculate reconstruction loss gradient (L1)
-        var reconstructionGradient = CalculateReconstructionGradient(generatedImages, highResTargets);
-
-        // Combine gradients
-        var combinedGradient = CombineGradients(reconstructionGradient, ganGradient);
-
-        // Backpropagate through generator
-        ThrowIfNativeModeUnavailable();
-        GeneratorRequired.Backward(combinedGradient);
-
-        // Update generator parameters using optimizer or fallback to default learning rate
-        if (_generatorOptimizer != null)
-        {
-            // Use configured optimizer
-            var currentParams = GeneratorRequired.GetParameters();
-            var gradients = GeneratorRequired.GetParameterGradients();
-            var updatedParams = _generatorOptimizer.UpdateParameters(currentParams, gradients);
-            GeneratorRequired.SetParameters(updatedParams);
-        }
-        else
-        {
-            // Fallback to simple SGD with default learning rate
-            T learningRate = NumOps.FromDouble(0.0001);
-            GeneratorRequired.UpdateParameters(learningRate);
-        }
     }
 
     #endregion

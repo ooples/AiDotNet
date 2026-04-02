@@ -203,52 +203,6 @@ public class PaddingLayer<T> : LayerBase<T>
         return currentTensor;
     }
 
-    /// <summary>
-    /// Performs the backward pass on GPU tensors.
-    /// </summary>
-    /// <param name="outputGradient">The GPU-resident gradient tensor.</param>
-    /// <returns>The gradient with respect to the input (center region extracted).</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass extracts the center region of the gradient tensor, which corresponds
-    /// to the original input positions. This is the reverse of the forward pass padding operation.
-    /// Uses SliceGpu to extract center region for each padded dimension.
-    /// </para>
-    /// </remarks>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (_gpuCachedInputShape == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        IGpuTensor<T> currentTensor = outputGradient;
-        bool tensorModified = false;
-
-        // Extract center region for each padded dimension using SliceGpu
-        for (int d = 0; d < _padding.Length; d++)
-        {
-            if (_padding[d] == 0) continue;
-
-            int pad = _padding[d];
-            int dimSize = currentTensor.Shape[d];
-            int originalSize = dimSize - 2 * pad;
-
-            // Slice to extract center: [pad : pad + originalSize]
-            var sliced = gpuEngine.SliceGpu(currentTensor, d, pad, pad + originalSize);
-
-            if (tensorModified)
-            {
-                currentTensor.Dispose();
-            }
-            currentTensor = sliced;
-            tensorModified = true;
-        }
-
-        return currentTensor;
-    }
-
     /// <inheritdoc/>
 
     /// <summary>
@@ -386,83 +340,6 @@ public class PaddingLayer<T> : LayerBase<T>
         // Assume BHWC format: padding order [batch, height, width, channels]
         var paddedOutput = Engine.Pad(input, _padding[1], _padding[1], _padding[2], _padding[2], NumOps.Zero);
         return ApplyActivation(paddedOutput);
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the padding layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the padding layer, which is used during training to propagate
-    /// error gradients back through the network. It extracts the gradients corresponding to the original input
-    /// positions from the output gradient tensor, ignoring the gradients in the padded regions. The method
-    /// applies the activation function derivative to the result.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how changes in the input would affect the final output.
-    ///
-    /// During the backward pass:
-    /// - The layer receives gradients for the entire padded output tensor
-    /// - It extracts only the gradients corresponding to the original input area
-    /// - The gradients in the padded regions are ignored (since they don't correspond to any input)
-    ///
-    /// This is essentially the reverse of the forward pass:
-    /// - Forward: copy input to center of larger padded tensor
-    /// - Backward: extract central region of gradient tensor that corresponds to the original input
-    ///
-    /// This allows the network to learn as if the padding wasn't there,
-    /// while still benefiting from the additional context it provides.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Performs the backward pass using manual gradient computation (optimized implementation).
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        if (_padding.Length != _lastInput.Shape.Length)
-            throw new ArgumentException("Padding array length must match input dimensions.");
-
-        var inputGradient = Engine.PadBackward(outputGradient, _padding[1], _padding[2], _lastInput.Shape.ToArray());
-        return ApplyActivationDerivative(_lastInput, inputGradient);
-    }
-
-    /// <summary>
-    /// Performs the backward pass using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method computes gradients using the same computation as BackwardManual to ensure
-    /// identical results. Both paths use the same indexing logic for extracting the center
-    /// region from the padded gradient tensor.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        if (_padding.Length != _lastInput.Shape.Length)
-            throw new ArgumentException("Padding array length must match input dimensions.");
-
-        var inputGradient = Engine.PadBackward(outputGradient, _padding[1], _padding[2], _lastInput.Shape.ToArray());
-        return ApplyActivationDerivative(_lastInput, inputGradient);
     }
 
     /// <summary>

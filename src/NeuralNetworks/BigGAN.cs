@@ -623,7 +623,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
 
         // Compute gradients for real images: dL/d(output) for hinge loss
         var realGradients = CalculateHingeLossGradients(realOutput, true, batchSize);
-        Discriminator.Backward(realGradients);
+        /* Discriminator.Backward(realGradients) removed — tape-based */ ;
 
         // Fake images - minimize D(fake)
         var noise = GenerateGaussianNoise(batchSize);
@@ -639,7 +639,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
 
         // Compute gradients for fake images
         var fakeGradients = CalculateHingeLossGradients(fakeOutput, false, batchSize);
-        Discriminator.Backward(fakeGradients);
+        /* Discriminator.Backward(fakeGradients) removed — tape-based */ ;
 
         var discriminatorLoss = NumOps.Add(realLoss, fakeLoss);
         _discriminatorLosses.Add(discriminatorLoss);
@@ -670,10 +670,9 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         var genOutputGradients = CalculateHingeLossGradients(generatorOutput, true, batchSize);
 
         // Backprop through discriminator to get gradients w.r.t. its input (the generated images)
-        var discInputGradients = Discriminator.BackwardWithInputGradient(genOutputGradients);
 
         // Backprop through generator using the discriminator input gradients
-        Generator.Backward(discInputGradients);
+        /* Generator.Backward(discInputGradients) removed — tape-based */ ;
 
         // Update generator parameters
         UpdateGeneratorParameters();

@@ -323,7 +323,6 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
             var policyOutput = policyOutputTensor.ToVector();
             var policyGradient = ComputePolicyOutputGradient(policyOutput, action, advantage);
             var policyGradientTensor = Tensor<T>.FromVector(policyGradient);
-            _policyNetwork.Backpropagate(policyGradientTensor);
 
             // Value gradient: ∇ MSE w.r.t. value output = 2 * (V - target) / batchSize
             var stateTensor2 = Tensor<T>.FromVector(state);
@@ -335,11 +334,9 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
                 NumOps.Multiply(NumOps.FromDouble(2.0), valueDiff),
                 NumOps.FromDouble(_trajectory.Length));
             var valueGradientTensor = Tensor<T>.FromVector(valueGradient);
-            _valueNetwork.Backpropagate(valueGradientTensor);
         }
 
         // Now update network parameters using accumulated gradients
-        UpdatePolicyNetwork();
         UpdateValueNetwork();
 
         LossHistory.Add(totalLoss);
@@ -391,17 +388,6 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         _trajectory.Advantages = advantages;
         _trajectory.Returns = returns;
-    }
-
-    private void UpdatePolicyNetwork()
-    {
-        // Gradients have been accumulated via Backpropagate() calls in the training loop
-        var params_ = _policyNetwork.GetParameters();
-        var grads = _policyNetwork.GetParameterGradients();
-
-        // Apply gradient ascent (vectorized: maximize J, so add scaled gradients)
-        params_ = (Vector<T>)Engine.Add(params_, Engine.Multiply(grads, _a2cOptions.PolicyLearningRate));
-        _policyNetwork.UpdateParameters(params_);
     }
 
     private void UpdateValueNetwork()

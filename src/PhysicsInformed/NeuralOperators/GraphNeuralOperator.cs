@@ -232,96 +232,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         }
 
 
-        /// <summary>
-        /// Trains the graph neural operator on a single graph.
-        /// </summary>
-        /// <param name="nodeFeatures">Node feature matrix.</param>
-        /// <param name="adjacencyMatrix">Adjacency matrix.</param>
-        /// <param name="targetValues">Target node features.</param>
-        /// <param name="epochs">Number of training epochs.</param>
-        /// <param name="learningRate">Learning rate.</param>
-        /// <param name="verbose">Whether to print progress.</param>
-        /// <returns>Training history.</returns>
-        public TrainingHistory<T> TrainOnGraph(
-            T[,] nodeFeatures,
-            T[,] adjacencyMatrix,
-            T[,] targetValues,
-            int epochs = 200,
-            double learningRate = 0.001,
-            bool verbose = true)
-        {
-            ValidateGraphInput(nodeFeatures, adjacencyMatrix);
-            if (targetValues == null)
-            {
-                throw new ArgumentNullException(nameof(targetValues));
-            }
-            if (targetValues.GetLength(0) != nodeFeatures.GetLength(0) ||
-                targetValues.GetLength(1) != _hiddenDim)
-            {
-                throw new ArgumentException("Target values must match node count and hidden dimension.");
-            }
-
-            var history = new TrainingHistory<T>();
-            var lossFunction = LossFunction ?? new MeanSquaredErrorLoss<T>();
-
-            if (_usesDefaultOptimizer)
-            {
-                var options = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    InitialLearningRate = learningRate
-                };
-                _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, options);
-            }
-
-            SetTrainingMode(true);
-            foreach (var layer in _graphLayers)
-            {
-                layer.SetTrainingMode(true);
-            }
-
-            try
-            {
-                for (int epoch = 0; epoch < epochs; epoch++)
-                {
-                    var featureTensor = ToTensor3D(nodeFeatures);
-                    var adjacencyTensor = ToTensor2D(adjacencyMatrix);
-                    var targetTensor = ToTensor3D(targetValues);
-
-                    var prediction = Forward(featureTensor, adjacencyTensor);
-                    var loss = lossFunction.CalculateLoss(prediction.ToVector(), targetTensor.ToVector());
-                    history.AddEpoch(loss);
-
-                    var outputGradientVector = lossFunction.CalculateDerivative(prediction.ToVector(), targetTensor.ToVector());
-                    var outputGradient = new Tensor<T>(prediction.Shape.ToArray(), outputGradientVector);
-                    Backpropagate(outputGradient);
-
-                    var gradients = GetGradients();
-                    var parameters = GetParameters();
-                    if (parameters.Length > 0)
-                    {
-                        var updatedParameters = _optimizer.UpdateParameters(parameters, gradients);
-                        UpdateParameters(updatedParameters);
-                    }
-
-                    ClearGradients();
-
-                    if (verbose && epoch % 10 == 0)
-                    {
-                        Console.WriteLine($"Epoch {epoch}/{epochs}, Loss: {loss}");
-                    }
-                }
-            }
-            finally
-            {
-                foreach (var layer in _graphLayers)
-                {
-                    layer.SetTrainingMode(false);
-                }
-                SetTrainingMode(false);
-            }
-
-            return history;
-        }
 
         /// <summary>
         /// Updates the operator parameters from a flattened vector.
@@ -340,27 +250,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                     index += layerParameterCount;
                 }
             }
-        }
-
-        public override Tensor<T> Backpropagate(Tensor<T> outputGradients)
-        {
-            if (!IsTrainingMode)
-            {
-                throw new InvalidOperationException("Cannot backpropagate when network is not in training mode");
-            }
-
-            if (!SupportsTraining)
-            {
-                throw new InvalidOperationException("This network does not support backpropagation");
-            }
-
-            var gradientTensor = outputGradients;
-            for (int i = _graphLayers.Count - 1; i >= 0; i--)
-            {
-                gradientTensor = _graphLayers[i].Backward(gradientTensor);
-            }
-
-            return gradientTensor;
         }
 
         public override Vector<T> GetGradients()

@@ -67,17 +67,6 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         return pooledOutput;
     }
 
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_maxIndices == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        // Use vectorized backward pass
-        return Engine.ReduceMaxBackward(outputGradient, _maxIndices, [_numPoints, _numFeatures]);
-    }
-
     public override void UpdateParameters(T learningRate)
     {
         // No parameters to update

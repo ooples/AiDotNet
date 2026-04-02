@@ -147,59 +147,6 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <summary>
-    /// Performs the backward pass.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from the next layer of shape [batch, newSeqLen, 2*dim].</param>
-    /// <returns>Gradient for the input of shape [batch, seqLen, dim].</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        int batch = outputGradient.Shape[0];
-        int newSeqLen = outputGradient.Shape[1];
-        int newH = _cachedH / 2;
-        int newW = _cachedW / 2;
-
-        // Backward through reduction layer (batched, matching Forward)
-        var flatGrad = outputGradient.Reshape([batch * newSeqLen, _outputDim]);
-        var flatReductionGrad = _reduction.Backward(flatGrad);
-        var reductionGrad = flatReductionGrad.Reshape([batch, newSeqLen, _inputDim * 4]);
-
-        // Backward through layer normalization
-        var normGrad = _norm.Backward(reductionGrad);
-
-        // Reverse the patch merging: distribute gradients back to original positions
-        int seqLen = _cachedH * _cachedW;
-        var inputGrad = TensorAllocator.Rent<T>([batch, seqLen, _inputDim]);
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int i = 0; i < newH; i++)
-            {
-                for (int j = 0; j < newW; j++)
-                {
-                    int newIdx = i * newW + j;
-
-                    // Get 4 patch indices from original grid
-                    int idx0 = (2 * i) * _cachedW + (2 * j);
-                    int idx1 = (2 * i) * _cachedW + (2 * j + 1);
-                    int idx2 = (2 * i + 1) * _cachedW + (2 * j);
-                    int idx3 = (2 * i + 1) * _cachedW + (2 * j + 1);
-
-                    // Distribute gradients back
-                    for (int d = 0; d < _inputDim; d++)
-                    {
-                        inputGrad[b, idx0, d] = normGrad[b, newIdx, d];
-                        inputGrad[b, idx1, d] = normGrad[b, newIdx, _inputDim + d];
-                        inputGrad[b, idx2, d] = normGrad[b, newIdx, 2 * _inputDim + d];
-                        inputGrad[b, idx3, d] = normGrad[b, newIdx, 3 * _inputDim + d];
-                    }
-                }
-            }
-        }
-
-        return inputGrad;
-    }
-
     private static void FindSpatialDimensions(int seqLen, out int h, out int w)
     {
         // Find valid factorization where both h and w are even

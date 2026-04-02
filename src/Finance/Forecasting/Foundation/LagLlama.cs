@@ -580,7 +580,6 @@ public class LagLlama<T> : ForecastingModelBase<T>
                 // sigma (idx+1) and nu (idx+2) remain zero - no direct loss gradient
             }
 
-            Backward(Tensor<T>.FromVector(fullGradient, predictions.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -891,42 +890,6 @@ public class LagLlama<T> : ForecastingModelBase<T>
         // Distribution output head
         if (_distributionHead is not null)
             current = _distributionHead.Forward(current);
-
-        return current;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through Lag-Llama.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the loss function.</param>
-    /// <returns>Gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation through Lag-Llama updates all learnable
-    /// parameters: embeddings, attention weights, FFN weights, and distribution head.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        // Distribution head backward
-        if (_distributionHead is not null)
-            current = _distributionHead.Backward(current);
-
-        // Final norm backward
-        if (_finalNorm is not null)
-            current = _finalNorm.Backward(current);
-
-        // Transformer layers backward (reverse order)
-        for (int i = _transformerLayers.Count - 1; i >= 0; i--)
-        {
-            current = _transformerLayers[i].Backward(current);
-        }
-
-        // Input embedding backward
-        if (_inputEmbedding is not null)
-            current = _inputEmbedding.Backward(current);
 
         return current;
     }

@@ -554,7 +554,6 @@ public class FEDformer<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        Backward(Tensor<T>.FromVector(outputGradient, prediction.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -840,27 +839,6 @@ public class FEDformer<T> : ForecastingModelBase<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Performs the backward pass.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from the loss function.</param>
-    /// <returns>Gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation calculates how each parameter contributed to
-    /// the error, allowing the optimizer to adjust them appropriately.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var gradient = outputGradient;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-        return gradient;
     }
 
     /// <summary>

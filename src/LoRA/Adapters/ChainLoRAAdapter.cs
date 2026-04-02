@@ -416,55 +416,6 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through all layers in the chain.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// Gradients flow through all adapters and the base layer. Only unfrozen adapters
-    /// and the base layer (if not frozen) receive parameter updates.
-    /// </para>
-    /// <para><b>For Beginners:</b>
-    /// During learning, this figures out how to improve each adapter. Only the active,
-    /// unfrozen adapter gets updated - the frozen ones preserve their learned knowledge.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Initialize input gradient accumulator
-        Tensor<T> inputGrad = new Tensor<T>(GetInputShape());
-
-        // Backward through each adapter in the chain
-        for (int i = 0; i < _adapterChain.Count; i++)
-        {
-            Tensor<T> adapterInputGrad = _adapterChain[i].Backward(outputGradient);
-
-            // Accumulate input gradients
-            for (int j = 0; j < inputGrad.Length; j++)
-            {
-                inputGrad[j] = NumOps.Add(inputGrad[j], adapterInputGrad[j]);
-            }
-        }
-
-        // ALWAYS backward through base layer to get input gradients
-        // Even when frozen, we need the base layer's Jacobian to propagate gradients to input
-        // Freezing only prevents parameter updates, not gradient computation
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        // Accumulate base layer gradients
-        for (int j = 0; j < inputGrad.Length; j++)
-        {
-            inputGrad[j] = NumOps.Add(inputGrad[j], baseInputGrad[j]);
-        }
-
-        // Update parameter gradients
-        UpdateParameterGradientsFromChain();
-
-        return inputGrad;
-    }
-
-    /// <summary>
     /// Updates parameters using the specified learning rate.
     /// </summary>
     /// <param name="learningRate">The learning rate for parameter updates.</param>

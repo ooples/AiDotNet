@@ -189,40 +189,6 @@ public class CLSToken<T>
     }
 
     /// <summary>
-    /// Computes gradients for the CLS token from the backward pass.
-    /// </summary>
-    /// <param name="gradient">Gradient with respect to CLS output [batchSize, embDim].</param>
-    public void Backward(Tensor<T> gradient)
-    {
-        if (gradient.Shape.Length < 2)
-            throw new ArgumentException($"Gradient must be at least rank-2 with last dimension = embDim, but got rank {gradient.Shape.Length}.");
-
-        int embDim = gradient.Shape[^1];
-
-        if (embDim != EmbeddingDimension)
-            throw new ArgumentException(
-                $"Gradient last dimension ({embDim}) does not match CLS token dimension ({EmbeddingDimension}).");
-
-        // Compute total number of batch elements (all dims except last)
-        int totalBatchElements = 1;
-        for (int i = 0; i < gradient.Shape.Length - 1; i++)
-        {
-            totalBatchElements *= gradient.Shape[i];
-        }
-
-        // Accumulate gradients from all batch elements using stride-based indexing
-        for (int d = 0; d < embDim; d++)
-        {
-            var gradSum = NumOps.Zero;
-            for (int b = 0; b < totalBatchElements; b++)
-            {
-                gradSum = NumOps.Add(gradSum, gradient[b * embDim + d]);
-            }
-            _clsGradient[d] = NumOps.Add(_clsGradient[d], gradSum);
-        }
-    }
-
-    /// <summary>
     /// Updates the CLS token embedding.
     /// </summary>
     /// <param name="learningRate">The learning rate.</param>

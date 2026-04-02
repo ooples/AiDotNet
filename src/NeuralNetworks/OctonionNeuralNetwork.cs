@@ -215,22 +215,6 @@ public class OctonionNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs a backward pass through the network to calculate gradients.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the network's output.</param>
-    /// <returns>The gradient of the loss with respect to the network's input.</returns>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        Tensor<T> gradient = outputGradient;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
     /// Updates the parameters of all layers in the network.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters for the network.</param>
@@ -275,7 +259,6 @@ public class OctonionNeuralNetwork<T> : NeuralNetworkBase<T>
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
         var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
 
-        Backward(outputGradientTensor);
 
         _optimizer.UpdateParameters(Layers);
 

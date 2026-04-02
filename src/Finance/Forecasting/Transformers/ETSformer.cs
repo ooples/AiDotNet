@@ -443,7 +443,6 @@ public class ETSformer<T> : ForecastingModelBase<T>
 
         // Backward pass - convert gradient back to tensor
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         // Update weights via optimizer
         _optimizer.UpdateParameters(Layers);
@@ -754,25 +753,6 @@ public class ETSformer<T> : ForecastingModelBase<T>
             current = layer.Forward(current);
         }
         return ReshapeOutput(current);
-    }
-
-    /// <summary>
-    /// Performs the backward pass for gradient computation.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from the loss function.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The backward pass computes gradients for all learnable
-    /// parameters by propagating error signals backwards through each layer.
-    /// </para>
-    /// </remarks>
-    private void Backward(Tensor<T> outputGradient)
-    {
-        var current = outputGradient;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            current = Layers[i].Backward(current);
-        }
     }
 
     /// <summary>

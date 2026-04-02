@@ -187,7 +187,6 @@ public class InputGradientHelper<T>
     {
         if (_neuralNetwork != null)
         {
-            return ComputeGradientTensorViaBackprop(input, outputIndex);
         }
         else if (_tensorPredictFunction != null)
         {
@@ -241,7 +240,6 @@ public class InputGradientHelper<T>
             inputTensor[0, i] = input[i];
         }
 
-        var gradTensor = ComputeGradientTensorViaBackprop(inputTensor, outputIndex);
 
         // Extract gradient vector
         var gradient = new T[input.Length];
@@ -251,47 +249,6 @@ public class InputGradientHelper<T>
         }
 
         return new Vector<T>(gradient);
-    }
-
-    /// <summary>
-    /// Computes tensor gradients via neural network backpropagation.
-    /// </summary>
-    /// <param name="input">The input tensor.</param>
-    /// <param name="outputIndex">Index of the output to differentiate.</param>
-    /// <returns>Input gradients as tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is the tensor version of backprop gradient computation.
-    /// It's used internally for image inputs or when working with multi-dimensional data.
-    ///
-    /// The neural network's ForwardWithMemory saves intermediate activations needed
-    /// for the backward pass. The Backpropagate method then computes how the output
-    /// changes with respect to the input by applying the chain rule through all layers.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ComputeGradientTensorViaBackprop(Tensor<T> input, int outputIndex)
-    {
-        if (_neuralNetwork == null)
-            throw new InvalidOperationException("Neural network not configured.");
-
-        // Set to inference mode for gradient computation
-        // (we want deterministic behavior, no dropout)
-        _neuralNetwork.SetTrainingMode(false);
-
-        // Forward pass with memory (stores activations)
-        var output = _neuralNetwork.ForwardWithMemory(input);
-
-        // Create one-hot gradient for the target output
-        var outputGradient = new Tensor<T>(output.Shape.ToArray());
-        if (outputIndex < output.Length)
-        {
-            outputGradient[outputIndex] = NumOps.One;
-        }
-
-        // Backward pass returns gradient with respect to input
-        var inputGradient = _neuralNetwork.Backpropagate(outputGradient);
-
-        return inputGradient;
     }
 
     /// <summary>

@@ -301,30 +301,6 @@ public class TrainingMemoryManager<T> : IDisposable
     #region Backward Pass with Recomputation
 
     /// <summary>
-    /// Performs backward pass, recomputing activations from checkpoints.
-    /// </summary>
-    /// <param name="layer">The layer to backpropagate through.</param>
-    /// <param name="outputGradient">Gradient from the next layer.</param>
-    /// <param name="layerIndex">Index of this layer.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    public Tensor<T> BackwardWithRecompute(ILayer<T> layer, Tensor<T> outputGradient, int layerIndex)
-    {
-        // If this is a checkpointed layer, we need to recompute forward first
-        if (_checkpoints.TryGetValue(layerIndex, out var checkpoint))
-        {
-            if (checkpoint.Input is null)
-                throw new InvalidOperationException(
-                    $"Checkpoint at layer {layerIndex} has null input. Cannot recompute forward pass.");
-
-            // Recompute forward pass from checkpoint with precision awareness
-            _ = layer.ForwardWithPrecisionCheck(checkpoint.Input);
-        }
-
-        // Now run backward pass
-        return layer.Backward(outputGradient);
-    }
-
-    /// <summary>
     /// Performs backward pass through multiple layers with recomputation.
     /// </summary>
     /// <param name="layers">Layers in forward order.</param>
@@ -337,7 +313,6 @@ public class TrainingMemoryManager<T> : IDisposable
         // Process layers in reverse order
         for (int i = layers.Count - 1; i >= 0; i--)
         {
-            gradient = BackwardWithRecompute(layers[i], gradient, i);
         }
 
         return gradient;
@@ -410,19 +385,6 @@ public class TrainingMemoryManager<T> : IDisposable
             throw new InvalidOperationException("Model sharding is not enabled.");
 
         return _modelShard.Forward(input);
-    }
-
-    /// <summary>
-    /// Performs backward pass through sharded model.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from loss.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    public Tensor<T> ShardedBackward(Tensor<T> outputGradient)
-    {
-        if (_modelShard is null)
-            throw new InvalidOperationException("Model sharding is not enabled.");
-
-        return _modelShard.Backward(outputGradient);
     }
 
     #endregion

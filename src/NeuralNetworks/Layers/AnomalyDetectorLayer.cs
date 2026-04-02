@@ -570,66 +570,6 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         };
     }
 
-    /// <summary>
-    /// Performs the backward pass of the anomaly detection layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the anomaly detection layer, which is used during training
-    /// to propagate error gradients back through the network. Since the anomaly detection layer doesn't have
-    /// trainable parameters, it simply passes the gradient through to the previous layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method passes error information backward during training.
-    ///
-    /// The backward pass:
-    /// - Takes an error gradient from the next layer
-    /// - Propagates it back to the previous layer
-    /// - Doesn't modify any parameters since this layer doesn't learn
-    ///
-    /// This method exists to maintain compatibility with the neural network
-    /// backpropagation mechanism, but it doesn't do much in this layer
-    /// since there are no weights to adjust.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        // Since this layer doesn't have trainable parameters, we just propagate the gradient
-        // back to the input. For anomaly detection, this is primarily a pass-through operation.
-
-        return CreateZeroInputGradient();
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. Since this layer
-    /// has no trainable parameters and serves as a monitoring layer, it returns zero gradients.
-    /// This matches the manual implementation behavior.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        return CreateZeroInputGradient();
-    }
-
     private Tensor<T> CreateZeroInputGradient()
     {
         if (_lastInputShape == null)

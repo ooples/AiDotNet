@@ -1073,15 +1073,6 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
         return seqOutput.Count > 0 ? seqOutput[seqOutput.Count - 1] : input;
     }
 
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Single-tensor backward through the existing two-arg Backward
-        var dOutput = new List<Tensor<T>> { outputGradient };
-        var input = _cachedInput ?? new List<Tensor<T>> { new Tensor<T>(new[] { _embeddingDim }) };
-        var (dInput, _) = Backward(dOutput, input);
-        return dInput.Count > 0 ? dInput[0] : new Tensor<T>(new[] { _embeddingDim });
-    }
-
     public override void UpdateParameters(T learningRate)
     {
         // Apply gradient descent to all weight tensors

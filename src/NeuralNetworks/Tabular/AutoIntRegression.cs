@@ -157,51 +157,12 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass using MSE loss gradients (2 * (prediction - target) / N).
-    /// </summary>
-    /// <remarks>
-    /// This method computes gradients for <see cref="ComputeMSELoss"/> only.
-    /// Do not use after computing <see cref="ComputeMAELoss"/>; the MAE loss is provided
-    /// for evaluation purposes and does not have a corresponding backward pass.
-    /// </remarks>
-    /// <param name="targets">Target values with the same shape as the cached predictions.</param>
-    /// <returns>Gradient with respect to the input features.</returns>
-    public Tensor<T> Backward(Tensor<T> targets)
-    {
-        if (_predictionsCache == null || _backboneOutputCache == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        if (!targets.Shape.ToArray().SequenceEqual(_predictionsCache.Shape.ToArray()))
-        {
-            throw new ArgumentException(
-                $"Targets shape [{string.Join(", ", targets.Shape.ToArray())}] must match predictions shape [{string.Join(", ", _predictionsCache.Shape.ToArray())}].");
-        }
-
-
-        var predictionGrad = new Tensor<T>(_predictionsCache.Shape.ToArray());
-        var scale = NumOps.FromDouble(2.0 / _predictionsCache.Length);
-
-        for (int i = 0; i < _predictionsCache.Length; i++)
-        {
-            predictionGrad[i] = NumOps.Multiply(
-                NumOps.Subtract(_predictionsCache[i], targets[i]),
-                scale);
-        }
-
-        var backboneGrad = _regressionHead.Backward(predictionGrad);
-        return BackwardBackbone(backboneGrad);
-    }
-
-    /// <summary>
     /// Performs a single training step.
     /// </summary>
     public T TrainStep(Tensor<T> numericalFeatures, Tensor<T> targets, T learningRate, Matrix<int>? categoricalIndices = null)
     {
         var predictions = Forward(numericalFeatures, categoricalIndices);
         var loss = ComputeMSELoss(predictions, targets);
-        _ = Backward(targets);
         UpdateParameters(learningRate);
         ResetState();
 

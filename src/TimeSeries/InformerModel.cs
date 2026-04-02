@@ -1006,7 +1006,6 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
         return new Vector<T>(p.ToArray());
     }
     public override Tensor<T> Forward(Tensor<T> input) { var seq = new List<Tensor<T>> { input }; var result = Forward(seq); return result.Count > 0 ? result[result.Count - 1] : input; }
-    public override Tensor<T> Backward(Tensor<T> outputGradient) { var dSeq = new List<Tensor<T>> { outputGradient }; var result = Backward(dSeq); return result.Count > 0 ? result[result.Count - 1] : outputGradient; }
 
     public InformerEncoderLayerTensor(int embeddingDim, int numHeads, int sparsityFactor, double dropoutRate, int seed = 42)
         : base(new[] { embeddingDim }, new[] { embeddingDim })
@@ -1378,7 +1377,6 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         return new Vector<T>(p.ToArray());
     }
     public override Tensor<T> Forward(Tensor<T> input) { var seq = new List<Tensor<T>> { input }; var result = Forward(seq); return result.Count > 0 ? result[result.Count - 1] : input; }
-    public override Tensor<T> Backward(Tensor<T> outputGradient) { var dSeq = new List<Tensor<T>> { outputGradient }; var result = Backward(dSeq); return result.Count > 0 ? result[result.Count - 1] : outputGradient; }
 
     public DistillingConvTensor(int embeddingDim, int inputSeqLen, int distillingFactor, int seed = 42)
         : base(new[] { embeddingDim }, new[] { embeddingDim })
@@ -1677,13 +1675,6 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
             return Forward(inputs[0]);
         }
         return Forward(inputs[0]);
-    }
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var dSeq = new List<Tensor<T>> { outputGradient };
-        var enc = _lastEncoderOutput ?? dSeq;
-        var (dInput, _) = Backward(dSeq, enc);
-        return dInput.Count > 0 ? dInput[dInput.Count - 1] : outputGradient;
     }
 
     public InformerDecoderLayerTensor(int embeddingDim, int numHeads, int sparsityFactor, double dropoutRate, int seed = 42)
