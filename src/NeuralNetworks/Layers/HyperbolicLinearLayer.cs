@@ -39,7 +39,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public class HyperbolicLinearLayer<T> : LayerBase<T>
 {
     private readonly IHyperbolicManifoldEngine _engine;
-    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// Weight matrix stored in tangent space at the origin.
@@ -142,7 +141,6 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         OutputFeatures = outputFeatures;
 
         _engine = CpuHyperbolicManifoldEngine.Instance;
-        _numOps = MathHelper.GetNumericOperations<T>();
         _curvature = _numOps.FromDouble(curvature);
 
         _weights = new Tensor<T>([outputFeatures, inputFeatures]);
