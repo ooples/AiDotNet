@@ -68,8 +68,8 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override ModelOptions GetOptions() => _dqnOptions;
     private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
 
-    private NeuralNetwork<T> _qNetwork;
-    private NeuralNetwork<T> _targetNetwork;
+    private INeuralNetwork<T> _qNetwork;
+    private INeuralNetwork<T> _targetNetwork;
     private double _epsilon;
     private int _steps;
 

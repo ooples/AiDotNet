@@ -2130,7 +2130,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     /// <param name="input">The input tensor.</param>
     /// <returns>The network output.</returns>
-    protected virtual Tensor<T> ForwardForTraining(Tensor<T> input)
+    /// <inheritdoc />
+    public virtual Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         var current = input;
         foreach (var layer in Layers)
@@ -2575,6 +2576,54 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         // Use the default optimizer (which respects configured LR) rather than creating a throwaway one
         TrainWithTape(input, expected, optimizer: null);
+    }
+
+    /// <summary>
+    /// Performs tape-based training with a caller-provided loss function.
+    /// Use this for RL agents and other scenarios where the loss is not a standard
+    /// predicted-vs-target comparison (e.g., PPO's clipped surrogate objective).
+    /// </summary>
+    /// <param name="input">The input tensor for the forward pass.</param>
+    /// <param name="computeLoss">
+    /// Function that receives the forward pass output and computes a scalar loss tensor
+    /// using engine ops (tape-tracked). Must return a scalar tensor for gradient computation.
+    /// </param>
+    /// <param name="optimizer">Optional optimizer override. Uses default Adam if null.</param>
+    /// <returns>The scalar loss value for monitoring.</returns>
+    public T TrainWithCustomLoss(
+        Tensor<T> input,
+        Func<Tensor<T>, Tensor<T>> computeLoss,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    {
+        SetTrainingMode(true);
+        try
+        {
+            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+            var opt = optimizer ?? GetOrCreateBaseOptimizer();
+
+            using var tape = new GradientTape<T>();
+            var output = ForwardForTraining(input);
+            var lossTensor = computeLoss(output);
+
+            var grads = tape.ComputeGradients(lossTensor, trainableParams);
+
+            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+            LastLoss = lossValue;
+
+            Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => ForwardForTraining(inp);
+            Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) => computeLoss(pred);
+
+            var context = new Training.TapeStepContext<T>(
+                trainableParams, grads, lossValue,
+                input, input, ComputeForward, RecomputeLoss);
+
+            opt.Step(context);
+            return lossValue;
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

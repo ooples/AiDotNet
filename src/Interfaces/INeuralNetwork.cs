@@ -126,4 +126,27 @@ public interface INeuralNetwork<T> : IFullModel<T, Tensor<T>, Tensor<T>>, ILayer
     /// </remarks>
     /// <returns>A vector containing gradients for all trainable parameters.</returns>
     Vector<T> GetParameterGradients();
+
+    /// <summary>
+    /// Gets the loss value from the most recent training step.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> After you call <c>Train()</c> on the network, this method
+    /// tells you how well (or poorly) the network performed on that training step.
+    ///
+    /// The loss value is a number where:
+    /// - Lower values mean the network's predictions were closer to the expected output
+    /// - Higher values mean the predictions were further off
+    /// - A value of zero would mean perfect predictions (rarely achieved in practice)
+    ///
+    /// You can track loss values over time to see if your network is learning:
+    /// <code>
+    /// network.Train(input, target);
+    /// var loss = network.GetLastLoss();
+    /// Console.WriteLine($"Training loss: {loss}");
+    /// // Loss should generally decrease over many training steps
+    /// </code>
+    /// </remarks>
+    /// <returns>The loss value from the most recent training step, or zero if no training has occurred.</returns>
+    T GetLastLoss();
 }

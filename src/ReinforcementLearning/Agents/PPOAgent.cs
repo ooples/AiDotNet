@@ -418,61 +418,67 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private T UpdateNetworks(List<int> batchIndices)
     {
-        T policyLoss = NumOps.Zero;
-        T valueLoss = NumOps.Zero;
-        T entropyLoss = NumOps.Zero;
+        int stateSize = _ppoOptions.StateSize;
+        int batchCount = batchIndices.Count;
+        var advantages = _trajectory.Advantages ?? throw new InvalidOperationException("Advantages not initialized.");
+        var returns = _trajectory.Returns ?? throw new InvalidOperationException("Returns not initialized.");
 
-        foreach (var idx in batchIndices)
+        // Build batched state tensor [batchCount, stateSize]
+        var batchStates = new Tensor<T>([batchCount, stateSize]);
+        var batchReturns = new Tensor<T>([batchCount, 1]);
+        var batchAdvantages = new Vector<T>(batchCount);
+        var batchOldLogProbs = new Vector<T>(batchCount);
+        var batchActions = new List<Vector<T>>(batchCount);
+
+        for (int i = 0; i < batchCount; i++)
         {
+            int idx = batchIndices[i];
             var state = _trajectory.States[idx];
-            var action = _trajectory.Actions[idx];
-            var oldLogProb = _trajectory.LogProbs[idx];
-            var advantage = (_trajectory.Advantages ?? throw new InvalidOperationException("Advantages has not been initialized."))[idx];
-            var targetReturn = (_trajectory.Returns ?? throw new InvalidOperationException("Returns has not been initialized."))[idx];
-
-            // Policy loss (clipped objective)
-            var newLogProb = ComputeLogProb(state, action);
-            var ratio = NumOps.FromDouble(Math.Exp(
-                NumOps.ToDouble(NumOps.Subtract(newLogProb, oldLogProb))
-            ));
-
-            var surr1 = NumOps.Multiply(ratio, advantage);
-            var clippedRatio = MathHelper.Clamp<T>(ratio,
-                NumOps.Subtract(NumOps.One, _ppoOptions.ClipEpsilon),
-                NumOps.Add(NumOps.One, _ppoOptions.ClipEpsilon));
-            var surr2 = NumOps.Multiply(clippedRatio, advantage);
-
-            var minSurr = MathHelper.Min<T>(surr1, surr2);
-            policyLoss = NumOps.Subtract(policyLoss, minSurr);  // Negative for gradient ascent
-
-            // Value loss
-            var stateTensor = Tensor<T>.FromVector(state);
-            var valueOutputTensor = _valueNetwork.Predict(stateTensor);
-            var valueOutput = valueOutputTensor.ToVector();
-            var predictedValue = valueOutput[0];
-            var valueDiff = NumOps.Subtract(predictedValue, targetReturn);
-            valueLoss = NumOps.Add(valueLoss, NumOps.Multiply(valueDiff, valueDiff));
-
-            // Entropy (for exploration)
-            var entropy = ComputeEntropy(state);
-            entropyLoss = NumOps.Subtract(entropyLoss, entropy);  // Negative to encourage entropy
+            for (int j = 0; j < stateSize; j++)
+                batchStates[i, j] = state[j];
+            batchReturns[i, 0] = returns[idx];
+            batchAdvantages[i] = advantages[idx];
+            batchOldLogProbs[i] = _trajectory.LogProbs[idx];
+            batchActions.Add(_trajectory.Actions[idx]);
         }
 
-        // Average losses
-        var batchSize = NumOps.FromDouble(batchIndices.Count);
-        policyLoss = NumOps.Divide(policyLoss, batchSize);
-        valueLoss = NumOps.Divide(valueLoss, batchSize);
-        entropyLoss = NumOps.Divide(entropyLoss, batchSize);
+        // --- Update value network (standard MSE regression) ---
+        _valueNetwork.Train(batchStates, batchReturns);
+        T valueLoss = _valueNetwork.GetLastLoss();
 
-        // Combined loss
+        // --- Update policy network (PPO clipped surrogate via TrainWithCustomLoss) ---
+        var trainablePolicy = (NeuralNetworkBase<T>)_policyNetwork;
+        T policyLoss = trainablePolicy.TrainWithCustomLoss(batchStates, policyOutput =>
+        {
+            // Compute log-probs and clipped surrogate for each sample
+            // policyOutput shape: [batchCount, actionSize] or [batchCount, actionSize*2] for continuous
+            T totalSurrLoss = NumOps.Zero;
+            for (int i = 0; i < batchCount; i++)
+            {
+                var state = _trajectory.States[batchIndices[i]];
+                var newLogProb = ComputeLogProb(state, batchActions[i]);
+                var ratio = NumOps.FromDouble(Math.Exp(
+                    NumOps.ToDouble(NumOps.Subtract(newLogProb, batchOldLogProbs[i]))));
+
+                var surr1 = NumOps.Multiply(ratio, batchAdvantages[i]);
+                var clippedRatio = MathHelper.Clamp<T>(ratio,
+                    NumOps.Subtract(NumOps.One, _ppoOptions.ClipEpsilon),
+                    NumOps.Add(NumOps.One, _ppoOptions.ClipEpsilon));
+                var surr2 = NumOps.Multiply(clippedRatio, batchAdvantages[i]);
+
+                totalSurrLoss = NumOps.Subtract(totalSurrLoss, MathHelper.Min<T>(surr1, surr2));
+            }
+            var avgLoss = NumOps.Divide(totalSurrLoss, NumOps.FromDouble(batchCount));
+
+            // Return as scalar tensor for tape
+            var lossTensor = new Tensor<T>([1]);
+            lossTensor[0] = avgLoss;
+            return lossTensor;
+        });
+
+        // Combined loss for monitoring
         var totalLoss = NumOps.Add(policyLoss,
-            NumOps.Add(
-                NumOps.Multiply(_ppoOptions.ValueLossCoefficient, valueLoss),
-                NumOps.Multiply(_ppoOptions.EntropyCoefficient, entropyLoss)
-            )
-        );
-
-        // Update networks (simplified - in practice would use proper optimizers)
+            NumOps.Multiply(_ppoOptions.ValueLossCoefficient, valueLoss));
 
         return totalLoss;
     }
