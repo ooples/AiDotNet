@@ -338,6 +338,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Enables deterministic CPU inference by setting MKL to single-threaded.
+    /// Call from model constructors that need bitwise-identical forward passes.
+    /// Override EnsureDeterministic() to customize per model.
+    /// </summary>
+    public static void EnableDeterministicMode()
+    {
+        AiDotNet.Tensors.Helpers.BlasProvider.SetDeterministicMode(true);
+    }
+
+    /// <summary>
     /// Applies gradient clipping to prevent exploding gradients.
     /// </summary>
     /// <param name="gradients">A list of tensors containing the gradients to be clipped.</param>

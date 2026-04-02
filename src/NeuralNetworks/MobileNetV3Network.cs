@@ -113,6 +113,7 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
+        EnableDeterministicMode();
         InitializeLayers();
     }
 

@@ -1380,7 +1380,8 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         Backpropagate(gradTensor);
 
         // Update via optimizer
-        _optimizer.UpdateParameters(Layers);
+        if (_optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradOpt)
+            gradOpt.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
 
