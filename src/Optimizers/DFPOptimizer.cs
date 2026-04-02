@@ -470,8 +470,7 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
-        var (pv, gv, offsets) = SecondOrderHelper<T>.FlattenTensors(context.Parameters, context.Gradients, NumOps);
-        var updated = UpdateParameters(pv, gv);
-        SecondOrderHelper<T>.UnflattenIntoTensors(updated, context.Parameters, offsets);
+        var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
+        context.SetFlatParameters(updated);
     }
 }

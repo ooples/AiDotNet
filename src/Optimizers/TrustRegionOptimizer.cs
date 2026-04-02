@@ -718,9 +718,8 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
-        var (pv, gv, offsets) = SecondOrderHelper<T>.FlattenTensors(context.Parameters, context.Gradients, NumOps);
-        var updated = UpdateParameters(pv, gv);
-        SecondOrderHelper<T>.UnflattenIntoTensors(updated, context.Parameters, offsets);
+        var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
+        context.SetFlatParameters(updated);
 
         // Trust Region benefits from re-evaluation to adjust the trust region radius
         if (context.SupportsReevaluation)
@@ -729,9 +728,8 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
             T newLoss = context.Reevaluate();
             if (NumOps.GreaterThan(newLoss, origLoss))
             {
-                var (pv2, gv2, offs2) = SecondOrderHelper<T>.FlattenTensors(context.Parameters, context.Gradients, NumOps);
-                var retry = UpdateParameters(pv2, gv2);
-                SecondOrderHelper<T>.UnflattenIntoTensors(retry, context.Parameters, offs2);
+                var retry = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
+                context.SetFlatParameters(retry);
             }
         }
     }

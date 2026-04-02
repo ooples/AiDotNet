@@ -401,8 +401,7 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
-        var (pv, gv, offsets) = SecondOrderHelper<T>.FlattenTensors(context.Parameters, context.Gradients, NumOps);
-        var updated = UpdateParameters(pv, gv);
-        SecondOrderHelper<T>.UnflattenIntoTensors(updated, context.Parameters, offsets);
+        var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
+        context.SetFlatParameters(updated);
     }
 }

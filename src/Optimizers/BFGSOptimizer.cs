@@ -492,9 +492,10 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
-        var (pv, gv, offsets) = SecondOrderHelper<T>.FlattenTensors(context.Parameters, context.Gradients, NumOps);
+        var pv = context.GetFlatParameters();
+        var gv = context.GetFlatGradients();
         var updated = UpdateParameters(pv, gv);
-        SecondOrderHelper<T>.UnflattenIntoTensors(updated, context.Parameters, offsets);
+        context.SetFlatParameters(updated);
 
         // If re-evaluation is available, use backtracking line search
         if (context.SupportsReevaluation)
@@ -503,10 +504,10 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             T newLoss = context.Reevaluate();
             if (NumOps.GreaterThan(newLoss, origLoss))
             {
-                // Loss increased — retry with updated gradients from Reevaluate
-                var (pv2, gv2, offs2) = SecondOrderHelper<T>.FlattenTensors(context.Parameters, context.Gradients, NumOps);
+                var pv2 = context.GetFlatParameters();
+                var gv2 = context.GetFlatGradients();
                 var retry = UpdateParameters(pv2, gv2);
-                SecondOrderHelper<T>.UnflattenIntoTensors(retry, context.Parameters, offs2);
+                context.SetFlatParameters(retry);
             }
         }
     }

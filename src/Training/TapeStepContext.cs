@@ -256,4 +256,65 @@ public sealed class TapeStepContext<T>
         var hvp = outerTape.ComputeGradients(dotProduct, Parameters);
         return hvp;
     }
+
+    /// <summary>
+    /// Returns the flat parameter vector. Flattens parameter tensors into a contiguous vector.
+    /// When backed by a ParameterBuffer (future), this will be zero-copy.
+    /// </summary>
+    public Vector<T> GetFlatParameters()
+    {
+        int total = 0;
+        foreach (var p in Parameters) total += p.Length;
+        var flat = new Vector<T>(total);
+        int offset = 0;
+        for (int i = 0; i < Parameters.Length; i++)
+        {
+            var p = Parameters[i];
+            for (int j = 0; j < p.Length; j++)
+                flat[offset + j] = p[j];
+            offset += p.Length;
+        }
+        return flat;
+    }
+
+    /// <summary>
+    /// Returns the flat gradient vector aligned with the parameter layout.
+    /// </summary>
+    public Vector<T> GetFlatGradients()
+    {
+        int total = 0;
+        foreach (var p in Parameters) total += p.Length;
+        var flat = new Vector<T>(total);
+        var numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        int offset = 0;
+        for (int i = 0; i < Parameters.Length; i++)
+        {
+            var p = Parameters[i];
+            if (Gradients.TryGetValue(p, out var grad))
+            {
+                int len = Math.Min(grad.Length, p.Length);
+                for (int j = 0; j < len; j++)
+                    flat[offset + j] = grad[j];
+            }
+            offset += p.Length;
+        }
+        return flat;
+    }
+
+    /// <summary>
+    /// Writes a flat parameter vector back into the parameter tensors.
+    /// When backed by a ParameterBuffer (future), this will be a single buffer copy.
+    /// </summary>
+    /// <param name="flatParams">The flat parameter vector to write back.</param>
+    public void SetFlatParameters(Vector<T> flatParams)
+    {
+        int offset = 0;
+        for (int i = 0; i < Parameters.Length; i++)
+        {
+            var p = Parameters[i];
+            for (int j = 0; j < p.Length; j++)
+                p[j] = flatParams[offset + j];
+            offset += p.Length;
+        }
+    }
 }
