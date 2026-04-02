@@ -650,58 +650,9 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        IsTrainingMode = true;
-
-        // Flatten the input tensor to a vector
-        var inputVector = input.ToVector();
-
-        // Forward pass
-        var (mean, logVariance) = Encode(inputVector);
-        _lastMean = mean;
-        _lastLogVariance = logVariance;
-
-        var latentSample = Reparameterize(mean, logVariance);
-        var reconstructed = Decode(latentSample);
-
-        // Calculate reconstruction loss
-        var reconstructionLoss = LossFunction.CalculateLoss(inputVector, reconstructed);
-
-        // Calculate auxiliary loss (KL divergence) using the interface
-        T auxiliaryLoss = NumOps.Zero;
-        if (UseAuxiliaryLoss)
-        {
-            var klDivergence = ComputeAuxiliaryLoss();
-            auxiliaryLoss = NumOps.Multiply(klDivergence, AuxiliaryLossWeight);
-        }
-
-        // Calculate total loss
-        var totalLoss = NumOps.Add(reconstructionLoss, auxiliaryLoss);
-        LastLoss = totalLoss;
-
-        // Backpropagation using proper reconstruction loss derivative
-        var reconstructionGradient = LossFunction.CalculateDerivative(inputVector, reconstructed);
-        var gradTensor = Tensor<T>.FromVector(reconstructionGradient);
-
-        // Backward through decoder layers
-        for (int i = Layers.Count - 1; i >= Layers.Count / 2; i--)
-        {
-            gradTensor = Layers[i].Backward(gradTensor);
-        }
-
-        // Backward through latent space (KL gradient per Kingma & Welling §2.4)
-        var (meanGrad, logVarGrad) = CalculateLatentGradients(gradTensor);
-
-        // Backward through encoder layers
-        var encoderGrad = meanGrad;
-        for (int i = (Layers.Count / 2) - 1; i >= 0; i--)
-        {
-            encoderGrad = Layers[i].Backward(encoderGrad);
-        }
-
-        // Update parameters using the optimizer
-        _optimizer.UpdateParameters(Layers);
-
-        IsTrainingMode = false;
+        SetTrainingMode(true);
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     /// <summary>

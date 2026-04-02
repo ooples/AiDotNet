@@ -542,40 +542,9 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass
-        Tensor<T> prediction = Predict(input);
-
-        var flattenedPredictions = prediction.ToVector();
-        var flattenedOutput = expectedOutput.ToVector();
-
-        // Calculate main loss
-        LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedOutput);
-
-        // Add auxiliary loss if enabled
-        if (UseAuxiliaryLoss)
-        {
-            T auxLoss = ComputeAuxiliaryLoss();
-            T weightedAuxLoss = NumOps.Multiply(AuxiliaryLossWeight, auxLoss);
-            LastLoss = NumOps.Add(LastLoss, weightedAuxLoss);
-        }
-
-        // Backward pass
-        var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedOutput);
-
-        // Backpropagate to get gradients for all layers
-        Backpropagate(Tensor<T>.FromVector(outputGradients));
-
-        // Get parameter gradients
-        Vector<T> parameterGradients = GetParameterGradients();
-
-        // Apply gradient clipping if necessary
-        parameterGradients = ClipGradient(parameterGradients);
-
-        // Update parameters
-        Vector<T> currentParameters = GetParameters();
-        Vector<T> updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
-
-        UpdateParameters(updatedParameters);
+        SetTrainingMode(true);
+        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(false);
     }
 
     /// <summary>
