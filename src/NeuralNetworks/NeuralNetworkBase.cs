@@ -2545,15 +2545,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         using var tape = new GradientTape<T>();
         var output = ForwardForTraining(input);
 
-        var diff = engine.TensorSubtract(output, expected);
-        var squared = engine.TensorMultiply(diff, diff);
-        var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
-        var lossTensor = engine.ReduceMean(squared, allAxes, keepDims: false);
+        // Compute tape-differentiable loss (virtual — subclasses override for non-MSE losses)
+        var lossTensor = ComputeTapeLoss(engine, output, expected);
 
         // Compute gradients (tape is disposed after this block, so Step ops aren't recorded)
         var grads = tape.ComputeGradients(lossTensor, trainableParams);
 
-        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+        // Use the model's configured LossFunction for monitoring (LastLoss)
+        T lossValue = LossFunction.CalculateLoss(output.ToVector(), expected.ToVector());
         LastLoss = lossValue;
 
         // Resolve optimizer: use provided, or fall back to lazily-created default
@@ -2561,20 +2560,33 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         // Build context with re-evaluation support for second-order optimizers
         Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => ForwardForTraining(inp);
-        Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> tgt)
-        {
-            var d = engine.TensorSubtract(pred, tgt);
-            var sq = engine.TensorMultiply(d, d);
-            var axes = Enumerable.Range(0, sq.Shape.Length).ToArray();
-            return engine.ReduceMean(sq, axes, keepDims: false);
-        }
 
         var context = new Training.TapeStepContext<T>(
             trainableParams, grads, lossValue,
-            input, expected, ComputeForward, ComputeLoss);
+            input, expected, ComputeForward,
+            (pred, tgt) => ComputeTapeLoss(engine, pred, tgt));
 
         // Delegate the actual parameter update to the optimizer
         opt.Step(context);
+    }
+
+    /// <summary>
+    /// Computes a tape-differentiable scalar loss tensor from predicted and target tensors.
+    /// Override in subclasses to use loss functions other than MSE (e.g., cross-entropy, Wasserstein).
+    /// </summary>
+    /// <remarks>
+    /// The default implementation computes Mean Squared Error via engine ops that are tape-tracked:
+    /// loss = mean((predicted - target)²)
+    ///
+    /// Subclasses (GANs, classifiers, etc.) should override this to compute their specific
+    /// loss function using engine ops so gradients flow correctly through the tape.
+    /// </remarks>
+    protected virtual Tensor<T> ComputeTapeLoss(IEngine engine, Tensor<T> predicted, Tensor<T> target)
+    {
+        var diff = engine.TensorSubtract(predicted, target);
+        var squared = engine.TensorMultiply(diff, diff);
+        var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+        return engine.ReduceMean(squared, allAxes, keepDims: false);
     }
 
     /// <summary>
