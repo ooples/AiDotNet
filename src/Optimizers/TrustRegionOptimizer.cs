@@ -637,13 +637,16 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     }
 
     /// <summary>
-    /// Updates parameters using GPU-accelerated Trust Region method.
+    /// GPU parameter update is handled by the tape-based Step(TapeStepContext) method.
+    /// Tensor<T> is natively GPU-resident — no separate GPU update path needed.
     /// </summary>
     public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
     {
-        // Trust Region requires complex Hessian computations - use CPU fallback for now
-        // TODO: Implement full GPU Trust Region with Hessian approximation
-        throw new NotSupportedException("Trust Region GPU update requires Hessian computation - use CPU optimizer or different method");
+        // Handled by Step(TapeStepContext) which uses Reevaluate() for trust region
+        // radius adjustment. Tensor<T> GPU residency handles GPU acceleration.
+        throw new NotSupportedException(
+            "Use Step(TapeStepContext) instead. Trust Region with Hessian-vector products " +
+            "is implemented via TapeStepContext.HessianVectorProduct().");
     }
 
     /// <summary>
