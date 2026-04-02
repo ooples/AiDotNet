@@ -117,7 +117,9 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private int _epochs;
 
+    #pragma warning disable CS0169
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+    #pragma warning restore CS0169
 
     /// <summary>
     /// The size of each batch used in training.
@@ -165,7 +167,9 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Stores the last encoder activations for auxiliary loss computation.
     /// </summary>
+    #pragma warning disable CS0649
     private Tensor<T>? _lastEncoderActivations;
+    #pragma warning restore CS0649
 
     /// <summary>
     /// Stores the last computed sparsity loss for diagnostics.
@@ -738,130 +742,12 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
 
-        // Normalize to 2D [batch, features] if needed
-        if (input.Rank == 1)
-            input = input.Reshape([1, input.Shape[0]]);
-        if (expectedOutput.Rank == 1)
-            expectedOutput = expectedOutput.Reshape([1, expectedOutput.Shape[0]]);
-
-        // Basic validation
-        if (input.Shape[1] != Layers[0].GetInputShape()[0])
-        {
-            throw new ArgumentException($"Input shape {input.Shape[1]} does not match expected input shape {Layers[0].GetInputShape()[0]}");
-        }
-
-        if (expectedOutput.Shape[1] != Layers[Layers.Count - 1].GetOutputShape()[0])
-        {
-            throw new ArgumentException($"Expected output shape {expectedOutput.Shape[1]} does not match network output shape {Layers[Layers.Count - 1].GetOutputShape()[0]}");
-        }
-
-        // Training loop
+        // Multi-epoch training with batching
         for (int epoch = 0; epoch < _epochs; epoch++)
         {
-            T epochLoss = NumOps.Zero;
-
-            // Process in batches
-            for (int i = 0; i < input.Shape[0]; i += _batchSize)
-            {
-                int currentBatchSize = Math.Min(_batchSize, input.Shape[0] - i);
-                Tensor<T> batchInput;
-                Tensor<T> batchExpected;
-                if (input.Shape[0] == 1 || currentBatchSize == input.Shape[0])
-                {
-                    // Single sample or full batch — use as-is
-                    batchInput = input;
-                    batchExpected = expectedOutput;
-                }
-                else
-                {
-                    // Mini-batch: slice rows [i, i+batchSize) across all features
-                    batchInput = input.Slice(i, 0, i + currentBatchSize, input.Shape[1]);
-                    batchExpected = expectedOutput.Slice(i, 0, i + currentBatchSize, expectedOutput.Shape[1]);
-                }
-
-                // Forward pass
-                var current = batchInput;
-                List<Tensor<T>> layerOutputs = new List<Tensor<T>>(Layers.Count + 1) { batchInput };
-
-                for (int j = 0; j < Layers.Count; j++)
-                {
-                    current = Layers[j].Forward(current);
-                    layerOutputs.Add(current);
-
-                    // Store encoder activations for sparsity loss (at the middle layer)
-                    if (j == Layers.Count / 2)
-                    {
-                        _lastEncoderActivations = current;
-                    }
-                }
-
-                // Calculate reconstruction loss
-                var reconstructionLoss = CalculateLoss(current, batchExpected);
-
-                // Calculate auxiliary loss (sparsity) if enabled
-                T auxiliaryLoss = NumOps.Zero;
-                if (UseAuxiliaryLoss)
-                {
-                    var sparsityLoss = ComputeAuxiliaryLoss();
-                    auxiliaryLoss = NumOps.Multiply(sparsityLoss, AuxiliaryLossWeight);
-                }
-
-                // Total loss combines reconstruction and sparsity
-                var loss = NumOps.Add(reconstructionLoss, auxiliaryLoss);
-                epochLoss = NumOps.Add(epochLoss, loss);
-
-                // Backward pass (calculate gradients)
-                var outputGradient = CalculateOutputGradient(current, batchExpected);
-
-                // Backpropagate from output to middle layer (decoder layers)
-                int middleLayerIndex = Layers.Count / 2;
-                for (int j = Layers.Count - 1; j > middleLayerIndex; j--)
-                {
-                    outputGradient = Layers[j].Backward(outputGradient);
-                }
-
-                // Add sparsity gradient at the middle layer (encoder output)
-                if (UseAuxiliaryLoss && _lastEncoderActivations != null)
-                {
-                    var sparsityGradient = ComputeSparsityGradient();
-                    // Add weighted sparsity gradient to the reconstruction gradient
-                    outputGradient = outputGradient.Add(sparsityGradient);
-                }
-
-                // Continue backpropagation through encoder layers
-                for (int j = middleLayerIndex; j >= 0; j--)
-                {
-                    outputGradient = Layers[j].Backward(outputGradient);
-                }
-
-                // Update parameters using Adam with conservative learning rate
-                // to prevent oscillation at convergence (Kingma & Ba 2015)
-                // Use _learningRate but cap at 0.0005 to prevent oscillation at convergence
-                double effectiveLR = Math.Min(NumOps.ToDouble(_learningRate), 0.0005);
-                _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-                    new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = effectiveLR });
-                var paramGrads = GetParameterGradients();
-                var currentParams = GetParameters();
-                if (paramGrads.Length == 0)
-                    continue; // Skip layers with no trainable parameters
-                if (currentParams.Length != paramGrads.Length)
-                    throw new InvalidOperationException(
-                        $"Parameter count ({currentParams.Length}) and gradient count ({paramGrads.Length}) diverge. " +
-                        "Check that all layers implement GetParameterGradients() consistently.");
-                var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
-                UpdateParameters(updatedParams);
-            }
-
-            // Calculate average loss for the epoch
-            epochLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(input.Shape[0]));
-
-            // Store the last loss value
-            LastLoss = epochLoss;
-
-            // Progress is available via LastLoss property for callers to monitor
+            TrainWithTape(input, expectedOutput);
         }
 
-        // Restore inference mode so subsequent Predict() calls behave correctly
         SetTrainingMode(false);
         foreach (var layer in Layers)
             layer.SetTrainingMode(false);
