@@ -440,35 +440,9 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         T miCoeff = NumOps.FromDouble(_mutualInfoCoefficient);
         T generatorLoss = NumOps.Add(ganLoss, NumOps.Multiply(miCoeff, mutualInfoLoss));
 
-        // Backpropagate through discriminator (for GAN loss) to get input gradients
-        var ganGradients = CalculateBinaryGradients(genPredictions, allRealLabels, batchSize);
-
-        // Backpropagate through Q network (for MI loss) to get input gradients
-        var miGradients = CalculateMutualInfoGradients(predictedCodes, latentCodes, batchSize);
-
-        // Combine gradients - verify shapes match
-        if (!discInputGradients.Shape.ToArray().SequenceEqual(qInputGradients.Shape.ToArray()))
-        {
-            throw new InvalidOperationException(
-                $"Gradient shape mismatch: discriminator input gradients have shape " +
-                $"[{string.Join(", ", discInputGradients.Shape.ToArray())}] but Q network input gradients have shape " +
-                $"[{string.Join(", ", qInputGradients.Shape.ToArray())}]. Both must match for gradient combining.");
-        }
-
-        var combinedGradients = new Tensor<T>(discInputGradients.Shape.ToArray());
-        int gradLength = discInputGradients.Length;
-        for (int i = 0; i < gradLength; i++)
-        {
-            combinedGradients.SetFlat(i, NumOps.Add(
-                discInputGradients.GetFlat(i),
-                NumOps.Multiply(miCoeff, qInputGradients.GetFlat(i))
-            ));
-        }
-
-        // Backpropagate through generator
-        /* Generator.Backward(combinedGradients) removed — tape-based */ ;
-        UpdateGeneratorParameters();
-        UpdateQNetworkParameters();
+        // Train generator with tape-based autodiff
+        var genTarget = CreateLabelTensor(batchSize, NumOps.One);
+        Generator.Train(noise, genTarget);
 
         // Track losses
         _discriminatorLosses.Add(discriminatorLoss);

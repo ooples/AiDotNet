@@ -643,7 +643,17 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         // Create gradient tensor filled with ones using vectorized Fill
         var ones = CreateFilledTensor(interpolatedOutput.Shape.ToArray(), NumOps.One);
 
-        // Backpropagate to get gradients w.r.t. interpolated input
+        // Compute input gradients for gradient penalty using tape-based autodiff
+        var eng = AiDotNetEngine.Current;
+        Tensor<T> inputGradients;
+        using (var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>())
+        {
+            var scores = Discriminator.Predict(interpolated);
+            var allAxes = Enumerable.Range(0, scores.Shape.Length).ToArray();
+            var sumScores = eng.ReduceSum(scores, allAxes, keepDims: false);
+            var grads = tape.ComputeGradients(sumScores, [interpolated]);
+            inputGradients = grads.TryGetValue(interpolated, out var g) ? g : new Tensor<T>(interpolated.Shape.ToArray());
+        }
 
         // Compute L2 norm of gradients for each sample using vectorized operations
         T totalPenalty = NumOps.Zero;

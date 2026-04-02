@@ -281,8 +281,12 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         // Average critic loss
         T avgCriticLoss = NumOps.Divide(totalCriticLoss, NumOps.FromDouble(_criticIterations));
 
-        // Train generator
+        // Train generator with tape
         Tensor<T> newNoise = GenerateRandomNoiseTensor(noise.Shape[0], Generator.Architecture.InputSize);
+        var genLabels = CreateLabelTensor(noise.Shape[0], NumOps.One);
+        Generator.Train(newNoise, genLabels);
+        var genPred = Discriminator.Predict(GenerateImages(newNoise));
+        T generatorLoss = LossFunction.CalculateLoss(genPred.ToVector(), genLabels.ToVector());
 
         // Track losses
         _criticLosses.Add(avgCriticLoss);
@@ -416,10 +420,18 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         var ones = new Tensor<T>(interpolatedScores.Shape.ToArray());
         Engine.TensorFill(ones, NumOps.One);
 
-        // Backpropagate to get gradients with respect to input
-
-        // Capture the parameter gradients from this backprop
-        var gpParameterGradients = Critic.GetParameterGradients().Clone();
+        // Compute input gradients for gradient penalty using tape-based autodiff
+        var eng = AiDotNetEngine.Current;
+        var interpolatedTensor = interpolated;
+        Tensor<T> inputGradients;
+        using (var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>())
+        {
+            var scores = Critic.Predict(interpolatedTensor);
+            var allAxes = Enumerable.Range(0, scores.Shape.Length).ToArray();
+            var sumScores = eng.ReduceSum(scores, allAxes, keepDims: false);
+            var grads = tape.ComputeGradients(sumScores, [interpolatedTensor]);
+            inputGradients = grads.TryGetValue(interpolatedTensor, out var g) ? g : new Tensor<T>(interpolated.Shape.ToArray());
+        }
 
         // Compute L2 norm of gradients for each sample using vectorized operations
         int gradientSampleSize = inputGradients.Length / batchSize;

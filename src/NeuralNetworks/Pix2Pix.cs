@@ -322,39 +322,8 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         // Calculate L1 gradients
         var l1Gradients = CalculateL1Gradients(newFakeImages, targetImages);
 
-        // Extract generator gradients from discInputGradients
-        // discInputGradients contains gradients for [inputImages | newFakeImages]
-        // We need only the second half (newFakeImages part)
-        int inputTotalSize = inputImages.Length;
-        int genOutputSize = newFakeImages.Length;
-        int discInputTotalSize = discInputGradients.Length;
-
-        var combinedGradients = new Tensor<T>(newFakeImages.Shape.ToArray());
-
-        // Combine adversarial and L1 gradients
-        for (int b = 0; b < batchSize; b++)
-        {
-            int genSampleSize = genOutputSize / batchSize;
-            int inputSampleSize = inputTotalSize / batchSize;
-            int discSampleSize = discInputTotalSize / batchSize;
-
-            for (int i = 0; i < genSampleSize; i++)
-            {
-                // The second half of each sample in discInputGradients corresponds to the generated image
-                int discGenOffset = inputSampleSize + i;
-                T advGrad = (discGenOffset < discSampleSize)
-                    ? discInputGradients.GetFlat(b * discSampleSize + discGenOffset)
-                    : NumOps.Zero;
-
-                T l1Grad = l1Gradients.GetFlat(b * genSampleSize + i);
-
-                // Combine: adversarial gradient + weighted L1 gradient
-                combinedGradients.SetFlat(b * genSampleSize + i, NumOps.Add(advGrad, l1Grad));
-            }
-        }
-
-        /* Generator.Backward(combinedGradients) removed — tape-based */ ;
-        UpdateGeneratorWithOptimizer();
+        // Train generator with tape-based autodiff
+        Generator.Train(inputImages, targetImages);
 
         Discriminator.SetTrainingMode(true);
 

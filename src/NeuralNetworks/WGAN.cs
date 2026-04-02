@@ -365,16 +365,18 @@ public class WGAN<T> : NeuralNetworkBase<T>
             Tensor<T> fakeImages = GenerateImages(noise);
 
             // Train critic with tape-based autodiff
-            var realLabels = CreateLabelTensor(realImages.Shape[0], NumOps.One);
-            var fakeLabels = CreateLabelTensor(fakeImages.Shape[0], NumOps.Zero);
-            Discriminator.Train(realImages, realLabels);
-            Discriminator.Train(fakeImages, fakeLabels);
+            var realLabels = new Tensor<T>([realImages.Shape[0], 1]);
+            realLabels.Fill(NumOps.One);
+            var fakeLabels = new Tensor<T>([fakeImages.Shape[0], 1]);
+            fakeLabels.Fill(NumOps.Zero);
+            Critic.Train(realImages, realLabels);
+            Critic.Train(fakeImages, fakeLabels);
 
             // Compute Wasserstein loss for monitoring: E[D(real)] - E[D(fake)]
-            var realPred = Discriminator.Predict(realImages);
-            var fakePred = Discriminator.Predict(fakeImages);
-            T realScore = NumOps.ToDouble(realPred.ToVector().Sum()) > 0 ? realPred.ToVector().Sum() : NumOps.Zero;
-            T fakeScore = NumOps.ToDouble(fakePred.ToVector().Sum()) > 0 ? fakePred.ToVector().Sum() : NumOps.Zero;
+            var realPred = Critic.Predict(realImages);
+            var fakePred = Critic.Predict(fakeImages);
+            T realScore = realPred.ToVector().Sum();
+            T fakeScore = fakePred.ToVector().Sum();
             T criticLoss = NumOps.Subtract(realScore, fakeScore);
 
             // We want to maximize this, so we negate for gradient descent
@@ -391,9 +393,10 @@ public class WGAN<T> : NeuralNetworkBase<T>
 
         // Train generator with tape
         Tensor<T> newNoise = GenerateRandomNoiseTensor(noise.Shape[0], Generator.Architecture.InputSize);
-        var genLabels = CreateLabelTensor(noise.Shape[0], NumOps.One);
+        var genLabels = new Tensor<T>([noise.Shape[0], 1]);
+        genLabels.Fill(NumOps.One);
         Generator.Train(newNoise, genLabels);
-        var genPred = Discriminator.Predict(GenerateImages(newNoise));
+        var genPred = Critic.Predict(GenerateImages(newNoise));
         T generatorLoss = LossFunction.CalculateLoss(genPred.ToVector(), genLabels.ToVector());
 
         // Track losses
