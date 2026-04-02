@@ -2717,6 +2717,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
             throw new ArgumentNullException(nameof(tensor));
 
         Engine.RegisterPersistentTensor(tensor, role);
+
+        // Deduplicate by reference identity: constructors and EnsureInitialized may both register
+        for (int i = 0; i < _registeredTensors.Count; i++)
+        {
+            if (ReferenceEquals(_registeredTensors[i], tensor))
+                return;
+        }
         _registeredTensors.Add(tensor);
     }
 
