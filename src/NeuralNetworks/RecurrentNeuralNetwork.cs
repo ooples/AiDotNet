@@ -355,8 +355,6 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
-
     /// <summary>
     /// Backpropagates the error through the network layers.
     /// </summary>

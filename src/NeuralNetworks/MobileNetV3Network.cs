@@ -202,8 +202,6 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // Preserve previous training modes so we don't clobber caller-controlled state
-        var previousModes = Layers.Select(l => l.IsTrainingMode).ToList();
         // Set eval mode on all layers for inference (BN uses running stats)
         foreach (var layer in Layers)
             layer.SetTrainingMode(false);
@@ -213,8 +211,8 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
         }
         finally
         {
-            for (int i = 0; i < Layers.Count; i++)
-                Layers[i].SetTrainingMode(previousModes[i]);
+            // Predict leaves layers in eval mode; callers (e.g., Train) set
+            // training mode explicitly before forward/backward passes.
         }
     }
 

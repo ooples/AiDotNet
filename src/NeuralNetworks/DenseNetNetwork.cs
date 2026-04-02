@@ -264,8 +264,6 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // Preserve previous training modes so we don't clobber caller-controlled state
-        var previousModes = Layers.Select(l => l.IsTrainingMode).ToList();
         // Set eval mode on layers for BN (use running stats, not batch stats)
         // Per Ioffe & Szegedy 2015: BN with batch_size=1 normalizes variance to 0
         foreach (var layer in Layers)
@@ -276,8 +274,8 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
         }
         finally
         {
-            for (int i = 0; i < Layers.Count; i++)
-                Layers[i].SetTrainingMode(previousModes[i]);
+            // Predict leaves layers in eval mode; callers (e.g., Train) set
+            // training mode explicitly before forward/backward passes.
         }
     }
 
