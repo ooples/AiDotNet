@@ -142,6 +142,9 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
         protected override void InitializeLayers()
         {
+            ClearLayers();
+            _graphLayers.Clear();
+
             for (int i = 0; i < _numMessagePassingLayers; i++)
             {
                 int layerInputDim = i == 0 ? _inputDim : _hiddenDim;
@@ -152,6 +155,10 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 layer.UseAutodiff = true;
                 _graphLayers.Add(layer);
             }
+
+            // Register all graph layers in the unified Layers list
+            foreach (var layer in _graphLayers)
+                Layers.Add(layer);
         }
 
         /// <summary>
@@ -426,40 +433,12 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             }
 
             SetTrainingMode(true);
-            foreach (var layer in _graphLayers)
-            {
-                layer.SetTrainingMode(true);
-            }
-
             try
             {
-                var adjacency = CreateIdentityAdjacency(numNodes);
-                var prediction = Forward(input, adjacency);
-                var lossFunction = LossFunction ?? new MeanSquaredErrorLoss<T>();
-                LastLoss = lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-                var outputGradientVector = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-                var outputGradient = new Tensor<T>(prediction.Shape.ToArray(), outputGradientVector);
-
-                Backpropagate(outputGradient);
-
-                var gradients = GetGradients();
-                var parameters = GetParameters();
-                if (parameters.Length > 0)
-                {
-                    var updatedParameters = _optimizer.UpdateParameters(parameters, gradients);
-                    UpdateParameters(updatedParameters);
-                }
-
-                ClearGradients();
+                TrainWithTape(input, expectedOutput);
             }
             finally
             {
-                foreach (var layer in _graphLayers)
-                {
-                    layer.SetTrainingMode(false);
-                }
-
                 SetTrainingMode(false);
             }
         }
