@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -259,7 +259,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Forward through all experts and store their outputs
         _lastExpertOutputs = new Tensor<T>[_experts.Length];
-        Tensor<T> combinedExpertOutput = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> combinedExpertOutput = new Tensor<T>(baseOutput._shape);
 
         // Initialize combined output to zero
         for (int i = 0; i < combinedExpertOutput.Length; i++)
@@ -293,7 +293,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Sum base output and combined expert output
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> result = new Tensor<T>(baseOutput._shape);
         for (int i = 0; i < baseOutput.Length; i++)
         {
             result[i] = NumOps.Add(baseOutput[i], combinedExpertOutput[i]);

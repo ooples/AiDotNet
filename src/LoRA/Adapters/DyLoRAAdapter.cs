@@ -678,7 +678,7 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
                     totalLoss = NumOps.Add(totalLoss, loss);
 
                     // Compute output gradient (simplified - assumes MSE loss)
-                    Tensor<T> outputGrad = new Tensor<T>(output.Shape.ToArray());
+                    Tensor<T> outputGrad = new Tensor<T>(output._shape);
                     for (int j = 0; j < output.Length; j++)
                     {
                         outputGrad[j] = NumOps.Subtract(output[j], targets[i][j]);

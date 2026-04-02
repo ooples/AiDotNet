@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -257,7 +257,7 @@ public class VAEResBlock<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ApplySiLUDerivative(Tensor<T> input, Tensor<T> gradient)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
         var inputSpan = input.AsSpan();
         var gradSpan = gradient.AsSpan();
         var outputSpan = output.AsWritableSpan();

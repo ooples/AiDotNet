@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
@@ -214,8 +214,8 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeZ.TryGetValue(param, out var z)) { z = new Tensor<T>(param.Shape.ToArray()); _tapeZ[param] = z; }
-            if (!_tapeN.TryGetValue(param, out var n)) { n = new Tensor<T>(param.Shape.ToArray()); _tapeN[param] = n; }
+            if (!_tapeZ.TryGetValue(param, out var z)) { z = new Tensor<T>(param._shape); _tapeZ[param] = z; }
+            if (!_tapeN.TryGetValue(param, out var n)) { n = new Tensor<T>(param._shape); _tapeN[param] = n; }
 
             // n_new = n + grad^2
             var gradSq = Engine.TensorMultiply(grad, grad);
@@ -242,7 +242,7 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             var ftrlUpdate = Engine.TensorDivide(numerator, denom);
 
             // Apply: where |z| > lambda1 use ftrl_update, else zero
-            var zeros = new Tensor<T>(param.Shape.ToArray());
+            var zeros = new Tensor<T>(param._shape);
             var result = Engine.TensorWhere(sparseMask, ftrlUpdate, zeros);
             Engine.TensorCopy(result, param);
         }

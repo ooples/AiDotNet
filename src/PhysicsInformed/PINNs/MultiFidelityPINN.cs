@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using System;
 using System.Collections.Generic;
 using AiDotNet.Autodiff;
@@ -373,7 +373,7 @@ public class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
 
     private Tensor<T> ComputeMSEGradient(Tensor<T> prediction, Tensor<T> target)
     {
-        var gradient = new Tensor<T>(prediction.Shape.ToArray());
+        var gradient = new Tensor<T>(prediction._shape);
         int count = prediction.Shape[0] * prediction.Shape[1];
         T scale = NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(count));
 

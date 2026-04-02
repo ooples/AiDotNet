@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
@@ -50,7 +50,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, 4, 128, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var lap = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { lap[i, i] = 2.0; if (i > 0) { lap[i, i-1] = -1.0; lap[i-1, i] = -1.0; } } ((AiDotNet.NeuralNetworks.Layers.DiffusionConvLayer<double>)layer).SetLaplacian(lap);")]
-public class DiffusionConvLayer<T> : LayerBase<T>
+public partial class DiffusionConvLayer<T> : LayerBase<T>
 {
     #region Properties
 
@@ -120,11 +120,15 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     /// <summary>
     /// Learnable weights [OutputChannels, InputChannels * NumTimeScales].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
     /// Learnable bias values [OutputChannels].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -1928,21 +1932,4 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     }
 
     #endregion
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_weights, _biases];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
-        _weights = parameters[0]; _biases = parameters[1];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
-        _weightsGradient = null;
-        _biasesGradient = null;
-    }
 }

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -667,7 +667,7 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape.ToArray());
+        var normalized = new Tensor<T>(image._shape);
 
         // TrOCR normalization (same as DeiT/BEiT)
         double[] means = [0.5, 0.5, 0.5];

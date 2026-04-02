@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -524,7 +524,7 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
         // Backward pass
         var gradientVector = _lossFunction.CalculateDerivative(enhancedVector, cleanVector);
-        var gradientTensor = Tensor<T>.FromVector(gradientVector, enhancedStft.Shape.ToArray());
+        var gradientTensor = Tensor<T>.FromVector(gradientVector, enhancedStft._shape);
 
         // Update parameters via optimizer
         _optimizer?.UpdateParameters(Layers);
@@ -766,7 +766,7 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     private Tensor<T> ApplyComplexMask(Tensor<T> stft, Tensor<T> mask)
     {
-        var result = new Tensor<T>(stft.Shape.ToArray());
+        var result = new Tensor<T>(stft._shape);
 
         for (int i = 0; i < stft.Shape[0]; i++)
         {

@@ -1,4 +1,4 @@
-using AiDotNet.ActiveLearning.Interfaces;
+﻿using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -297,6 +297,6 @@ public class AveragedGEM<T> : IContinualLearningStrategy<T>
         {
             gradData[i] = _numOps.Subtract(output[i], target[i]);
         }
-        return new Tensor<T>(output.Shape.ToArray(), gradData);
+        return new Tensor<T>(output._shape, gradData);
     }
 }

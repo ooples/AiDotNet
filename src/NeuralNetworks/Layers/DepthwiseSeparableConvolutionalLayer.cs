@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.Medium, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "1, 2, 3, 8, 8, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
+public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The filter kernels used for the depthwise convolution step.
@@ -57,6 +57,8 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// Each filter looks for specific patterns within its own channel, like edges or textures.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _depthwiseKernels;
 
     /// <summary>
@@ -99,6 +101,8 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// triggering more easily even with weaker input signals.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -431,22 +435,6 @@ public class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _depthwiseKernelsGradient = null; _pointwiseKernelsGradient = null; _biasesGradient = null;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_depthwiseKernels, _pointwiseKernels, _biases];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 3) throw new ArgumentException($"Expected 3 parameters, got {parameters.Length}.");
-        _depthwiseKernels = parameters[0]; _pointwiseKernels = parameters[1]; _biases = parameters[2];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
         _depthwiseKernelsGradient = null; _pointwiseKernelsGradient = null; _biasesGradient = null;
     }
 

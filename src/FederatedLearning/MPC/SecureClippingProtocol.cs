@@ -1,4 +1,4 @@
-using AiDotNet.FederatedLearning.Infrastructure;
+﻿using AiDotNet.FederatedLearning.Infrastructure;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.FederatedLearning.MPC;
@@ -116,8 +116,8 @@ public class SecureClippingProtocol<T> : FederatedLearningComponentBase<T>
         int totalElements = ComputeTotalElements(gradientShares[0]);
 
         // Create shares of +C and -C
-        var upperShares = CreateConstantShares(_clipNorm, gradientShares[0].Shape.ToArray(), n);
-        var lowerShares = CreateConstantShares(-_clipNorm, gradientShares[0].Shape.ToArray(), n);
+        var upperShares = CreateConstantShares(_clipNorm, gradientShares[0]._shape, n);
+        var lowerShares = CreateConstantShares(-_clipNorm, gradientShares[0]._shape, n);
 
         // min(g, C)
         var clippedUpper = _comparison.SecureMin(gradientShares, upperShares);

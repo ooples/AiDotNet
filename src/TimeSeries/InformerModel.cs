@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors;
@@ -900,7 +900,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (int dim in tensor.Shape.ToArray())
+        foreach (int dim in tensor._shape)
             writer.Write(dim);
         writer.Write(tensor.Length);
         for (int i = 0; i < tensor.Length; i++)

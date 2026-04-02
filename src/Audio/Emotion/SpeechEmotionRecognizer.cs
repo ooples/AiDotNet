@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Classification;
 using AiDotNet.Diffusion.Audio;
@@ -468,7 +468,7 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
         }
 
         // Create tensor from the normalized vector with the original shape
-        return Tensor<T>.FromVector(resultVector, melSpec.Shape.ToArray());
+        return Tensor<T>.FromVector(resultVector, melSpec._shape);
     }
 
     /// <inheritdoc/>

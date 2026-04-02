@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.NeuralNetworks.Options;
@@ -620,7 +620,7 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
         var reconstructed = Decode(latentSample);
 
         // Reshape the output to match the input shape
-        return new Tensor<T>(input.Shape.ToArray(), reconstructed);
+        return new Tensor<T>(input._shape, reconstructed);
     }
 
     /// <summary>

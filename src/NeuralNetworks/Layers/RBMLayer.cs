@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -31,7 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class RBMLayer<T> : LayerBase<T>
+public partial class RBMLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Gets the number of units in the visible layer.
@@ -95,6 +95,8 @@ public class RBMLayer<T> : LayerBase<T>
     /// During training, these weights are adjusted to capture patterns in your data.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
@@ -118,6 +120,8 @@ public class RBMLayer<T> : LayerBase<T>
     /// the biases for those background pixels would become negative during training.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _visibleBiases;
 
     /// <summary>
@@ -998,17 +1002,4 @@ public class RBMLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsJitCompilation => true;
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_weights, _visibleBiases, _hiddenBiases];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 3) throw new ArgumentException($"Expected 3 parameters, got {parameters.Length}.");
-        _weights = parameters[0]; _visibleBiases = parameters[1]; _hiddenBiases = parameters[2];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad() { _weightsGradient = null; }
 }

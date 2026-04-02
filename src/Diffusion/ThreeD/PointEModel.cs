@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
@@ -493,8 +493,8 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
             return textCondition;
 
         // Concatenate along feature dimension
-        var textShape = textCondition.Shape.ToArray();
-        var imgShape = imageCondition.Shape.ToArray();
+        var textShape = textCondition._shape;
+        var imgShape = imageCondition._shape;
 
         var batch = textShape[0];
         var textSeqLen = textShape[1];
@@ -551,7 +551,7 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
     /// </summary>
     private new Tensor<T> NormalizePointCloud(Tensor<T> points)
     {
-        var result = new Tensor<T>(points.Shape.ToArray());
+        var result = new Tensor<T>(points._shape);
         var resultSpan = result.AsWritableSpan();
         var pointsSpan = points.AsSpan();
 

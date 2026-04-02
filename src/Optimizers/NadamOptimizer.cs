@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
@@ -341,8 +341,8 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param.Shape.ToArray()); _tapeM[param] = m; }
-            if (!_tapeV2.TryGetValue(param, out var v)) { v = new Tensor<T>(param.Shape.ToArray()); _tapeV2[param] = v; }
+            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeM[param] = m; }
+            if (!_tapeV2.TryGetValue(param, out var v)) { v = new Tensor<T>(param._shape); _tapeV2[param] = v; }
 
             // m = beta1 * m + (1 - beta1) * grad
             Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1)), m);

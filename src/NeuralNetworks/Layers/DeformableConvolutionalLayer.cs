@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "8, 8, 1, 2, 3")]
-public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
+public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 {
     #region Fields
 
@@ -54,7 +54,11 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
     private readonly int _deformGroups;
 
     // Main convolution weights and bias
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _bias;
 
     // Offset prediction convolution
@@ -1057,36 +1061,6 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _weightGradients = null; _biasGradients = null;
-        _offsetWeightGradients = null; _offsetBiasGradients = null;
-        _maskWeightGradients = null; _maskBiasGradients = null;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters()
-    {
-        var parameters = new List<Tensor<T>> { _weights, _bias, _offsetWeights, _offsetBias };
-        if (_maskWeights is not null) parameters.Add(_maskWeights);
-        if (_maskBias is not null) parameters.Add(_maskBias);
-        return parameters.ToArray();
-    }
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        int idx = 0;
-        if (parameters.Length < 4) throw new ArgumentException($"Expected at least 4 parameters, got {parameters.Length}.");
-        _weights = parameters[idx++];
-        _bias = parameters[idx++];
-        _offsetWeights = parameters[idx++];
-        _offsetBias = parameters[idx++];
-        if (_maskWeights is not null && idx < parameters.Length) _maskWeights = parameters[idx++];
-        if (_maskBias is not null && idx < parameters.Length) _maskBias = parameters[idx++];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
         _weightGradients = null; _biasGradients = null;
         _offsetWeightGradients = null; _offsetBiasGradients = null;
         _maskWeightGradients = null; _maskBiasGradients = null;

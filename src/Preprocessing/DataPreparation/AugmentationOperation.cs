@@ -1,4 +1,4 @@
-using AiDotNet.Augmentation.Tabular;
+﻿using AiDotNet.Augmentation.Tabular;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -144,7 +144,7 @@ public class AugmentationOperation<T> : IRowOperation<T>
         int newSamples = augmentedMatrix.Rows;
 
         // Convert back to tensor shape
-        int[] newXShape = (int[])X.Shape.ToArray().Clone();
+        int[] newXShape = (int[])X.Shape.ToArray();
         newXShape[0] = newSamples;
         var augmentedX = new Tensor<T>(newXShape);
 
@@ -165,7 +165,7 @@ public class AugmentationOperation<T> : IRowOperation<T>
         var augmentedVectorY = GenerateAugmentedLabels(matrixX, vectorY, augmentedMatrix);
 
         // Convert vector back to tensor
-        int[] newYShape = (int[])y.Shape.ToArray().Clone();
+        int[] newYShape = (int[])y.Shape.ToArray();
         newYShape[0] = newSamples;
         var augmentedY = new Tensor<T>(newYShape);
 

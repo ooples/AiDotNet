@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -249,7 +249,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> Forward(Tensor<T> x, Tensor<T> timeEmbed, Tensor<T>? conditioning)
     {
-        var shape = x.Shape.ToArray();
+        var shape = x._shape;
         var batch = shape[0];
 
         // Patchify and embed
@@ -293,7 +293,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
                         }
                     }
                 }
-                patches = new Tensor<T>(patches.Shape.ToArray(), new Vector<T>(resultData));
+                patches = new Tensor<T>(patches._shape, new Vector<T>(resultData));
             }
         }
 
@@ -350,7 +350,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> Patchify(Tensor<T> x)
     {
-        var shape = x.Shape.ToArray();
+        var shape = x._shape;
         var batch = shape[0];
         var height = shape.Length > 2 ? shape[2] : 1;
         var width = shape.Length > 3 ? shape[3] : 1;
@@ -462,7 +462,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         var span = t.AsSpan();
         var data = new T[span.Length];
         span.CopyTo(data);
-        return new Tensor<T>(t.Shape.ToArray(), new Vector<T>(data));
+        return new Tensor<T>(t._shape, new Vector<T>(data));
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)

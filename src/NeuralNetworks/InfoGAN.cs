@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -482,7 +482,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> CalculateMutualInfoGradients(Tensor<T> predictedCodes, Tensor<T> trueCodes, int batchSize)
     {
-        var gradients = new Tensor<T>(predictedCodes.Shape.ToArray());
+        var gradients = new Tensor<T>(predictedCodes._shape);
         T scale = NumOps.FromDouble(2.0 / ((double)batchSize * _latentCodeSize));
 
         for (int b = 0; b < batchSize; b++)
@@ -529,7 +529,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
-        var gradients = new Tensor<T>(predictions.Shape.ToArray());
+        var gradients = new Tensor<T>(predictions._shape);
 
         for (int i = 0; i < batchSize; i++)
         {

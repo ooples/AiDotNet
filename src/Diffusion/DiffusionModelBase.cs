@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Enums;
@@ -257,7 +257,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         var noisySample = _scheduler.AddNoise(cleanVector, noiseVector, timesteps[0]);
 
         // Create tensor for noise prediction
-        var noisySampleTensor = new Tensor<T>(cleanSamples.Shape.ToArray(), noisySample);
+        var noisySampleTensor = new Tensor<T>(cleanSamples._shape, noisySample);
 
         // Predict the noise
         var predictedNoise = PredictNoise(noisySampleTensor, timesteps[0]);
@@ -309,7 +309,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         {
             seed = unchecked(seed * 31 + NumOps.ToDouble(input[i]).GetHashCode());
         }
-        return Generate(input.Shape.ToArray(), _options.DefaultInferenceSteps, seed);
+        return Generate(input._shape, _options.DefaultInferenceSteps, seed);
     }
 
     /// <inheritdoc />
@@ -625,7 +625,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
         // Add noise to the clean sample using the scheduler
         var noisySample = _scheduler.AddNoise(inputVector, noiseVector, timestep);
-        var noisySampleTensor = new Tensor<T>(input.Shape.ToArray(), noisySample);
+        var noisySampleTensor = new Tensor<T>(input._shape, noisySample);
 
         // Primary path: layer-level backpropagation (like PyTorch's autograd).
         // Forward pass through the noise predictor, compute loss gradient,
@@ -638,7 +638,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             // Compute loss gradient: d(loss)/d(predicted)
             var lossGrad = effectiveLossFunction.CalculateDerivative(
                 predicted.ToVector(), noiseVector);
-            var lossGradTensor = new Tensor<T>(predicted.Shape.ToArray(), lossGrad);
+            var lossGradTensor = new Tensor<T>(predicted._shape, lossGrad);
 
             // Backpropagate through the noise predictor's layers.
             // Each layer computes input gradients and stores weight gradients internally.

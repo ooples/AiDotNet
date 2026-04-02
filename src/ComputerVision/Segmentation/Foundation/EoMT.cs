@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -293,7 +293,7 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         for (int i = 0; i < input.Length; i++)
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "pixel_values";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
 

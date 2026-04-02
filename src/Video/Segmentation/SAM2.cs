@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -623,7 +623,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
         }
 
         // Create ONNX input tensor
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, image.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, image._shape);
         var inputMeta = _onnxSession.InputMetadata;
 
         // SAM2 encoder typically has 'image' as input name
@@ -719,7 +719,7 @@ public class SAM2<T> : NeuralNetworkBase<T>
         }
 
         // Average pool memory features
-        var memoryAggregate = new Tensor<T>(currentFeatures.Shape.ToArray());
+        var memoryAggregate = new Tensor<T>(currentFeatures._shape);
         foreach (var memory in _memoryBank)
         {
             memoryAggregate = AddTensors(memoryAggregate, memory);

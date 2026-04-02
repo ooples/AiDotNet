@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -307,7 +307,7 @@ public class XMem<T> : NeuralNetworkBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = _onnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -359,7 +359,7 @@ public class XMem<T> : NeuralNetworkBase<T>
         if (_useNativeMode)
         {
             var queryFeatures = EncodeFrame(frame);
-            var sensoryResponse = QueryMemory(_sensoryMemory, queryFeatures.Shape.ToArray());
+            var sensoryResponse = QueryMemory(_sensoryMemory, queryFeatures._shape);
             var workingResponse = QueryMemory(_workingMemory, [queryFeatures.Shape[0], _numFeatures / 2, queryFeatures.Shape[2], queryFeatures.Shape[3]]);
             var longTermResponse = QueryMemory(_longTermMemory, [queryFeatures.Shape[0], _numFeatures / 4, queryFeatures.Shape[2], queryFeatures.Shape[3]]);
 
@@ -416,7 +416,7 @@ public class XMem<T> : NeuralNetworkBase<T>
         int height = features.Shape[2];
         int width = features.Shape[3];
 
-        var masked = new Tensor<T>(features.Shape.ToArray());
+        var masked = new Tensor<T>(features._shape);
         for (int b = 0; b < batchSize; b++)
             for (int c = 0; c < channels; c++)
                 for (int h = 0; h < height; h++)

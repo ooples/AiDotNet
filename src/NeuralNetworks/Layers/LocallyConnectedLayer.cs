@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "4, 4, 1, 2, 3, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class LocallyConnectedLayer<T> : LayerBase<T>
+public partial class LocallyConnectedLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The weight tensors for the locally connected filters.
@@ -68,6 +68,8 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// This complex structure allows each position to have its own specialized filter.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
@@ -88,6 +90,8 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// They're like a "starting point" that the network can adjust during learning.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -883,19 +887,6 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         _weightGradients = null;
         _biasGradients = null;
     }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_weights, _biases];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
-        _weights = parameters[0]; _biases = parameters[1];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad() { _weightGradients = null; _biasGradients = null; }
 
     public override void SetParameters(Vector<T> parameters)
     {

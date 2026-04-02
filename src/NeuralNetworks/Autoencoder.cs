@@ -1,4 +1,4 @@
-global using AiDotNet.LossFunctions;
+﻿global using AiDotNet.LossFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -498,7 +498,7 @@ public class Autoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         Vector<T> gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
 
         // Reshape the gradient back to the original tensor shape
-        return new Tensor<T>(predicted.Shape.ToArray(), gradientVector);
+        return new Tensor<T>(predicted._shape, gradientVector);
     }
 
     /// <summary>

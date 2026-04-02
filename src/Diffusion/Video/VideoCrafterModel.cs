@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
@@ -355,7 +355,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         var effectiveNumFrames = numFrames ?? DefaultNumFrames;
         var effectiveMotionBucket = motionBucketId ?? MotionBucketId;
 
-        var imageShape = inputImage.Shape.ToArray();
+        var imageShape = inputImage._shape;
         var height = imageShape[2];
         var width = imageShape[3];
 
@@ -425,7 +425,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         var effectiveNumFrames = numFrames ?? DefaultNumFrames;
         var useCFG = guidanceScale > 1.0;
 
-        var imageShape = image.Shape.ToArray();
+        var imageShape = image._shape;
         var height = imageShape[2];
         var width = imageShape[3];
 
@@ -537,7 +537,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         // This ensures we don't lose information from either embedding
         int imageSize = imageSpan.Length;
         int textSize = textSpan.Length;
-        var combinedShape = imageSize >= textSize ? imageEmbedding.Shape.ToArray() : textEmbedding.Shape.ToArray();
+        var combinedShape = imageSize >= textSize ? imageEmbedding._shape : textEmbedding._shape;
 
         var combined = new Tensor<T>(combinedShape);
         var combinedSpan = combined.AsWritableSpan();
@@ -564,7 +564,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         int timestep,
         Tensor<T> textEmbedding)
     {
-        var videoShape = latents.Shape.ToArray();
+        var videoShape = latents._shape;
         var numFrames = videoShape[1];
         var result = new Tensor<T>(videoShape);
 
@@ -604,7 +604,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> CombineImageAndMotion(Tensor<T> imageEmbedding, Tensor<T> motionEmbedding)
     {
-        var imageShape = imageEmbedding.Shape.ToArray();
+        var imageShape = imageEmbedding._shape;
         var result = new Tensor<T>(imageShape);
         var resultSpan = result.AsWritableSpan();
         var imageSpan = imageEmbedding.AsSpan();

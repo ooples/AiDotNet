@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -451,8 +451,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
             for (int d = 0; d < inputDim; d++)
             {
-                var plusInput = new Tensor<T>(input.Shape.ToArray());
-                var minusInput = new Tensor<T>(input.Shape.ToArray());
+                var plusInput = new Tensor<T>(input._shape);
+                var minusInput = new Tensor<T>(input._shape);
 
                 for (int i = 0; i < inputDim; i++)
                 {

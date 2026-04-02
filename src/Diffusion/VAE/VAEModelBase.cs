@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -124,9 +124,9 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         // std = exp(0.5 * logVariance)
 
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
-        var epsilon = SampleNoise(mean.Shape.ToArray(), rng);
+        var epsilon = SampleNoise(mean._shape, rng);
 
-        var result = new Tensor<T>(mean.Shape.ToArray());
+        var result = new Tensor<T>(mean._shape);
         var meanSpan = mean.AsSpan();
         var logVarSpan = logVariance.AsSpan();
         var epsilonSpan = epsilon.AsSpan();
@@ -476,7 +476,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
 
             var lossGrad = effectiveLossFunction.CalculateDerivative(
                 predicted.ToVector(), target.ToVector());
-            var lossGradTensor = new Tensor<T>(predicted.Shape.ToArray(), lossGrad);
+            var lossGradTensor = new Tensor<T>(predicted._shape, lossGrad);
 
 
             var gradients = GetParameterGradients();

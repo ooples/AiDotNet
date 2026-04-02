@@ -1,4 +1,4 @@
-namespace AiDotNet.Helpers;
+﻿namespace AiDotNet.Helpers;
 
 /// <summary>
 /// Provides helper methods for model-related operations.
@@ -235,7 +235,7 @@ public static class ModelHelper<T, TInput, TOutput>
                 if (index < 0 || index >= tensor.Shape[1])
                 {
                     throw new ArgumentOutOfRangeException(nameof(indices),
-                        $"Column index {index} is out of range for tensor with shape {string.Join("×", tensor.Shape.ToArray())}");
+                        $"Column index {index} is out of range for tensor with shape {string.Join("×", tensor._shape)}");
                 }
 
                 // Create a vector from the column

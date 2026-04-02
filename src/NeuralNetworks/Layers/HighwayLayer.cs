@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Gating)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -71,6 +71,8 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// During training, these weights are adjusted to better recognize important patterns in your data.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _transformWeights;
 
     /// <summary>
@@ -91,6 +93,8 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// It's like setting the initial position before fine-tuning.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _transformBias;
 
     /// <summary>
@@ -923,24 +927,6 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _transformWeightsGradient = null; _transformBiasGradient = null;
-        _gateWeightsGradient = null; _gateBiasGradient = null;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() =>
-        [_transformWeights, _transformBias, _gateWeights, _gateBias];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 4) throw new ArgumentException($"Expected 4 parameters, got {parameters.Length}.");
-        _transformWeights = parameters[0]; _transformBias = parameters[1]; _gateWeights = parameters[2]; _gateBias = parameters[3];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
         _transformWeightsGradient = null; _transformBiasGradient = null;
         _gateWeightsGradient = null; _gateBiasGradient = null;
     }

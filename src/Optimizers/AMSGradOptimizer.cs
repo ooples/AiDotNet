@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
@@ -254,9 +254,9 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param.Shape.ToArray()); _tapeM[param] = m; }
-            if (!_tapeV.TryGetValue(param, out var v)) { v = new Tensor<T>(param.Shape.ToArray()); _tapeV[param] = v; }
-            if (!_tapeVHat.TryGetValue(param, out var vHat)) { vHat = new Tensor<T>(param.Shape.ToArray()); _tapeVHat[param] = vHat; }
+            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeM[param] = m; }
+            if (!_tapeV.TryGetValue(param, out var v)) { v = new Tensor<T>(param._shape); _tapeV[param] = v; }
+            if (!_tapeVHat.TryGetValue(param, out var vHat)) { vHat = new Tensor<T>(param._shape); _tapeVHat[param] = vHat; }
 
             // m = beta1 * m + (1 - beta1) * grad
             Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1)), m);

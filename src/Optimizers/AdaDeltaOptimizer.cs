@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
@@ -356,8 +356,8 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeAccSqGrad.TryGetValue(param, out var accSqGrad)) { accSqGrad = new Tensor<T>(param.Shape.ToArray()); _tapeAccSqGrad[param] = accSqGrad; }
-            if (!_tapeAccSqUpd.TryGetValue(param, out var accSqUpd)) { accSqUpd = new Tensor<T>(param.Shape.ToArray()); _tapeAccSqUpd[param] = accSqUpd; }
+            if (!_tapeAccSqGrad.TryGetValue(param, out var accSqGrad)) { accSqGrad = new Tensor<T>(param._shape); _tapeAccSqGrad[param] = accSqGrad; }
+            if (!_tapeAccSqUpd.TryGetValue(param, out var accSqUpd)) { accSqUpd = new Tensor<T>(param._shape); _tapeAccSqUpd[param] = accSqUpd; }
 
             // accSqGrad = rho * accSqGrad + (1 - rho) * grad^2
             Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(accSqGrad, rho), Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusRho)), accSqGrad);

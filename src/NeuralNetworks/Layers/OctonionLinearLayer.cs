@@ -378,40 +378,11 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
         inputNodes.Add(inputNode);
 
-        // Convert weights to tensor format [outputFeatures, inputFeatures, 8]
-        var weightsTensor = new Tensor<T>(new int[] { OutputFeatures, InputFeatures, 8 });
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            for (int i = 0; i < InputFeatures; i++)
-            {
-                var oct = _weights[o, i];
-                weightsTensor[o, i, 0] = oct.Scalar;
-                weightsTensor[o, i, 1] = oct.E1;
-                weightsTensor[o, i, 2] = oct.E2;
-                weightsTensor[o, i, 3] = oct.E3;
-                weightsTensor[o, i, 4] = oct.E4;
-                weightsTensor[o, i, 5] = oct.E5;
-                weightsTensor[o, i, 6] = oct.E6;
-                weightsTensor[o, i, 7] = oct.E7;
-            }
-        }
-        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "weights");
+        // Weights are already Tensor<T> with shape [outputFeatures, inputFeatures, 8]
+        var weightsNode = TensorOperations<T>.Constant(_weights, "weights");
 
-        // Convert biases to tensor format [outputFeatures, 8]
-        var biasesTensor = new Tensor<T>(new int[] { OutputFeatures, 8 });
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            var oct = _biases[o];
-            biasesTensor[o, 0] = oct.Scalar;
-            biasesTensor[o, 1] = oct.E1;
-            biasesTensor[o, 2] = oct.E2;
-            biasesTensor[o, 3] = oct.E3;
-            biasesTensor[o, 4] = oct.E4;
-            biasesTensor[o, 5] = oct.E5;
-            biasesTensor[o, 6] = oct.E6;
-            biasesTensor[o, 7] = oct.E7;
-        }
-        var biasesNode = TensorOperations<T>.Constant(biasesTensor, "biases");
+        // Biases are already Tensor<T> with shape [outputFeatures, 8]
+        var biasesNode = TensorOperations<T>.Constant(_biases, "biases");
 
         // Perform octonion matrix multiplication
         var outputNode = TensorOperations<T>.OctonionMatMul(inputNode, weightsNode, biasesNode);

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -154,7 +154,7 @@ public class FlowFormerPlusPlus<T> : OpticalFlowBase<T>
             throw new ArgumentException($"frame1 must be at least rank 3 [C,H,W], got rank {frame1.Rank}.", nameof(frame1));
         if (frame0.Shape[0] != frame1.Shape[0] || frame0.Shape[1] != frame1.Shape[1] || frame0.Shape[2] != frame1.Shape[2])
             throw new ArgumentException(
-                $"Frame shapes must match. frame0: [{string.Join(",", frame0.Shape.ToArray())}], frame1: [{string.Join(",", frame1.Shape.ToArray())}].",
+                $"Frame shapes must match. frame0: [{string.Join(",", frame0._shape)}], frame1: [{string.Join(",", frame1._shape)}].",
                 nameof(frame1));
         int height = frame0.Shape[1];
         int width = frame0.Shape[2];

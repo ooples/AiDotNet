@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -873,7 +873,7 @@ public class TemporalGCN<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape.ToArray())
+        foreach (var dim in input._shape)
         {
             totalSize *= dim;
         }
@@ -943,7 +943,7 @@ public class TemporalGCN<T> : ForecastingModelBase<T>
             }
         }
 
-        return new Tensor<T>(nodeFeatures.Shape.ToArray(), new Vector<T>(result));
+        return new Tensor<T>(nodeFeatures._shape, new Vector<T>(result));
     }
 
     #endregion
@@ -1055,7 +1055,7 @@ public class TemporalGCN<T> : ForecastingModelBase<T>
             perturbed[i] = NumOps.FromDouble(val + noise);
         }
 
-        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(perturbed));
+        return new Tensor<T>(input._shape, new Vector<T>(perturbed));
     }
 
     #endregion

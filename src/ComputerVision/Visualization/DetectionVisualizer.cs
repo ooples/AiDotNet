@@ -1,4 +1,4 @@
-using AiDotNet.Augmentation.Image;
+﻿using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.ObjectDetection;
 using AiDotNet.Tensors;
 
@@ -51,7 +51,7 @@ public class DetectionVisualizer<T>
         if (image.Shape.Length != 4)
         {
             throw new ArgumentException(
-                $"Expected 4D image tensor [batch, channels, height, width], got shape [{string.Join(", ", image.Shape.ToArray())}]",
+                $"Expected 4D image tensor [batch, channels, height, width], got shape [{string.Join(", ", image._shape)}]",
                 nameof(image));
         }
 

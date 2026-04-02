@@ -1,4 +1,4 @@
-namespace AiDotNet.Data.Multimodal;
+﻿namespace AiDotNet.Data.Multimodal;
 
 /// <summary>
 /// Represents a single modality's data within a multimodal sample.
@@ -59,7 +59,7 @@ public class ModalitySample<T>
     /// <summary>
     /// Gets the shape of the data tensor.
     /// </summary>
-    public int[] Shape => Data.Shape.ToArray();
+    public int[] Shape => Data._shape;
 
     /// <summary>
     /// Gets the total number of elements in the data tensor.

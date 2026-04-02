@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -937,7 +937,7 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape.ToArray())
+        foreach (var dim in input._shape)
             totalSize *= dim;
 
         var flattened = new Tensor<T>(new[] { totalSize });
@@ -1021,7 +1021,7 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
             }
         }
 
-        return new Tensor<T>(nodeFeatures.Shape.ToArray(), new Vector<T>(result.Select(d => NumOps.FromDouble(d)).ToArray()));
+        return new Tensor<T>(nodeFeatures._shape, new Vector<T>(result.Select(d => NumOps.FromDouble(d)).ToArray()));
     }
 
     #endregion
@@ -1112,7 +1112,7 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
             double noise = (_random.NextDouble() - 0.5) * 0.01 * Math.Abs(val + 1e-6);
             perturbed[i] = NumOps.FromDouble(val + noise);
         }
-        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(perturbed));
+        return new Tensor<T>(input._shape, new Vector<T>(perturbed));
     }
 
     #endregion

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -151,7 +151,7 @@ public class HuberLoss<T> : LossFunctionBase<T>
         backend.SmoothL1Backward(predicted.Buffer, actual.Buffer, gradientBuffer, size, beta);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape.ToArray(), GpuTensorRole.Gradient);
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

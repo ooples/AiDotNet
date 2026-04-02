@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
@@ -117,10 +117,10 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     /// </summary>
     public T ComputeMSELoss(Tensor<T> predictions, Tensor<T> targets)
     {
-        if (!predictions.Shape.ToArray().SequenceEqual(targets.Shape.ToArray()))
+        if (!predictions._shape.SequenceEqual(targets._shape))
         {
             throw new ArgumentException(
-                $"Predictions shape [{string.Join(", ", predictions.Shape.ToArray())}] must match targets shape [{string.Join(", ", targets.Shape.ToArray())}].");
+                $"Predictions shape [{string.Join(", ", predictions._shape)}] must match targets shape [{string.Join(", ", targets._shape)}].");
         }
 
         var totalLoss = NumOps.Zero;
@@ -139,10 +139,10 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     /// </summary>
     public T ComputeMAELoss(Tensor<T> predictions, Tensor<T> targets)
     {
-        if (!predictions.Shape.ToArray().SequenceEqual(targets.Shape.ToArray()))
+        if (!predictions._shape.SequenceEqual(targets._shape))
         {
             throw new ArgumentException(
-                $"Predictions shape [{string.Join(", ", predictions.Shape.ToArray())}] must match targets shape [{string.Join(", ", targets.Shape.ToArray())}].");
+                $"Predictions shape [{string.Join(", ", predictions._shape)}] must match targets shape [{string.Join(", ", targets._shape)}].");
         }
 
         var totalLoss = NumOps.Zero;
@@ -178,10 +178,10 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     /// </remarks>
     public T ComputeR2Score(Tensor<T> predictions, Tensor<T> targets)
     {
-        if (!predictions.Shape.ToArray().SequenceEqual(targets.Shape.ToArray()))
+        if (!predictions._shape.SequenceEqual(targets._shape))
         {
             throw new ArgumentException(
-                $"Predictions shape [{string.Join(", ", predictions.Shape.ToArray())}] must match targets shape [{string.Join(", ", targets.Shape.ToArray())}].");
+                $"Predictions shape [{string.Join(", ", predictions._shape)}] must match targets shape [{string.Join(", ", targets._shape)}].");
         }
 
         var targetMean = NumOps.Zero;

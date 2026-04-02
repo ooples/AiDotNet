@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using System.Collections.Generic;
 using AiDotNet.Interfaces;
 
@@ -314,7 +314,7 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> sparseOutput = ForwardSparseFullRank(input);
 
         // Sum all three components
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> result = new Tensor<T>(baseOutput._shape);
         for (int i = 0; i < baseOutput.Length; i++)
         {
             T sum = NumOps.Add(baseOutput[i], loraOutput[i]);

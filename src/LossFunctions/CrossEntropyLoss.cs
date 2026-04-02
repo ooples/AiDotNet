@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -122,7 +122,7 @@ public class CrossEntropyLoss<T> : LossFunctionBase<T>
         backend.CrossEntropyBackward(predicted.Buffer, actual.Buffer, gradientBuffer, batchSize, numClasses);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape.ToArray(), GpuTensorRole.Gradient);
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

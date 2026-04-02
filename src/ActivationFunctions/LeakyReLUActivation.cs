@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -194,7 +194,7 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     /// <returns>A new tensor containing the derivatives of the Leaky ReLU function for each input element.</returns>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
-        Tensor<T> output = new Tensor<T>(input.Shape.ToArray());
+        Tensor<T> output = new Tensor<T>(input._shape);
         for (int i = 0; i < input.Length; i++)
         {
             output[i] = Derivative(input[i]);

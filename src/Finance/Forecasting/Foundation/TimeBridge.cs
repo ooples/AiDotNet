@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -419,7 +419,7 @@ public class TimeBridge<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {

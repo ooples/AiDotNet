@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -312,7 +312,7 @@ public class VGGNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A tensor with shape [1, channels, height, width].</returns>
     private static Tensor<T> AddBatchDimension(Tensor<T> input)
     {
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int[] resultShape = new int[inputShape.Length + 1];
 
         // Add batch dimension of size 1

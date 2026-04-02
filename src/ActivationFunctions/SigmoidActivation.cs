@@ -1,4 +1,4 @@
-
+﻿
 
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -152,7 +152,7 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>, IOutputDerivative
     public override Tensor<T> Derivative(Tensor<T> input)
     {
         var sigmoid = Activate(input);
-        var oneMinusSigmoid = Engine.TensorSubtract(Tensor<T>.CreateDefault(input.Shape.ToArray(), NumOps.One), sigmoid);
+        var oneMinusSigmoid = Engine.TensorSubtract(Tensor<T>.CreateDefault(input._shape, NumOps.One), sigmoid);
         return Engine.TensorMultiply(sigmoid, oneMinusSigmoid);
     }
 
@@ -220,7 +220,7 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>, IOutputDerivative
     /// </summary>
     public Tensor<T> DerivativeFromOutput(Tensor<T> output)
     {
-        var ones = new Tensor<T>(output.Shape.ToArray());
+        var ones = new Tensor<T>(output._shape);
         ones.Fill(NumOps.One);
         return output.ElementwiseMultiply(ones.Subtract(output));
     }

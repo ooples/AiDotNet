@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -682,7 +682,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         private Tensor<T> NormalizeAdjacencySingle(Tensor<T> adjacency)
         {
             int numNodes = adjacency.Shape[0];
-            var normalized = new Tensor<T>(adjacency.Shape.ToArray());
+            var normalized = new Tensor<T>(adjacency._shape);
             var degrees = new T[numNodes];
             var invSqrt = new T[numNodes];
             T epsilon = NumOps.FromDouble(1e-10);
@@ -713,7 +713,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         {
             int batch = adjacency.Shape[0];
             int numNodes = adjacency.Shape[1];
-            var normalized = new Tensor<T>(adjacency.Shape.ToArray());
+            var normalized = new Tensor<T>(adjacency._shape);
             var degrees = new T[numNodes];
             var invSqrt = new T[numNodes];
             T epsilon = NumOps.FromDouble(1e-10);

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -847,8 +847,8 @@ public class TSMixer<T> : ForecastingModelBase<T>
             throw new InvalidOperationException(
                 $"Input projection failed to transform features. " +
                 $"Expected output last dimension = {_hiddenDim}, got {currentLastDim}. " +
-                $"Input shape: [{string.Join(", ", normalized.Shape.ToArray())}], " +
-                $"Output shape: [{string.Join(", ", current.Shape.ToArray())}]. " +
+                $"Input shape: [{string.Join(", ", normalized._shape)}], " +
+                $"Output shape: [{string.Join(", ", current._shape)}]. " +
                 $"Layer used: {layerType}. " +
                 $"NumFeatures={_numFeatures}, HiddenDim={_hiddenDim}.");
         }

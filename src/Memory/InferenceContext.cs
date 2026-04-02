@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 
 namespace AiDotNet.Memory;
 
@@ -151,7 +151,7 @@ public class InferenceContext<T> : IDisposable
     {
         if (template == null)
             throw new ArgumentNullException(nameof(template));
-        return Rent(template.Shape.ToArray());
+        return Rent(template._shape);
     }
 
     /// <summary>
@@ -298,7 +298,7 @@ public static class InferenceScope<T>
     {
         if (template == null)
             throw new ArgumentNullException(nameof(template));
-        return RentOrCreate(template.Shape.ToArray());
+        return RentOrCreate(template._shape);
     }
 }
 

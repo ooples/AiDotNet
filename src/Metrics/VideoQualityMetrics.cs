@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors;
@@ -65,7 +65,7 @@ public class VideoPSNR<T> where T : struct
             throw new ArgumentException("Video tensors must have at least 4 dimensions (T, H, W, C or T, C, H, W).");
         }
 
-        if (!predicted.Shape.ToArray().SequenceEqual(groundTruth.Shape.ToArray()))
+        if (!predicted._shape.SequenceEqual(groundTruth._shape))
         {
             throw new ArgumentException("Predicted and ground truth videos must have the same shape.");
         }
@@ -185,7 +185,7 @@ public class VideoSSIM<T> where T : struct
             throw new ArgumentException("Video tensors must have at least 4 dimensions (T, H, W, C or T, C, H, W).");
         }
 
-        if (!predicted.Shape.ToArray().SequenceEqual(groundTruth.Shape.ToArray()))
+        if (!predicted._shape.SequenceEqual(groundTruth._shape))
         {
             throw new ArgumentException("Predicted and ground truth videos must have the same shape.");
         }

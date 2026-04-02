@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Attributes;
@@ -1028,7 +1028,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape.ToArray());
+        var normalized = new Tensor<T>(image._shape);
 
         // Donut uses different normalization than standard ImageNet
         double[] means = [0.5, 0.5, 0.5];

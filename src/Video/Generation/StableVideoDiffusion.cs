@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -356,7 +356,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         var imageLatent = EncodeToLatent(inputImage);
 
         // Initialize noise
-        var latents = InitializeLatents(imageLatent.Shape.ToArray(), random);
+        var latents = InitializeLatents(imageLatent._shape, random);
 
         // Condition on input image
         var imageCondition = ImageConditioner.Forward(imageLatent);
@@ -868,7 +868,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
     {
         int batch = input.Shape[0];
         int channels = input.Shape[1];
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
         double eps = 1e-5;
 
         for (int b = 0; b < batch; b++)
@@ -1023,7 +1023,7 @@ public class StableVideoDiffusion<T> : NeuralNetworkBase<T>
 
     private Tensor<T> AddNoise(Tensor<T> latent, double noiseLevel, Random random)
     {
-        var noise = GenerateNoise(latent.Shape.ToArray(), random);
+        var noise = GenerateNoise(latent._shape, random);
         var scaledNoise = Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(noiseLevel));
         return Engine.TensorAdd(latent, scaledNoise);
     }

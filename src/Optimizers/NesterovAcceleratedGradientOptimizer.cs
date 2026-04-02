@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
@@ -276,7 +276,7 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = new Tensor<T>(param.Shape.ToArray()); _tapeVelocity[param] = vel; }
+            if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = new Tensor<T>(param._shape); _tapeVelocity[param] = vel; }
 
             // velocity = momentum * velocity + lr * grad
             var velNew = Engine.TensorAdd(Engine.TensorMultiplyScalar(vel, CurrentMomentum), Engine.TensorMultiplyScalar(grad, CurrentLearningRate));

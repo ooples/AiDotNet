@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -159,10 +160,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// Returns all trainable parameter tensors marked with [TrainableParameter].");
             sb.AppendLine("    /// Auto-generated — do not modify. Edit the [TrainableParameter] attributes instead.");
             sb.AppendLine("    /// </summary>");
-            sb.AppendLine($"    public override Tensor<{GetTypeParamName(classSymbol)}>[] GetTrainableParameters()");
-            sb.Append("        => [");
-            sb.Append(string.Join(", ", paramFields.Select(f => f.Name)));
-            sb.AppendLine("];");
+            sb.AppendLine($"    public override System.Collections.Generic.IReadOnlyList<Tensor<{GetTypeParamName(classSymbol)}>> GetTrainableParameters()");
+            sb.AppendLine($"        => new Tensor<{GetTypeParamName(classSymbol)}>[] {{ {string.Join(", ", paramFields.Select(f => f.Name))} }};");
             sb.AppendLine();
 
             // SetTrainableParameters
@@ -170,10 +169,10 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// Replaces trainable parameter tensors (e.g., with ParameterBuffer views).");
             sb.AppendLine("    /// Auto-generated — updates both the field and the registered tensor list.");
             sb.AppendLine("    /// </summary>");
-            sb.AppendLine($"    public override void SetTrainableParameters(Tensor<{GetTypeParamName(classSymbol)}>[] parameters)");
+            sb.AppendLine($"    public override void SetTrainableParameters(System.Collections.Generic.IReadOnlyList<Tensor<{GetTypeParamName(classSymbol)}>> parameters)");
             sb.AppendLine("    {");
-            sb.AppendLine($"        if (parameters.Length != {paramFields.Count})");
-            sb.AppendLine($"            throw new System.ArgumentException($\"Expected {paramFields.Count} parameters, got {{parameters.Length}}.\");");
+            sb.AppendLine($"        if (parameters.Count != {paramFields.Count})");
+            sb.AppendLine($"            throw new System.ArgumentException($\"Expected {paramFields.Count} parameters, got {{parameters.Count}}.\");");
             for (int i = 0; i < paramFields.Count; i++)
             {
                 sb.AppendLine($"        {paramFields[i].Name} = parameters[{i}];");

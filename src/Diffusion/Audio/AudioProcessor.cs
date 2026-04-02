@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.Diffusion.Audio;
 
@@ -245,7 +245,7 @@ public class AudioProcessor<T>
     /// <returns>Normalized spectrogram in [0, 1].</returns>
     public Tensor<T> NormalizeSpectrogram(Tensor<T> dbSpectrogram)
     {
-        var normalized = new Tensor<T>(dbSpectrogram.Shape.ToArray());
+        var normalized = new Tensor<T>(dbSpectrogram._shape);
         double range = _maxDb - _minDb;
 
         for (int i = 0; i < dbSpectrogram.Data.Length; i++)
@@ -270,7 +270,7 @@ public class AudioProcessor<T>
     /// <returns>Spectrogram in dB.</returns>
     public Tensor<T> DenormalizeSpectrogram(Tensor<T> normalizedSpectrogram)
     {
-        var denormalized = new Tensor<T>(normalizedSpectrogram.Shape.ToArray());
+        var denormalized = new Tensor<T>(normalizedSpectrogram._shape);
         double range = _maxDb - _minDb;
 
         for (int i = 0; i < normalizedSpectrogram.Data.Length; i++)
@@ -293,7 +293,7 @@ public class AudioProcessor<T>
     /// </summary>
     private Tensor<T> PowerToDb(Tensor<T> power)
     {
-        var db = new Tensor<T>(power.Shape.ToArray());
+        var db = new Tensor<T>(power._shape);
         const double epsilon = 1e-10;
 
         for (int i = 0; i < power.Data.Length; i++)
@@ -311,7 +311,7 @@ public class AudioProcessor<T>
     /// </summary>
     private Tensor<T> DbToPower(Tensor<T> db)
     {
-        var power = new Tensor<T>(db.Shape.ToArray());
+        var power = new Tensor<T>(db._shape);
 
         for (int i = 0; i < db.Data.Length; i++)
         {
@@ -437,7 +437,7 @@ public class AudioProcessor<T>
             return audio;
 
         // Scale to target peak
-        var result = new Tensor<T>(audio.Shape.ToArray());
+        var result = new Tensor<T>(audio._shape);
         double scale = targetPeak / maxAbs;
 
         for (int i = 0; i < audio.Data.Length; i++)

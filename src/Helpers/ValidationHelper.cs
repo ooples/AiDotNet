@@ -1,4 +1,4 @@
-namespace AiDotNet.Helpers;
+﻿namespace AiDotNet.Helpers;
 
 /// <summary>
 /// Provides validation methods for AI model inputs and parameters.
@@ -198,7 +198,7 @@ public static class ValidationHelper<T>
         if (x.Shape[0] != y.Shape[0])
             throw new ArgumentException($"First dimension of {datasetName.ToLower()} input tensor must match the first dimension of the {datasetName.ToLower()} target tensor.");
 
-        if (x.Shape.ToArray().Any(dim => dim == 0) || y.Shape.ToArray().Any(dim => dim == 0))
+        if (x._shape.Any(dim => dim == 0) || y._shape.Any(dim => dim == 0))
             throw new ArgumentException($"{datasetName} tensors cannot have zero-sized dimensions.");
     }
 
@@ -211,8 +211,8 @@ public static class ValidationHelper<T>
         }
         else if (xTrain is Tensor<T> xTrainTensor && xValidation is Tensor<T> xValTensor && xTest is Tensor<T> xTestTensor)
         {
-            if (!Enumerable.SequenceEqual(xTrainTensor.Shape.ToArray().Skip(1), xValTensor.Shape.ToArray().Skip(1)) ||
-                !Enumerable.SequenceEqual(xTrainTensor.Shape.ToArray().Skip(1), xTestTensor.Shape.ToArray().Skip(1)))
+            if (!Enumerable.SequenceEqual(xTrainTensor._shape.Skip(1), xValTensor._shape.Skip(1)) ||
+                !Enumerable.SequenceEqual(xTrainTensor._shape.Skip(1), xTestTensor._shape.Skip(1)))
                 throw new ArgumentException("All input tensors must have the same shape (except for the first dimension).");
         }
         else

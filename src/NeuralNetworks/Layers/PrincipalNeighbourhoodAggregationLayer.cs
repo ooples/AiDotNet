@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 4", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 4, 4 }); for (int i = 0; i < 4; i++) { adj[0, i, i] = 1.0; if (i > 0) adj[0, i, i-1] = 1.0; if (i < 3) adj[0, i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
-public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
@@ -51,7 +51,11 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
     private readonly int _hiddenDim;
 
     // Pre-transformation weights (applied before aggregation) - Tensor-based for GPU acceleration
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _preTransformWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _preTransformBias;
 
     // Post-aggregation MLP weights - Tensor-based for GPU acceleration
@@ -1282,22 +1286,4 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
         return output;
     }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() =>
-        [_preTransformWeights, _preTransformBias, _postAggregationWeights1, _postAggregationBias1,
-         _postAggregationWeights2, _postAggregationBias2, _selfWeights, _bias];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 8) throw new ArgumentException($"Expected 8 parameters, got {parameters.Length}.");
-        _preTransformWeights = parameters[0]; _preTransformBias = parameters[1];
-        _postAggregationWeights1 = parameters[2]; _postAggregationBias1 = parameters[3];
-        _postAggregationWeights2 = parameters[4]; _postAggregationBias2 = parameters[5];
-        _selfWeights = parameters[6]; _bias = parameters[7];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad() { _biasGradient = null; }
 }

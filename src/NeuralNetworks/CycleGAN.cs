@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -555,7 +555,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
-        var gradients = new Tensor<T>(predictions.Shape.ToArray());
+        var gradients = new Tensor<T>(predictions._shape);
         T epsilon = NumOps.FromDouble(1e-10);
         T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
 
@@ -585,7 +585,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     private Tensor<T> CalculateL1Gradient(Tensor<T> predictions, Tensor<T> targets, double coefficient)
     {
-        var gradients = new Tensor<T>(predictions.Shape.ToArray());
+        var gradients = new Tensor<T>(predictions._shape);
         int count = predictions.Length;
         T coeff = NumOps.FromDouble(coefficient / count);
 

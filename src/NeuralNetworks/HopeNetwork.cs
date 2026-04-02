@@ -1,4 +1,4 @@
-
+﻿
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -232,7 +232,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             }
         }
 
-        return new Tensor<T>(input.Shape.ToArray(), modified);
+        return new Tensor<T>(input._shape, modified);
     }
 
     /// <summary>
@@ -281,7 +281,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             blended[i] = _numOps.Add(partA, partB);
         }
 
-        return new Tensor<T>(a.Shape.ToArray(), blended);
+        return new Tensor<T>(a._shape, blended);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)

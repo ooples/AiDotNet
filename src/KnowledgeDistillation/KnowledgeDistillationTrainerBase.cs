@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Validation;
@@ -837,7 +837,7 @@ public abstract class KnowledgeDistillationTrainerBase<T, TInput, TOutput> : IKn
             if (shouldCollect)
             {
                 // Convert tensor output to matrix: [batchSize, features]
-                var outputShape = current.Shape.ToArray();
+                var outputShape = current._shape;
                 if (outputShape.Length == 0 || outputShape[0] <= 0 || current.Length == 0)
                     continue;
 

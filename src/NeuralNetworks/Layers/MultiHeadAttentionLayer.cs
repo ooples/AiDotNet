@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
@@ -29,7 +29,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 8", TestConstructorArgs = "4, 8, 2")]
-public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets whether auxiliary loss (attention regularization) should be used during training.
@@ -136,6 +136,8 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Tensor of weights for transforming input into query representations.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _queryWeights;
 
     /// <summary>
@@ -160,6 +162,8 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Tensor of biases added to the final output.
     /// Shape: [embeddingDimension]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputBias;
 
     /// <summary>
@@ -1188,26 +1192,6 @@ public class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         base.ClearGradients();
         _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() =>
-        [_queryWeights, _keyWeights, _valueWeights, _outputWeights, _outputBias];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 5) throw new ArgumentException($"Expected 5 parameters, got {parameters.Length}.");
-        _queryWeights = parameters[0]; _keyWeights = parameters[1]; _valueWeights = parameters[2];
-        _outputWeights = parameters[3]; _outputBias = parameters[4];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
-        _queryWeightsGradient = null;
-        _keyWeightsGradient = null;
-        _valueWeightsGradient = null;
     }
 
     public override void ResetState()

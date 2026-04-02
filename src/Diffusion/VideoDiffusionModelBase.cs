@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -126,7 +126,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         var effectiveMotionBucket = motionBucketId ?? MotionBucketId;
 
         // Get image dimensions
-        var imageShape = inputImage.Shape.ToArray();
+        var imageShape = inputImage._shape;
         var height = imageShape[2];
         var width = imageShape[3];
 
@@ -319,7 +319,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         int targetFPS,
         FrameInterpolationMethod interpolationMethod = FrameInterpolationMethod.Diffusion)
     {
-        var videoShape = video.Shape.ToArray();
+        var videoShape = video._shape;
         var currentFrames = videoShape[1];
         var currentFPS = DefaultFPS;
         var targetFrames = (int)Math.Ceiling((double)currentFrames * targetFPS / currentFPS);
@@ -348,7 +348,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     /// <inheritdoc />
     public virtual Tensor<T> ExtractFrame(Tensor<T> video, int frameIndex)
     {
-        var videoShape = video.Shape.ToArray();
+        var videoShape = video._shape;
         var numFrames = videoShape[1];
 
         if (frameIndex < 0 || frameIndex >= numFrames)
@@ -386,7 +386,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
             throw new ArgumentException("Frames array must not be empty.", nameof(frames));
 
         var firstFrame = frames[0];
-        var frameShape = firstFrame.Shape.ToArray();
+        var frameShape = firstFrame._shape;
         var batchSize = frameShape[0];
         var channels = frameShape[1];
         var height = frameShape[2];
@@ -432,10 +432,10 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         if (noiseAugStrength > 0)
         {
             var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
-            var noise = DiffusionNoiseHelper<T>.SampleGaussian(image.Shape.ToArray(), rng);
+            var noise = DiffusionNoiseHelper<T>.SampleGaussian(image._shape, rng);
             var scaledNoise = DiffusionNoiseHelper<T>.ScaleNoise(noise, noiseAugStrength);
 
-            var augmented = new Tensor<T>(image.Shape.ToArray());
+            var augmented = new Tensor<T>(image._shape);
             var augSpan = augmented.AsWritableSpan();
             var imgSpan = image.AsSpan();
             var noiseSpan = scaledNoise.AsSpan();
@@ -496,7 +496,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         Tensor<T> textEmbedding)
     {
         // Default: predict noise for each frame independently
-        var videoShape = latents.Shape.ToArray();
+        var videoShape = latents._shape;
         var numFrames = videoShape[1];
         var result = new Tensor<T>(videoShape);
 
@@ -517,7 +517,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     /// <returns>Video latents.</returns>
     protected virtual Tensor<T> EncodeVideoToLatent(Tensor<T> video)
     {
-        var videoShape = video.Shape.ToArray();
+        var videoShape = video._shape;
         var numFrames = videoShape[1];
 
         // Use temporal VAE if available, otherwise encode per-frame
@@ -529,7 +529,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         // Encode each frame independently
         var firstFrame = ExtractFrame(video, 0);
         var firstLatent = EncodeToLatent(firstFrame, sampleMode: true);
-        var latentShape = firstLatent.Shape.ToArray();
+        var latentShape = firstLatent._shape;
 
         var videoLatentShape = new[] { videoShape[0], numFrames, latentShape[1], latentShape[2], latentShape[3] };
         var videoLatents = new Tensor<T>(videoLatentShape);
@@ -553,7 +553,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     /// <returns>Decoded video [batch, numFrames, channels, height, width].</returns>
     protected virtual Tensor<T> DecodeVideoLatents(Tensor<T> latents)
     {
-        var latentShape = latents.Shape.ToArray();
+        var latentShape = latents._shape;
         var numFrames = latentShape[1];
 
         // Use temporal VAE if available
@@ -582,9 +582,9 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     /// <returns>Noisy latents.</returns>
     protected virtual Tensor<T> AddNoiseToVideoLatents(Tensor<T> latents, int timestep, Random rng)
     {
-        var noise = DiffusionNoiseHelper<T>.SampleGaussian(latents.Shape.ToArray(), rng);
+        var noise = DiffusionNoiseHelper<T>.SampleGaussian(latents._shape, rng);
         var noisyLatents = Scheduler.AddNoise(latents.ToVector(), noise.ToVector(), timestep);
-        return new Tensor<T>(latents.Shape.ToArray(), noisyLatents);
+        return new Tensor<T>(latents._shape, noisyLatents);
     }
 
     /// <summary>
@@ -599,7 +599,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
         var latentVector = latents.ToVector();
         var noiseVector = noisePrediction.ToVector();
         latentVector = Scheduler.Step(noiseVector, timestep, latentVector, NumOps.Zero);
-        return new Tensor<T>(latents.Shape.ToArray(), latentVector);
+        return new Tensor<T>(latents._shape, latentVector);
     }
 
     /// <summary>
@@ -615,7 +615,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     /// </summary>
     protected virtual Tensor<T> ExtractFrameLatent(Tensor<T> videoLatents, int frameIndex)
     {
-        var shape = videoLatents.Shape.ToArray();
+        var shape = videoLatents._shape;
         var batchSize = shape[0];
         var channels = shape[2];
         var height = shape[3];
@@ -649,7 +649,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     /// </summary>
     protected virtual void InsertFrameLatent(Tensor<T> videoLatents, Tensor<T> frameLatent, int frameIndex)
     {
-        var shape = videoLatents.Shape.ToArray();
+        var shape = videoLatents._shape;
         var batchSize = shape[0];
         var channels = shape[2];
         var height = shape[3];
@@ -684,7 +684,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     {
         // Use diffusion to generate intermediate frames
         // This is a simplified implementation
-        var videoShape = video.Shape.ToArray();
+        var videoShape = video._shape;
         var currentFrames = videoShape[1];
 
         var interpolatedFrames = new List<Tensor<T>>();
@@ -724,7 +724,7 @@ public abstract class VideoDiffusionModelBase<T> : LatentDiffusionModelBase<T>, 
     /// </summary>
     protected virtual Tensor<T> InterpolateFramesLinear(Tensor<T> video, int targetFrames)
     {
-        var videoShape = video.Shape.ToArray();
+        var videoShape = video._shape;
         var currentFrames = videoShape[1];
 
         var interpolatedFrames = new List<Tensor<T>>();

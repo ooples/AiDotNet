@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -238,7 +238,7 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        Tensor<T> output = new Tensor<T>(input.Shape.ToArray());
+        Tensor<T> output = new Tensor<T>(input._shape);
 
         // Apply the activation to each element in the tensor
         for (int i = 0; i < input.Length; i++)
@@ -268,7 +268,7 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
-        Tensor<T> derivatives = new Tensor<T>(input.Shape.ToArray());
+        Tensor<T> derivatives = new Tensor<T>(input._shape);
 
         // Calculate the derivative for each element in the tensor
         for (int i = 0; i < input.Length; i++)

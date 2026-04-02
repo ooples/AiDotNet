@@ -1,4 +1,4 @@
-using AiDotNet.Models.Options;
+﻿using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -232,7 +232,7 @@ public abstract class TabRBase<T>
     {
         int batchSize = embeddings.Shape[0];
         int dim = embeddings.Shape[1];
-        var normalized = new Tensor<T>(embeddings.Shape.ToArray());
+        var normalized = new Tensor<T>(embeddings._shape);
         var epsilon = NumOps.FromDouble(1e-12);
 
         for (int b = 0; b < batchSize; b++)

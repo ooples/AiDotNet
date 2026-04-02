@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Engines;
 using AiDotNet.Initialization;
@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "1, 8, 8, 2, 3")]
-public class ConvolutionalLayer<T> : LayerBase<T>
+public partial class ConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Gets the depth (number of channels) of the input data.
@@ -184,24 +184,6 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         return _biases;
     }
 
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_kernels, _biases];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
-        _kernels = parameters[0];
-        _biases = parameters[1];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
-        _kernelsGradient = null;
-        _biasesGradient = null;
-    }
-
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -224,6 +206,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// are what actually get updated when the network learns.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _kernels;
 
     /// <summary>
@@ -245,6 +229,8 @@ public class ConvolutionalLayer<T> : LayerBase<T>
     /// perfectly match what the kernel is looking for.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>

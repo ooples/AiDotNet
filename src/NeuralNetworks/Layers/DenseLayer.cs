@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -45,7 +45,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
-public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets whether auxiliary loss (weight regularization) should be used during training.
@@ -144,6 +144,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// and weights close to zero mean the connection is weak or unimportant.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
@@ -166,6 +168,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// while a negative bias would require stronger input signals to activate.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -738,29 +742,6 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Ensure biases are initialized (supports lazy initialization)
         EnsureInitialized();
         return _biases;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters()
-    {
-        EnsureInitialized();
-        return [_weights, _biases];
-    }
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 2)
-            throw new ArgumentException($"DenseLayer expects 2 parameters (weights, biases), got {parameters.Length}.");
-        _weights = parameters[0];
-        _biases = parameters[1];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
-        _weightsGradient?.Fill(NumOps.Zero);
-        _biasesGradient?.Fill(NumOps.Zero);
     }
 
     /// <summary>

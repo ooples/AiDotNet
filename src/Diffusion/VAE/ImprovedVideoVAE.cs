@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -185,7 +185,7 @@ public class ImprovedVideoVAE<T> : VAEModelBase<T>
         // Split into mean and log-variance
         int halfLength = x.AsSpan().Length / 2;
         var meanShape = new int[x.Shape.Length];
-        Array.Copy(x.Shape.ToArray(), meanShape, x.Shape.Length);
+        Array.Copy(x._shape, meanShape, x.Shape.Length);
         if (meanShape.Length > 1)
             meanShape[meanShape.Length - 3] = _latentChannels;
 
@@ -233,7 +233,7 @@ public class ImprovedVideoVAE<T> : VAEModelBase<T>
             int groupEnd = Math.Min(i + _temporalDownsample, latents.Count);
             int groupSize = groupEnd - i;
 
-            var avg = new Tensor<T>(latents[i].Shape.ToArray());
+            var avg = new Tensor<T>(latents[i]._shape);
             var avgSpan = avg.AsWritableSpan();
             var scale = NumOps.FromDouble(1.0 / groupSize);
 

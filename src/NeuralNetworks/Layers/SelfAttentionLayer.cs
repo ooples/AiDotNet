@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 2, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets whether auxiliary loss (attention sparsity regularization) should be used during training.
@@ -100,6 +100,8 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Queries represent what each position in the sequence is looking for in other positions.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _queryWeights;
 
     /// <summary>
@@ -132,6 +134,8 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// baseline activation level of the attention output.
     /// Shape: [embeddingDimension]
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputBias;
 
     /// <summary>
@@ -1046,24 +1050,6 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         base.ClearGradients();
         _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_queryWeights, _keyWeights, _valueWeights, _outputBias];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 4) throw new ArgumentException($"Expected 4 parameters, got {parameters.Length}.");
-        _queryWeights = parameters[0]; _keyWeights = parameters[1]; _valueWeights = parameters[2]; _outputBias = parameters[3];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
-        _queryWeightsGradient = null;
-        _keyWeightsGradient = null;
-        _valueWeightsGradient = null;
     }
 
     public override void ResetState()

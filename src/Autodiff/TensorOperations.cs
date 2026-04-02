@@ -1,4 +1,4 @@
-using AiDotNet.Engines;
+﻿using AiDotNet.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Autodiff;
@@ -119,13 +119,13 @@ public static class TensorOperations<T>
         var numOps = MathHelper.GetNumericOperations<T>();
 
         // Use direct addition if shapes are equal, otherwise broadcast
-        Tensor<T> result = a.Value.Shape.ToArray().SequenceEqual(b.Value.Shape.ToArray())
+        Tensor<T> result = a.Value._shape.SequenceEqual(b.Value._shape)
             ? engine.TensorAdd(a.Value, b.Value)
             : BroadcastAdd(a.Value, b.Value, numOps);
 
         // Store original shapes for gradient reduction
-        var aShape = a.Value.Shape.ToArray();
-        var bShape = b.Value.Shape.ToArray();
+        var aShape = a.Value._shape;
+        var bShape = b.Value._shape;
 
         // Create backward function
         void BackwardFunction(Tensor<T> gradient)
@@ -274,13 +274,13 @@ public static class TensorOperations<T>
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
 
-        Tensor<T> result = a.Value.Shape.ToArray().SequenceEqual(b.Value.Shape.ToArray())
+        Tensor<T> result = a.Value._shape.SequenceEqual(b.Value._shape)
             ? engine.TensorMultiply(a.Value, b.Value)
             : BroadcastMultiply(a.Value, b.Value, numOps);
 
         // Store original shapes for gradient reduction
-        var aShape = a.Value.Shape.ToArray();
-        var bShape = b.Value.Shape.ToArray();
+        var aShape = a.Value._shape;
+        var bShape = b.Value._shape;
 
         // Create backward function
         void BackwardFunction(Tensor<T> gradient)
@@ -1141,7 +1141,7 @@ public static class TensorOperations<T>
     {
         var result = a.Value.Sum(axes);
         // Store original shape for gradient computation
-        var originalShape = a.Value.Shape.ToArray();
+        var originalShape = a.Value._shape;
         void BackwardFunction(Tensor<T> gradient)
         {
             if (a.RequiresGradient)
@@ -1265,7 +1265,7 @@ public static class TensorOperations<T>
         var mean = a.Value.Mean();
         var result = new Tensor<T>(new int[] { 1 });
         result[0] = mean;
-        var originalShape = a.Value.Shape.ToArray();
+        var originalShape = a.Value._shape;
         var count = a.Value.Length;
         void BackwardFunction(Tensor<T> gradient)
         {
@@ -1307,14 +1307,14 @@ public static class TensorOperations<T>
     /// The total number of elements must remain the same.
     /// </para>
     /// <para><b>Gradient computation:</b>
-    /// - ∂(Reshape(A))/∂A = Reshape(gradOut, A.Shape.ToArray())
+    /// - ∂(Reshape(A))/∂A = Reshape(gradOut, A._shape)
     /// - Simply reshape the gradient back to the original shape.
     /// </para>
     /// </remarks>
     public static ComputationNode<T> Reshape(ComputationNode<T> a, params int[] newShape)
     {
         var result = a.Value.Reshape(newShape);
-        var originalShape = a.Value.Shape.ToArray();
+        var originalShape = a.Value._shape;
         void BackwardFunction(Tensor<T> gradient)
         {
             if (a.RequiresGradient)
@@ -1422,7 +1422,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Broadcast(ComputationNode<T> a, int[] targetShape)
     {
         var engine = AiDotNetEngine.Current;
-        var originalShape = a.Value.Shape.ToArray();
+        var originalShape = a.Value._shape;
 
         // Validate: we support broadcasting 1D [N] to 2D [M, N]
         if (originalShape.Length != 1 || targetShape.Length != 2 || originalShape[0] != targetShape[1])
@@ -1502,7 +1502,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Softmax(ComputationNode<T> a, int axis = -1)
     {
         var engine = AiDotNetEngine.Current;
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
         // Use IEngine for GPU-accelerated forward pass
         var result = engine.Softmax(a.Value, axis);
@@ -2505,7 +2505,7 @@ public static class TensorOperations<T>
             throw new ArgumentException("Cannot concatenate empty list of nodes");
 
         var engine = AiDotNetEngine.Current;
-        var firstShape = nodes[0].Value.Shape.ToArray();
+        var firstShape = nodes[0].Value._shape;
 
         // Normalize axis
         int normalizedAxis = axis < 0 ? firstShape.Length + axis : axis;
@@ -2516,14 +2516,14 @@ public static class TensorOperations<T>
 
         // Store sizes and shapes for gradient splitting
         var sizes = nodes.Select(n => n.Value.Shape[normalizedAxis]).ToList();
-        var shapes = nodes.Select(n => n.Value.Shape.ToArray()).ToList();
+        var shapes = nodes.Select(n => n.Value._shape).ToList();
         int capturedAxis = normalizedAxis;
 
         void BackwardFunction(Tensor<T> gradient)
         {
             // Split gradient along concat axis and distribute to inputs
             var numOps = MathHelper.GetNumericOperations<T>();
-            var gradShape = gradient.Shape.ToArray();
+            var gradShape = gradient._shape;
             var strides = ComputeStridesStatic(gradShape);
             var gradData = gradient.ToArray();
 
@@ -2641,7 +2641,7 @@ public static class TensorOperations<T>
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var padValue = value ?? numOps.Zero;
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
         // Validate padWidth dimensions
         if (padWidth.GetLength(0) != shape.Length)
             throw new ArgumentException("padWidth must have same number of dimensions as input tensor");
@@ -2851,7 +2851,7 @@ public static class TensorOperations<T>
         int[] poolSize,
         int[]? strides = null)
     {
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
         if (shape.Length != 4)
             throw new ArgumentException("MaxPool2D requires 4D input [batch, channels, height, width]");
 
@@ -2923,7 +2923,7 @@ public static class TensorOperations<T>
         int[] poolSize,
         int[]? strides = null)
     {
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
         if (shape.Length != 4)
             throw new ArgumentException("AvgPool2D requires 4D input [batch, channels, height, width]");
 
@@ -3001,7 +3001,7 @@ public static class TensorOperations<T>
         double epsilon = 1e-5)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
         var eps = numOps.FromDouble(epsilon);
         // For 2D input [batch, features], normalize over features
         if (shape.Length == 2 && normalizedShape.Length == 1 && normalizedShape[0] == shape[1])
@@ -3368,7 +3368,7 @@ public static class TensorOperations<T>
         double epsilon = 1e-5)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
         var eps = numOps.FromDouble(epsilon);
         // Handle 2D case [batch, features]
         if (shape.Length == 2)
@@ -3912,7 +3912,7 @@ public static class TensorOperations<T>
         double epsilon = 1e-5)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
         var eps = numOps.FromDouble(epsilon);
 
         if (shape.Length < 2)
@@ -4336,8 +4336,8 @@ public static class TensorOperations<T>
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var kernelShape = kernel.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var kernelShape = kernel.Value._shape;
         if (inputShape.Length != 4)
             throw new ArgumentException("Conv2D requires 4D input [batch, inChannels, height, width]");
         if (kernelShape.Length != 4)
@@ -4478,8 +4478,8 @@ public static class TensorOperations<T>
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var kernelShape = kernel.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var kernelShape = kernel.Value._shape;
 
         if (inputShape.Length != 5)
             throw new ArgumentException("Conv3D requires 5D input [batch, inChannels, depth, height, width]", nameof(input));
@@ -4625,7 +4625,7 @@ public static class TensorOperations<T>
         int[] poolSize,
         int[]? strides = null)
     {
-        var shape = input.Value.Shape.ToArray();
+        var shape = input.Value._shape;
         if (shape.Length != 5)
             throw new ArgumentException("MaxPool3D requires 5D input [batch, channels, depth, height, width]");
 
@@ -4692,7 +4692,7 @@ public static class TensorOperations<T>
         int scaleH,
         int scaleW)
     {
-        var shape = input.Value.Shape.ToArray();
+        var shape = input.Value._shape;
         if (shape.Length != 5)
             throw new ArgumentException("Upsample3D requires 5D input [batch, channels, depth, height, width]");
 
@@ -4765,8 +4765,8 @@ public static class TensorOperations<T>
         int[]? outputPadding = null)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var kernelShape = kernel.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var kernelShape = kernel.Value._shape;
 
         if (inputShape.Length != 4)
             throw new ArgumentException("ConvTranspose2D requires 4D input [batch, inChannels, height, width]");
@@ -4907,7 +4907,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> ReduceMax(ComputationNode<T> a, int[]? axes = null, bool keepDims = false)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = a.Value.Shape.ToArray();
+        var inputShape = a.Value._shape;
         // If axes is null, reduce all dimensions
         if (axes == null)
         {
@@ -5017,7 +5017,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> ReduceMean(ComputationNode<T> a, int[]? axes = null, bool keepDims = false)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = a.Value.Shape.ToArray();
+        var inputShape = a.Value._shape;
         // If axes is null, reduce all dimensions
         if (axes == null)
         {
@@ -5143,7 +5143,7 @@ public static class TensorOperations<T>
     public static List<ComputationNode<T>> Split(ComputationNode<T> a, int numSplits, int axis = 0)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = a.Value.Shape.ToArray();
+        var inputShape = a.Value._shape;
         if (axis < 0 || axis >= inputShape.Length)
             throw new ArgumentException($"Axis {axis} is out of bounds for tensor with {inputShape.Length} dimensions.");
         if (inputShape[axis] % numSplits != 0)
@@ -5235,7 +5235,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Crop(ComputationNode<T> a, int[] cropping)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = a.Value.Shape.ToArray();
+        var inputShape = a.Value._shape;
         if (inputShape.Length == 4 && cropping.Length == 4)
         {
             // 4D tensor: [batch, channels, height, width]
@@ -5316,7 +5316,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Upsample(ComputationNode<T> a, int scale)
     {
         var engine = AiDotNetEngine.Current;
-        var inputShape = a.Value.Shape.ToArray();
+        var inputShape = a.Value._shape;
 
         if (inputShape.Length < 2)
             throw new ArgumentException("Upsample requires tensor with at least 2 dimensions for height and width.");
@@ -5365,7 +5365,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> PixelShuffle(ComputationNode<T> a, int upscaleFactor)
     {
         var engine = AiDotNetEngine.Current;
-        var inputShape = a.Value.Shape.ToArray();
+        var inputShape = a.Value._shape;
 
         if (inputShape.Length != 4)
             throw new ArgumentException("PixelShuffle expects 4D input [batch, channels, height, width]");
@@ -5429,8 +5429,8 @@ public static class TensorOperations<T>
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var kernelShape = kernel.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var kernelShape = kernel.Value._shape;
         if (inputShape.Length != 4 || kernelShape.Length != 4)
             throw new ArgumentException("DilatedConv2D expects 4D tensors [batch, channels, height, width]");
         stride ??= new int[] { 1, 1 };
@@ -5559,8 +5559,8 @@ public static class TensorOperations<T>
         int[]? padding = null)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var kernelShape = kernel.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var kernelShape = kernel.Value._shape;
 
         // Validate input shape (must be 4D: [batch, in_channels, height, width])
         if (inputShape.Length != 4)
@@ -5583,7 +5583,7 @@ public static class TensorOperations<T>
         // Validate bias if provided
         if (bias != null)
         {
-            var biasShape = bias.Value.Shape.ToArray();
+            var biasShape = bias.Value._shape;
             if (biasShape.Length != 1 || biasShape[0] != outChannels)
                 throw new ArgumentException($"Bias must be 1D tensor of length {outChannels}");
         }
@@ -5722,8 +5722,8 @@ public static class TensorOperations<T>
         int[]? stride = null)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var weightsShape = weights.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var weightsShape = weights.Value._shape;
         // Validate input shape (must be 4D: [batch, in_channels, height, width])
         if (inputShape.Length != 4)
             throw new ArgumentException("Input must be 4D tensor [batch, in_channels, height, width]");
@@ -5751,7 +5751,7 @@ public static class TensorOperations<T>
         // Validate bias if provided
         if (bias != null)
         {
-            var biasShape = bias.Value.Shape.ToArray();
+            var biasShape = bias.Value._shape;
             if (biasShape.Length != 1 || biasShape[0] != outChannels)
                 throw new ArgumentException($"Bias must be 1D tensor of length {outChannels}");
         }
@@ -5945,8 +5945,8 @@ public static class TensorOperations<T>
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var kernelShape = kernel.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var kernelShape = kernel.Value._shape;
 
         if (inputShape.Length != 4)
             throw new ArgumentException("DeformableConv2D requires 4D input [batch, inChannels, height, width]");
@@ -6115,7 +6115,7 @@ public static class TensorOperations<T>
         double epsilon = 1e-8)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
         if (axis < 0 || axis >= inputShape.Length)
             throw new ArgumentException($"Axis {axis} is out of range for tensor of rank {inputShape.Length}");
         // Compute output shape (remove the reduction axis)
@@ -6265,9 +6265,9 @@ public static class TensorOperations<T>
         ComputationNode<T> epsilons)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var centersShape = centers.Value.Shape.ToArray();
-        var epsilonsShape = epsilons.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var centersShape = centers.Value._shape;
+        var epsilonsShape = epsilons.Value._shape;
         // Validate shapes
         if (inputShape.Length != 2)
             throw new ArgumentException("Input must be 2D tensor [batch, inputSize]");
@@ -6439,7 +6439,7 @@ public static class TensorOperations<T>
         int outputWidth)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var thetaShape = theta.Value.Shape.ToArray();
+        var thetaShape = theta.Value._shape;
         // Validate shapes
         if (thetaShape.Length != 3 || thetaShape[1] != 2 || thetaShape[2] != 3)
             throw new ArgumentException("Theta must be of shape [batch, 2, 3]");
@@ -6570,8 +6570,8 @@ public static class TensorOperations<T>
         ComputationNode<T> grid)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var gridShape = grid.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var gridShape = grid.Value._shape;
         // Validate shapes
         if (inputShape.Length != 4)
             throw new ArgumentException("Input must be 4D tensor [batch, height, width, channels]");
@@ -6794,9 +6794,9 @@ public static class TensorOperations<T>
         ComputationNode<T>? bias = null)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var adjShape = adjacency.Value.Shape.ToArray();
-        var weightsShape = weights.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var adjShape = adjacency.Value._shape;
+        var weightsShape = weights.Value._shape;
         // Validate shapes
         if (inputShape.Length != 3)
             throw new ArgumentException("Input must be 3D tensor [batch, numNodes, inputFeatures]");
@@ -7017,7 +7017,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Pad(ComputationNode<T> a, int[] padding)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = a.Value.Shape.ToArray();
+        var inputShape = a.Value._shape;
 
         if (padding.Length != inputShape.Length)
             throw new ArgumentException($"Padding array length ({padding.Length}) must match input rank ({inputShape.Length})");
@@ -7264,7 +7264,7 @@ public static class TensorOperations<T>
         {
             if (embeddings.RequiresGradient)
             {
-                var embeddingGrad = new Tensor<T>(embeddingMatrix.Shape.ToArray());
+                var embeddingGrad = new Tensor<T>(embeddingMatrix._shape);
 
                 for (int b = 0; b < batchSize; b++)
                 {
@@ -7611,7 +7611,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Squash(ComputationNode<T> a, double epsilon = 1e-7)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = a.Value.Shape.ToArray();
+        var inputShape = a.Value._shape;
 
         // Assume last dimension is the capsule dimension
         int capsuleDim = inputShape[inputShape.Length - 1];
@@ -7752,7 +7752,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Norm(ComputationNode<T> a, int axis = -1, bool keepDims = false, double epsilon = 1e-12)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = a.Value.Shape.ToArray();
+        var inputShape = a.Value._shape;
 
         // Normalize axis to positive index
         if (axis < 0)
@@ -7901,8 +7901,8 @@ public static class TensorOperations<T>
     public static ComputationNode<T> ComplexMatMul(ComputationNode<T> a, ComputationNode<T> b, string format = "split")
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shapeA = a.Value.Shape.ToArray();
-        var shapeB = b.Value.Shape.ToArray();
+        var shapeA = a.Value._shape;
+        var shapeB = b.Value._shape;
 
         // For split format: [batch, m, 2*k] and [batch, 2*k, n]
         // Split into real and imaginary parts
@@ -8278,9 +8278,9 @@ public static class TensorOperations<T>
     public static ComputationNode<T> ComplexMultiply(ComputationNode<T> a, ComputationNode<T> b, string format = "split")
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
-        if (!shape.SequenceEqual(b.Value.Shape.ToArray()))
+        if (!shape.SequenceEqual(b.Value._shape))
             throw new ArgumentException("Tensors must have the same shape for complex multiplication.");
 
         var result = new Tensor<T>(shape);
@@ -8446,7 +8446,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Slice(ComputationNode<T> a, int start, int length, int step = 1, int axis = 0)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
         // Handle negative axis
         if (axis < 0)
@@ -8594,7 +8594,7 @@ public static class TensorOperations<T>
 
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = logits.Value.Shape.ToArray();
+        var shape = logits.Value._shape;
         var eps = 1e-10;
 
         // Add Gumbel noise: -log(-log(U)) where U ~ Uniform(0, 1)
@@ -8721,7 +8721,7 @@ public static class TensorOperations<T>
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = membranePotential.Value.Shape.ToArray();
+        var shape = membranePotential.Value._shape;
 
         // Forward pass: hard threshold
         var spikes = new Tensor<T>(shape);
@@ -8788,7 +8788,7 @@ public static class TensorOperations<T>
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = input.Value.Shape.ToArray();
+        var shape = input.Value._shape;
         var thresholdT = numOps.FromDouble(threshold);
 
         var result = new Tensor<T>(shape);
@@ -8835,7 +8835,7 @@ public static class TensorOperations<T>
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = scores.Value.Shape.ToArray();
+        var shape = scores.Value._shape;
         int lastDim = shape[^1];
         int batchSize = scores.Value.Length / lastDim;
 
@@ -9075,10 +9075,10 @@ public static class TensorOperations<T>
                 }
             }
 
-            var emitGrad = new Tensor<T>(emissions.Value.Shape.ToArray());
-            var transGrad = new Tensor<T>(transitions.Value.Shape.ToArray());
-            Tensor<T>? startGrad = startScores != null ? new Tensor<T>(startScores.Value.Shape.ToArray()) : null;
-            Tensor<T>? endGrad = endScores != null ? new Tensor<T>(endScores.Value.Shape.ToArray()) : null;
+            var emitGrad = new Tensor<T>(emissions.Value._shape);
+            var transGrad = new Tensor<T>(transitions.Value._shape);
+            Tensor<T>? startGrad = startScores != null ? new Tensor<T>(startScores.Value._shape) : null;
+            Tensor<T>? endGrad = endScores != null ? new Tensor<T>(endScores.Value._shape) : null;
 
             // Emission grads (posterior)
             for (int t = 0; t < seqLen; t++)
@@ -9428,7 +9428,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> LogSoftmax(ComputationNode<T> a, int axis = -1)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
         if (axis < 0)
             axis = shape.Length + axis;
@@ -9550,7 +9550,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Softmin(ComputationNode<T> a, int axis = -1)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
         if (axis < 0)
             axis = shape.Length + axis;
@@ -9669,7 +9669,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> LogSoftmin(ComputationNode<T> a, int axis = -1)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
         if (axis < 0)
             axis = shape.Length + axis;
@@ -9849,7 +9849,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Maxout(ComputationNode<T> a, int numPieces = 2)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
         if (shape.Length != 2)
             throw new ArgumentException($"Maxout requires 2D input [batch, features], got {shape.Length}D");
@@ -10026,7 +10026,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> SphericalSoftmax(ComputationNode<T> a, int axis = -1)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
         if (axis < 0)
             axis = shape.Length + axis;
@@ -10205,7 +10205,7 @@ public static class TensorOperations<T>
             throw new ArgumentOutOfRangeException(nameof(order), order, "Order must be at least 1.");
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
         if (axis < 0)
             axis = shape.Length + axis;
@@ -10369,7 +10369,7 @@ public static class TensorOperations<T>
     public static ComputationNode<T> Sparsemax(ComputationNode<T> a, int axis = -1)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var shape = a.Value.Shape.ToArray();
+        var shape = a.Value._shape;
 
         if (axis < 0)
             axis = shape.Length + axis;
@@ -10546,8 +10546,8 @@ public static class TensorOperations<T>
         int numClasses)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var weightsShape = nodeWeights.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var weightsShape = nodeWeights.Value._shape;
 
         if (inputShape.Length != 2)
             throw new ArgumentException($"Input must be 2D [batch, inputDim], got {inputShape.Length}D");
@@ -10916,7 +10916,7 @@ public static class TensorOperations<T>
         var labelData = labels.Value.ToVector();
 
         // Determine number of support vectors and features
-        var svShape = supportVectors.Value.Shape.ToArray();
+        var svShape = supportVectors.Value._shape;
         var nSamples = svShape.Length > 0 ? svShape[0] : svData.Length;
         var nFeatures = svShape.Length > 1 ? svShape[1] : 1;
 
@@ -10992,7 +10992,7 @@ public static class TensorOperations<T>
                         }
                     }
                 }
-                var gradLabelsTensor = new Tensor<T>(labels.Value.Shape.ToArray(), new Vector<T>(gradLabels));
+                var gradLabelsTensor = new Tensor<T>(labels.Value._shape, new Vector<T>(gradLabels));
                 if (labels.Gradient == null)
                     labels.Gradient = gradLabelsTensor;
                 else
@@ -11044,7 +11044,7 @@ public static class TensorOperations<T>
                     }
                 }
 
-                var gradInputTensor = new Tensor<T>(input.Value.Shape.ToArray(), new Vector<T>(gradInput));
+                var gradInputTensor = new Tensor<T>(input.Value._shape, new Vector<T>(gradInput));
                 if (input.Gradient == null)
                     input.Gradient = gradInputTensor;
                 else
@@ -11250,8 +11250,8 @@ public static class TensorOperations<T>
         {
             // General broadcasting following NumPy rules:
             // Align shapes from the right, dimensions are compatible if equal or one is 1.
-            var largerShape = larger.Shape.ToArray();
-            var smallerShape = smaller.Shape.ToArray();
+            var largerShape = larger._shape;
+            var smallerShape = smaller._shape;
             int maxRank = largerShape.Length;
 
             // Pad smaller shape with 1s on the left to match rank
@@ -11351,8 +11351,8 @@ public static class TensorOperations<T>
         // General broadcasting multiplication following NumPy rules
         var mulLarger = a.Length >= b.Length ? a : b;
         var mulSmaller = a.Length >= b.Length ? b : a;
-        var mulLargerShape = mulLarger.Shape.ToArray();
-        var mulSmallerShape = mulSmaller.Shape.ToArray();
+        var mulLargerShape = mulLarger._shape;
+        var mulSmallerShape = mulSmaller._shape;
         int maxRank = mulLargerShape.Length;
         int offset = maxRank - mulSmallerShape.Length;
 
@@ -11398,7 +11398,7 @@ public static class TensorOperations<T>
     private static Tensor<T> ReduceGradient(Tensor<T> gradient, int[] originalShape)
     {
         // If shapes already match, no reduction needed
-        if (gradient.Shape.ToArray().SequenceEqual(originalShape))
+        if (gradient._shape.SequenceEqual(originalShape))
         {
             return gradient;
         }
@@ -11433,7 +11433,7 @@ public static class TensorOperations<T>
         else
         {
             // General reduction: sum across dimensions that were broadcasted
-            throw new NotSupportedException($"Gradient reduction from shape [{string.Join(", ", gradient.Shape.ToArray())}] to [{string.Join(", ", originalShape)}] is not yet implemented for this shape combination.");
+            throw new NotSupportedException($"Gradient reduction from shape [{string.Join(", ", gradient._shape)}] to [{string.Join(", ", originalShape)}] is not yet implemented for this shape combination.");
         }
     }
 
@@ -11464,8 +11464,8 @@ public static class TensorOperations<T>
         ComputationNode<T>? biases = null)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var inputShape = input.Value.Shape.ToArray();
-        var weightShape = weights.Value.Shape.ToArray();
+        var inputShape = input.Value._shape;
+        var weightShape = weights.Value._shape;
 
         if (inputShape.Length != 2)
             throw new ArgumentException("OctonionMatMul input must have shape [batch, inputFeatures * 8]");
@@ -11817,7 +11817,7 @@ public static class TensorOperations<T>
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var input = point.Value;
-        var shape = input.Shape.ToArray();
+        var shape = input._shape;
 
         // Compute max radius based on curvature
         double absC = Math.Abs(curvature);
@@ -11969,7 +11969,7 @@ public static class TensorOperations<T>
         var numOps = MathHelper.GetNumericOperations<T>();
         var xVal = x.Value;
         var yVal = y.Value;
-        var shape = xVal.Shape.ToArray();
+        var shape = xVal._shape;
         double c = Math.Abs(curvature); // Use absolute value of curvature
 
         int batchSize = shape.Length > 1 ? shape[0] : 1;
@@ -12103,7 +12103,7 @@ public static class TensorOperations<T>
         var numOps = MathHelper.GetNumericOperations<T>();
         var pVal = point.Value;
         var vVal = tangent.Value;
-        var shape = pVal.Shape.ToArray();
+        var shape = pVal._shape;
         double c = Math.Abs(curvature);
         double sqrtC = Math.Sqrt(c);
 
@@ -12265,7 +12265,7 @@ public static class TensorOperations<T>
         var numOps = MathHelper.GetNumericOperations<T>();
         var pVal = point.Value;
         var qVal = target.Value;
-        var shape = pVal.Shape.ToArray();
+        var shape = pVal._shape;
         double c = Math.Abs(curvature);
         double sqrtC = Math.Sqrt(c);
 
@@ -12416,7 +12416,7 @@ public static class TensorOperations<T>
         var numOps = MathHelper.GetNumericOperations<T>();
         var xVal = x.Value;
         var yVal = y.Value;
-        var shape = xVal.Shape.ToArray();
+        var shape = xVal._shape;
         double c = Math.Abs(curvature);
         double sqrtC = Math.Sqrt(c);
 
@@ -12713,7 +12713,7 @@ public static class TensorOperations<T>
                         if (input.RequiresGradient)
                         {
                             if (input.Gradient == null)
-                                input.Gradient = new Tensor<T>(inputVal.Shape.ToArray());
+                                input.Gradient = new Tensor<T>(inputVal._shape);
                             double existingInputGrad = numOps.ToDouble(input.Gradient[b, i]);
                             input.Gradient[b, i] = numOps.FromDouble(existingInputGrad + scaledGrad * w);
                         }
@@ -12722,7 +12722,7 @@ public static class TensorOperations<T>
                         if (weights.RequiresGradient)
                         {
                             if (weights.Gradient == null)
-                                weights.Gradient = new Tensor<T>(weightsVal.Shape.ToArray());
+                                weights.Gradient = new Tensor<T>(weightsVal._shape);
                             double existingWeightGrad = numOps.ToDouble(weights.Gradient[o, i]);
                             weights.Gradient[o, i] = numOps.FromDouble(existingWeightGrad + scaledGrad * inp);
                         }
@@ -12731,7 +12731,7 @@ public static class TensorOperations<T>
                         if (biases is not null && biases.RequiresGradient)
                         {
                             if (biases.Gradient == null)
-                                biases.Gradient = new Tensor<T>(biases.Value.Shape.ToArray());
+                                biases.Gradient = new Tensor<T>(biases.Value._shape);
                             double existingBiasGrad = numOps.ToDouble(biases.Gradient[o, i]);
                             biases.Gradient[o, i] = numOps.FromDouble(existingBiasGrad + scaledGrad / inputFeatures);
                         }

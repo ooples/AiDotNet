@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
@@ -334,7 +334,7 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeMomentum.TryGetValue(param, out var m)) { m = new Tensor<T>(param.Shape.ToArray()); _tapeMomentum[param] = m; }
+            if (!_tapeMomentum.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeMomentum[param] = m; }
 
             // Interpolate: c = beta1 * m + (1 - beta1) * grad
             var interpolated = Engine.TensorAdd(Engine.TensorMultiplyScalar(m, _currentBeta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1));

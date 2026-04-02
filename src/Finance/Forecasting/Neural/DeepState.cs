@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -875,7 +875,7 @@ public class DeepState<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
 
         // Defensive check: verify OnnxSession.InputMetadata is not null/empty
         var inputMeta = OnnxSession.InputMetadata;
@@ -972,7 +972,7 @@ public class DeepState<T> : ForecastingModelBase<T>
     {
         int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
         int totalElements = _lookbackWindow * _numFeatures;
-        var newInput = new Tensor<T>(input.Shape.ToArray());
+        var newInput = new Tensor<T>(input._shape);
 
         int steps = Math.Min(stepsUsed, _lookbackWindow);
         int shift = steps * _numFeatures;

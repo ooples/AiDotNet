@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -348,7 +348,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         T criticLoss = NumOps.Add(NumOps.Negate(wassersteinDistance), gpTerm);
 
         // Create gradients for real images (maximize score) using vectorized fill
-        var realGradients = new Tensor<T>(realScores.Shape.ToArray());
+        var realGradients = new Tensor<T>(realScores._shape);
         Engine.TensorFill(realGradients, NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize)));
 
         // IMPORTANT: Re-run forward pass on real images before backprop
@@ -357,7 +357,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         var realParameterGradients = Critic.GetParameterGradients().Clone();
 
         // Create gradients for fake images (minimize score) using vectorized fill
-        var fakeGradients = new Tensor<T>(fakeScores.Shape.ToArray());
+        var fakeGradients = new Tensor<T>(fakeScores._shape);
         Engine.TensorFill(fakeGradients, NumOps.Divide(NumOps.Negate(NumOps.One), NumOps.FromDouble(batchSize)));
 
         // IMPORTANT: Re-run forward pass on fake images before backprop
@@ -404,7 +404,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         var epsilon = Engine.TensorTile(epsilonBase, tileFactors);
 
         // Compute (1 - epsilon)
-        var onesTensor = new Tensor<T>(epsilon.Shape.ToArray());
+        var onesTensor = new Tensor<T>(epsilon._shape);
         Engine.TensorFill(onesTensor, NumOps.One);
         var oneMinusEpsilon = Engine.TensorSubtract(onesTensor, epsilon);
 
@@ -417,7 +417,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         var interpolatedScores = Critic.Predict(interpolatedImages);
 
         // Create gradients of all ones using vectorized fill
-        var ones = new Tensor<T>(interpolatedScores.Shape.ToArray());
+        var ones = new Tensor<T>(interpolatedScores._shape);
         Engine.TensorFill(ones, NumOps.One);
 
         // Compute input gradients for gradient penalty using tape-based autodiff
@@ -430,7 +430,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
             var allAxes = Enumerable.Range(0, scores.Shape.Length).ToArray();
             var sumScores = eng.ReduceSum(scores, allAxes, keepDims: false);
             var grads = tape.ComputeGradients(sumScores, [interpolatedTensor]);
-            inputGradients = grads.TryGetValue(interpolatedTensor, out var g) ? g : new Tensor<T>(interpolated.Shape.ToArray());
+            inputGradients = grads.TryGetValue(interpolatedTensor, out var g) ? g : new Tensor<T>(interpolated._shape);
         }
 
         // Compute L2 norm of gradients for each sample using vectorized operations
@@ -445,7 +445,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         var gradNorm = Engine.TensorSqrt(gradNormSquared);
 
         // deviation = gradNorm - 1
-        var onesForDeviation = new Tensor<T>(gradNorm.Shape.ToArray());
+        var onesForDeviation = new Tensor<T>(gradNorm._shape);
         Engine.TensorFill(onesForDeviation, NumOps.One);
         var deviation = Engine.TensorSubtract(gradNorm, onesForDeviation);
 

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -253,7 +253,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         // For single-frame prediction, use zero mask (no inpainting)
-        var mask = new Tensor<T>(input.Shape.ToArray());
+        var mask = new Tensor<T>(input._shape);
         return InpaintFrame(input, mask, input, input, mask, mask);
     }
 
@@ -350,7 +350,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
 
             // Multi-head self-attention
             var qkv = _transformerQKV[i].Forward(normed);
-            var attended = MultiHeadSelfAttention(qkv, transformedFeatures.Shape.ToArray());
+            var attended = MultiHeadSelfAttention(qkv, transformedFeatures._shape);
             attended = _transformerProj[i].Forward(attended);
 
             // Residual connection
@@ -444,7 +444,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var result = new Tensor<T>(image.Shape.ToArray());
+        var result = new Tensor<T>(image._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -477,7 +477,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var result = new Tensor<T>(image.Shape.ToArray());
+        var result = new Tensor<T>(image._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -506,7 +506,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         int height = original.Shape[2];
         int width = original.Shape[3];
 
-        var result = new Tensor<T>(original.Shape.ToArray());
+        var result = new Tensor<T>(original._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -598,7 +598,7 @@ public class ProPainter<T> : VideoInpaintingBase<T>
         int height = input.Shape[2];
         int width = input.Shape[3];
 
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         const double eps = 1e-5;
 
         for (int b = 0; b < batchSize; b++)

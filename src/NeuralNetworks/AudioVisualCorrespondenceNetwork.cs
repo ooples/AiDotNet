@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -305,7 +305,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         foreach (var frame in frames)
         {
             var spatialFeatures = ExtractSpatialFeatures(frame);
-            var attentionMap = ComputeSoundSourceAttention(audioEmbedding, spatialFeatures, frame.Shape.ToArray());
+            var attentionMap = ComputeSoundSourceAttention(audioEmbedding, spatialFeatures, frame._shape);
             results.Add(attentionMap);
         }
 
@@ -1023,7 +1023,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             var outputGradient = _lossFunction.CalculateDerivative(predictionVec, expectedVec);
 
             // Convert gradient to tensor and backpropagate through audio encoder
-            var gradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
+            var gradientTensor = new Tensor<T>(prediction._shape, outputGradient);
 
             // Update parameters using the optimizer
             _optimizer.UpdateParameters(Layers);

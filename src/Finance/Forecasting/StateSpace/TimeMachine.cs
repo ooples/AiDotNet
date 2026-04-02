@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -735,7 +735,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         T std = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(variance)) + 1e-8);
 
         // Normalize
-        var normalized = new Tensor<T>(input.Shape.ToArray());
+        var normalized = new Tensor<T>(input._shape);
         for (int i = 0; i < length; i++)
         {
             normalized.Data.Span[i] = NumOps.Divide(
@@ -887,7 +887,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape.ToArray())
+        foreach (var dim in input._shape)
         {
             totalSize *= dim;
         }
@@ -966,7 +966,7 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         int inputLength = input.Data.Length;
         int predLength = Math.Min(prediction.Data.Length, inputLength);
 
-        var shifted = new Tensor<T>(input.Shape.ToArray());
+        var shifted = new Tensor<T>(input._shape);
 
         // Copy shifted values (skip first predLength values)
         for (int i = predLength; i < inputLength; i++)

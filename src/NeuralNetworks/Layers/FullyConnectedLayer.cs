@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class FullyConnectedLayer<T> : LayerBase<T>
+public partial class FullyConnectedLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The weight matrix connecting input neurons to output neurons.
@@ -67,6 +67,8 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// so every input-output pair has exactly one weight value.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
@@ -92,6 +94,8 @@ public class FullyConnectedLayer<T> : LayerBase<T>
     /// Each output neuron has its own bias value that can be learned independently.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -694,25 +698,6 @@ public class FullyConnectedLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override Tensor<T>? GetBiases() => _biases;
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_weights, _biases];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 2)
-            throw new ArgumentException($"FullyConnectedLayer expects 2 parameters (weights, biases), got {parameters.Length}.");
-        _weights = parameters[0];
-        _biases = parameters[1];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
-        _weightsGradient?.Fill(NumOps.Zero);
-        _biasesGradient?.Fill(NumOps.Zero);
-    }
 
     public override bool SupportsJitCompilation
     {

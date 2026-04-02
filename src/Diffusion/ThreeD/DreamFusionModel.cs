@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
@@ -387,7 +387,7 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private Tensor<T> GenerateNoise(Tensor<T> template)
     {
-        var noise = new Tensor<T>(template.Shape.ToArray());
+        var noise = new Tensor<T>(template._shape);
         var noiseSpan = noise.AsWritableSpan();
 
         for (int i = 0; i < noiseSpan.Length; i++)

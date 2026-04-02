@@ -1,4 +1,4 @@
-namespace AiDotNet.NeuralNetworks.Tabular;
+﻿namespace AiDotNet.NeuralNetworks.Tabular;
 
 /// <summary>
 /// Implements the Sparsemax activation function, which projects input onto the probability simplex
@@ -346,7 +346,7 @@ public class Sparsemax<T>
     private void ProcessHigherDimensionalAxis(Tensor<T> input, Tensor<T> output, int axis)
     {
         // Calculate strides for iteration
-        int[] shape = input.Shape.ToArray();
+        int[] shape = input._shape;
         int rank = shape.Length;
 
         // Calculate the total number of slices
@@ -404,7 +404,7 @@ public class Sparsemax<T>
     /// </summary>
     private void ProcessHigherDimensionalGradient(Tensor<T> gradOutput, Tensor<T> sparsemaxOutput, Tensor<T> gradInput, int axis)
     {
-        int[] shape = gradOutput.Shape.ToArray();
+        int[] shape = gradOutput._shape;
         int rank = shape.Length;
 
         int numSlices = 1;

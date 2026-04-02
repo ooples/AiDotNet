@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -671,7 +671,7 @@ public class ETSformer<T> : ForecastingModelBase<T>
 
         _instanceMean = new Tensor<T>(new[] { batchSize, 1, features });
         _instanceStd = new Tensor<T>(new[] { batchSize, 1, features });
-        var normalized = new Tensor<T>(input.Shape.ToArray());
+        var normalized = new Tensor<T>(input._shape);
 
         var epsilon = NumOps.FromDouble(1e-5);
 
@@ -786,7 +786,7 @@ public class ETSformer<T> : ForecastingModelBase<T>
             throw new InvalidOperationException("ONNX session not initialized.");
 
         var inputData = ConvertToFloatArray(input);
-        var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
 
         var inputs = new List<NamedOnnxValue>
         {
@@ -822,7 +822,7 @@ public class ETSformer<T> : ForecastingModelBase<T>
         int seqLen = output.Shape[1];
         int features = output.Shape[2];
 
-        var denormalized = new Tensor<T>(output.Shape.ToArray());
+        var denormalized = new Tensor<T>(output._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -898,7 +898,7 @@ public class ETSformer<T> : ForecastingModelBase<T>
         int seqLen = input.Shape[1];
         int features = input.Shape[2];
 
-        var newInput = new Tensor<T>(input.Shape.ToArray());
+        var newInput = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {

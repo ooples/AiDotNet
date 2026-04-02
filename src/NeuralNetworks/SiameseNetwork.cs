@@ -1,4 +1,4 @@
-global using AiDotNet.NeuralNetworks.Layers;
+﻿global using AiDotNet.NeuralNetworks.Layers;
 
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -454,7 +454,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             if (input.Shape.Length < 2 || input.Shape[1] != 2)
             {
                 throw new ArgumentException(
-                    $"Input tensor must have shape [batchSize, 2, ...dimensions] for Siamese comparison. Got shape: {string.Join(",", input.Shape.ToArray())}");
+                    $"Input tensor must have shape [batchSize, 2, ...dimensions] for Siamese comparison. Got shape: {string.Join(",", input._shape)}");
             }
 
             int batchSize = input.Shape[0];

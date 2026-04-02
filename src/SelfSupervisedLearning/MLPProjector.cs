@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -552,14 +552,14 @@ public class MLPProjector<T> : IProjectorHead<T>
             result[i] = NumOps.GreaterThan(input.Data.Span[i], NumOps.Zero) ? input.Data.Span[i] : NumOps.Zero;
         }
 
-        return new Tensor<T>(result, input.Shape.ToArray());
+        return new Tensor<T>(result, input._shape);
     }
 
     private Tensor<T> ReLUBackward(Tensor<T> outputGrad, Tensor<T> input)
     {
         // Vectorized ReLU backward: grad * (input > 0)
         var mask = Engine.TensorGreaterThan(input, NumOps.Zero);
-        var zeros = Tensor<T>.CreateDefault(outputGrad.Shape.ToArray(), NumOps.Zero);
+        var zeros = Tensor<T>.CreateDefault(outputGrad._shape, NumOps.Zero);
         return Engine.TensorWhere(mask, outputGrad, zeros);
     }
 

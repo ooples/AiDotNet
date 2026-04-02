@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -712,8 +712,8 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         outputGate = NeuralNetworkHelper<T>.ApplyActivation(outputGate, OutputGateActivation, OutputGateVectorActivation);
 
         // Rent new state tensors
-        var newCellState = TensorAllocator.Rent<T>(cellState.Shape.ToArray());
-        var newHiddenState = TensorAllocator.Rent<T>(hiddenState.Shape.ToArray());
+        var newCellState = TensorAllocator.Rent<T>(cellState._shape);
+        var newHiddenState = TensorAllocator.Rent<T>(hiddenState._shape);
 
         // Efficiently handle vector or scalar activation
         if (VectorActivation != null)
@@ -825,7 +825,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Get shape information from the first tensor
-        int[] shape = tensors[0].Shape.ToArray();
+        int[] shape = tensors[0]._shape;
 
         // Create result shape with time dimension inserted at position 1
         int[] resultShape = new int[shape.Length + 1];
@@ -875,7 +875,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A tensor with an additional batch dimension.</returns>
     private Tensor<T> AddBatchDimension(Tensor<T> input)
     {
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int[] resultShape = new int[inputShape.Length + 1];
 
         // Add batch dimension of size 1
@@ -924,7 +924,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A tensor with the batch dimension removed.</returns>
     private Tensor<T> RemoveBatchDimension(Tensor<T> input)
     {
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
 
         // Ensure first dimension is batch and has size 1
         if (inputShape[0] != 1)
@@ -977,7 +977,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A tensor with an additional time dimension.</returns>
     private Tensor<T> AddTimeDimension(Tensor<T> input)
     {
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int[] resultShape = new int[inputShape.Length + 1];
 
         // First dimension is batch
@@ -1020,7 +1020,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A tensor with the time dimension removed.</returns>
     private Tensor<T> RemoveTimeDimension(Tensor<T> input)
     {
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
 
         // Ensure second dimension is time and has size 1
         if (inputShape[1] != 1)
@@ -1067,7 +1067,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A tensor with additional batch and time dimensions.</returns>
     private Tensor<T> AddBatchAndTimeDimensions(Tensor<T> input)
     {
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int[] resultShape = new int[inputShape.Length + 2];
 
         // Add batch and time dimensions of size 1
@@ -1104,7 +1104,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A tensor with batch and time dimensions removed.</returns>
     private Tensor<T> RemoveBatchAndTimeDimensions(Tensor<T> input)
     {
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
 
         // Ensure first and second dimensions are batch and time with size 1
         if (inputShape[0] != 1 || inputShape[1] != 1)
@@ -1177,7 +1177,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
 
         // Calculate output gradients
         var gradientVector = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
-        var outputGradients = new Tensor<T>(predictions.Shape.ToArray(), gradientVector);
+        var outputGradients = new Tensor<T>(predictions._shape, gradientVector);
 
         // Backpropagation through time
 
@@ -1216,7 +1216,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         var transformedGradient = new Tensor<T>(outputShape);
 
         // Case 1: Shapes match exactly - direct copy
-        if (hiddenGradient.Shape.ToArray().SequenceEqual(outputShape))
+        if (hiddenGradient._shape.SequenceEqual(outputShape))
         {
             for (int i = 0; i < hiddenGradient.Length; i++)
             {

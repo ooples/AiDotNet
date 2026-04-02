@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
@@ -318,7 +318,7 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeAccSqGrad.TryGetValue(param, out var accSq)) { accSq = new Tensor<T>(param.Shape.ToArray()); _tapeAccSqGrad[param] = accSq; }
+            if (!_tapeAccSqGrad.TryGetValue(param, out var accSq)) { accSq = new Tensor<T>(param._shape); _tapeAccSqGrad[param] = accSq; }
 
             // accSqGrad += grad^2
             Engine.TensorAddInPlace(accSq, Engine.TensorMultiply(grad, grad));

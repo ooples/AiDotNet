@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -501,7 +501,7 @@ public class FILM<T> : FrameInterpolationBase<T>
         int height = features.Shape[2];
         int width = features.Shape[3];
 
-        var warped = new Tensor<T>(features.Shape.ToArray());
+        var warped = new Tensor<T>(features._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -796,10 +796,10 @@ public class FILM<T> : FrameInterpolationBase<T>
         ComputeFusionGradients(Tensor<T> gradOutput, Tensor<T> warped1, Tensor<T> warped2,
             Tensor<T> occ1, Tensor<T> occ2, double timestep)
     {
-        var gradWarped1 = new Tensor<T>(warped1.Shape.ToArray());
-        var gradWarped2 = new Tensor<T>(warped2.Shape.ToArray());
-        var gradOcc1 = new Tensor<T>(occ1.Shape.ToArray());
-        var gradOcc2 = new Tensor<T>(occ2.Shape.ToArray());
+        var gradWarped1 = new Tensor<T>(warped1._shape);
+        var gradWarped2 = new Tensor<T>(warped2._shape);
+        var gradOcc1 = new Tensor<T>(occ1._shape);
+        var gradOcc2 = new Tensor<T>(occ2._shape);
 
         int batchSize = warped1.Shape[0];
         int channels = warped1.Shape[1];
@@ -853,8 +853,8 @@ public class FILM<T> : FrameInterpolationBase<T>
     private (Tensor<T> gradFeatures, Tensor<T> gradFlow) WarpFeaturesBackward(
         Tensor<T> gradOutput, Tensor<T> features, Tensor<T> flow)
     {
-        var gradFeatures = new Tensor<T>(features.Shape.ToArray());
-        var gradFlow = new Tensor<T>(flow.Shape.ToArray());
+        var gradFeatures = new Tensor<T>(features._shape);
+        var gradFlow = new Tensor<T>(flow._shape);
 
         int batchSize = features.Shape[0];
         int channels = features.Shape[1];
@@ -964,7 +964,7 @@ public class FILM<T> : FrameInterpolationBase<T>
         int height = gradOutput.Shape[2];
         int width = gradOutput.Shape[3];
 
-        var result = new Tensor<T>(gradOutput.Shape.ToArray());
+        var result = new Tensor<T>(gradOutput._shape);
         for (int b = 0; b < batchSize; b++)
         {
             for (int h = 0; h < height; h++)

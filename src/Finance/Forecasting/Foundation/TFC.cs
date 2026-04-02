@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -475,7 +475,7 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -636,7 +636,7 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         int n = input.Rank > 1 ? input.Shape[^1] : input.Length;
         int numSamples = input.Rank > 1 ? input.Length / n : 1;
         int halfN = n / 2 + 1;
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         T invN = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
 
         for (int s = 0; s < numSamples; s++)

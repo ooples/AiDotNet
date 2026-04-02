@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
@@ -1810,6 +1810,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected void InvalidateParameterCountCache()
     {
         _cachedParameterCount = null;
+        _layerStructureVersion++;
+        _parameterBuffer = null;
+        Training.TapeTrainingStep<T>.InvalidateCache();
         InvalidateLayerInfoCache();
     }
 
@@ -1843,12 +1846,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     internal int LayerStructureVersion => _layerStructureVersion;
 
-    private void InvalidateParameterCountCache()
-    {
-        _layerStructureVersion++;
-        _parameterBuffer = null; // Buffer layout depends on layer structure
-        Training.TapeTrainingStep<T>.InvalidateCache();
-    }
 
     protected void AddLayerToCollection(ILayer<T> layer)
     {
@@ -3560,7 +3557,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         int targetClass = -1)
     {
         // Get input shape from the tensor
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
 
         // For GradCAM we need feature map shape, which depends on the network architecture
         // Default to a reasonable size; users can override with the helper method directly
@@ -4085,7 +4082,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var loss = lossFunction ?? DefaultLossFunction;
         var pred = Predict(input);
         var lossDerivative = loss.CalculateDerivative(pred.ToVector(), target.ToVector());
-        var outputGradients = new Tensor<T>(pred.Shape.ToArray(), lossDerivative);
+        var outputGradients = new Tensor<T>(pred._shape, lossDerivative);
         return GetParameterGradients();
     }
 

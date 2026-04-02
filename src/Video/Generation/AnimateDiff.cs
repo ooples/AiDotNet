@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -348,7 +348,7 @@ public class AnimateDiff<T> : NeuralNetworkBase<T>
             resultData[i] = NumOps.FromDouble(blended);
         }
 
-        return new Tensor<T>(originalFeatures.Shape.ToArray(), new Vector<T>(resultData));
+        return new Tensor<T>(originalFeatures._shape, new Vector<T>(resultData));
     }
 
     #endregion
@@ -382,7 +382,7 @@ public class AnimateDiff<T> : NeuralNetworkBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = _onnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 

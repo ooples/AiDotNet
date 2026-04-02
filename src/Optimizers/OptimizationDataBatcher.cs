@@ -1,4 +1,4 @@
-using AiDotNet.Data.Sampling;
+﻿using AiDotNet.Data.Sampling;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -249,7 +249,7 @@ public class OptimizationDataBatcher<T, TInput, TOutput>
         if (data is Tensor<T> tensor)
         {
             // Clone shape but change first dimension
-            var newShape = (int[])tensor.Shape.ToArray().Clone();
+            var newShape = (int[])tensor.Shape.ToArray();
             newShape[0] = indices.Length;
             var result = new Tensor<T>(newShape);
 

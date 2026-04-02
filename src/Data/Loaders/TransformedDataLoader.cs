@@ -1,4 +1,4 @@
-using System.Buffers;
+﻿using System.Buffers;
 using AiDotNet.Data.Transforms;
 using AiDotNet.Interfaces;
 using AiDotNet.Validation;
@@ -200,7 +200,7 @@ public class TransformedDataLoader<T> :
                     "Transform must preserve sample element count.");
             }
 
-            return new Tensor<T>(transformed, tensor.Shape.ToArray());
+            return new Tensor<T>(transformed, tensor._shape);
         }
 
         int sampleCount = tensor.Shape[0];
@@ -249,6 +249,6 @@ public class TransformedDataLoader<T> :
             pool.Return(sampleBuffer);
         }
 
-        return new Tensor<T>(resultData, tensor.Shape.ToArray());
+        return new Tensor<T>(resultData, tensor._shape);
     }
 }

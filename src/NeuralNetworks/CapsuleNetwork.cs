@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -588,7 +588,7 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Flatten original input for comparison
         // Validate the input can be flattened before attempting reshape
         int expectedLength = 1;
-        foreach (int dim in input.Shape.ToArray())
+        foreach (int dim in input._shape)
         {
             expectedLength *= dim;
         }

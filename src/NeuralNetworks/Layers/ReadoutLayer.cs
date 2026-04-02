@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
-public class ReadoutLayer<T> : LayerBase<T>
+public partial class ReadoutLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Tensor storing the weight parameters for connections between inputs and outputs.
@@ -48,6 +48,8 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// for one output neuron. These weights determine how strongly each input feature influences
     /// each output neuron and are the primary trainable parameters of the layer.
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
@@ -58,6 +60,8 @@ public class ReadoutLayer<T> : LayerBase<T>
     /// weighted sum for the corresponding output neuron. Biases allow the network to shift the
     /// activation function, giving it more flexibility to fit the data.
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _bias;
 
     /// <summary>
@@ -669,17 +673,4 @@ public class ReadoutLayer<T> : LayerBase<T>
 
     public override bool SupportsJitCompilation =>
         _weights != null && _bias != null;
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_weights, _bias];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
-        _weights = parameters[0]; _bias = parameters[1];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad() { _weightGradients.Fill(NumOps.Zero); _biasGradients.Fill(NumOps.Zero); }
 }

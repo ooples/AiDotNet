@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -321,7 +321,7 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         }
 
         // Create ONNX input tensor
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = _onnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 

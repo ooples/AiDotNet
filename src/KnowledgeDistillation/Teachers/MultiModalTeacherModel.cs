@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -167,7 +167,7 @@ public class MultiModalTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, 
             inputNodes.AddRange(teacherInputNodes);
 
             // Scale by modality weight
-            var weightTensor = new Tensor<T>((int[])teacherOutput.Value.Shape.ToArray().Clone());
+            var weightTensor = new Tensor<T>((int[])teacherOutput.Value.Shape.ToArray());
             weightTensor.Fill(NumOps.FromDouble(_modalityWeights[i]));
             var weightNode = TensorOperations<T>.Constant(weightTensor, $"modality_{i}_weight");
             var scaledOutput = TensorOperations<T>.ElementwiseMultiply(teacherOutput, weightNode);

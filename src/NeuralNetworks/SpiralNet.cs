@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -404,7 +404,7 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
                 epochLoss += NumOps.ToDouble(loss);
 
                 var lossGrad = _lossFunction.CalculateDerivative(output.ToVector(), target);
-                var lossGradTensor = new Tensor<T>(lossGrad.ToArray(), output.Shape.ToArray());
+                var lossGradTensor = new Tensor<T>(lossGrad.ToArray(), output._shape);
 
                 UpdateParameters(learningRate);
             }

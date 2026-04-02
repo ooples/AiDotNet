@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
@@ -361,8 +361,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param.Shape.ToArray()); _tapeM[param] = m; }
-            if (!_tapeV.TryGetValue(param, out var v)) { v = new Tensor<T>(param.Shape.ToArray()); _tapeV[param] = v; }
+            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeM[param] = m; }
+            if (!_tapeV.TryGetValue(param, out var v)) { v = new Tensor<T>(param._shape); _tapeV[param] = v; }
 
             Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1)), m);
             Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(v, beta2), Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusBeta2)), v);

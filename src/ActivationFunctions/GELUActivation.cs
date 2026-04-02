@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -152,7 +152,7 @@ public class GELUActivation<T> : ActivationFunctionBase<T>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
         // Use the tensor-level derivative computation
-        Tensor<T> output = new Tensor<T>(input.Shape.ToArray());
+        Tensor<T> output = new Tensor<T>(input._shape);
         for (int i = 0; i < input.Length; i++)
         {
             output[i] = Derivative(input[i]);

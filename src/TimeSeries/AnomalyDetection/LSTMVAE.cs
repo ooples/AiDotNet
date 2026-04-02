@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -526,12 +526,12 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public void ResetGradients()
     {
-        _weightsGrad = new Tensor<T>(_weightsGrad.Shape.ToArray());
-        _biasGrad = new Tensor<T>(_biasGrad.Shape.ToArray());
-        _meanWeightsGrad = new Tensor<T>(_meanWeightsGrad.Shape.ToArray());
-        _meanBiasGrad = new Tensor<T>(_meanBiasGrad.Shape.ToArray());
-        _logVarWeightsGrad = new Tensor<T>(_logVarWeightsGrad.Shape.ToArray());
-        _logVarBiasGrad = new Tensor<T>(_logVarBiasGrad.Shape.ToArray());
+        _weightsGrad = new Tensor<T>(_weightsGrad._shape);
+        _biasGrad = new Tensor<T>(_biasGrad._shape);
+        _meanWeightsGrad = new Tensor<T>(_meanWeightsGrad._shape);
+        _meanBiasGrad = new Tensor<T>(_meanBiasGrad._shape);
+        _logVarWeightsGrad = new Tensor<T>(_logVarWeightsGrad._shape);
+        _logVarBiasGrad = new Tensor<T>(_logVarBiasGrad._shape);
     }
 
     public void ApplyGradients(T learningRate, int batchSize)
@@ -576,18 +576,18 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         _logVarBias = ReadTensor(reader);
 
         // Reinitialize gradient accumulators
-        _weightsGrad = new Tensor<T>(_weights.Shape.ToArray());
-        _biasGrad = new Tensor<T>(_bias.Shape.ToArray());
-        _meanWeightsGrad = new Tensor<T>(_meanWeights.Shape.ToArray());
-        _meanBiasGrad = new Tensor<T>(_meanBias.Shape.ToArray());
-        _logVarWeightsGrad = new Tensor<T>(_logVarWeights.Shape.ToArray());
-        _logVarBiasGrad = new Tensor<T>(_logVarBias.Shape.ToArray());
+        _weightsGrad = new Tensor<T>(_weights._shape);
+        _biasGrad = new Tensor<T>(_bias._shape);
+        _meanWeightsGrad = new Tensor<T>(_meanWeights._shape);
+        _meanBiasGrad = new Tensor<T>(_meanBias._shape);
+        _logVarWeightsGrad = new Tensor<T>(_logVarWeights._shape);
+        _logVarBiasGrad = new Tensor<T>(_logVarBias._shape);
     }
 
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (int dim in tensor.Shape.ToArray())
+        foreach (int dim in tensor._shape)
             writer.Write(dim);
         writer.Write(tensor.Length);
         for (int i = 0; i < tensor.Length; i++)
@@ -762,10 +762,10 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public void ResetGradients()
     {
-        _weightsGrad = new Tensor<T>(_weightsGrad.Shape.ToArray());
-        _biasGrad = new Tensor<T>(_biasGrad.Shape.ToArray());
-        _outputWeightsGrad = new Tensor<T>(_outputWeightsGrad.Shape.ToArray());
-        _outputBiasGrad = new Tensor<T>(_outputBiasGrad.Shape.ToArray());
+        _weightsGrad = new Tensor<T>(_weightsGrad._shape);
+        _biasGrad = new Tensor<T>(_biasGrad._shape);
+        _outputWeightsGrad = new Tensor<T>(_outputWeightsGrad._shape);
+        _outputBiasGrad = new Tensor<T>(_outputBiasGrad._shape);
     }
 
     public void ApplyGradients(T learningRate, int batchSize)
@@ -804,16 +804,16 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         _outputBias = ReadTensor(reader);
 
         // Reinitialize gradient accumulators
-        _weightsGrad = new Tensor<T>(_weights.Shape.ToArray());
-        _biasGrad = new Tensor<T>(_bias.Shape.ToArray());
-        _outputWeightsGrad = new Tensor<T>(_outputWeights.Shape.ToArray());
-        _outputBiasGrad = new Tensor<T>(_outputBias.Shape.ToArray());
+        _weightsGrad = new Tensor<T>(_weights._shape);
+        _biasGrad = new Tensor<T>(_bias._shape);
+        _outputWeightsGrad = new Tensor<T>(_outputWeights._shape);
+        _outputBiasGrad = new Tensor<T>(_outputBias._shape);
     }
 
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (int dim in tensor.Shape.ToArray())
+        foreach (int dim in tensor._shape)
             writer.Write(dim);
         writer.Write(tensor.Length);
         for (int i = 0; i < tensor.Length; i++)

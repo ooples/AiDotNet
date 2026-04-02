@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -193,7 +193,7 @@ public class NTXentLoss<T> : IContrastiveLoss<T>
             result[i] = NumOps.Multiply(similarity.Data.Span[i], invTemp);
         }
 
-        return new Tensor<T>(result, similarity.Shape.ToArray());
+        return new Tensor<T>(result, similarity._shape);
     }
 
     private T ComputeContrastiveLoss(Tensor<T> similarity, int batchSize)

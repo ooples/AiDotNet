@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -993,7 +993,7 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
 
         // Convert input to ONNX tensor format
         var inputData = ConvertToFloatArray(input);
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
 
         // Get input name from model
         var inputMeta = OnnxSession.InputMetadata;
@@ -1029,7 +1029,7 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     private Tensor<T> ApplyRandomMasking(Tensor<T> input)
     {
-        var masked = new Tensor<T>(input.Shape.ToArray());
+        var masked = new Tensor<T>(input._shape);
         var rand = RandomHelper.CreateSecureRandom();
 
         // Copy input data

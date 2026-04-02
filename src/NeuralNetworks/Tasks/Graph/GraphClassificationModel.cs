@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Data.Structures;
 using AiDotNet.Enums;
@@ -644,7 +644,7 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
 
         if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
         {
-            gradOutput = gradOutput.Reshape(predictions.Shape.ToArray());
+            gradOutput = gradOutput.Reshape(predictions._shape);
         }
 
 

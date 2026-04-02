@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, NormalizesInput = true, IsStateful = true, ChangesShape = true, UsesSurrogateGradient = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
-public class SpikingLayer<T> : LayerBase<T>
+public partial class SpikingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The type of spiking neuron model to use.
@@ -132,6 +132,8 @@ public class SpikingLayer<T> : LayerBase<T>
     /// These weights are adjusted during training to make the layer learn.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
@@ -153,6 +155,8 @@ public class SpikingLayer<T> : LayerBase<T>
     /// Biases are adjusted during training along with the weights.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _bias;
 
     /// <summary>
@@ -1851,17 +1855,4 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsJitCompilation => true;
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_weights, _bias];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
-        _weights = parameters[0]; _bias = parameters[1];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad() { _weightGradients.Fill(NumOps.Zero); _biasGradients.Fill(NumOps.Zero); }
 }

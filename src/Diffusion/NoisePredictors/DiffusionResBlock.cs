@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -146,7 +146,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
     /// </summary>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         _lastInput = input;
         _lastForwardUsedTime = false;
 
@@ -178,7 +178,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
     /// <returns>Output tensor [B, outChannels, H, W].</returns>
     public Tensor<T> Forward(Tensor<T> input, Tensor<T> timeEmbed)
     {
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         _lastInput = input;
         _lastForwardUsedTime = true;
 

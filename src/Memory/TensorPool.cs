@@ -1,4 +1,4 @@
-using System.Buffers;
+﻿using System.Buffers;
 using System.Collections.Concurrent;
 
 namespace AiDotNet.Memory;
@@ -137,7 +137,7 @@ public class TensorPool<T> : IDisposable
                 UpdateMemoryUsage(-entry.SizeBytes);
                 Interlocked.Decrement(ref _totalPooledTensors);
 
-                if (entry.Tensor is not null && ShapeMatches(entry.Tensor.Shape.ToArray(), shape))
+                if (entry.Tensor is not null && ShapeMatches(entry.Tensor._shape, shape))
                 {
                     ClearTensor(entry.Tensor);
                     return entry.Tensor;
@@ -172,7 +172,7 @@ public class TensorPool<T> : IDisposable
 
         ClearTensor(tensor);
 
-        var key = GetTensorPoolKey(tensor.Shape.ToArray());
+        var key = GetTensorPoolKey(tensor._shape);
         var pool = _tensorPools.GetOrAdd(key, _ => new ConcurrentBag<TensorEntry>());
 
         if (pool.Count < _options.MaxItemsPerBucket)

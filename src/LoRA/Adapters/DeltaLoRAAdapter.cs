@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -239,7 +239,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
         // Compute delta contribution: delta_weights @ input * delta_scaling — vectorized
         var deltaWeightsTensor = Tensor<T>.FromMatrix(_deltaWeights);
         var inputCol = input.Reshape(_deltaWeights.Columns, 1);
-        var deltaOutput = Engine.TensorMatMul(deltaWeightsTensor, inputCol).Reshape(baseOutput.Shape.ToArray());
+        var deltaOutput = Engine.TensorMatMul(deltaWeightsTensor, inputCol).Reshape(baseOutput._shape);
         deltaOutput = Engine.TensorMultiplyScalar(deltaOutput, NumOps.FromDouble(_deltaScaling));
 
         // Combine all three outputs — vectorized

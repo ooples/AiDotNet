@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -838,7 +838,7 @@ public class TFT<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -926,7 +926,7 @@ public class TFT<T> : ForecastingModelBase<T>
             _instanceMean = new Tensor<T>(new[] { batchSize, 1, features });
             _instanceStd = new Tensor<T>(new[] { batchSize, 1, features });
 
-            var normalized = new Tensor<T>(input.Shape.ToArray());
+            var normalized = new Tensor<T>(input._shape);
             T epsilon = NumOps.FromDouble(1e-5);
 
             for (int b = 0; b < batchSize; b++)
@@ -968,7 +968,7 @@ public class TFT<T> : ForecastingModelBase<T>
             if (input.Shape.Length < 3)
                 return input;
 
-            var denormalized = new Tensor<T>(input.Shape.ToArray());
+            var denormalized = new Tensor<T>(input._shape);
             int batchSize = input.Shape[0];
             int horizonLen = input.Shape[1];
             int features = input.Shape[2];

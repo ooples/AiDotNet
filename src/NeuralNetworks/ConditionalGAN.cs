@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -281,7 +281,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         // Preserves spatial shape for CNN generators (e.g., [1,H,W,C] → [H,W,C])
         if (wasSingleSample && output.Rank > 1 && output.Shape[0] == 1)
         {
-            var fullShape = output.Shape.ToArray();
+            var fullShape = output._shape;
             var squeezedShape = new int[fullShape.Length - 1];
             Array.Copy(fullShape, 1, squeezedShape, 0, squeezedShape.Length);
             return output.Reshape(squeezedShape);

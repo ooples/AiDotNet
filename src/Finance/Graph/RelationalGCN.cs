@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -1019,7 +1019,7 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
             // Before final Dense layer, flatten if needed (GRU outputs 3D)
             if (i == Layers.Count - 1 && layer is DenseLayer<T> && current.Rank > 2)
             {
-                _preOutputShape = current.Shape.ToArray();
+                _preOutputShape = current._shape;
                 current = current.Reshape(new[] { current.Length });
             }
 
@@ -1253,7 +1253,7 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape.ToArray())
+        foreach (var dim in input._shape)
         {
             totalSize *= dim;
         }
@@ -1424,7 +1424,7 @@ public class RelationalGCN<T> : ForecastingModelBase<T>
                 newData[dstIdx] = prediction.Data.Span[i];
         }
 
-        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(newData));
+        return new Tensor<T>(input._shape, new Vector<T>(newData));
     }
 
     /// <summary>

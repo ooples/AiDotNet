@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "new[] { 1, 1, 4, 4 }, 2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class DeconvolutionalLayer<T> : LayerBase<T>
+public partial class DeconvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The collection of filter kernels used for the deconvolution operation.
@@ -62,6 +62,8 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// are what actually get updated when the network learns.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _kernels;
 
     /// <summary>
@@ -83,6 +85,8 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     /// or brightness levels.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -773,23 +777,6 @@ public class DeconvolutionalLayer<T> : LayerBase<T>
     }
 
     public override void ClearGradients()
-    {
-        _kernelsGradient = null;
-        _biasesGradient = null;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_kernels, _biases];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
-        _kernels = parameters[0]; _biases = parameters[1];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
     {
         _kernelsGradient = null;
         _biasesGradient = null;

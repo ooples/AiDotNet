@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Features;
 using AiDotNet.Diffusion.Audio;
@@ -396,7 +396,7 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
     {
         // Apply softmax to get probabilities
         var probs = Softmax(modelOutput.Data.ToArray());
-        return new Tensor<T>(probs, modelOutput.Shape.ToArray());
+        return new Tensor<T>(probs, modelOutput._shape);
     }
 
     /// <inheritdoc/>
@@ -431,7 +431,7 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
 
         var loss = _lossFunction.CalculateLoss(predictedVector, expectedVector);
         var gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
-        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape.ToArray());
+        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted._shape);
 
         _optimizer?.UpdateParameters(Layers);
 
@@ -700,7 +700,7 @@ public class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILangua
             }
         }
 
-        return new Tensor<T>(output, input.Shape.ToArray());
+        return new Tensor<T>(output, input._shape);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)

@@ -1,4 +1,4 @@
-using AiDotNet.Extensions;
+﻿using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -422,7 +422,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> veraOutput = new Tensor<T>(new[] { batchSize, outputSize }, veraOutputData);
 
         // Sum base output and VeRA output
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> result = new Tensor<T>(baseOutput._shape);
         for (int i = 0; i < baseOutput.Length; i++)
         {
             result[i] = NumOps.Add(baseOutput[i], veraOutput[i]);

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -476,7 +476,7 @@ public class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -699,12 +699,12 @@ public class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
         int t = rand.Next(_numDiffusionSteps);
 
         // Generate noise
-        var noise = new Tensor<T>(target.Shape.ToArray());
+        var noise = new Tensor<T>(target._shape);
         for (int i = 0; i < noise.Length; i++)
             noise.Data.Span[i] = NumOps.FromDouble(SampleStandardNormal(rand));
 
         // Create noisy target: x_t = sqrt(alpha_bar_t) * x_0 + sqrt(1 - alpha_bar_t) * eps
-        var noisyTarget = new Tensor<T>(target.Shape.ToArray());
+        var noisyTarget = new Tensor<T>(target._shape);
         for (int i = 0; i < target.Length; i++)
         {
             double x0 = NumOps.ToDouble(target[i]);

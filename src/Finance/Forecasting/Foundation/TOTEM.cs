@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Validation;
@@ -499,7 +499,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -611,7 +611,7 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         if (_codebooks is null) InitializeCodebooks();
 
         int totalLen = encoderOutput.Length;
-        var quantized = new Tensor<T>(encoderOutput.Shape.ToArray());
+        var quantized = new Tensor<T>(encoderOutput._shape);
         T commitmentLoss = NumOps.Zero;
 
         // Product quantization: split encoded vector across codebooks

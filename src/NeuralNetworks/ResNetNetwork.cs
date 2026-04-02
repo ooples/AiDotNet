@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -480,7 +480,7 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     private static Tensor<T> AddBatchDimension(Tensor<T> input)
     {
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int[] resultShape = new int[inputShape.Length + 1];
         resultShape[0] = 1;
         for (int i = 0; i < inputShape.Length; i++)

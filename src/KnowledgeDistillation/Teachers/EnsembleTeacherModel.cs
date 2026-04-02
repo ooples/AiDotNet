@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -469,7 +469,7 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
             inputNodes.AddRange(teacherInputNodes);
 
             // Scale by weight
-            var weightTensor = new Tensor<T>((int[])teacherOutput.Value.Shape.ToArray().Clone());
+            var weightTensor = new Tensor<T>((int[])teacherOutput.Value.Shape.ToArray());
             weightTensor.Fill(NumOps.FromDouble(jitWeights[i]));
             var weightNode = TensorOperations<T>.Constant(weightTensor, $"teacher_{i}_weight");
             var scaledOutput = TensorOperations<T>.ElementwiseMultiply(teacherOutput, weightNode);

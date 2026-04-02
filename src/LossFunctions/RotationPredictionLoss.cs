@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -69,7 +69,7 @@ public class RotationPredictionLoss<T> : ISelfSupervisedLoss<T>
         {
             throw new ArgumentException(
                 $"Input tensor must have at least 3 dimensions [N, H, W] or [N, H, W, C], " +
-                $"but got shape [{string.Join(", ", tensorInput.Shape.ToArray())}]");
+                $"but got shape [{string.Join(", ", tensorInput._shape)}]");
         }
 
         int numImages = tensorInput.Shape[0];

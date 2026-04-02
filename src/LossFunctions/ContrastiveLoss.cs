@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -199,8 +199,8 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
             grad1Buffer, grad2Buffer, batchSize, embeddingSize, margin);
 
         // Create gradient tensors
-        var grad1Tensor = new GpuTensor<T>(backend, grad1Buffer, output1.Shape.ToArray(), GpuTensorRole.Gradient);
-        var grad2Tensor = new GpuTensor<T>(backend, grad2Buffer, output2.Shape.ToArray(), GpuTensorRole.Gradient);
+        var grad1Tensor = new GpuTensor<T>(backend, grad1Buffer, output1._shape, GpuTensorRole.Gradient);
+        var grad2Tensor = new GpuTensor<T>(backend, grad2Buffer, output2._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), grad1Tensor, grad2Tensor);
     }

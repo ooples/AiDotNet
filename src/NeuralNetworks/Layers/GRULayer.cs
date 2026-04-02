@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, false, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class GRULayer<T> : LayerBase<T>
+public partial class GRULayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The weight tensors for the update gate (z), reset gate (r), and candidate hidden state (h).
@@ -1459,27 +1459,6 @@ public class GRULayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _dWz = null; _dWr = null; _dWh = null;
-        _dUz = null; _dUr = null; _dUh = null;
-        _dbz = null; _dbr = null; _dbh = null;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() =>
-        [_Wz, _Wr, _Wh, _Uz, _Ur, _Uh, _bz, _br, _bh];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 9) throw new ArgumentException($"Expected 9 parameters, got {parameters.Length}.");
-        _Wz = parameters[0]; _Wr = parameters[1]; _Wh = parameters[2];
-        _Uz = parameters[3]; _Ur = parameters[4]; _Uh = parameters[5];
-        _bz = parameters[6]; _br = parameters[7]; _bh = parameters[8];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
         _dWz = null; _dWr = null; _dWh = null;
         _dUz = null; _dUr = null; _dUh = null;
         _dbz = null; _dbr = null; _dbh = null;

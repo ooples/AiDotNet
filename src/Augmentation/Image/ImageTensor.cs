@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.LinearAlgebra;
+﻿using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
 namespace AiDotNet.Augmentation.Image;
@@ -267,7 +267,7 @@ public class ImageTensor<T>
     public ImageTensor<T> Clone()
     {
         // Create a copy of the tensor data
-        var clonedData = new Tensor<T>((int[])_data.Shape.ToArray().Clone());
+        var clonedData = new Tensor<T>((int[])_data.Shape.ToArray());
         for (int i = 0; i < _data.Length; i++)
         {
             clonedData[i] = _data[i];
@@ -419,7 +419,7 @@ public class ImageTensor<T>
     /// <returns>The dimensions array.</returns>
     public int[] GetDimensions()
     {
-        return (int[])_data.Shape.ToArray().Clone();
+        return (int[])_data.Shape.ToArray();
     }
 
     /// <summary>
@@ -427,7 +427,7 @@ public class ImageTensor<T>
     /// </summary>
     private void ParseDimensions()
     {
-        var dims = _data.Shape.ToArray();
+        var dims = _data._shape;
 
         switch (ChannelOrder)
         {
@@ -484,7 +484,7 @@ public class ImageTensor<T>
     /// </summary>
     private static void TransposeData(Tensor<T> source, Tensor<T> target, ChannelOrder sourceOrder, ChannelOrder targetOrder)
     {
-        var sourceDims = source.Shape.ToArray();
+        var sourceDims = source._shape;
         int height, width, channels, batchSize;
 
         // Parse source dimensions

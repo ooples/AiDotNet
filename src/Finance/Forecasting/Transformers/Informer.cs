@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -737,7 +737,7 @@ public class Informer<T> : ForecastingModelBase<T>
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputName = OnnxSession.InputMetadata.Keys.First();
-        var inputShape = input.Shape.ToArray().Select(d => (long)d).ToArray();
+        var inputShape = input._shape.Select(d => (long)d).ToArray();
         var onnxInput = new OnnxTensors.DenseTensor<float>(
             input.ToArray().Select(x => Convert.ToSingle(x)).ToArray(),
             inputShape.Select(d => (int)d).ToArray());
@@ -776,7 +776,7 @@ public class Informer<T> : ForecastingModelBase<T>
             _instanceMean = new Tensor<T>(new[] { batchSize, 1, features });
             _instanceStd = new Tensor<T>(new[] { batchSize, 1, features });
 
-            var normalized = new Tensor<T>(input.Shape.ToArray());
+            var normalized = new Tensor<T>(input._shape);
             T epsilon = NumOps.FromDouble(1e-5);
 
             for (int b = 0; b < batchSize; b++)
@@ -814,7 +814,7 @@ public class Informer<T> : ForecastingModelBase<T>
             if (_instanceMean is null || _instanceStd is null)
                 return input;
 
-            var denormalized = new Tensor<T>(input.Shape.ToArray());
+            var denormalized = new Tensor<T>(input._shape);
             int batchSize = input.Shape[0];
             int horizonLen = input.Shape[1];
             int features = input.Shape[2];

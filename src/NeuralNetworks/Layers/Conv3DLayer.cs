@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.VolumetricProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 4, 4, 4", TestConstructorArgs = "1, 2, 3, 4, 4, 4, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)new AiDotNet.ActivationFunctions.LeakyReLUActivation<double>()")]
-public class Conv3DLayer<T> : LayerBase<T>
+public partial class Conv3DLayer<T> : LayerBase<T>
 {
     #region Properties
 
@@ -115,19 +115,6 @@ public class Conv3DLayer<T> : LayerBase<T>
 
     public override void ClearGradients() { base.ClearGradients(); _kernelsGradient = null; _biasesGradient = null; }
 
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_kernels, _biases];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
-        _kernels = parameters[0]; _biases = parameters[1];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad() { _kernelsGradient = null; _biasesGradient = null; }
-
     internal override Dictionary<string, string> GetMetadata()
     {
         var metadata = base.GetMetadata();
@@ -150,11 +137,15 @@ public class Conv3DLayer<T> : LayerBase<T>
     /// <summary>
     /// The learnable convolution kernels with shape [OutputChannels, InputChannels, KernelSize, KernelSize, KernelSize].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _kernels;
 
     /// <summary>
     /// The learnable bias values with shape [OutputChannels], one per output channel.
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>

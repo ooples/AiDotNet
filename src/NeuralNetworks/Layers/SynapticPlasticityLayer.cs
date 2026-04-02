@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, SupportsBackpropagation = false, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
-public class SynapticPlasticityLayer<T> : LayerBase<T>
+public partial class SynapticPlasticityLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The input tensor from the last forward pass.
@@ -99,6 +99,8 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// which gets updated as the network learns patterns.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
@@ -754,17 +756,4 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public override bool SupportsJitCompilation => true;
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_weights];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 1) throw new ArgumentException($"Expected 1 parameter, got {parameters.Length}.");
-        _weights = parameters[0];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad() { /* Gradients managed by STDP plasticity rules, not explicit gradient storage */ }
 }

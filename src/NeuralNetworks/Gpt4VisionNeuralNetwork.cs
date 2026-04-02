@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using AiDotNet.Attributes;
@@ -1476,7 +1476,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
             return tensor;
         }
 
-        var normalized = Tensor<T>.CreateDefault(tensor.Shape.ToArray(), NumOps.Zero);
+        var normalized = Tensor<T>.CreateDefault(tensor._shape, NumOps.Zero);
         for (int i = 0; i < tensor.Shape[0]; i++)
         {
             for (int j = 0; j < tensor.Shape[1]; j++)

@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -630,7 +630,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private Tensor<T> ApplyTemporalProcessing(ILayer<T> temporalLayer, Tensor<T> video)
     {
         // Apply temporal layer to the video tensor
-        var result = new Tensor<T>(video.Shape.ToArray());
+        var result = new Tensor<T>(video._shape);
         video.AsSpan().CopyTo(result.AsWritableSpan());
         return result;
     }
@@ -646,7 +646,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     private Tensor<T> ApplyTemporalAttention(ILayer<T> temporalAttention, Tensor<T> video)
     {
         // Video shape: [batch, channels, frames, height, width] (NCFHW)
-        var shape = video.Shape.ToArray();
+        var shape = video._shape;
         int batch = shape[0];
         int channels = shape[1];
         int frames = shape[2];
@@ -688,7 +688,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> AddImageCondition(Tensor<T> videoFeatures, Tensor<T> imageCond, int numFrames)
     {
-        var result = new Tensor<T>(videoFeatures.Shape.ToArray());
+        var result = new Tensor<T>(videoFeatures._shape);
         var resultSpan = result.AsWritableSpan();
         var videoSpan = videoFeatures.AsSpan();
         var imageSpan = imageCond.AsSpan();

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
@@ -408,11 +408,11 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
 
             // Copy the trained weights and biases to our DBM
             _layerWeights[layer] = new Tensor<T>(
-                _layerWeights[layer].Shape.ToArray(),
+                _layerWeights[layer]._shape,
                 tmpRBM.GetParameters().GetSubVector(0, _layerSizes[layer] * _layerSizes[layer + 1]));
 
             _layerBiases[layer] = new Tensor<T>(
-                _layerBiases[layer].Shape.ToArray(),
+                _layerBiases[layer]._shape,
                 tmpRBM.GetParameters().GetSubVector(
                     _layerSizes[layer] * _layerSizes[layer + 1],
                     _layerSizes[layer]));
@@ -617,7 +617,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     private Tensor<T> Reconstruct(Tensor<T> input)
     {
         // Remember original shape
-        var originalShape = input.Shape.ToArray();
+        var originalShape = input._shape;
         var was1D = originalShape.Length == 1;
 
         var hidden = PropagateUp(input);
@@ -939,12 +939,12 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         {
             int weightCount = _layerWeights[i].Length;
             var weightVector = parameters.GetSubVector(index, weightCount);
-            _layerWeights[i] = new Tensor<T>(_layerWeights[i].Shape.ToArray(), weightVector);
+            _layerWeights[i] = new Tensor<T>(_layerWeights[i]._shape, weightVector);
             index += weightCount;
 
             int biasCount = _layerBiases[i].Length;
             var biasVector = parameters.GetSubVector(index, biasCount);
-            _layerBiases[i] = new Tensor<T>(_layerBiases[i].Shape.ToArray(), biasVector);
+            _layerBiases[i] = new Tensor<T>(_layerBiases[i]._shape, biasVector);
             index += biasCount;
         }
     }

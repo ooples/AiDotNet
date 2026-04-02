@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Memory)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -95,6 +95,8 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This tensor transforms the input vector into query vectors used to determine where to write in memory.
     /// Shape: [inputDimension, memoryDimension]
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _queryWeights;
 
     /// <summary>
@@ -131,6 +133,8 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This tensor is added to the output after all weight transformations.
     /// Shape: [memoryDimension]
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputBias;
 
     /// <summary>
@@ -906,25 +910,6 @@ public class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
-        _outputWeightsGradient = null; _outputBiasGradient = null;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() =>
-        [_queryWeights, _keyWeights, _valueWeights, _outputWeights, _outputBias];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 5) throw new ArgumentException($"Expected 5 parameters, got {parameters.Length}.");
-        _queryWeights = parameters[0]; _keyWeights = parameters[1]; _valueWeights = parameters[2];
-        _outputWeights = parameters[3]; _outputBias = parameters[4];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
         _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
         _outputWeightsGradient = null; _outputBiasGradient = null;
     }

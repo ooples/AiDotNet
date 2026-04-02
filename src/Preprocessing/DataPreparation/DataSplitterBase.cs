@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -244,7 +244,7 @@ public abstract class DataSplitterBase<T> : IDataSplitter<T>
     protected Tensor<T> SelectSamples(Tensor<T> X, int[] indices)
     {
         // Create new shape with updated first dimension
-        int[] newShape = (int[])X.Shape.ToArray().Clone();
+        int[] newShape = (int[])X.Shape.ToArray();
         newShape[0] = indices.Length;
         var result = new Tensor<T>(newShape);
 

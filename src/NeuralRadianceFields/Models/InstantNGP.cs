@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -1308,7 +1308,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
             data[i] = numOps.FromDouble(grad * sig * (1.0 - sig));
         }
 
-        return new Tensor<T>(data, gradient.Shape.ToArray());
+        return new Tensor<T>(data, gradient._shape);
     }
 
     private Tensor<T> ApplySoftplusGradient(Tensor<T> raw, Tensor<T> gradient)
@@ -1323,7 +1323,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
             data[i] = numOps.FromDouble(grad * sigmoid);
         }
 
-        return new Tensor<T>(data, gradient.Shape.ToArray());
+        return new Tensor<T>(data, gradient._shape);
     }
 
     private Tensor<T> AddTensors(Tensor<T> left, Tensor<T> right)

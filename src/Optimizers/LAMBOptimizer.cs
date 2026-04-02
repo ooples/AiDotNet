@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
@@ -513,8 +513,8 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param.Shape.ToArray()); _tapeM[param] = m; }
-            if (!_tapeV.TryGetValue(param, out var v)) { v = new Tensor<T>(param.Shape.ToArray()); _tapeV[param] = v; }
+            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeM[param] = m; }
+            if (!_tapeV.TryGetValue(param, out var v)) { v = new Tensor<T>(param._shape); _tapeV[param] = v; }
 
             // Update moments
             Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1)), m);

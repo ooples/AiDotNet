@@ -571,6 +571,7 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
             for (int b = 0; b < data.Rows; b += batchSize)
             {
                 int end = Math.Min(b + batchSize, data.Rows);
+                double batchLoss = 0;
                 if (!double.IsNaN(batchLoss) && !double.IsInfinity(batchLoss) && batchLoss < 1e10)
                 {
                     totalLoss += batchLoss;

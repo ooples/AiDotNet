@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IChainableComputationGraph<T>
+public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IChainableComputationGraph<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -155,6 +155,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This is part of the "squeeze" operation that compresses information.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights1;
 
     /// <summary>
@@ -176,6 +178,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// means it starts with some activation even before the input is considered.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _bias1;
 
     /// <summary>
@@ -1689,22 +1693,5 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             resultSpan[i] = NumOps.Multiply(largeSpan[i], smallSpan[i % small.Length]);
         }
         return result;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_weights1, _bias1, _weights2, _bias2];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 4) throw new ArgumentException($"Expected 4 parameters, got {parameters.Length}.");
-        _weights1 = parameters[0]; _bias1 = parameters[1]; _weights2 = parameters[2]; _bias2 = parameters[3];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
-        _weights1Gradient = null; _bias1Gradient = null;
-        _weights2Gradient = null; _bias2Gradient = null;
     }
 }

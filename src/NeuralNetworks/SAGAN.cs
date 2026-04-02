@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -689,7 +689,7 @@ public class SAGAN<T> : NeuralNetworkBase<T>
             var loss = CalculateLoss(predictedCpu.ToVector(), actualCpu.ToVector());
             var gradientCpu = CalculateDerivative(predictedCpu.ToVector(), actualCpu.ToVector());
 
-            var gradientTensor = new Tensor<TLoss>(predictedCpu.Shape.ToArray());
+            var gradientTensor = new Tensor<TLoss>(predictedCpu._shape);
             Array.Copy(gradientCpu.ToArray(), gradientTensor.Data.ToArray(), gradientCpu.Length);
 
             var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;

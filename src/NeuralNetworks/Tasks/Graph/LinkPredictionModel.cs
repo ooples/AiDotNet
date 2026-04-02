@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Data.Structures;
 using AiDotNet.Enums;
@@ -469,7 +469,7 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
             throw new InvalidOperationException("Node embeddings not computed.");
         }
 
-        var gradient = new Tensor<T>(_nodeEmbeddings.Shape.ToArray());
+        var gradient = new Tensor<T>(_nodeEmbeddings._shape);
         int numPos = posEdges.Shape[0];
         int numNeg = negEdges.Shape[0];
 
@@ -643,7 +643,7 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
 
         if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
         {
-            gradOutput = gradOutput.Reshape(predictions.Shape.ToArray());
+            gradOutput = gradOutput.Reshape(predictions._shape);
         }
 
 

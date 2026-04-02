@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -211,7 +211,7 @@ public class LISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = _onnxSession.Run(inputs);

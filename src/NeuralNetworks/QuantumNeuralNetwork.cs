@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Preprocessing;
@@ -238,7 +238,7 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
         int inputElements = input.Length;
 
         // If element counts match, reshape to expected shape
-        if (inputElements == expectedElements && !input.Shape.ToArray().SequenceEqual(expectedShape))
+        if (inputElements == expectedElements && !input._shape.SequenceEqual(expectedShape))
         {
             workingInput = input.Reshape(expectedShape);
         }

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
@@ -346,7 +346,7 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(input), "Input tensor cannot be null.");
         }
 
-        var inputShape = input.Shape.ToArray();
+        var inputShape = input._shape;
         var expectedShape = Architecture.GetInputShape();
 
         // Ensure input has correct shape

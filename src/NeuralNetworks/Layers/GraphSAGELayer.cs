@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
-public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
@@ -50,6 +50,8 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <summary>
     /// Weight tensor for self features. Shape: [inputFeatures, outputFeatures].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _selfWeights;
 
     /// <summary>
@@ -60,6 +62,8 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <summary>
     /// Bias tensor. Shape: [outputFeatures].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _bias;
 
     /// <summary>
@@ -1043,17 +1047,4 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         return output;
     }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_selfWeights, _neighborWeights, _bias];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 3) throw new ArgumentException($"Expected 3 parameters, got {parameters.Length}.");
-        _selfWeights = parameters[0]; _neighborWeights = parameters[1]; _bias = parameters[2];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad() { _biasGradient = null; }
 }

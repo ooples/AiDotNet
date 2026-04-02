@@ -527,7 +527,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         _ttCoreGradients = new List<Tensor<T>>();
         for (int k = 0; k < _numCores; k++)
         {
-            _ttCoreGradients.Add(new Tensor<T>(_ttCores[k].Shape.ToArray()));
+            _ttCoreGradients.Add(new Tensor<T>(_ttCores[k]._shape));
         }
 
         int batchSize = outputGradient.Shape[0];

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -403,7 +403,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
 
             // Step 3: Backward pass - compute gradients
             var outputGradient = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
+            var outputGradientTensor = new Tensor<T>(prediction._shape, outputGradient);
 
             // Step 4: Update parameters
             _optimizer.UpdateParameters(Layers);

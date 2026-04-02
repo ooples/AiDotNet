@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
@@ -479,12 +479,12 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             // Lazily initialize per-parameter moment tensors
             if (!_tapeM.TryGetValue(param, out var m))
             {
-                m = new Tensor<T>(param.Shape.ToArray());
+                m = new Tensor<T>(param._shape);
                 _tapeM[param] = m;
             }
             if (!_tapeV.TryGetValue(param, out var v))
             {
-                v = new Tensor<T>(param.Shape.ToArray());
+                v = new Tensor<T>(param._shape);
                 _tapeV[param] = v;
             }
 

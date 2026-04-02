@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Memory)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, NormalizesInput = true, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -94,6 +94,8 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This tensor transforms the input vector into a key vector that is used to query the memory.
     /// Shape: [inputDimension, memoryDimension]
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _keyWeights;
 
     /// <summary>
@@ -121,6 +123,8 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This tensor is added to the output after all weight transformations.
     /// Shape: [outputDimension]
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputBias;
 
     /// <summary>
@@ -893,24 +897,6 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _keyWeightsGradient = null; _valueWeightsGradient = null;
-        _outputWeightsGradient = null; _outputBiasGradient = null;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() =>
-        [_keyWeights, _valueWeights, _outputWeights, _outputBias];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 4) throw new ArgumentException($"Expected 4 parameters, got {parameters.Length}.");
-        _keyWeights = parameters[0]; _valueWeights = parameters[1]; _outputWeights = parameters[2]; _outputBias = parameters[3];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
         _keyWeightsGradient = null; _valueWeightsGradient = null;
         _outputWeightsGradient = null; _outputBiasGradient = null;
     }

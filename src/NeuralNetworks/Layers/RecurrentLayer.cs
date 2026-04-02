@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class RecurrentLayer<T> : LayerBase<T>
+public partial class RecurrentLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Tensor storing the weight parameters for connections between inputs and hidden neurons.
@@ -56,6 +56,8 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// for one hidden neuron. These weights determine how each input feature influences each
     /// hidden neuron and are trainable parameters of the layer.
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _inputWeights;
 
     /// <summary>
@@ -76,6 +78,8 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// weighted sum for the corresponding hidden neuron. Biases allow the network to shift the
     /// activation function, giving it more flexibility to fit the data.
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -848,24 +852,6 @@ public class RecurrentLayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _inputWeightsGradient = null;
-        _hiddenWeightsGradient = null;
-        _biasesGradient = null;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_inputWeights, _hiddenWeights, _biases];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 3) throw new ArgumentException($"Expected 3 parameters, got {parameters.Length}.");
-        _inputWeights = parameters[0]; _hiddenWeights = parameters[1]; _biases = parameters[2];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
         _inputWeightsGradient = null;
         _hiddenWeightsGradient = null;
         _biasesGradient = null;

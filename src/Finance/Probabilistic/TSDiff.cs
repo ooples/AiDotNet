@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -841,7 +841,7 @@ public class TSDiff<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape.ToArray())
+        foreach (var dim in input._shape)
         {
             totalSize *= dim;
         }
@@ -994,8 +994,8 @@ public class TSDiff<T> : ForecastingModelBase<T>
             noisyVec[i] = NumOps.FromDouble(noisyVal);
         }
 
-        return (new Tensor<T>(data.Shape.ToArray(), new Vector<T>(noisyVec)),
-                new Tensor<T>(data.Shape.ToArray(), new Vector<T>(noiseVec)));
+        return (new Tensor<T>(data._shape, new Vector<T>(noisyVec)),
+                new Tensor<T>(data._shape, new Vector<T>(noiseVec)));
     }
 
     /// <summary>
@@ -1041,7 +1041,7 @@ public class TSDiff<T> : ForecastingModelBase<T>
             resultVec[i] = NumOps.FromDouble(mean + sigma * z);
         }
 
-        return new Tensor<T>(current.Shape.ToArray(), new Vector<T>(resultVec));
+        return new Tensor<T>(current._shape, new Vector<T>(resultVec));
     }
 
     /// <summary>
@@ -1079,7 +1079,7 @@ public class TSDiff<T> : ForecastingModelBase<T>
             resultVec[i] = NumOps.FromDouble(guided);
         }
 
-        return new Tensor<T>(sample.Shape.ToArray(), new Vector<T>(resultVec));
+        return new Tensor<T>(sample._shape, new Vector<T>(resultVec));
     }
 
     /// <summary>

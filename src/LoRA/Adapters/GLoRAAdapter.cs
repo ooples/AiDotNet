@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -185,7 +185,7 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> activationAdaptationOutput = _activationAdaptation.Forward(input);
 
         // Sum all outputs: base + weight_adaptation + activation_adaptation
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> result = new Tensor<T>(baseOutput._shape);
         for (int i = 0; i < baseOutput.Length; i++)
         {
             T sum = NumOps.Add(baseOutput[i], weightAdaptationOutput[i]);

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -423,7 +423,7 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
 
         // Serialize FC weights tensor
         writer.Write(_fcWeights.Shape.Length);
-        foreach (int dim in _fcWeights.Shape.ToArray())
+        foreach (int dim in _fcWeights._shape)
             writer.Write(dim);
         writer.Write(_fcWeights.Length);
         for (int i = 0; i < _fcWeights.Length; i++)
@@ -431,7 +431,7 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
 
         // Serialize FC bias tensor
         writer.Write(_fcBias.Shape.Length);
-        foreach (int dim in _fcBias.Shape.ToArray())
+        foreach (int dim in _fcBias._shape)
             writer.Write(dim);
         writer.Write(_fcBias.Length);
         for (int i = 0; i < _fcBias.Length; i++)
@@ -707,11 +707,11 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         writer.Write(_outputChannels);
         writer.Write(_kernelSize);
         writer.Write(_kernels.Shape.Length);
-        foreach (int dim in _kernels.Shape.ToArray()) writer.Write(dim);
+        foreach (int dim in _kernels._shape) writer.Write(dim);
         writer.Write(_kernels.Length);
         for (int i = 0; i < _kernels.Length; i++) writer.Write(NumOps.ToDouble(_kernels[i]));
         writer.Write(_biases.Shape.Length);
-        foreach (int dim in _biases.Shape.ToArray()) writer.Write(dim);
+        foreach (int dim in _biases._shape) writer.Write(dim);
         writer.Write(_biases.Length);
         for (int i = 0; i < _biases.Length; i++) writer.Write(NumOps.ToDouble(_biases[i]));
     }

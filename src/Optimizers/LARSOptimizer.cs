@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
@@ -434,7 +434,7 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = new Tensor<T>(param.Shape.ToArray()); _tapeVelocity[param] = vel; }
+            if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = new Tensor<T>(param._shape); _tapeVelocity[param] = vel; }
 
             // LARS scaling: localLr = baseLr * trustCoeff * ||param|| / (||grad|| + weightDecay * ||param|| + eps)
             var paramNorm = Engine.TensorNorm(param);

@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -33,7 +33,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "8, 8, 3, 4, 16")]
-public class PatchEmbeddingLayer<T> : LayerBase<T>
+public partial class PatchEmbeddingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The size of each square patch (both width and height).
@@ -78,11 +78,15 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// <summary>
     /// The projection weights that transform flattened patches to embeddings.
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _projectionWeights;
 
     /// <summary>
     /// The bias terms added to the projected embeddings.
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _projectionBias;
 
     /// <summary>
@@ -472,23 +476,6 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     {
         base.ClearGradients();
         _projectionWeightsGradient = null; _projectionBiasGradient = null;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_projectionWeights, _projectionBias];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
-        _projectionWeights = parameters[0]; _projectionBias = parameters[1];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
-        _projectionWeightsGradient = null;
-        _projectionBiasGradient = null;
     }
 
     public override void ResetState()

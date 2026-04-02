@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -423,7 +423,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape
         // Compute loss gradient: d(loss)/d(predicted)
         var lossGrad = effectiveLossFunction.CalculateDerivative(
             predicted.ToVector(), target.ToVector());
-        var lossGradTensor = new Tensor<T>(predicted.Shape.ToArray(), lossGrad);
+        var lossGradTensor = new Tensor<T>(predicted._shape, lossGrad);
 
         // Backpropagate through all layers
 

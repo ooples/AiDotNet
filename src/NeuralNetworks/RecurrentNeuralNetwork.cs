@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -329,7 +329,7 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
             // Reshape gradient to match output tensor shape for proper BPTT
             var gradTensor = Tensor<T>.FromVector(lossGrad);
             if (gradTensor.Rank < output.Rank)
-                gradTensor = gradTensor.Reshape(output.Shape.ToArray());
+                gradTensor = gradTensor.Reshape(output._shape);
 
             // Clip loss gradient before backprop (Pascanu et al. 2013 — essential for RNNs)
             var clippedLossGrad = ClipGradient(gradTensor);

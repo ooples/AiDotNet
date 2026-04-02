@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -209,7 +209,7 @@ public class AttentiveTransformer<T> : LayerBase<T>
     {
         // prior_new = prior * (gamma - attention)
         var gamma = NumOps.FromDouble(_relaxationFactor);
-        var gammaFull = Tensor<T>.CreateDefault(priorScales.Shape.ToArray(), gamma);
+        var gammaFull = Tensor<T>.CreateDefault(priorScales._shape, gamma);
         var scaleFactor = Engine.TensorSubtract(gammaFull, attentionMask);
         return Engine.TensorMultiply(priorScales, scaleFactor);
     }

@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -159,7 +159,7 @@ public class EntmoidActivation<T> : ActivationFunctionBase<T>
     /// <returns>Activated tensor.</returns>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
 
         for (int i = 0; i < input.Length; i++)
         {
@@ -284,12 +284,12 @@ public class EntmaxAttention<T>
     {
         var reshaped = scores.Reshape([batchSize, seqLen]);
         var result = AiDotNetEngine.Current.Softmax(reshaped, -1);
-        return result.Reshape(scores.Shape.ToArray());
+        return result.Reshape(scores._shape);
     }
 
     private Tensor<T> ApplySparsemax(Tensor<T> scores, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(scores.Shape.ToArray());
+        var output = new Tensor<T>(scores._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -331,7 +331,7 @@ public class EntmaxAttention<T>
 
     private Tensor<T> ApplyEntmaxBisection(Tensor<T> scores, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(scores.Shape.ToArray());
+        var output = new Tensor<T>(scores._shape);
         var alphaMinusOne = _alpha - 1.0;
         var invAlphaMinusOne = 1.0 / alphaMinusOne;
 

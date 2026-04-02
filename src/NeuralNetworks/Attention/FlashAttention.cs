@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Engines;
+﻿using AiDotNet.Tensors.Engines;
 
 
 namespace AiDotNet.NeuralNetworks.Attention;
@@ -107,7 +107,7 @@ internal static class FlashAttention<T>
             : NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
 
         // Initialize output tensor
-        var output = new Tensor<T>(query.Shape.ToArray());
+        var output = new Tensor<T>(query._shape);
 
         // Optional: materialize attention weights for debugging
         Tensor<T>? attentionWeights = config.ReturnAttentionWeights
@@ -148,7 +148,7 @@ internal static class FlashAttention<T>
             : NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
 
         // Initialize output tensor
-        var output = new Tensor<T>(query.Shape.ToArray());
+        var output = new Tensor<T>(query._shape);
 
         // Optional: materialize attention weights for debugging
         Tensor<T>? attentionWeights = config.ReturnAttentionWeights
@@ -593,9 +593,9 @@ internal static class FlashAttention<T>
         int seqLenKV = key.Shape[1];
         int headDim = query.Shape[2];
 
-        var gradQuery = new Tensor<T>(query.Shape.ToArray());
-        var gradKey = new Tensor<T>(key.Shape.ToArray());
-        var gradValue = new Tensor<T>(value.Shape.ToArray());
+        var gradQuery = new Tensor<T>(query._shape);
+        var gradKey = new Tensor<T>(key._shape);
+        var gradValue = new Tensor<T>(value._shape);
 
         T scale = config.ScaleFactor.HasValue
             ? NumOps.FromDouble(config.ScaleFactor.Value)
@@ -790,9 +790,9 @@ internal static class FlashAttention<T>
         int seqLenKV = key.Shape[2];
         int headDim = query.Shape[3];
 
-        var gradQuery = new Tensor<T>(query.Shape.ToArray());
-        var gradKey = new Tensor<T>(key.Shape.ToArray());
-        var gradValue = new Tensor<T>(value.Shape.ToArray());
+        var gradQuery = new Tensor<T>(query._shape);
+        var gradKey = new Tensor<T>(key._shape);
+        var gradValue = new Tensor<T>(value._shape);
 
         T scale = config.ScaleFactor.HasValue
             ? NumOps.FromDouble(config.ScaleFactor.Value)

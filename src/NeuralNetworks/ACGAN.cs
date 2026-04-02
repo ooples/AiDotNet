@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -240,14 +240,14 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         if (realLabels.Shape.Length != 2 || realLabels.Shape[1] != _numClasses)
         {
             throw new ArgumentException(
-                $"realLabels must be [batch,{_numClasses}], got [{string.Join(",", realLabels.Shape.ToArray())}].",
+                $"realLabels must be [batch,{_numClasses}], got [{string.Join(",", realLabels._shape)}].",
                 nameof(realLabels));
         }
 
         if (fakeLabels.Shape.Length != 2 || fakeLabels.Shape[1] != _numClasses)
         {
             throw new ArgumentException(
-                $"fakeLabels must be [batch,{_numClasses}], got [{string.Join(",", fakeLabels.Shape.ToArray())}].",
+                $"fakeLabels must be [batch,{_numClasses}], got [{string.Join(",", fakeLabels._shape)}].",
                 nameof(fakeLabels));
         }
 
@@ -439,7 +439,7 @@ public class ACGAN<T> : NeuralNetworkBase<T>
         bool isReal,
         int batchSize)
     {
-        var gradients = new Tensor<T>(discOutput.Shape.ToArray());
+        var gradients = new Tensor<T>(discOutput._shape);
         T authTarget = isReal ? NumOps.One : NumOps.Zero;
         T epsilon = NumOps.FromDouble(1e-10);
         T batchSizeT = NumOps.FromDouble(batchSize);

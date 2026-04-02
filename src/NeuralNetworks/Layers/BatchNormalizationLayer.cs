@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
-public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
+public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     /// <summary>
     /// A small constant added to the variance for numerical stability.
@@ -70,6 +70,8 @@ public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtra
     /// Also known as gamma. This learnable parameter allows the network to scale
     /// each normalized feature. Initialized to ones.
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
+
     private Tensor<T> _gamma;
 
     /// <summary>
@@ -825,24 +827,6 @@ public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtra
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _gammaGradient = null;
-        _betaGradient = null;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_gamma, _beta];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
-        _gamma = parameters[0];
-        _beta = parameters[1];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
         _gammaGradient = null;
         _betaGradient = null;
     }

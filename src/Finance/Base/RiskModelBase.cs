@@ -1,4 +1,4 @@
-using AiDotNet.Finance.Interfaces;
+﻿using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -199,7 +199,7 @@ public abstract class RiskModelBase<T> : FinancialModelBase<T>, IRiskModel<T>
     /// Useful for finding the "bad apples" to remove if you need to lower risk.
     /// </para>
     /// </remarks>
-    public virtual Tensor<T> DecomposeRisk(Tensor<T> portfolioReturns, Tensor<T> weights) => new Tensor<T>(weights.Shape.ToArray());
+    public virtual Tensor<T> DecomposeRisk(Tensor<T> portfolioReturns, Tensor<T> weights) => new Tensor<T>(weights._shape);
 
     /// <summary>
     /// Estimates the probability of losses exceeding a threshold.

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -1391,7 +1391,7 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
 
         // Calculate output gradients
         var gradVector = LossFunction.CalculateDerivative(predVector, expectedVector);
-        var outputGradients = new Tensor<T>(predictions.Shape.ToArray());
+        var outputGradients = new Tensor<T>(predictions._shape);
 
         // Copy gradient values to tensor
         int index = 0;

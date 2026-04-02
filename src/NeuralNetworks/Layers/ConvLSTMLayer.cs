@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -46,12 +46,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "new[] { 1, 4, 4, 1 }, 3, 2, 1, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class ConvLSTMLayer<T> : LayerBase<T>
+public partial class ConvLSTMLayer<T> : LayerBase<T>
 {
     private readonly int _kernelSize;
     private readonly int _filters;
     private readonly int _padding;
     private readonly int _strides;
+
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
 
     private Tensor<T> _weightsFi; // Forget gate input weights
     private Tensor<T> _weightsIi; // Input gate input weights
@@ -62,6 +65,9 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     private Tensor<T> _weightsIh; // Input gate hidden weights
     private Tensor<T> _weightsCh; // Cell state hidden weights
     private Tensor<T> _weightsOh; // Output gate hidden weights
+
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
 
     private Tensor<T> _biasF; // Forget gate bias
     private Tensor<T> _biasI; // Input gate bias
@@ -1654,26 +1660,6 @@ public class ConvLSTMLayer<T> : LayerBase<T>
     {
         _gradients?.Clear();
     }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() =>
-    [
-        _weightsFi, _weightsIi, _weightsCi, _weightsOi,
-        _weightsFh, _weightsIh, _weightsCh, _weightsOh,
-        _biasF, _biasI, _biasC, _biasO
-    ];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 12) throw new ArgumentException($"Expected 12 parameters, got {parameters.Length}.");
-        _weightsFi = parameters[0]; _weightsIi = parameters[1]; _weightsCi = parameters[2]; _weightsOi = parameters[3];
-        _weightsFh = parameters[4]; _weightsIh = parameters[5]; _weightsCh = parameters[6]; _weightsOh = parameters[7];
-        _biasF = parameters[8]; _biasI = parameters[9]; _biasC = parameters[10]; _biasO = parameters[11];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad() { _gradients?.Clear(); }
 
     public override void SetParameters(Vector<T> parameters)
     {

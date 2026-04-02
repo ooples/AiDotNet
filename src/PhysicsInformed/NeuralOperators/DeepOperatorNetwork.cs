@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -608,7 +608,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
                         // Backpropagation: compute gradients for both branch and trunk networks
                         var outputGradientVector = lossFunction.CalculateDerivative(predictions.ToVector(), targets.ToVector());
-                        var outputGradient = new Tensor<T>(predictions.Shape.ToArray(), outputGradientVector);
+                        var outputGradient = new Tensor<T>(predictions._shape, outputGradientVector);
 
                         // Gradient for branch network: grad_branch = (grad_output)^T * trunk_output
                         var branchGradient = Engine.TensorMatMul(Engine.TensorTranspose(outputGradient), trunkOutput2D);

@@ -414,7 +414,7 @@ public class LongLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Determine tensor dimensions
-        int[] shape = tensor.Shape.ToArray();
+        int[] shape = tensor._shape;
 
         if (shape.Length == 1)
         {

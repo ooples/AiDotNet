@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -617,7 +617,7 @@ public class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDetector<T>
     /// </summary>
     private Tensor<T> ExtractLastTimestep(Tensor<T> sequenceOutput)
     {
-        var shape = sequenceOutput.Shape.ToArray();
+        var shape = sequenceOutput._shape;
         if (shape.Length < 2) return sequenceOutput;
 
         // Assuming shape [batch, seq, hidden] or [batch, hidden]

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -209,7 +209,7 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = _onnxSession.Run(inputs);
@@ -456,7 +456,7 @@ public class SlimSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
 
     private Tensor<T> ModulateFeatures(Tensor<T> features, Tensor<T> spatialMask, int numC, int h, int w)
     {
-        var modulated = new Tensor<T>(features.Shape.ToArray());
+        var modulated = new Tensor<T>(features._shape);
         for (int c = 0; c < numC; c++)
             for (int y = 0; y < h; y++)
                 for (int x = 0; x < w; x++)

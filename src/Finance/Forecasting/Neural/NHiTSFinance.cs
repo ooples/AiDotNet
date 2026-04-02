@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -771,7 +771,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -960,7 +960,7 @@ public class NHiTSFinance<T> : ForecastingModelBase<T>
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length / batchSize;
         int steps = Math.Min(stepsUsed, seqLen);
 
-        var shifted = new Tensor<T>(input.Shape.ToArray());
+        var shifted = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {

@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -171,7 +171,7 @@ public class DeepCompressionVAE<T> : VAEModelBase<T>
             x = layer.Forward(x);
 
         // DC-AE is deterministic (not variational) — logVar is zeros
-        var logVar = new Tensor<T>(x.Shape.ToArray());
+        var logVar = new Tensor<T>(x._shape);
         return (x, logVar);
     }
 

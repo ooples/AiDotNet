@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -709,7 +709,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> CalculateHingeLossGradients(Tensor<T> output, bool isReal, int batchSize)
     {
-        var gradients = new Tensor<T>(output.Shape.ToArray());
+        var gradients = new Tensor<T>(output._shape);
 
         for (int i = 0; i < output.Length; i++)
         {
@@ -1002,7 +1002,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
             var loss = CalculateLoss(predictedCpu.ToVector(), actualCpu.ToVector());
             var gradientCpu = CalculateDerivative(predictedCpu.ToVector(), actualCpu.ToVector());
 
-            var gradientTensor = new Tensor<TLoss>(predictedCpu.Shape.ToArray());
+            var gradientTensor = new Tensor<TLoss>(predictedCpu._shape);
             Array.Copy(gradientCpu.ToArray(), gradientTensor.Data.ToArray(), gradientCpu.Length);
 
             var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;

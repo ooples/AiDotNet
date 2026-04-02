@@ -1,4 +1,4 @@
-using AiDotNet.Data.Loaders;
+﻿using AiDotNet.Data.Loaders;
 using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Data.Text;
@@ -198,7 +198,7 @@ public class TokenizedTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
 
     private static Tensor<T> ExtractTensorBatch(Tensor<T> source, int[] indices)
     {
-        var newShape = (int[])source.Shape.ToArray().Clone();
+        var newShape = (int[])source.Shape.ToArray();
         newShape[0] = indices.Length;
         var result = new Tensor<T>(newShape);
 

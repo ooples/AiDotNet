@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, new[] { 1, 4 }, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class LSTMLayer<T> : LayerBase<T>
+public partial class LSTMLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The size of each input vector (number of features).
@@ -103,6 +103,8 @@ public class LSTMLayer<T> : LayerBase<T>
     /// about previous subjects when a new subject is introduced.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weightsFi;
 
     /// <summary>
@@ -272,6 +274,8 @@ public class LSTMLayer<T> : LayerBase<T>
     /// or context is considered.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biasF;
 
     /// <summary>
@@ -2211,29 +2215,6 @@ public class LSTMLayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
-        Gradients?.Clear();
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() =>
-    [
-        _weightsFi, _weightsIi, _weightsCi, _weightsOi,
-        _weightsFh, _weightsIh, _weightsCh, _weightsOh,
-        _biasF, _biasI, _biasC, _biasO
-    ];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 12) throw new ArgumentException($"Expected 12 parameters, got {parameters.Length}.");
-        _weightsFi = parameters[0]; _weightsIi = parameters[1]; _weightsCi = parameters[2]; _weightsOi = parameters[3];
-        _weightsFh = parameters[4]; _weightsIh = parameters[5]; _weightsCh = parameters[6]; _weightsOh = parameters[7];
-        _biasF = parameters[8]; _biasI = parameters[9]; _biasC = parameters[10]; _biasO = parameters[11];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
         Gradients?.Clear();
     }
 

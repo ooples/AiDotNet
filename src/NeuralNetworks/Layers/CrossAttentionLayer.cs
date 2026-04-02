@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -31,7 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.CrossModalAttention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 16", TestConstructorArgs = "16, 16, 2, 4")]
-public class CrossAttentionLayer<T> : LayerBase<T>
+public partial class CrossAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _queryDim;
     private readonly int _contextDim;
@@ -39,6 +39,8 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     private readonly int _headDim;
 
     // Query projection: queryDim -> queryDim
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _queryWeights;
 
     // Key projection: contextDim -> queryDim
@@ -49,6 +51,8 @@ public class CrossAttentionLayer<T> : LayerBase<T>
 
     // Output projection: queryDim -> queryDim
     private Tensor<T> _outputWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputBias;
 
     // Cached values for backward pass
@@ -807,28 +811,6 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _queryWeightsGradient = null;
-        _keyWeightsGradient = null;
-        _valueWeightsGradient = null;
-        _outputWeightsGradient = null;
-        _outputBiasGradient = null;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() =>
-        [_queryWeights, _keyWeights, _valueWeights, _outputWeights, _outputBias];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 5) throw new ArgumentException($"Expected 5 parameters, got {parameters.Length}.");
-        _queryWeights = parameters[0]; _keyWeights = parameters[1]; _valueWeights = parameters[2];
-        _outputWeights = parameters[3]; _outputBias = parameters[4];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;
         _valueWeightsGradient = null;

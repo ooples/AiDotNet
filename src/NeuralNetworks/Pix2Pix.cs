@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -538,7 +538,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> CalculateL1Gradients(Tensor<T> predictions, Tensor<T> targets)
     {
-        var gradients = new Tensor<T>(predictions.Shape.ToArray());
+        var gradients = new Tensor<T>(predictions._shape);
         int count = predictions.Length;
         T scale = NumOps.FromDouble(_l1Lambda / count);
 

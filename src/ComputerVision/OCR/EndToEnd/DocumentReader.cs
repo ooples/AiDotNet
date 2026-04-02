@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.TextDetection;
 using AiDotNet.ComputerVision.OCR.Recognition;
@@ -158,7 +158,7 @@ public class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var result = new Tensor<T>(image.Shape.ToArray());
+        var result = new Tensor<T>(image._shape);
 
         // Detect pixel range by sampling a few values to determine if normalized [0,1] or [0,255]
         double maxVal = 0;

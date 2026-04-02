@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -207,7 +207,7 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
     /// </remarks>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        Tensor<T> output = new Tensor<T>(input.Shape.ToArray());
+        Tensor<T> output = new Tensor<T>(input._shape);
 
         if (input.Shape.Length == 2)
         {
@@ -268,7 +268,7 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
 
             var flat = input.Reshape([totalVectors, vectorLength]);
             var flatOutput = Activate(flat);
-            output = flatOutput.Reshape(input.Shape.ToArray());
+            output = flatOutput.Reshape(input._shape);
         }
 
         return output;

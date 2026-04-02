@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
@@ -397,7 +397,7 @@ public class SSLAugmentationPolicies<T>
             }
         }
 
-        return new Tensor<T>(result, image.Shape.ToArray());
+        return new Tensor<T>(result, image._shape);
     }
 
     private Tensor<T> HorizontalFlip(Tensor<T> image)
@@ -435,7 +435,7 @@ public class SSLAugmentationPolicies<T>
             Array.Copy(image.Data.ToArray(), result, image.Length);
         }
 
-        return new Tensor<T>(result, image.Shape.ToArray());
+        return new Tensor<T>(result, image._shape);
     }
 
     private Tensor<T> ColorJitter(Tensor<T> image,
@@ -456,7 +456,7 @@ public class SSLAugmentationPolicies<T>
             result[i] = NumOps.FromDouble(val);
         }
 
-        return new Tensor<T>(result, image.Shape.ToArray());
+        return new Tensor<T>(result, image._shape);
     }
 
     private Tensor<T> ToGrayscale(Tensor<T> image)
@@ -514,7 +514,7 @@ public class SSLAugmentationPolicies<T>
             Array.Copy(image.Data.ToArray(), result, image.Length);
         }
 
-        return new Tensor<T>(result, image.Shape.ToArray());
+        return new Tensor<T>(result, image._shape);
     }
 
     private Tensor<T> GaussianBlur(Tensor<T> image, double sigmaMin, double sigmaMax)
@@ -594,14 +594,14 @@ public class SSLAugmentationPolicies<T>
                 }
             }
 
-            return new Tensor<T>(result, image.Shape.ToArray());
+            return new Tensor<T>(result, image._shape);
         }
         else
         {
             // For 2D tensors, just copy (no spatial dimension to blur)
             var result = new T[image.Length];
             Array.Copy(image.Data.ToArray(), result, image.Length);
-            return new Tensor<T>(result, image.Shape.ToArray());
+            return new Tensor<T>(result, image._shape);
         }
     }
 
@@ -619,7 +619,7 @@ public class SSLAugmentationPolicies<T>
             result[i] = NumOps.FromDouble(val);
         }
 
-        return new Tensor<T>(result, image.Shape.ToArray());
+        return new Tensor<T>(result, image._shape);
     }
 
     #endregion

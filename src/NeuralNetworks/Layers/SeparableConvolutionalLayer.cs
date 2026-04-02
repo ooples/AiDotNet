@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 8, 8, 1", TestConstructorArgs = "new[] { 1, 8, 8, 1 }, 2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class SeparableConvolutionalLayer<T> : LayerBase<T>
+public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Kernels for the depthwise convolution operation.
@@ -51,6 +51,8 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// which makes the computation more efficient than standard convolution.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _depthwiseKernels;
 
     /// <summary>
@@ -81,6 +83,8 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// for the network to fit the data properly.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -344,22 +348,6 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _depthwiseKernelsGradient = null; _pointwiseKernelsGradient = null; _biasesGradient = null;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_depthwiseKernels, _pointwiseKernels, _biases];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 3) throw new ArgumentException($"Expected 3 parameters, got {parameters.Length}.");
-        _depthwiseKernels = parameters[0]; _pointwiseKernels = parameters[1]; _biases = parameters[2];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
         _depthwiseKernelsGradient = null; _pointwiseKernelsGradient = null; _biasesGradient = null;
     }
 

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -408,7 +408,7 @@ public class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape.ToArray());
+        var normalized = new Tensor<T>(image._shape);
         for (int i = 0; i < image.Data.Length; i++)
         {
             normalized.Data.Span[i] = NumOps.FromDouble(NumOps.ToDouble(image.Data.Span[i]) / 255.0);

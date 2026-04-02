@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -1732,7 +1732,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         var realPart = Engine.TensorMultiply(epsilonBroadcast, realFlat);
         var fakePart = Engine.TensorMultiply(oneMinusEpsilon, fakeFlat);
         var interpolatedFlat = Engine.TensorAdd(realPart, fakePart);
-        var interpolated = interpolatedFlat.Reshape(realSamples.Shape.ToArray());
+        var interpolated = interpolatedFlat.Reshape(realSamples._shape);
 
         // Compute gradients using symbolic differentiation (autodiff)
         var gradients = ComputeSymbolicGradient(interpolated);
@@ -1817,7 +1817,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
         // Create gradient signal: we want d(output)/d(input)
         // Start with gradient of 1.0 with respect to the output
-        var outputGradient = new Tensor<T>(output.Shape.ToArray());
+        var outputGradient = new Tensor<T>(output._shape);
         outputGradient.Fill(NumOps.One);
 
         // Run backward pass through discriminator layers to compute input gradient

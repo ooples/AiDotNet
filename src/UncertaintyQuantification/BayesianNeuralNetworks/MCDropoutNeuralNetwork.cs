@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
@@ -123,7 +123,7 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
     {
         // MC Dropout primarily captures epistemic uncertainty
         // Return a small baseline aleatoric estimate
-        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input.Shape.ToArray());
+        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input._shape);
 
         var aleatoric = new Tensor<T>(totalUncertainty.Shape.ToArray());
         var aleatoricFactor = NumOps.FromDouble(0.2); // Assume 20% of variance is aleatoric
@@ -147,7 +147,7 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
     /// </remarks>
     public Tensor<T> EstimateEpistemicUncertainty(Tensor<T> input)
     {
-        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input.Shape.ToArray());
+        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input._shape);
 
         var epistemic = new Tensor<T>(totalUncertainty.Shape.ToArray());
         var epistemicFactor = NumOps.FromDouble(0.8); // Assume 80% of variance is epistemic

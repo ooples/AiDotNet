@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Gating)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class GatedLinearUnitLayer<T> : LayerBase<T>
+public partial class GatedLinearUnitLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The weight tensor for the linear transformation path.
@@ -65,6 +65,8 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// which parts are important to keep or filter out (that's the gate's job).
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _linearWeights;
 
     /// <summary>
@@ -107,6 +109,8 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// Each output neuron in the linear path has its own bias value.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _linearBias;
 
     /// <summary>
@@ -774,24 +778,6 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _linearWeightsGradient = null; _gateWeightsGradient = null;
-        _linearBiasGradient = null; _gateBiasGradient = null;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() =>
-        [_linearWeights, _gateWeights, _linearBias, _gateBias];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 4) throw new ArgumentException($"Expected 4 parameters, got {parameters.Length}.");
-        _linearWeights = parameters[0]; _gateWeights = parameters[1]; _linearBias = parameters[2]; _gateBias = parameters[3];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
         _linearWeightsGradient = null; _gateWeightsGradient = null;
         _linearBiasGradient = null; _gateBiasGradient = null;
     }

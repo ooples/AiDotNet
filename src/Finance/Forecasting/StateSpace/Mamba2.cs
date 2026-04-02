@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -491,7 +491,7 @@ public class Mamba2<T> : ForecastingModelBase<T>
         for (int i = 0; i < input.Length; i++)
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = OnnxSession.InputMetadata.Keys.First();
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
 
@@ -534,7 +534,7 @@ public class Mamba2<T> : ForecastingModelBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         for (int i = 0; i < _contextLength - stepsUsed; i++)
             result.Data.Span[i] = input.Data.Span[i + stepsUsed];
         for (int i = 0; i < stepsUsed && i < predictions.Length; i++)

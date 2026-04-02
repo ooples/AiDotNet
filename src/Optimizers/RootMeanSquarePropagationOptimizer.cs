@@ -1,4 +1,4 @@
-using AiDotNet.Engines;
+﻿using AiDotNet.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
@@ -289,7 +289,7 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeSqGrad.TryGetValue(param, out var sqGrad)) { sqGrad = new Tensor<T>(param.Shape.ToArray()); _tapeSqGrad[param] = sqGrad; }
+            if (!_tapeSqGrad.TryGetValue(param, out var sqGrad)) { sqGrad = new Tensor<T>(param._shape); _tapeSqGrad[param] = sqGrad; }
 
             // sqGrad = decay * sqGrad + (1 - decay) * grad^2
             var sqGradNew = Engine.TensorAdd(Engine.TensorMultiplyScalar(sqGrad, decay), Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusDecay));

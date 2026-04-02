@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
@@ -317,7 +317,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     {
         // Vectorized ReLU backward: grad * (preActivation > 0)
         var mask = Engine.TensorGreaterThan(preActivation, NumOps.Zero);
-        var zeros = Tensor<T>.CreateDefault(gradOutput.Shape.ToArray(), NumOps.Zero);
+        var zeros = Tensor<T>.CreateDefault(gradOutput._shape, NumOps.Zero);
         return Engine.TensorWhere(mask, gradOutput, zeros);
     }
 
@@ -858,6 +858,6 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             output[i] = NumOps.GreaterThan(val, NumOps.Zero) ? val : NumOps.Zero;
         }
 
-        return new Tensor<T>(output, input.Shape.ToArray());
+        return new Tensor<T>(output, input._shape);
     }
 }

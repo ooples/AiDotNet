@@ -1,4 +1,4 @@
-using AiDotNet.Diffusion.Memory;
+﻿using AiDotNet.Diffusion.Memory;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Training.Memory;
@@ -445,7 +445,7 @@ public class TrainingMemoryManager<T> : IDisposable
         // If pooling is enabled, get a tensor from the pool
         if (_activationPool is not null)
         {
-            var clone = _activationPool.Rent(source.Shape.ToArray());
+            var clone = _activationPool.Rent(source._shape);
             // Copy data
             var sourceSpan = source.AsSpan();
             var cloneSpan = clone.AsWritableSpan();
@@ -457,7 +457,7 @@ public class TrainingMemoryManager<T> : IDisposable
         }
 
         // Otherwise create a new tensor
-        var newTensor = new Tensor<T>(source.Shape.ToArray());
+        var newTensor = new Tensor<T>(source._shape);
         var srcSpan = source.AsSpan();
         var dstSpan = newTensor.AsWritableSpan();
         for (int i = 0; i < srcSpan.Length; i++)

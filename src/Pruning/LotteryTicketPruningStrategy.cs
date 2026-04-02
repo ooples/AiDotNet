@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.ModelCompression;
 
@@ -202,7 +202,7 @@ public class LotteryTicketPruningStrategy<T> : IPruningStrategy<T>
         {
             scores[i] = _numOps.Abs(flatWeights[i]);
         }
-        return Tensor<T>.FromVector(new Vector<T>(scores), (int[])weights.Shape.ToArray().Clone());
+        return Tensor<T>.FromVector(new Vector<T>(scores), (int[])weights.Shape.ToArray());
     }
 
     /// <summary>
@@ -576,7 +576,7 @@ public class LotteryTicketPruningStrategy<T> : IPruningStrategy<T>
                     Values = nonZeroValues.ToArray(),
                     RowIndices = rowIndices.ToArray(),
                     ColumnIndices = colIndices.ToArray(),
-                    OriginalShape = weights.Shape.ToArray().ToArray()
+                    OriginalShape = weights._shape.ToArray()
                 };
 
             case SparseFormat.CSR:
@@ -603,7 +603,7 @@ public class LotteryTicketPruningStrategy<T> : IPruningStrategy<T>
                     Values = nonZeroValues.ToArray(),
                     RowPointers = rowPointers.ToArray(),
                     ColumnIndices = colIndices.ToArray(),
-                    OriginalShape = weights.Shape.ToArray().ToArray()
+                    OriginalShape = weights._shape.ToArray()
                 };
 
             case SparseFormat.CSC:
@@ -630,7 +630,7 @@ public class LotteryTicketPruningStrategy<T> : IPruningStrategy<T>
                     Values = nonZeroValues.ToArray(),
                     ColumnPointers = colPointers.ToArray(),
                     RowIndices = rowIndices.ToArray(),
-                    OriginalShape = weights.Shape.ToArray().ToArray()
+                    OriginalShape = weights._shape.ToArray()
                 };
 
             default:
@@ -684,7 +684,7 @@ public class LotteryTicketPruningStrategy<T> : IPruningStrategy<T>
             SparsityMask = mask.ToArray(),
             SparsityN = n,
             SparsityM = m,
-            OriginalShape = weights.Shape.ToArray().ToArray()
+            OriginalShape = weights._shape.ToArray()
         };
     }
 

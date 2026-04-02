@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, UsesSurrogateGradient = true, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 10, 4, 3")]
-public class DigitCapsuleLayer<T> : LayerBase<T>
+public partial class DigitCapsuleLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The weight tensor connecting input capsules to output capsules.
@@ -52,6 +52,8 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     /// - During training, these weights are adjusted to make better predictions
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
@@ -854,17 +856,4 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     /// that can be unrolled into a static computation graph.
     /// </value>
     public override bool SupportsJitCompilation => true;
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_weights];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 1) throw new ArgumentException($"Expected 1 parameter, got {parameters.Length}.");
-        _weights = parameters[0];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad() { _weightsGradient = null; }
 }

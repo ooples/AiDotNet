@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -1049,7 +1049,7 @@ public class DCRNN<T> : ForecastingModelBase<T>
             inputData[i] = NumOps.ToFloat(input.Data.Span[i]);
         }
 
-        var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray().Select(d => (int)d).ToArray());
+        var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, input._shape.Select(d => (int)d).ToArray());
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, inputTensor) };
 
         using var results = OnnxSession.Run(inputs);
@@ -1085,7 +1085,7 @@ public class DCRNN<T> : ForecastingModelBase<T>
         if (_forwardPowers.Count == 0 || _backwardPowers.Count == 0)
             return input;
 
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         int n = _numNodes;
         int featuresPerNode = input.Data.Length / n;
 
@@ -1126,7 +1126,7 @@ public class DCRNN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ApplyMatrixToTensor(double[,] matrix, Tensor<T> tensor, int n, int featuresPerNode)
     {
-        var result = new Tensor<T>(tensor.Shape.ToArray());
+        var result = new Tensor<T>(tensor._shape);
 
         for (int i = 0; i < n; i++)
         {
@@ -1289,7 +1289,7 @@ public class DCRNN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> newData)
     {
-        var shifted = new Tensor<T>(input.Shape.ToArray());
+        var shifted = new Tensor<T>(input._shape);
 
         // Guard against stepSize larger than input length
         int stepSize = Math.Min(_numNodes * _numFeatures, input.Data.Length);

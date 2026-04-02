@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -602,7 +602,7 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
         // Default encoder: last layer outputs [mean | logVar] concatenated
         // Derive shape from encoder output rank: replace last dim with latentDim
-        int[] meanShape = DeriveShapeWithLastDim(encoderOutput.Shape.ToArray(), latentDim);
+        int[] meanShape = DeriveShapeWithLastDim(encoderOutput._shape, latentDim);
         var meanTensor = new Tensor<T>(meanShape);
         var logVarTensor = new Tensor<T>(meanShape);
 
@@ -633,7 +633,7 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     private Tensor<T> Reparameterize(Tensor<T> mean, Tensor<T> logVar)
     {
         var z = new Tensor<T>(mean.Shape.ToArray());
-        _lastEpsilon = new Tensor<T>(mean.Shape.ToArray());
+        _lastEpsilon = new Tensor<T>(mean._shape);
         for (int i = 0; i < mean.Length; i++)
         {
             double m = NumOps.ToDouble(mean[i]);

@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.ModelLoading;
@@ -367,9 +367,9 @@ public class VAEEncoder<T> : LayerBase<T>
     private Tensor<T> Sample(Tensor<T> mean, Tensor<T> logVar, int? seed)
     {
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var epsilon = SampleNoise(mean.Shape.ToArray(), rng);
+        var epsilon = SampleNoise(mean._shape, rng);
 
-        var result = new Tensor<T>(mean.Shape.ToArray());
+        var result = new Tensor<T>(mean._shape);
         var meanSpan = mean.AsSpan();
         var logVarSpan = logVar.AsSpan();
         var epsilonSpan = epsilon.AsSpan();
@@ -417,7 +417,7 @@ public class VAEEncoder<T> : LayerBase<T>
 
     private (Tensor<T> First, Tensor<T> Second) SplitChannels(Tensor<T> combined, int splitChannels)
     {
-        var shape = combined.Shape.ToArray();
+        var shape = combined._shape;
         int batch = shape.Length > 3 ? shape[0] : 1;
         int totalChannels = shape.Length > 3 ? shape[1] : shape[0];
         int height = shape.Length > 3 ? shape[2] : shape[1];
@@ -452,7 +452,7 @@ public class VAEEncoder<T> : LayerBase<T>
 
     private Tensor<T> ApplySiLUDerivative(Tensor<T> input, Tensor<T> gradient)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
         var inputSpan = input.AsSpan();
         var gradSpan = gradient.AsSpan();
         var outputSpan = output.AsWritableSpan();

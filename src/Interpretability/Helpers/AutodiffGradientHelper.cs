@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -151,7 +151,7 @@ public class AutodiffGradientHelper<T>
         var grad0 = ComputeGradient(input, outputIndex);
 
         // Compute gradient at x + ε*v
-        var perturbedShape = input.Shape.ToArray();
+        var perturbedShape = input._shape;
         var perturbed = new Tensor<T>(perturbedShape);
         for (int i = 0; i < input.Length; i++)
         {

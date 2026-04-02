@@ -1,4 +1,4 @@
-
+﻿
 
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -157,7 +157,7 @@ public class TanhActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>
     {
         var tanh = Activate(input);
         var tanhSquared = Engine.TensorMultiply(tanh, tanh);
-        var one = Tensor<T>.CreateDefault(input.Shape.ToArray(), NumOps.One);
+        var one = Tensor<T>.CreateDefault(input._shape, NumOps.One);
         return Engine.TensorSubtract(one, tanhSquared);
     }
 
@@ -225,7 +225,7 @@ public class TanhActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>
     /// </summary>
     public Tensor<T> DerivativeFromOutput(Tensor<T> output)
     {
-        var ones = new Tensor<T>(output.Shape.ToArray());
+        var ones = new Tensor<T>(output._shape);
         ones.Fill(NumOps.One);
         return ones.Subtract(output.ElementwiseMultiply(output));
     }

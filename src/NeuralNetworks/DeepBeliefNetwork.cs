@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
@@ -359,7 +359,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     private T CalculateReconstructionError(Tensor<T> original, Tensor<T> reconstruction)
     {
         // Check that shapes match
-        if (!Enumerable.SequenceEqual(original.Shape.ToArray(), reconstruction.Shape.ToArray()))
+        if (!Enumerable.SequenceEqual(original._shape, reconstruction._shape))
         {
             throw new ArgumentException("Original and reconstruction tensors must have the same shape.");
         }

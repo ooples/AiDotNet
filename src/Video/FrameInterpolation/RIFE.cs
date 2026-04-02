@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -396,8 +396,8 @@ public class RIFE<T> : FrameInterpolationBase<T>
         int height = outputGrad.Shape[2];
         int width = outputGrad.Shape[3];
 
-        var frameGrad = new Tensor<T>(inputFrame.Shape.ToArray());
-        var flowGrad = new Tensor<T>(flow.Shape.ToArray());
+        var frameGrad = new Tensor<T>(inputFrame._shape);
+        var flowGrad = new Tensor<T>(flow._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -563,7 +563,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
         int height = encoderGrad.Shape[2];
         int width = encoderGrad.Shape[3];
 
-        var result = new Tensor<T>(encoderGrad.Shape.ToArray());
+        var result = new Tensor<T>(encoderGrad._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -723,7 +723,7 @@ public class RIFE<T> : FrameInterpolationBase<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var result = new Tensor<T>(image.Shape.ToArray());
+        var result = new Tensor<T>(image._shape);
 
         for (int b = 0; b < batchSize; b++)
         {

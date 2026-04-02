@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -55,7 +55,7 @@ public enum EmbeddingInputMode
 [LayerCategory(LayerCategory.Embedding)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "100, 16")]
-public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmbedding<T>
+public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmbedding<T>
 {
     /// <summary>
     /// The embedding tensor that stores vector representations for each token in the vocabulary.
@@ -87,6 +87,8 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
     /// During training, these values are adjusted to make similar tokens have similar vectors.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Embeddings)]
+
     private Tensor<T> _embeddingTensor;
 
     /// <summary>
@@ -1032,37 +1034,6 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _embeddingGradient = null;
-        _projectionWeightsGradient = null;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters()
-    {
-        if (_projectionWeights is not null)
-            return [_embeddingTensor, _projectionWeights];
-        return [_embeddingTensor];
-    }
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (_projectionWeights is not null)
-        {
-            if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters (with projection), got {parameters.Length}.");
-            _embeddingTensor = parameters[0];
-            _projectionWeights = parameters[1];
-        }
-        else
-        {
-            if (parameters.Length != 1) throw new ArgumentException($"Expected 1 parameter (no projection), got {parameters.Length}.");
-            _embeddingTensor = parameters[0];
-        }
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
         _embeddingGradient = null;
         _projectionWeightsGradient = null;
     }

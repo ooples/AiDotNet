@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using AiDotNet.Tensors.Helpers;
 
@@ -108,7 +108,7 @@ public static class VectorizedOps
                 break;
         }
 
-        return new Tensor<T>(left.Shape.ToArray(), new Vector<T>(result));
+        return new Tensor<T>(left._shape, new Vector<T>(result));
     }
 
     /// <summary>
@@ -179,7 +179,7 @@ public static class VectorizedOps
                 break;
         }
 
-        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(result));
+        return new Tensor<T>(input._shape, new Vector<T>(result));
     }
 
     /// <summary>
@@ -513,7 +513,7 @@ public static class VectorizedOps
         bool keepDims,
         INumericOperations<T> numOps)
     {
-        var inputShape = input.Shape.ToArray();
+        var inputShape = input._shape;
         var inputSpan = input.AsSpan();
 
         // Normalize negative axes

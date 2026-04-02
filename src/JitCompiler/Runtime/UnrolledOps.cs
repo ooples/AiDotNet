@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Runtime.CompilerServices;
 using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Helpers;
@@ -83,7 +83,7 @@ public static class UnrolledOps
             result[i] = ConvertFromDouble<T>(value);
         }
 
-        return new Tensor<T>(input.Shape.ToArray(), new AiDotNet.Tensors.LinearAlgebra.Vector<T>(result));
+        return new Tensor<T>(input._shape, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(result));
     }
 
     /// <summary>
@@ -153,7 +153,7 @@ public static class UnrolledOps
             result[i] = ApplyOp<T>(inputVector[i], operation);
         }
 
-        return new Tensor<T>(input.Shape.ToArray(), new AiDotNet.Tensors.LinearAlgebra.Vector<T>(result));
+        return new Tensor<T>(input._shape, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(result));
     }
 
     /// <summary>

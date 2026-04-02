@@ -1,4 +1,4 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
@@ -374,8 +374,8 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param.Shape.ToArray()); _tapeM[param] = m; }
-            if (!_tapeU.TryGetValue(param, out var u)) { u = new Tensor<T>(param.Shape.ToArray()); _tapeU[param] = u; }
+            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeM[param] = m; }
+            if (!_tapeU.TryGetValue(param, out var u)) { u = new Tensor<T>(param._shape); _tapeU[param] = u; }
 
             // m = beta1 * m + (1 - beta1) * grad
             Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1)), m);

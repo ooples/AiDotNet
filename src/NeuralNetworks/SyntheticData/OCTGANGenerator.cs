@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -422,7 +422,7 @@ public class OCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     private Tensor<T> ComputeSVDDGradient(Tensor<T> embedding)
     {
-        if (_svddCenter is null) return new Tensor<T>(embedding.Shape.ToArray());
+        if (_svddCenter is null) return new Tensor<T>(embedding._shape);
 
         int len = Math.Min(embedding.Length, _svddCenter.Length);
         var grad = new Tensor<T>([len]);

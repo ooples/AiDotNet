@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -43,7 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)new AiDotNet.ActivationFunctions.LeakyReLUActivation<double>()")]
-public class FeedForwardLayer<T> : LayerBase<T>
+public partial class FeedForwardLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The weight matrix connecting input neurons to output neurons.
@@ -626,23 +626,6 @@ public class FeedForwardLayer<T> : LayerBase<T>
     public override void ClearGradients()
     {
         base.ClearGradients();
-        WeightsGradient = Tensor<T>.Empty();
-        BiasesGradient = Tensor<T>.Empty();
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [Weights, Biases];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
-        Weights = parameters[0]; Biases = parameters[1];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
         WeightsGradient = Tensor<T>.Empty();
         BiasesGradient = Tensor<T>.Empty();
     }

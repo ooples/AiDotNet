@@ -1,4 +1,4 @@
-using AiDotNet.Extensions;
+﻿using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -365,7 +365,7 @@ public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
         Matrix<T> accumulatedOutput = inputMatrix.Multiply(_accumulatedWeight.Transpose());
 
         // Sum all contributions
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> result = new Tensor<T>(baseOutput._shape);
         for (int i = 0; i < batchSize; i++)
         {
             for (int j = 0; j < outputSize; j++)

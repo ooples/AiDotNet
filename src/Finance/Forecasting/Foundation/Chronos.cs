@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -885,7 +885,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1144,7 +1144,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
-        var newInput = new Tensor<T>(input.Shape.ToArray());
+        var newInput = new Tensor<T>(input._shape);
 
         // Clamp stepsUsed to prevent negative indices
         int clampedSteps = Math.Min(stepsUsed, _contextLength);

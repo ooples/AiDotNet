@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "1, 1, 2, 3, 4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class SubpixelConvolutionalLayer<T> : LayerBase<T>
+public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The number of channels in the input tensor.
@@ -142,6 +142,8 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// are used to store information that helps create the higher resolution output.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _kernels;
 
     /// <summary>
@@ -163,6 +165,8 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// across the entire feature map.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -961,19 +965,6 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         _kernelGradients = null;
         _biasGradients = null;
     }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_kernels, _biases];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
-        _kernels = parameters[0]; _biases = parameters[1];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad() { _kernelGradients = null; _biasGradients = null; }
 
     public override void SetParameters(Vector<T> parameters)
     {

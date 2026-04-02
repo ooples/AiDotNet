@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -265,7 +265,7 @@ public class BandSplitRNN<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<
         var sources = new Dictionary<string, Tensor<T>>();
         for (int si = 0; si < _options.NumStems && si < _options.Sources.Length; si++)
         {
-            var maskedMag = new Tensor<T>(magnitude.Shape.ToArray());
+            var maskedMag = new Tensor<T>(magnitude._shape);
             for (int f = 0; f < nf; f++)
                 for (int b = 0; b < numBins; b++)
                 {

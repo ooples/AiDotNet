@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -39,11 +39,13 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "2, 4")]
-public class GroupNormalizationLayer<T> : LayerBase<T>
+public partial class GroupNormalizationLayer<T> : LayerBase<T>
 {
     private readonly T _epsilon;
     private readonly int _numGroups;
     private readonly int _numChannels;
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
+
     private Tensor<T> _gamma;
     private Tensor<T> _beta;
     private Tensor<T>? _lastInput;
@@ -394,23 +396,6 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
     }
 
     public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_gamma, _beta];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
-        _gamma = parameters[0]; _beta = parameters[1];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
-        _gammaGradient = null;
-        _betaGradient = null;
-    }
 
     public override void ResetState()
     {

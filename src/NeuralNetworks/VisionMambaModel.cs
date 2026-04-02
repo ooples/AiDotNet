@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -442,7 +442,7 @@ public class VisionMambaModel<T> : NeuralNetworkBase<T>
 
     private Tensor<T> ApplyRMSNorm1D(Tensor<T> input, Tensor<T> gamma, int batchSize, int dim)
     {
-        var output = TensorAllocator.Rent<T>(input.Shape.ToArray());
+        var output = TensorAllocator.Rent<T>(input._shape);
         T eps = NumOps.FromDouble(1e-6);
 
         for (int b = 0; b < batchSize; b++)

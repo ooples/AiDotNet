@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -270,7 +270,7 @@ public abstract class MambularBase<T>
 
     private Tensor<T> ReverseSequence(Tensor<T> input, int batchSize, int seqLen, int dim)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
         for (int b = 0; b < batchSize; b++)
         {
             for (int s = 0; s < seqLen; s++)
@@ -405,7 +405,7 @@ public abstract class MambularBase<T>
 
         public Tensor<T> Forward(Tensor<T> input, int batchSize, int seqLen, int dim)
         {
-            var output = new Tensor<T>(input.Shape.ToArray());
+            var output = new Tensor<T>(input._shape);
 
             for (int b = 0; b < batchSize; b++)
             {

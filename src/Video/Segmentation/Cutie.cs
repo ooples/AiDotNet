@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -423,7 +423,7 @@ public class Cutie<T> : NeuralNetworkBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = _onnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -542,7 +542,7 @@ public class Cutie<T> : NeuralNetworkBase<T>
         int height = query.Shape[2];
         int width = query.Shape[3];
 
-        var attended = new Tensor<T>(query.Shape.ToArray());
+        var attended = new Tensor<T>(query._shape);
 
         foreach (var (key, value) in _memoryBank)
         {

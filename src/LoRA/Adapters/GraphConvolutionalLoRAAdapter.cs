@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -183,7 +183,7 @@ public class GraphConvolutionalLoRAAdapter<T> : LoRAAdapterBase<T>, IGraphConvol
         Tensor<T> loraOutput = _loraLayer.Forward(input);
 
         // Sum the outputs
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> result = new Tensor<T>(baseOutput._shape);
         for (int i = 0; i < baseOutput.Length; i++)
         {
             result[i] = NumOps.Add(baseOutput[i], loraOutput[i]);

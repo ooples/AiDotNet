@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -368,7 +368,7 @@ public class GMFlow<T> : OpticalFlowBase<T>
         int height = query.Shape[2];
         int width = query.Shape[3];
 
-        var output = new Tensor<T>(value.Shape.ToArray());
+        var output = new Tensor<T>(value._shape);
         double scale = 1.0 / Math.Sqrt(channels);
 
         // Use local window attention for efficiency (window size based on feature resolution)
@@ -555,7 +555,7 @@ public class GMFlow<T> : OpticalFlowBase<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var warped = new Tensor<T>(image.Shape.ToArray());
+        var warped = new Tensor<T>(image._shape);
 
         for (int b = 0; b < batchSize; b++)
         {

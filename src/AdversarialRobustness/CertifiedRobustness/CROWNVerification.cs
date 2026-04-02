@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -610,7 +610,7 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
         Tensor<T> weights,
         Tensor<T>? biases)
     {
-        var shape = weights.Shape.ToArray();
+        var shape = weights._shape;
         if (shape.Length < 2)
         {
             return (alphaLower, alphaUpper, betaLower, betaUpper);
@@ -804,7 +804,7 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
         Tensor<T> weights,
         Tensor<T>? biases)
     {
-        var shape = weights.Shape.ToArray();
+        var shape = weights._shape;
         if (shape.Length < 2)
         {
             return (lower, upper);

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -185,7 +185,7 @@ public class NeuralVaR<T> : RiskModelBase<T>
             for (int i = 0; i < action.Length; i++)
                 scaledData[i] = NumOps.Multiply(action.Data.Span[i], scale);
             
-            return new Tensor<T>(action.Shape.ToArray(), new Vector<T>(scaledData));
+            return new Tensor<T>(action._shape, new Vector<T>(scaledData));
         }
 
         return action;

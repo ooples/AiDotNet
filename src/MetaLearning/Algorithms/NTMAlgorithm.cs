@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -1402,7 +1402,7 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
     private int GetTensorLength(Tensor<T> tensor)
     {
         int length = 1;
-        foreach (int dim in tensor.Shape.ToArray())
+        foreach (int dim in tensor._shape)
         {
             length *= dim;
         }
@@ -1774,7 +1774,7 @@ public class MLPNTMController<T, TInput, TOutput> : INTMController<T>
     private int GetTensorLength(Tensor<T> tensor)
     {
         int length = 1;
-        foreach (int dim in tensor.Shape.ToArray())
+        foreach (int dim in tensor._shape)
         {
             length *= dim;
         }

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -931,7 +931,7 @@ public class LagLlama<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1180,7 +1180,7 @@ public class LagLlama<T> : ForecastingModelBase<T>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
         // For Lag-Llama, update lag features after shifting.
-        var newInput = new Tensor<T>(input.Shape.ToArray());
+        var newInput = new Tensor<T>(input._shape);
 
         int featureSize = 1 + _lagIndices.Length; // value + lags
         int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;

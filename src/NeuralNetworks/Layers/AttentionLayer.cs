@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IVectorActivationFunction<double>?)null")]
-public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// The weight tensor for the query transformation.
@@ -51,6 +51,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Think of it as formulating what information we're looking for in the input sequence.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _Wq;
 
     /// <summary>
@@ -1134,24 +1136,6 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     public override void ClearGradients()
-    {
-        _dWq = null;
-        _dWk = null;
-        _dWv = null;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_Wq, _Wk, _Wv, _Wo];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 4) throw new ArgumentException($"Expected 4 parameters, got {parameters.Length}.");
-        _Wq = parameters[0]; _Wk = parameters[1]; _Wv = parameters[2]; _Wo = parameters[3];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
     {
         _dWq = null;
         _dWk = null;

@@ -1,4 +1,4 @@
-
+﻿
 
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -156,7 +156,7 @@ public class CTCLoss<T> : ISequenceLossFunction<T>
         int numClasses = logProbs.Shape[2];
 
         // Initialize gradient tensor with same shape as input
-        var gradient = new Tensor<T>(logProbs.Shape.ToArray());
+        var gradient = new Tensor<T>(logProbs._shape);
 
         // For each item in the batch
         for (int b = 0; b < batchSize; b++)

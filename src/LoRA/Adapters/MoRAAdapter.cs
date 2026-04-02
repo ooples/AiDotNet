@@ -1,4 +1,4 @@
-using AiDotNet.Extensions;
+﻿using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -389,7 +389,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
         T scalingFactor = NumOps.FromDouble(Alpha);
         decompressed = decompressed.Multiply(scalingFactor);
 
-        Tensor<T> moraOutput = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> moraOutput = new Tensor<T>(baseOutput._shape);
         int idx = 0;
         for (int i = 0; i < batchSize; i++)
         {
@@ -400,7 +400,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> result = new Tensor<T>(baseOutput._shape);
         for (int i = 0; i < baseOutput.Length; i++)
         {
             result[i] = NumOps.Add(baseOutput[i], moraOutput[i]);

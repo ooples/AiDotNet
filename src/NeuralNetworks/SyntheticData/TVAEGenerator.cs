@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -500,7 +500,7 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     private (Tensor<T> Mean, Tensor<T> LogVar) SplitEncoderOutput(Tensor<T> encoderOutput)
     {
         int latentDim = _options.LatentDimension;
-        int[] halfShape = DeriveShapeWithLastDim(encoderOutput.Shape.ToArray(), latentDim);
+        int[] halfShape = DeriveShapeWithLastDim(encoderOutput._shape, latentDim);
         var mean = new Tensor<T>(halfShape);
         var logVar = new Tensor<T>(halfShape);
 
@@ -523,7 +523,7 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     private Tensor<T> Reparameterize(Tensor<T> mean, Tensor<T> logVar)
     {
         var z = new Tensor<T>(mean.Shape.ToArray());
-        _lastEpsilon = new Tensor<T>(mean.Shape.ToArray());
+        _lastEpsilon = new Tensor<T>(mean._shape);
 
         for (int i = 0; i < mean.Length; i++)
         {

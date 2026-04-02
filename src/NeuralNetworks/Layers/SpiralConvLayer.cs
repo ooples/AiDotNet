@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "8, 3", TestConstructorArgs = "3, 6, 3, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var s = new int[8, 3]; for (int i = 0; i < 8; i++) for (int j = 0; j < 3; j++) s[i, j] = (i * 2 + j + 1) % 8; ((AiDotNet.NeuralNetworks.Layers.SpiralConvLayer<double>)layer).SetSpiralIndices(s);")]
-public class SpiralConvLayer<T> : LayerBase<T>
+public partial class SpiralConvLayer<T> : LayerBase<T>
 {
     #region Properties
 
@@ -364,11 +364,15 @@ public class SpiralConvLayer<T> : LayerBase<T>
     /// <summary>
     /// Learnable weights [OutputChannels, InputChannels * SpiralLength].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
     /// Learnable bias values [OutputChannels].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -1136,17 +1140,4 @@ public class SpiralConvLayer<T> : LayerBase<T>
     }
 
     #endregion
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_weights, _biases];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
-        _weights = parameters[0]; _biases = parameters[1];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad() { _weightsGradient = null; _biasesGradient = null; }
 }

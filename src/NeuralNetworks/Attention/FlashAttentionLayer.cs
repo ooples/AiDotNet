@@ -1,4 +1,4 @@
-
+﻿
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
@@ -263,7 +263,7 @@ public class FlashAttentionLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         var input3D = NormalizeTo3D(input, out int batchSize, out int sequenceLength, out int embeddingDimension);
         _lastInput = input3D;
 

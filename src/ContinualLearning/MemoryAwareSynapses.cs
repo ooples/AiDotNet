@@ -1,4 +1,4 @@
-using AiDotNet.ActiveLearning.Interfaces;
+﻿using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -191,7 +191,7 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
             gradData[i] = _numOps.Multiply(two, output[i]);
         }
 
-        return new Tensor<T>(output.Shape.ToArray(), gradData);
+        return new Tensor<T>(output._shape, gradData);
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -423,7 +423,7 @@ public class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape.ToArray());
+        var normalized = new Tensor<T>(image._shape);
         double[] means = [0.485, 0.456, 0.406];
         double[] stds = [0.229, 0.224, 0.225];
 

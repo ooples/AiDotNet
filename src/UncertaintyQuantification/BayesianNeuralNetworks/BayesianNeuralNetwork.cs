@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
@@ -175,7 +175,7 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
             aleatoricData[i] = NumOps.Multiply(aleatoricData[i], aleatoricFactor);
         }
 
-        return new Tensor<T>(variance.Shape.ToArray(), aleatoricData);
+        return new Tensor<T>(variance._shape, aleatoricData);
     }
 
     /// <summary>
@@ -213,7 +213,7 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
             epistemicData[i] = NumOps.Multiply(epistemicData[i], epistemicFactor);
         }
 
-        return new Tensor<T>(variance.Shape.ToArray(), epistemicData);
+        return new Tensor<T>(variance._shape, epistemicData);
     }
 
     /// <summary>
@@ -224,7 +224,7 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
         if (predictions.Count == 0)
             throw new ArgumentException("Cannot compute mean of empty prediction list");
 
-        var shape = predictions[0].Shape.ToArray();
+        var shape = predictions[0]._shape;
         var sum = Vector<T>.CreateDefault(predictions[0].Length, NumOps.Zero);
         foreach (var pred in predictions)
         {
@@ -249,7 +249,7 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
     /// </summary>
     private Tensor<T> ComputeVariance(List<Tensor<T>> predictions, Tensor<T> mean)
     {
-        var shape = mean.Shape.ToArray();
+        var shape = mean._shape;
         var meanData = mean.ToVector();
         var variance = Vector<T>.CreateDefault(meanData.Length, NumOps.Zero);
 

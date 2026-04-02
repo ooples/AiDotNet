@@ -1,4 +1,4 @@
-namespace AiDotNet.Helpers;
+﻿namespace AiDotNet.Helpers;
 
 /// <summary>
 /// Provides methods for serializing and deserializing AI model components to and from binary formats.
@@ -386,7 +386,7 @@ public static class SerializationHelper<T>
     public static void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor.Shape.ToArray())
+        foreach (var dim in tensor._shape)
         {
             writer.Write(dim);
         }

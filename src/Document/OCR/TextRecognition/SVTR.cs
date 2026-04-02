@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -363,7 +363,7 @@ public class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
     private Tensor<T> PreprocessTextImage(Tensor<T> image)
     {
         var processed = EnsureBatchDimension(image);
-        var normalized = new Tensor<T>(processed.Shape.ToArray());
+        var normalized = new Tensor<T>(processed._shape);
 
         for (int i = 0; i < processed.Data.Length; i++)
         {

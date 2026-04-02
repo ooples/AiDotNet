@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -178,7 +178,7 @@ public class EQVAEModel<T> : VAEModelBase<T>
     public override (Tensor<T> Mean, Tensor<T> LogVariance) EncodeWithDistribution(Tensor<T> image)
     {
         var mean = Encode(image, sampleMode: false);
-        var logVar = new Tensor<T>(mean.Shape.ToArray());
+        var logVar = new Tensor<T>(mean._shape);
         return (mean, logVar);
     }
 
@@ -203,7 +203,7 @@ public class EQVAEModel<T> : VAEModelBase<T>
         var latentTrans = Encode(transformed);
 
         // L2 distance between latent representations should be preserved
-        var diff = new Tensor<T>(latentOrig.Shape.ToArray());
+        var diff = new Tensor<T>(latentOrig._shape);
         var origSpan = latentOrig.AsSpan();
         var transSpan = latentTrans.AsSpan();
         var diffSpan = diff.AsWritableSpan();

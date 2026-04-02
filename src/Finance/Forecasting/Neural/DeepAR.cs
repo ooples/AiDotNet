@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Base;
@@ -902,7 +902,7 @@ public class DeepAR<T> : ForecastingModelBase<T>
         // Only _scaleStd is used for denormalization; _scaleMean is not needed for this scaling approach
         _scaleStd = new Tensor<T>(new[] { batchSize, 1, features });
 
-        var scaled = new Tensor<T>(input.Shape.ToArray());
+        var scaled = new Tensor<T>(input._shape);
         T epsilon = NumOps.FromDouble(1e-5);
 
         for (int b = 0; b < batchSize; b++)
@@ -958,7 +958,7 @@ public class DeepAR<T> : ForecastingModelBase<T>
         int seqLen = output.Shape.Length > 1 ? output.Shape[1] : 1;
         int features = output.Shape.Length > 2 ? output.Shape[2] : 1;
 
-        var unscaled = new Tensor<T>(output.Shape.ToArray());
+        var unscaled = new Tensor<T>(output._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -1126,7 +1126,7 @@ public class DeepAR<T> : ForecastingModelBase<T>
     private Tensor<T> ComputeGradient(Tensor<T> predictions, Tensor<T> targets)
     {
         var gradVector = LossFunction.CalculateDerivative(predictions.ToVector(), targets.ToVector());
-        return Tensor<T>.FromVector(gradVector, predictions.Shape.ToArray());
+        return Tensor<T>.FromVector(gradVector, predictions._shape);
     }
 
     /// <summary>
@@ -1182,7 +1182,7 @@ public class DeepAR<T> : ForecastingModelBase<T>
         int seqLen = input.Shape[1];
         int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
 
-        var shifted = new Tensor<T>(input.Shape.ToArray());
+        var shifted = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {

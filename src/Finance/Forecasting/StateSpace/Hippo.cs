@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -830,7 +830,7 @@ public class Hippo<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape.ToArray())
+        foreach (var dim in input._shape)
         {
             totalSize *= dim;
         }
@@ -906,7 +906,7 @@ public class Hippo<T> : ForecastingModelBase<T>
         int inputLength = input.Data.Length;
         int predLength = Math.Min(prediction.Data.Length, inputLength);
 
-        var shifted = new Tensor<T>(input.Shape.ToArray());
+        var shifted = new Tensor<T>(input._shape);
 
         // Copy shifted values (skip first predLength values)
         for (int i = predLength; i < inputLength; i++)

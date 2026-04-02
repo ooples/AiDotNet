@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -137,7 +137,7 @@ public class Causal3DVAE<T> : VAEModelBase<T>
 
         // Split into mean and log variance
         int halfLen = x.Shape[^1] / 2;
-        var meanShape = GetReducedShape(x.Shape.ToArray(), halfLen);
+        var meanShape = GetReducedShape(x._shape, halfLen);
         var mean = new Tensor<T>(meanShape);
         var logVar = new Tensor<T>(meanShape);
         int elements = mean.Length;

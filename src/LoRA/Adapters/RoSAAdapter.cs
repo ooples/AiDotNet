@@ -1,4 +1,4 @@
-using AiDotNet.Extensions;
+﻿using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -459,7 +459,7 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> sparseOutput = new Tensor<T>(new[] { batchSize, outputSize }, sparseOutputData);
 
         // 4. Sum all three outputs
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> result = new Tensor<T>(baseOutput._shape);
         for (int i = 0; i < baseOutput.Length; i++)
         {
             T sum = NumOps.Add(baseOutput[i], loraOutput[i]);

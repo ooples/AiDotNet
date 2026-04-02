@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -39,11 +39,13 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
-public class InstanceNormalizationLayer<T> : LayerBase<T>
+public partial class InstanceNormalizationLayer<T> : LayerBase<T>
 {
     private readonly T _epsilon;
     private readonly int _numChannels;
     private readonly bool _affine;
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
+
     private Tensor<T> _gamma;
     private Tensor<T> _beta;
     private Tensor<T>? _lastInput;
@@ -423,23 +425,6 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     }
 
     public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
-
-    /// <inheritdoc />
-    public Tensor<T>[] GetTrainableParameters() => [_gamma, _beta];
-
-    /// <inheritdoc />
-    public void SetTrainableParameters(Tensor<T>[] parameters)
-    {
-        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
-        _gamma = parameters[0]; _beta = parameters[1];
-    }
-
-    /// <inheritdoc />
-    public void ZeroGrad()
-    {
-        _gammaGradient = null;
-        _betaGradient = null;
-    }
 
     public override void ResetState()
     {
