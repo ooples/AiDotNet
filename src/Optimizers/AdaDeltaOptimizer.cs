@@ -1,6 +1,7 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Training;
 using Newtonsoft.Json;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Optimizers;
 
@@ -341,8 +342,8 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     }
 
     // Per-parameter AdaDelta state for tape-based training
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeAccSqGrad = new(ReferenceEqualityComparer.Instance);
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeAccSqUpd = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeAccSqGrad = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeAccSqUpd = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)

@@ -339,8 +339,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     }
 
     // Per-parameter state for tape-based training (full precision — quantization is for legacy path)
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeM = new(ReferenceEqualityComparer.Instance);
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeV = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeM = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeV = new(TensorReferenceComparer<Tensor<T>>.Instance);
     private int _tapeStep;
 
     /// <inheritdoc />

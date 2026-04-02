@@ -1,6 +1,7 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Training;
 using Newtonsoft.Json;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Optimizers;
 
@@ -266,7 +267,7 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     }
 
     // Per-parameter velocity for tape-based NAG training
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeVelocity = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeVelocity = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)

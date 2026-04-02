@@ -1,6 +1,7 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Training;
 using Newtonsoft.Json;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Optimizers;
 
@@ -320,7 +321,7 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     }
 
     // Per-parameter momentum for tape-based Lion training
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeMomentum = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeMomentum = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)

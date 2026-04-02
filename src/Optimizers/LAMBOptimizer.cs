@@ -483,8 +483,8 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     }
 
     // Per-parameter LAMB state for tape-based training
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeM = new(ReferenceEqualityComparer.Instance);
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeV = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeM = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeV = new(TensorReferenceComparer<Tensor<T>>.Instance);
     private int _tapeStep;
 
     /// <inheritdoc />

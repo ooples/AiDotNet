@@ -415,7 +415,7 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     }
 
     // Per-parameter LARS velocity for tape-based training
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeVelocity = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeVelocity = new(TensorReferenceComparer<Tensor<T>>.Instance);
     private int _tapeStep;
 
     /// <inheritdoc />
