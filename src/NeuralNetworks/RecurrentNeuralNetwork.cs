@@ -337,14 +337,13 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
             // Backpropagate error through time
             BackpropagateError(clippedLossGrad);
 
-            // Use _learningRate but cap for Adam stability (default SGD LR of 0.01 is too high for Adam)
-            double effectiveLR = Math.Min(NumOps.ToDouble(_learningRate), 0.001);
-            _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = effectiveLR });
-            var paramGrads = GetParameterGradients();
-            var currentParams = GetParameters();
-            var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
-            UpdateParameters(updatedParams);
+            // Per-layer direct update (avoids serialize/deserialize overhead)
+            T lr = _learningRate;
+            foreach (var layer in Layers)
+            {
+                if (layer.SupportsTraining)
+                    layer.UpdateParameters(lr);
+            }
         }
         finally
         {
