@@ -359,8 +359,11 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>, ITrainableLayer<T>
         if (_gammaGradient == null || _betaGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
-        _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+        // Update in-place to preserve GPU-registered tensor references
+        var updGamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
+        var updBeta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+        for (int i = 0; i < _gamma.Length; i++) _gamma[i] = updGamma[i];
+        for (int i = 0; i < _beta.Length; i++) _beta[i] = updBeta[i];
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_gamma);
