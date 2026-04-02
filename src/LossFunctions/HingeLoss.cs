@@ -119,4 +119,15 @@ public class HingeLoss<T> : LossFunctionBase<T>
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Hinge = mean(max(0, 1 - target * predicted))
+        var product = Engine.TensorMultiply(target, predicted);
+        var margin = Engine.ScalarMinusTensor(NumOps.One, product);
+        var hinged = Engine.ReLU(margin);
+        var allAxes = Enumerable.Range(0, hinged.Shape.Length).ToArray();
+        return Engine.ReduceMean(hinged, allAxes, keepDims: false);
+    }
 }

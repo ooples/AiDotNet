@@ -98,4 +98,23 @@ public class ScaleInvariantDepthLoss<T> : LossFunctionBase<T>
 
         return derivative;
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Scale-invariant: mean(d²) - lambda/n² * sum(d)²  where d = log(pred) - log(target)
+        var safePred = Engine.TensorAbs(Engine.TensorAddScalar(predicted, NumOps.FromDouble(1e-7)));
+        var safeTarget = Engine.TensorAbs(Engine.TensorAddScalar(target, NumOps.FromDouble(1e-7)));
+        var logPred = Engine.TensorLog(safePred);
+        var logTarget = Engine.TensorLog(safeTarget);
+        var d = Engine.TensorSubtract(logPred, logTarget);
+        var dSquared = Engine.TensorMultiply(d, d);
+        var allAxes = Enumerable.Range(0, d.Shape.Length).ToArray();
+        var meanDSq = Engine.ReduceMean(dSquared, allAxes, keepDims: false);
+        var sumD = Engine.ReduceSum(d, allAxes, keepDims: false);
+        var sumDSq = Engine.TensorMultiply(sumD, sumD);
+        double n = d.Length > 0 ? d.Length : 1.0;
+        var scaledSumDSq = Engine.TensorMultiplyScalar(sumDSq, NumOps.FromDouble(_lambda / (n * n)));
+        return Engine.TensorSubtract(meanDSq, scaledSumDSq);
+    }
 }

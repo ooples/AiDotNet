@@ -126,4 +126,16 @@ public class CrossEntropyLoss<T> : LossFunctionBase<T>
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // CE = -mean(target * log(predicted + eps))
+        var safePred = Engine.TensorAddScalar(predicted, NumOps.FromDouble(1e-7));
+        var logP = Engine.TensorLog(safePred);
+        var product = Engine.TensorMultiply(target, logP);
+        var allAxes = Enumerable.Range(0, product.Shape.Length).ToArray();
+        var mean = Engine.ReduceMean(product, allAxes, keepDims: false);
+        return Engine.TensorNegate(mean);
+    }
 }

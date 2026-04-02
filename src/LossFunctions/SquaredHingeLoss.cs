@@ -128,4 +128,15 @@ public class SquaredHingeLoss<T> : LossFunctionBase<T>
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        var product = Engine.TensorMultiply(target, predicted);
+        var margin = Engine.ScalarMinusTensor(NumOps.One, product);
+        var hinged = Engine.ReLU(margin);
+        var squared = Engine.TensorMultiply(hinged, hinged);
+        var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+        return Engine.ReduceMean(squared, allAxes, keepDims: false);
+    }
 }

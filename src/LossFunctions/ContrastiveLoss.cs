@@ -204,4 +204,20 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
 
         return (NumOps.FromDouble(lossValue), grad1Tensor, grad2Tensor);
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Contrastive = mean(y * d² + (1-y) * max(0, margin - d)²)
+        var squared = Engine.TensorMultiply(predicted, predicted);
+        var oneMinusY = Engine.ScalarMinusTensor(NumOps.One, target);
+        var marginMinusD = Engine.ScalarMinusTensor(_margin, predicted);
+        var clampedMargin = Engine.ReLU(marginMinusD);
+        var clampedSq = Engine.TensorMultiply(clampedMargin, clampedMargin);
+        var positivePart = Engine.TensorMultiply(target, squared);
+        var negativePart = Engine.TensorMultiply(oneMinusY, clampedSq);
+        var result = Engine.TensorAdd(positivePart, negativePart);
+        var allAxes = Enumerable.Range(0, result.Shape.Length).ToArray();
+        return Engine.ReduceMean(result, allAxes, keepDims: false);
+    }
 }

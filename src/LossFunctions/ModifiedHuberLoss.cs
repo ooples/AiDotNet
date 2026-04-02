@@ -141,4 +141,21 @@ public class ModifiedHuberLoss<T> : LossFunctionBase<T>
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Modified Huber: max(0, 1-y*f)² if y*f >= -1, else -4*y*f
+        var product = Engine.TensorMultiply(target, predicted);
+        var margin = Engine.ScalarMinusTensor(NumOps.One, product);
+        var hinged = Engine.ReLU(margin);
+        var squaredHinge = Engine.TensorMultiply(hinged, hinged);
+        var linearPart = Engine.TensorMultiplyScalar(product, NumOps.FromDouble(-4.0));
+        // Use TensorClamp-based selection: y*f >= -1 means product + 1 >= 0
+        var shifted = Engine.TensorAddScalar(product, NumOps.One);
+        var mask = Engine.TensorGreaterThan(shifted, NumOps.Zero);
+        var result = Engine.TensorWhere(mask, squaredHinge, linearPart);
+        var allAxes = Enumerable.Range(0, result.Shape.Length).ToArray();
+        return Engine.ReduceMean(result, allAxes, keepDims: false);
+    }
 }

@@ -206,4 +206,20 @@ public class ElasticNetLoss<T> : LossFunctionBase<T>
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // ElasticNet = l1Ratio * MAE + (1 - l1Ratio) * MSE
+        var diff = Engine.TensorSubtract(predicted, target);
+        var absDiff = Engine.TensorAbs(diff);
+        var squared = Engine.TensorMultiply(diff, diff);
+        var allAxes = Enumerable.Range(0, diff.Shape.Length).ToArray();
+        var mae = Engine.ReduceMean(absDiff, allAxes, keepDims: false);
+        var mse = Engine.ReduceMean(squared, allAxes, keepDims: false);
+        var scaledL1 = Engine.TensorMultiplyScalar(mae, _l1Ratio);
+        var oneMinusRatio = NumOps.Subtract(NumOps.One, _l1Ratio);
+        var scaledL2 = Engine.TensorMultiplyScalar(mse, oneMinusRatio);
+        return Engine.TensorAdd(scaledL1, scaledL2);
+    }
 }

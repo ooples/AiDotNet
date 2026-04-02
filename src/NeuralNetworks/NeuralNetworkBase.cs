@@ -2538,42 +2538,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected void TrainWithTape(Tensor<T> input, Tensor<T> expected,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
-        var engine = AiDotNetEngine.Current;
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+        var loss = LossFunction as LossFunctions.LossFunctionBase<T>
+            ?? throw new InvalidOperationException("LossFunction must derive from LossFunctionBase<T> for tape-based training.");
 
-        // Forward + loss under tape
+        // Forward + loss under tape using the model's configured loss function
         using var tape = new GradientTape<T>();
         var output = ForwardForTraining(input);
+        var lossTensor = loss.ComputeTapeLoss(output, expected);
 
-        var diff = engine.TensorSubtract(output, expected);
-        var squared = engine.TensorMultiply(diff, diff);
-        var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
-        var lossTensor = engine.ReduceMean(squared, allAxes, keepDims: false);
-
-        // Compute gradients (tape is disposed after this block, so Step ops aren't recorded)
+        // Compute gradients
         var grads = tape.ComputeGradients(lossTensor, trainableParams);
 
         T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
         LastLoss = lossValue;
 
-        // Resolve optimizer: use provided, or fall back to lazily-created default
+        // Resolve optimizer
         var opt = optimizer ?? GetOrCreateBaseOptimizer();
 
         // Build context with re-evaluation support for second-order optimizers
         Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => ForwardForTraining(inp);
-        Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> tgt)
-        {
-            var d = engine.TensorSubtract(pred, tgt);
-            var sq = engine.TensorMultiply(d, d);
-            var axes = Enumerable.Range(0, sq.Shape.Length).ToArray();
-            return engine.ReduceMean(sq, axes, keepDims: false);
-        }
 
         var context = new Training.TapeStepContext<T>(
             trainableParams, grads, lossValue,
-            input, expected, ComputeForward, ComputeLoss);
+            input, expected, ComputeForward,
+            (pred, tgt) => loss.ComputeTapeLoss(pred, tgt));
 
-        // Delegate the actual parameter update to the optimizer
         opt.Step(context);
     }
 

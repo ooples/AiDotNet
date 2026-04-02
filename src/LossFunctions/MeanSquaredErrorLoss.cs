@@ -60,6 +60,16 @@ public class MeanSquaredErrorLoss<T> : LossFunctionBase<T>
         ).Divide(NumOps.FromDouble(predicted.Length));
     }
 
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // MSE = mean((predicted - target)²)
+        var diff = Engine.TensorSubtract(predicted, target);
+        var squared = Engine.TensorMultiply(diff, diff);
+        var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+        return Engine.ReduceMean(squared, allAxes, keepDims: false);
+    }
+
     /// <summary>
     /// Calculates both MSE loss and gradient on GPU in a single efficient pass.
     /// </summary>

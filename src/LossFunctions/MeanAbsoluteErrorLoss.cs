@@ -73,6 +73,15 @@ public class MeanAbsoluteErrorLoss<T> : LossFunctionBase<T>
         }).Divide(NumOps.FromDouble(predicted.Length));
     }
 
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        var diff = Engine.TensorSubtract(predicted, target);
+        var absDiff = Engine.TensorAbs(diff);
+        var allAxes = Enumerable.Range(0, absDiff.Shape.Length).ToArray();
+        return Engine.ReduceMean(absDiff, allAxes, keepDims: false);
+    }
+
     /// <summary>
     /// Calculates both MAE loss and gradient on GPU in a single efficient pass.
     /// </summary>

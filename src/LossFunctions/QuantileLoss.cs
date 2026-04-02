@@ -149,4 +149,17 @@ public class QuantileLoss<T> : LossFunctionBase<T>
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Quantile = mean(max(q*(t-p), (q-1)*(t-p)))
+        var diff = Engine.TensorSubtract(target, predicted);
+        var qDiff = Engine.TensorMultiplyScalar(diff, _quantile);
+        var qm1 = NumOps.Subtract(_quantile, NumOps.One);
+        var qm1Diff = Engine.TensorMultiplyScalar(diff, qm1);
+        var result = Engine.TensorMax(qDiff, qm1Diff);
+        var allAxes = Enumerable.Range(0, result.Shape.Length).ToArray();
+        return Engine.ReduceMean(result, allAxes, keepDims: false);
+    }
 }

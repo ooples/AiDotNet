@@ -166,4 +166,17 @@ public class SparseCategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         // Average the gradients
         return gradient.Divide(NumOps.FromDouble(actual.Length));
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Sparse CCE with softmax: -mean(target * log(softmax(predicted)))
+        var softmaxed = Engine.Softmax(predicted);
+        var safeSoftmax = Engine.TensorAddScalar(softmaxed, NumOps.FromDouble(1e-7));
+        var logP = Engine.TensorLog(safeSoftmax);
+        var product = Engine.TensorMultiply(target, logP);
+        var allAxes = Enumerable.Range(0, product.Shape.Length).ToArray();
+        var mean = Engine.ReduceMean(product, allAxes, keepDims: false);
+        return Engine.TensorNegate(mean);
+    }
 }

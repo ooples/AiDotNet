@@ -135,4 +135,21 @@ public class WeightedCrossEntropyLoss<T> : LossFunctionBase<T>
         // Return the average derivative (consistent with BinaryCrossEntropyLoss)
         return derivative.Divide(NumOps.FromDouble(predicted.Length));
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Weighted CE = -mean(weights * target * log(predicted))
+        var safePred = Engine.TensorAddScalar(predicted, NumOps.FromDouble(1e-7));
+        var logP = Engine.TensorLog(safePred);
+        var product = Engine.TensorMultiply(target, logP);
+        if (_weights.Length > 0)
+        {
+            var weightTensor = Tensor<T>.FromVector(_weights);
+            product = Engine.TensorMultiply(product, weightTensor);
+        }
+        var allAxes = Enumerable.Range(0, product.Shape.Length).ToArray();
+        var mean = Engine.ReduceMean(product, allAxes, keepDims: false);
+        return Engine.TensorNegate(mean);
+    }
 }

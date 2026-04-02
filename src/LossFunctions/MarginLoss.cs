@@ -119,4 +119,22 @@ public class MarginLoss<T> : LossFunctionBase<T>
 
         return derivative.Divide(NumOps.FromDouble(predicted.Length));
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Margin (capsule): mean(t * max(0, m+ - p)² + λ * (1-t) * max(0, p - m-)²)
+        var posDiff = Engine.ScalarMinusTensor(NumOps.FromDouble(0.9), predicted);
+        var posHinged = Engine.ReLU(posDiff);
+        var posSq = Engine.TensorMultiply(posHinged, posHinged);
+        var negDiff = Engine.TensorSubtractScalar(predicted, NumOps.FromDouble(0.1));
+        var negHinged = Engine.ReLU(negDiff);
+        var negSq = Engine.TensorMultiply(negHinged, negHinged);
+        var oneMinusT = Engine.ScalarMinusTensor(NumOps.One, target);
+        var posLoss = Engine.TensorMultiply(target, posSq);
+        var negLoss = Engine.TensorMultiplyScalar(Engine.TensorMultiply(oneMinusT, negSq), NumOps.FromDouble(0.5));
+        var result = Engine.TensorAdd(posLoss, negLoss);
+        var allAxes = Enumerable.Range(0, result.Shape.Length).ToArray();
+        return Engine.ReduceMean(result, allAxes, keepDims: false);
+    }
 }

@@ -113,4 +113,15 @@ public class ExponentialLoss<T> : LossFunctionBase<T>
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Exponential = mean(exp(-target * predicted))
+        var product = Engine.TensorMultiply(target, predicted);
+        var negProduct = Engine.TensorNegate(product);
+        var expResult = Engine.TensorExp(negProduct);
+        var allAxes = Enumerable.Range(0, expResult.Shape.Length).ToArray();
+        return Engine.ReduceMean(expResult, allAxes, keepDims: false);
+    }
 }

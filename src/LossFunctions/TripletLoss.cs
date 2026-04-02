@@ -251,4 +251,18 @@ public class TripletLoss<T> : LossFunctionBase<T>
 
         return (NumOps.FromDouble(lossValue), anchorGradTensor, positiveGradTensor, negativeGradTensor);
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Triplet: mean(max(0, d_pos - d_neg + margin))
+        // predicted contains distance differences, target unused
+        var marginTensor = new Tensor<T>(predicted.Shape.ToArray());
+        marginTensor.Fill(_margin);
+        var shifted = Engine.TensorAdd(predicted, marginTensor);
+        var zeros = new Tensor<T>(shifted.Shape.ToArray());
+        var clamped = Engine.TensorMax(shifted, zeros);
+        var allAxes = Enumerable.Range(0, clamped.Shape.Length).ToArray();
+        return Engine.ReduceMean(clamped, allAxes, keepDims: false);
+    }
 }

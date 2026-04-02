@@ -155,4 +155,21 @@ public class HuberLoss<T> : LossFunctionBase<T>
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Huber: |d| <= delta ? 0.5*d² : delta*(|d| - 0.5*delta)
+        var diff = Engine.TensorSubtract(predicted, target);
+        var absDiff = Engine.TensorAbs(diff);
+        var squared = Engine.TensorMultiply(diff, diff);
+        var quadratic = Engine.TensorMultiplyScalar(squared, NumOps.FromDouble(0.5));
+        double deltaVal = NumOps.ToDouble(_delta);
+        var shifted = Engine.TensorSubtractScalar(absDiff, NumOps.FromDouble(deltaVal * 0.5));
+        var linear = Engine.TensorMultiplyScalar(shifted, _delta);
+        var mask = Engine.TensorLessThan(absDiff, _delta);
+        var result = Engine.TensorWhere(mask, quadratic, linear);
+        var allAxes = Enumerable.Range(0, result.Shape.Length).ToArray();
+        return Engine.ReduceMean(result, allAxes, keepDims: false);
+    }
 }

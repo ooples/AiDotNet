@@ -119,4 +119,16 @@ public class PoissonLoss<T> : LossFunctionBase<T>
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Poisson = mean(predicted - target * log(predicted))
+        var safePred = Engine.TensorAddScalar(predicted, NumOps.FromDouble(1e-7));
+        var logPred = Engine.TensorLog(safePred);
+        var targetLogPred = Engine.TensorMultiply(target, logPred);
+        var result = Engine.TensorSubtract(predicted, targetLogPred);
+        var allAxes = Enumerable.Range(0, result.Shape.Length).ToArray();
+        return Engine.ReduceMean(result, allAxes, keepDims: false);
+    }
 }
