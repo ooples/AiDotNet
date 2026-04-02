@@ -103,10 +103,10 @@ public class PGDAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TO
             Vector<T> gradient;
             {
                 var eng = AiDotNetEngine.Current;
-                var inputTensor = Tensor<T>.FromVector(perturbedInput);
+                var inputTensor = Tensor<T>.FromVector(adversarial);
                 var targetTensor = Tensor<T>.FromVector(vectorLabel);
                 using var tape = new GradientTape<T>();
-                var modelIn = ConversionsHelper.ConvertVectorToInput<T, TInput>(perturbedInput, referenceInput);
+                var modelIn = ConversionsHelper.ConvertVectorToInput<T, TInput>(adversarial, input);
                 var output = targetModel.Predict(modelIn);
                 var outputTensor = Tensor<T>.FromVector(ConversionsHelper.ConvertToVector<T, TOutput>(output));
                 var diff = eng.TensorSubtract(outputTensor, targetTensor);
@@ -114,7 +114,7 @@ public class PGDAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TO
                 var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
                 var loss = eng.ReduceMean(squared, allAxes, keepDims: false);
                 var grads = tape.ComputeGradients(loss, [inputTensor]);
-                gradient = grads.TryGetValue(inputTensor, out var g) ? g.ToVector() : new Vector<T>(perturbedInput.Length);
+                gradient = grads.TryGetValue(inputTensor, out var g) ? g.ToVector() : new Vector<T>(adversarial.Length);
             }
 
             // Compute perturbation: stepSize * sign(gradient)

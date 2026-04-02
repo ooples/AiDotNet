@@ -283,9 +283,10 @@ public class WGANGP<T> : NeuralNetworkBase<T>
 
         // Train generator with tape
         Tensor<T> newNoise = GenerateRandomNoiseTensor(noise.Shape[0], Generator.Architecture.InputSize);
-        var genLabels = CreateLabelTensor(noise.Shape[0], NumOps.One);
+        var genLabels = new Tensor<T>([noise.Shape[0], 1]);
+        genLabels.Fill(NumOps.One);
         Generator.Train(newNoise, genLabels);
-        var genPred = Discriminator.Predict(GenerateImages(newNoise));
+        var genPred = Critic.Predict(GenerateImages(newNoise));
         T generatorLoss = LossFunction.CalculateLoss(genPred.ToVector(), genLabels.ToVector());
 
         // Track losses
@@ -422,15 +423,14 @@ public class WGANGP<T> : NeuralNetworkBase<T>
 
         // Compute input gradients for gradient penalty using tape-based autodiff
         var eng = AiDotNetEngine.Current;
-        var interpolatedTensor = interpolated;
         Tensor<T> inputGradients;
         using (var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>())
         {
-            var scores = Critic.Predict(interpolatedTensor);
+            var scores = Critic.Predict(interpolatedImages);
             var allAxes = Enumerable.Range(0, scores.Shape.Length).ToArray();
             var sumScores = eng.ReduceSum(scores, allAxes, keepDims: false);
-            var grads = tape.ComputeGradients(sumScores, [interpolatedTensor]);
-            inputGradients = grads.TryGetValue(interpolatedTensor, out var g) ? g : new Tensor<T>(interpolated.Shape.ToArray());
+            var grads = tape.ComputeGradients(sumScores, [interpolatedImages]);
+            inputGradients = grads.TryGetValue(interpolatedImages, out var g) ? g : new Tensor<T>(interpolatedImages.Shape.ToArray());
         }
 
         // Compute L2 norm of gradients for each sample using vectorized operations
@@ -455,7 +455,10 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         // totalPenalty = mean(penalty)
         T totalPenalty = NumOps.Divide(Engine.TensorSum(penalty), NumOps.FromDouble(batchSize));
 
-        return (totalPenalty, gpParameterGradients);
+        // With tape-based training, parameter gradients are computed by the tape
+        // during the training step. Return the penalty scalar only.
+        var emptyGradients = new Vector<T>(Critic.GetParameters().Length);
+        return (totalPenalty, emptyGradients);
     }
 
     /// <summary>

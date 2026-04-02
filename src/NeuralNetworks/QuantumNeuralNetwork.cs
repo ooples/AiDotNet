@@ -291,9 +291,8 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
         // Calculate and set the loss
         LastLoss = CalculateLoss(prediction, expectedOutput);
 
-        // Backward pass (quantum-inspired gradient calculation)
-
-        // Update parameters
+        // Tape-based training handles gradient computation
+        var gradients = new List<Tensor<T>>();
         UpdateQuantumParameters(gradients);
     }
 

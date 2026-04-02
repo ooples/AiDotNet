@@ -152,6 +152,19 @@ public abstract class ActivationFunctionBase<T> : IActivationFunction<T>, IVecto
     }
 
     /// <summary>
+    /// Calculates the backward pass gradient for this activation function.
+    /// </summary>
+    /// <param name="input">The input tensor from the forward pass.</param>
+    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
+    /// <returns>The gradient with respect to the input.</returns>
+    public virtual Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
+    {
+        // Default: element-wise product of derivative and output gradient (Hadamard product)
+        var derivative = Derivative(input);
+        return derivative.PointwiseMultiply(outputGradient);
+    }
+
+    /// <summary>
     /// Gets whether this activation function supports JIT compilation.
     /// </summary>
     /// <value>False by default; derived classes override to return true when gradient is implemented.</value>

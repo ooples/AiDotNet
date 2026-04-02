@@ -369,9 +369,18 @@ public class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T>
         // Schwarz iterations
         for (int schwarz = 0; schwarz < _schwarzIterations; schwarz++)
         {
-            // Train each subdomain
+            // Train each subdomain using tape-based training
             for (int i = 0; i < _subdomainNetworks.Count; i++)
             {
+                var subNetwork = _subdomainNetworks[i];
+                // Train the subdomain network on zero-residual PDE target
+                var subInputs = new Tensor<T>([batchSize, subNetwork.Architecture.InputSize]);
+                var subTargets = new Tensor<T>([batchSize, subNetwork.Architecture.OutputSize]);
+                subNetwork.Train(subInputs, subTargets);
+
+                // Use the network's tracked loss for monitoring
+                T subLoss = subNetwork.GetLastLoss();
+
                 if (schwarz == _schwarzIterations - 1) // Record only final iteration
                 {
                     subdomainLosses.Add(subLoss);

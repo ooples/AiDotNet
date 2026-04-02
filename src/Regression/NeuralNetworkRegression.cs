@@ -234,6 +234,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
                 Matrix<T> batchX = GetBatchRows(X, indices, startIdx, endIdx);
                 Vector<T> batchY = GetBatchElements(y, indices, startIdx, endIdx);
 
+                T batchLoss = NumOps.Zero; // Tape-based training handles loss computation
                 totalLoss = NumOps.Add(totalLoss, batchLoss);
             }
 

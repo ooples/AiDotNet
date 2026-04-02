@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
@@ -109,13 +110,50 @@ public class AutodiffGradientHelper<T>
         var gradTensor = ComputeGradient(inputTensor, outputIndex);
 
         // Convert back to vector
-        var gradient = new T[input.Length];
+        var gradient = new Vector<T>(input.Length);
         for (int i = 0; i < input.Length; i++)
         {
             gradient[i] = gradTensor[0, i];
         }
 
-        return new Vector<T>(gradient);
+        return gradient;
+    }
+
+    /// <summary>
+    /// Computes gradients for a tensor input.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="outputIndex">Index of the output to compute gradients for.</param>
+    /// <returns>Gradient tensor with the same shape as input.</returns>
+    public Tensor<T> ComputeGradient(Tensor<T> input, int outputIndex = 0)
+    {
+        // Use tape-based autodiff to compute gradients through the computation graph
+        var eng = AiDotNetEngine.Current;
+        using var tape = new GradientTape<T>();
+
+        // Create a computation node for the input
+        var inputNode = TensorOperations<T>.Variable(input, "input");
+
+        // Run the model function
+        var outputNode = _modelFunction(inputNode);
+
+        if (outputNode.Value is null)
+        {
+            return new Tensor<T>(input.Shape.ToArray());
+        }
+
+        // Create one-hot selector for the target output index and compute scalar loss
+        var oneHot = new Tensor<T>(outputNode.Value.Shape.ToArray());
+        if (outputIndex < oneHot.Length)
+        {
+            oneHot[outputIndex] = NumOps.One;
+        }
+        var selected = eng.TensorMultiply(outputNode.Value, oneHot);
+        var allAxes = Enumerable.Range(0, selected.Shape.Length).ToArray();
+        var loss = eng.ReduceSum(selected, allAxes, keepDims: false);
+
+        var grads = tape.ComputeGradients(loss, [input]);
+        return grads.TryGetValue(input, out var g) ? g : new Tensor<T>(input.Shape.ToArray());
     }
 
     /// <summary>
@@ -295,12 +333,7 @@ public static class GradientHelperFactory<T>
                 tensor[0, i] = input[i];
             }
             var output = model.Predict(tensor);
-            var result = new T[output.Length];
-            for (int i = 0; i < output.Length; i++)
-            {
-                result[i] = output.ToArray()[i];
-            }
-            return new Vector<T>(result);
+            return output.ToVector();
         };
 
         return new InputGradientHelper<T>(predict).CreateGradientFunction();

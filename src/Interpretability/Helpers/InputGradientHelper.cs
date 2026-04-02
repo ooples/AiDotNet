@@ -1,6 +1,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
@@ -159,12 +160,12 @@ public class InputGradientHelper<T>
                 tensor[0, i] = input[i];
             }
             var gradTensor = ComputeGradientTensor(tensor, outputIndex);
-            var grad = new T[input.Length];
+            var grad = new Vector<T>(input.Length);
             for (int i = 0; i < input.Length; i++)
             {
                 grad[i] = gradTensor[0, i];
             }
-            return new Vector<T>(grad);
+            return grad;
         }
 
         throw new InvalidOperationException("No prediction method configured.");
@@ -196,13 +197,8 @@ public class InputGradientHelper<T>
         {
             // Flatten tensor, compute vector gradient, reshape back
             int total = input.Length;
-            var flatInput = new T[total];
-            int idx = 0;
-            foreach (var val in input.ToArray())
-            {
-                flatInput[idx++] = val;
-            }
-            var grad = ComputeNumericalGradient(new Vector<T>(flatInput), outputIndex);
+            var flatInput = input.ToVector();
+            var grad = ComputeNumericalGradient(flatInput, outputIndex);
             var gradTensor = new Tensor<T>(input.Shape.ToArray());
             for (int i = 0; i < total; i++)
             {
@@ -240,15 +236,30 @@ public class InputGradientHelper<T>
             inputTensor[0, i] = input[i];
         }
 
+        // Compute gradient of specific output w.r.t. input using tape
+        var eng = AiDotNetEngine.Current;
+        using var tape = new GradientTape<T>();
+        var output = _neuralNetwork?.Predict(inputTensor) ?? inputTensor;
 
-        // Extract gradient vector
-        var gradient = new T[input.Length];
+        // Create a selector that extracts the target output index
+        // Loss = output[outputIndex] (we want gradient of this single output w.r.t. input)
+        var oneHot = new Tensor<T>(output.Shape.ToArray());
+        oneHot[outputIndex] = NumOps.One;
+        var selected = eng.TensorMultiply(output, oneHot);
+        var allAxes = Enumerable.Range(0, selected.Shape.Length).ToArray();
+        var loss = eng.ReduceSum(selected, allAxes, keepDims: false);
+
+        var grads = tape.ComputeGradients(loss, [inputTensor]);
+        var gradTensor = grads.TryGetValue(inputTensor, out var g) ? g : new Tensor<T>(inputTensor.Shape.ToArray());
+
+        // Extract gradient vector from tensor
+        var gradient = new Vector<T>(input.Length);
         for (int i = 0; i < input.Length; i++)
         {
             gradient[i] = gradTensor[0, i];
         }
 
-        return new Vector<T>(gradient);
+        return gradient;
     }
 
     /// <summary>
@@ -275,26 +286,20 @@ public class InputGradientHelper<T>
             throw new InvalidOperationException("Predict function not configured.");
 
         int n = input.Length;
-        var gradient = new T[n];
+        var gradient = new Vector<T>(n);
 
         for (int i = 0; i < n; i++)
         {
-            // Create perturbed inputs
-            var inputPlus = new T[n];
-            var inputMinus = new T[n];
-
-            for (int j = 0; j < n; j++)
-            {
-                inputPlus[j] = input[j];
-                inputMinus[j] = input[j];
-            }
+            // Create perturbed inputs using Vector<T>
+            var inputPlus = input.Clone();
+            var inputMinus = input.Clone();
 
             inputPlus[i] = NumOps.FromDouble(NumOps.ToDouble(input[i]) + _epsilon);
             inputMinus[i] = NumOps.FromDouble(NumOps.ToDouble(input[i]) - _epsilon);
 
             // Compute predictions
-            var predPlus = _predictFunction(new Vector<T>(inputPlus));
-            var predMinus = _predictFunction(new Vector<T>(inputMinus));
+            var predPlus = _predictFunction(inputPlus);
+            var predMinus = _predictFunction(inputMinus);
 
             // Extract target output values
             double valPlus = outputIndex < predPlus.Length ? NumOps.ToDouble(predPlus[outputIndex]) : 0;
@@ -304,7 +309,7 @@ public class InputGradientHelper<T>
             gradient[i] = NumOps.FromDouble((valPlus - valMinus) / (2 * _epsilon));
         }
 
-        return new Vector<T>(gradient);
+        return gradient;
     }
 
     /// <summary>
@@ -435,7 +440,7 @@ public class InputGradientHelper<T>
             double alpha = (double)step / (numSteps - 1);
 
             // Interpolate between baseline and input
-            var interpolated = new T[n];
+            var interpolated = new Vector<T>(n);
             for (int i = 0; i < n; i++)
             {
                 double baseVal = NumOps.ToDouble(baseline[i]);
@@ -443,7 +448,7 @@ public class InputGradientHelper<T>
                 interpolated[i] = NumOps.FromDouble(baseVal + alpha * (inputVal - baseVal));
             }
 
-            gradients[step] = ComputeGradient(new Vector<T>(interpolated), outputIndex);
+            gradients[step] = ComputeGradient(interpolated, outputIndex);
         }
 
         return gradients;
@@ -493,13 +498,13 @@ public class InputGradientHelper<T>
         }
 
         // Multiply by (input - baseline)
-        var result = new T[n];
+        var result = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
             double diff = NumOps.ToDouble(input[i]) - NumOps.ToDouble(baseline[i]);
             result[i] = NumOps.FromDouble(attributions[i] * diff);
         }
 
-        return new Vector<T>(result);
+        return result;
     }
 }

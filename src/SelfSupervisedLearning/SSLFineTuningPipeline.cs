@@ -46,7 +46,9 @@ public class SSLFineTuningPipeline<T>
     /// <summary>
     /// Event raised for progress updates.
     /// </summary>
+    #pragma warning disable CS0067
     public event Action<int, int, double>? OnProgress;
+    #pragma warning restore CS0067
 
     /// <summary>
     /// Initializes a new fine-tuning pipeline.

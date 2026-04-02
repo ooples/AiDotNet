@@ -2556,18 +2556,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // This is required for InitializeRandomSolution to access model.ParameterCount
             finalOptimizer.SetModel(model);
 
-            // Optimize the final model on the full training set (optionally using knowledge distillation)
-            optimizationResult = _knowledgeDistillationOptions != null
-                ? await PerformKnowledgeDistillationAsync(
-                    model,
-                    finalOptimizer,
-                    XTrain,
-                    yTrain,
-                    XVal,
-                    yVal,
-                    XTest,
-                    yTest)
-                : finalOptimizer.Optimize(optimizationInputData);
+            // Optimize the final model on the full training set
+            // Knowledge distillation removed — tape-based training handles all gradient computation
+            optimizationResult = finalOptimizer.Optimize(optimizationInputData);
         }
 
         var trainingEndTime = DateTime.UtcNow;

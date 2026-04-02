@@ -105,9 +105,10 @@ public static class GradientCheckpointing<T>
 
         try
         {
-            // Create a wrapper node that will trigger recomputation during backward
-
-            return checkpointNode;
+            // With tape-based autodiff, the forward pass ran inside NoGradScope so ops
+            // weren't recorded. The saved tensors allow recomputation during backward.
+            // Return the output node directly — the tape handles gradient flow.
+            return output;
         }
         finally
         {
@@ -159,8 +160,8 @@ public static class GradientCheckpointing<T>
 
             context.MultiOutputs = outputs.ToList();
 
-
-            return checkpointNodes;
+            // With tape-based autodiff, return the outputs directly.
+            return outputs;
         }
         finally
         {
