@@ -146,7 +146,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             layers: layers.ToList()
         );
 
-        return new NeuralNetwork<T>(finalArchitecture, LossFunction);
+        return new NeuralNetwork<T>(finalArchitecture, lossFunction: LossFunction);
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)

@@ -2309,8 +2309,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 _memoryWordSize,
                 _controllerSize,
                 _readHeads,
-                _lossFunction,
-                _activationFunction
+                lossFunction: _lossFunction,
+                activationFunction: _activationFunction
             );
         }
         else
@@ -2321,8 +2321,8 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 _memoryWordSize,
                 _controllerSize,
                 _readHeads,
-                _lossFunction,
-                _vectorActivationFunction
+                lossFunction: _lossFunction,
+                vectorActivationFunction: _vectorActivationFunction
             );
         }
     }

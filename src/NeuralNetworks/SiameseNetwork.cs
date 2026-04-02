@@ -641,6 +641,6 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
-        return new SiameseNetwork<T>(Architecture, LossFunction);
+        return new SiameseNetwork<T>(Architecture, lossFunction: LossFunction);
     }
 }

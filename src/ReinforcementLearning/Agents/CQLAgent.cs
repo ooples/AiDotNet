@@ -177,7 +177,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture, _options.QLossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _options.QLossFunction);
     }
 
     private void InitializeBuffer()

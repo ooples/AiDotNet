@@ -135,7 +135,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: _options.ActionSize,
             layers: layers
         );
-        _transformerNetwork = new NeuralNetwork<T>(architecture, _options.LossFunction);
+        _transformerNetwork = new NeuralNetwork<T>(architecture, lossFunction: _options.LossFunction);
 
         // Register network with base class
         Networks.Add(_transformerNetwork);

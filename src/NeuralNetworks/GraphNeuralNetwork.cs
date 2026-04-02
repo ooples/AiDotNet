@@ -1056,21 +1056,21 @@ public class GraphNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T
         {
             return new GraphNeuralNetwork<T>(
                 Architecture,
-                LossFunction,
-                _graphConvolutionalVectorActivation,
-                _activationLayerVectorActivation,
-                _finalDenseLayerVectorActivation,
-                _finalActivationLayerVectorActivation);
+                lossFunction: LossFunction,
+                graphConvolutionalVectorActivation: _graphConvolutionalVectorActivation,
+                activationLayerVectorActivation: _activationLayerVectorActivation,
+                finalDenseLayerVectorActivation: _finalDenseLayerVectorActivation,
+                finalActivationLayerVectorActivation: _finalActivationLayerVectorActivation);
         }
         else
         {
             return new GraphNeuralNetwork<T>(
                 Architecture,
-                LossFunction,
-                _graphConvolutionalScalarActivation,
-                _activationLayerScalarActivation,
-                _finalDenseLayerScalarActivation,
-                _finalActivationLayerScalarActivation);
+                lossFunction: LossFunction,
+                graphConvolutionalActivation: _graphConvolutionalScalarActivation,
+                activationLayerActivation: _activationLayerScalarActivation,
+                finalDenseLayerActivation: _finalDenseLayerScalarActivation,
+                finalActivationLayerActivation: _finalActivationLayerScalarActivation);
         }
     }
 }

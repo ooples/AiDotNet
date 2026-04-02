@@ -182,7 +182,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture, _options.CriticLossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _options.CriticLossFunction);
     }
 
     /// <inheritdoc/>

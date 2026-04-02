@@ -413,8 +413,8 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         return new GRUNeuralNetwork<T>(
             Architecture,
-            LossFunction,
-            _options,
-            NumOps.ToDouble(_learningRate));
+            lossFunction: LossFunction,
+            options: _options,
+            learningRate: NumOps.ToDouble(_learningRate));
     }
 }

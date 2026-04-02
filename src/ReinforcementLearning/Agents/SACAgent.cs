@@ -182,7 +182,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture, _sacOptions.QLossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _sacOptions.QLossFunction);
     }
 
     /// <inheritdoc/>

@@ -173,7 +173,7 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: 1,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, _ppoOptions.ValueLossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _ppoOptions.ValueLossFunction);
     }
 
     /// <inheritdoc/>

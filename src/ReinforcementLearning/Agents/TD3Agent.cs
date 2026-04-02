@@ -156,7 +156,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        return new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
     }
 
     private NeuralNetwork<T> CreateCriticNetwork()
@@ -183,7 +183,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        return new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)

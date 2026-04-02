@@ -145,7 +145,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
             outputSize: outputSize);
-        var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
 
         for (int i = 0; i < 2; i++)
         {
@@ -165,7 +165,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             complexity: NetworkComplexity.Medium,
             inputSize: _options.LatentSize,
             outputSize: _options.ActionSize);
-        var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
 
         for (int i = 0; i < 2; i++)
         {

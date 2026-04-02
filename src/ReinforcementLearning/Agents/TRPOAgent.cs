@@ -151,7 +151,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: outputSize,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, _options.ValueLossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _options.ValueLossFunction);
     }
 
     private INeuralNetwork<T> CreateValueNetwork()
@@ -179,7 +179,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: 1,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, _options.ValueLossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _options.ValueLossFunction);
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)

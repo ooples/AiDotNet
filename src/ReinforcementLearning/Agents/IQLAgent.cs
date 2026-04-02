@@ -139,7 +139,7 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: _options.ActionSize * 2,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        return new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
     }
 
     private NeuralNetwork<T> CreateValueNetwork()

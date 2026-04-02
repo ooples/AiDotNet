@@ -107,8 +107,8 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
 
         EnsureDefaultLayers(architecture, options.StateSize, options.ActionSize);
 
-        _qNetwork = new NeuralNetwork<T>(architecture, TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
-        _targetNetwork = new NeuralNetwork<T>(architecture, TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        _qNetwork = new NeuralNetwork<T>(architecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        _targetNetwork = new NeuralNetwork<T>(architecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
         UpdateTargetNetwork();
     }

@@ -233,7 +233,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
         // Only create the target network if this is not already a target network (prevents infinite recursion)
         if (!isTargetNetwork)
         {
-            _targetNetwork = new DeepQNetwork<T>(architecture, lossFunction, epsilon, isTargetNetwork: true);
+            _targetNetwork = new DeepQNetwork<T>(architecture, lossFunction: lossFunction, epsilon, isTargetNetwork: true);
         }
 
         InitializeLayers();
