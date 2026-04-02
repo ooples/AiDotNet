@@ -1832,6 +1832,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// This method ensures that the parameter count cache is properly invalidated when layers are added.
     /// Derived classes should use this method instead of directly accessing Layers.Add().
     /// </remarks>
+    /// <summary>
+    /// Monotonically increasing version counter, incremented when layers are added/removed.
+    /// Used by TapeTrainingStep caching to detect structural changes.
+    /// </summary>
+    private int _layerStructureVersion;
+
+    /// <summary>
+    /// Gets the current layer structure version for cache invalidation.
+    /// </summary>
+    internal int LayerStructureVersion => _layerStructureVersion;
+
+    private void InvalidateParameterCountCache()
+    {
+        _layerStructureVersion++;
+        _parameterBuffer = null; // Buffer layout depends on layer structure
+        Training.TapeTrainingStep<T>.InvalidateCache();
+    }
+
     protected void AddLayerToCollection(ILayer<T> layer)
     {
         _layers.Add(layer);
@@ -2543,12 +2561,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Initialize parameter buffer BEFORE collecting params and running the forward pass.
         // This replaces layer parameter tensors with buffer views on the first call.
         // Subsequent calls reuse the existing buffer (views are already in place).
-        var initialParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+        // Force-refresh (-1) on first call to ensure recursive walk runs.
+        var initialParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _parameterBuffer is null ? -1 : _layerStructureVersion);
         var paramBuffer = GetOrCreateParameterBuffer(initialParams);
 
         // Re-collect after buffer initialization — parameter tensor references may have changed
         // if this was the first call (views replaced the originals).
-        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+        // Second call uses version-based caching (O(1) if structure unchanged).
+        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
 
         // Forward + loss under tape — uses the buffer-backed view tensors
         using var tape = new GradientTape<T>();

@@ -277,6 +277,25 @@ public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider, IWeightLoa
     void SetTrainingMode(bool isTraining);
 
     /// <summary>
+    /// Returns the immediate child layers contained within this layer.
+    /// Composite layers (e.g., TransformerEncoderLayer, InvertedResidualBlock) override
+    /// this to expose their internal sub-layers, enabling recursive parameter collection.
+    /// </summary>
+    /// <returns>Child layers, or empty if this is a leaf layer.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is the equivalent of PyTorch's <c>nn.Module.children()</c>. The framework
+    /// uses this to recursively discover all trainable parameters in a model without
+    /// requiring each composite layer to manually implement <see cref="ITrainableLayer{T}"/>.
+    /// </para>
+    /// <para><b>For Beginners:</b> Some layers contain other layers inside them (like a
+    /// TransformerEncoder contains Attention + FeedForward + Normalization layers).
+    /// This method lets the framework look inside composite layers to find all the
+    /// weights that need to be trained.</para>
+    /// </remarks>
+    IReadOnlyList<ILayer<T>> GetSubLayers() => Array.Empty<ILayer<T>>();
+
+    /// <summary>
     /// Gets the gradients of all trainable parameters.
     /// </summary>
     /// <returns>A vector containing the gradients for all trainable parameters.</returns>
