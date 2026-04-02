@@ -187,6 +187,10 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, ITrain
 
         // Initialize bias to zero
         _bias.Fill(NumOps.Zero);
+
+        RegisterTrainableParameter(_selfWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_neighborWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
     }
 
     private void InitializeTensor(Tensor<T> tensor, int fanIn, int fanOut)

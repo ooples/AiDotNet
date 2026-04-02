@@ -431,11 +431,14 @@ public class DiffusionConvLayer<T> : LayerBase<T>, ITrainableLayer<T>
             NumOps.FromDouble(fanIn)));
 
         // Initialize weights in [-scale, scale] range
-        _weights = Engine.TensorRandomUniformRange<T>(_weights.Shape.ToArray(), NumOps.Negate(scale), scale);
+        _weights = Engine.TensorRandomUniformRange<T>(_weights._shape, NumOps.Negate(scale), scale);
 
         // Initialize biases to zero
-        _biases = new Tensor<T>(_biases.Shape.ToArray());
+        _biases = new Tensor<T>(_biases._shape);
         Engine.TensorFill(_biases, NumOps.Zero);
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     #endregion

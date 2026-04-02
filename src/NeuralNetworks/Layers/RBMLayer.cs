@@ -353,6 +353,10 @@ public class RBMLayer<T> : LayerBase<T>, ITrainableLayer<T>
         var shiftTensor = new Tensor<T>([_hiddenUnits, _visibleUnits]);
         shiftTensor.Fill(NumOps.FromDouble(range / 2.0));
         _weights = Engine.TensorSubtract(scaledTensor, shiftTensor);
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_visibleBiases, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_hiddenBiases, PersistentTensorRole.Biases);
     }
 
     /// <summary>

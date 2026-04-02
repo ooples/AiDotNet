@@ -567,6 +567,8 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>, ITrainableLayer<T>
         _presynapticSpikes.Fill(NumOps.Zero);
         _postsynapticSpikes = new Tensor<T>([size]);
         _postsynapticSpikes.Fill(NumOps.Zero);
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
     }
 
     /// <summary>

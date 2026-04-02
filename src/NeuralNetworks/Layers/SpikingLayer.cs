@@ -692,6 +692,9 @@ public class SpikingLayer<T> : LayerBase<T>, ITrainableLayer<T>
             _hGate = new Tensor<T>([outputSize]);
             _hGate.Fill(NumOps.FromDouble(0.60)); // Sodium inactivation
         }
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
     }
 
     /// <summary>

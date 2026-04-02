@@ -625,6 +625,9 @@ public class ReadoutLayer<T> : LayerBase<T>, ITrainableLayer<T>
     {
         InitializeLayerWeights(_weights, outputSize, inputSize);
         InitializeLayerBiases(_bias);
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

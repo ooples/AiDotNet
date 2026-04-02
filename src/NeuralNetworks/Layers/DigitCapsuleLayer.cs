@@ -328,7 +328,9 @@ public class DigitCapsuleLayer<T> : LayerBase<T>, ITrainableLayer<T>
         var scaled = Engine.TensorMultiplyScalar(shifted, scale);
 
         // Copy to weights tensor - reshape maintains the same underlying data
-        _weights = scaled.Reshape(_weights.Shape.ToArray());
+        _weights = scaled.Reshape(_weights._shape);
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
     }
 
     /// <summary>

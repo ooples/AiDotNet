@@ -177,6 +177,15 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         _postAggregationBias1.Fill(NumOps.Zero);
         _postAggregationBias2.Fill(NumOps.Zero);
         _bias.Fill(NumOps.Zero);
+
+        RegisterTrainableParameter(_preTransformWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_preTransformBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_postAggregationWeights1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_postAggregationBias1, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_postAggregationWeights2, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_postAggregationBias2, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_selfWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
     }
 
     private void InitializeTensor(Tensor<T> tensor, int fanIn, int fanOut)

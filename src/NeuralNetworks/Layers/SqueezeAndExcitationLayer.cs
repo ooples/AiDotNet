@@ -621,6 +621,11 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         InitializeTensor2D(_weights2, scale);
         InitializeTensor1D(_bias1, scale);
         InitializeTensor1D(_bias2, scale);
+
+        RegisterTrainableParameter(_weights1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias1, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_weights2, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias2, PersistentTensorRole.Biases);
     }
 
     /// <summary>
