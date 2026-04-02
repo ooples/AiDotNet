@@ -821,14 +821,11 @@ public class ConvolutionalLayer<T> : LayerBase<T>
         {
             if (_isInitialized) return;
 
-            // Allocate kernels — RentUninitialized since InitializeWeights overwrites all elements
-            _kernels = TensorAllocator.RentUninitialized<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-            _biases = new Tensor<T>([OutputDepth]);
             // Use correct input/output shapes as placeholders (batch=1, replaced in Forward())
             _lastInput = new Tensor<T>([1, InputShape[0], InputShape[1], InputShape[2]]);
             _lastOutput = new Tensor<T>([1, OutputShape[0], OutputShape[1], OutputShape[2]]);
 
-            // Initialize weights
+            // Initialize weights (allocates _kernels and _biases)
             InitializeWeights();
 
             // Register trainable parameters with the engine for GPU persistence

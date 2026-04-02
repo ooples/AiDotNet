@@ -65,6 +65,7 @@ public class MeshPoolLayer<T> : LayerBase<T>
     {
         var metadata = base.GetMetadata();
         metadata["TargetEdges"] = TargetEdges.ToString();
+        metadata["NumNeighbors"] = _numNeighbors.ToString();
         return metadata;
     }
 

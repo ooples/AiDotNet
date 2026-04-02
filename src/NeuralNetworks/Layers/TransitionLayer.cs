@@ -60,6 +60,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     private Tensor<T>? _bnOut;
     private Tensor<T>? _reluOut;
     private Tensor<T>? _convOut;
+    private bool _poolSkipped;
 
     // GPU cached tensors for backward pass
     private IGpuTensor<T>? _gpuBnOut;
@@ -196,14 +197,17 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         if (spatialH < 2 || spatialW < 2)
         {
             output = _convOut; // Skip pooling at minimum spatial dims
+            _poolSkipped = true;
         }
         else if (_convOut.Shape.Length == 4)
         {
             output = Engine.AvgPool2D(_convOut, poolSize: 2, stride: 2, padding: 0);
+            _poolSkipped = false;
         }
         else
         {
             output = _pool.Forward(_convOut);
+            _poolSkipped = false;
         }
 
         // Restore original batch dimensions for any-rank support
@@ -438,11 +442,14 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         if (was3D && grad.Shape.Length == 3)
             grad = grad.Reshape([1, grad.Shape[0], grad.Shape[1], grad.Shape[2]]);
 
-        // Backward through pool - handle 4D inputs
-        // 4D: manual backward, 3D: use pooling layer
-        grad = grad.Shape.Length == 4
-            ? AvgPool2DBackward(grad, _convOut.Shape.ToArray())
-            : _pool.Backward(grad);
+        // Backward through pool - skip when pooling was skipped in Forward
+        if (!_poolSkipped)
+        {
+            // 4D: manual backward, 3D: use pooling layer
+            grad = grad.Shape.Length == 4
+                ? AvgPool2DBackward(grad, _convOut.Shape.ToArray())
+                : _pool.Backward(grad);
+        }
 
         // Backward through conv
         grad = _conv.Backward(grad);
