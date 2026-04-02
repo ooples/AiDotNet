@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Autodiff;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -47,7 +48,6 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// </summary>
     protected IEngine Engine => AiDotNetEngine.Current;
 
-    /// <summary>
     /// <summary>
     /// Gets the element-wise activation function for this layer, if specified.
     /// </summary>
