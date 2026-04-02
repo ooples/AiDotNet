@@ -1351,6 +1351,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             if (layer.SupportsTraining)
             {
                 layer.UpdateParameters(lr);
+                layer.ClearGradients();
             }
         }
     }

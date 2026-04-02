@@ -264,6 +264,8 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // Preserve previous training modes so we don't clobber caller-controlled state
+        var previousModes = Layers.Select(l => l.IsTrainingMode).ToList();
         // Set eval mode on layers for BN (use running stats, not batch stats)
         // Per Ioffe & Szegedy 2015: BN with batch_size=1 normalizes variance to 0
         foreach (var layer in Layers)
@@ -274,8 +276,8 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
         }
         finally
         {
-            foreach (var layer in Layers)
-                layer.SetTrainingMode(true);
+            for (int i = 0; i < Layers.Count; i++)
+                Layers[i].SetTrainingMode(previousModes[i]);
         }
     }
 
@@ -311,12 +313,9 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
         }
         Backpropagate(gradTensor);
 
-        // Update parameters with Adam optimizer
-        T lr = NumOps.FromDouble(0.001); // Higher LR with MSE loss + Softmax
-        foreach (var layer in Layers)
-        {
-            layer.UpdateParameters(lr);
-        }
+        // Update parameters with configured optimizer (e.g., Adam)
+        _optimizer.UpdateParameters(Layers);
+
         SetTrainingMode(false);
     }
 

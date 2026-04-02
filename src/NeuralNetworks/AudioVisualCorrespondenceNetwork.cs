@@ -1085,7 +1085,10 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             // Update parameters
             T lr = NumOps.FromDouble(0.001);
             foreach (var layer in Layers)
+            {
                 layer.UpdateParameters(lr);
+                layer.ClearGradients();
+            }
         }
         finally
         {

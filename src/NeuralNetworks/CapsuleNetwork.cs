@@ -444,6 +444,7 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         foreach (var layer in Layers)
         {
             layer.UpdateParameters(lr);
+            layer.ClearGradients();
         }
 
         // Restore inference mode after training step

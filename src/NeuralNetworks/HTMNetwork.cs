@@ -623,7 +623,10 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
                 // Only update readout layers (Dense + Softmax), not SP/TM
                 T lr = NumOps.FromDouble(0.01);
                 for (int li = 2; li < Layers.Count; li++)
+                {
                     Layers[li].UpdateParameters(lr);
+                    Layers[li].ClearGradients();
+                }
             }
         }
         finally
