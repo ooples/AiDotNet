@@ -202,39 +202,38 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // Set eval mode on STANDALONE BN layers only (for proper forward output).
-        // Internal BN inside InvertedResidualBlock stays in training mode
-        // (needed for training gradient dynamics with batch_size=1).
-        // The InvertedResidualBlock.Forward handles its own BN internally.
+        // Preserve previous training modes so we don't clobber caller-controlled state
+        var previousModes = Layers.Select(l => l.IsTrainingMode).ToList();
+        // Set eval mode on all layers for inference (BN uses running stats)
         foreach (var layer in Layers)
-        {
-            if (layer is BatchNormalizationLayer<T>)
-                layer.SetTrainingMode(false);
-        }
+            layer.SetTrainingMode(false);
         try
         {
             return Forward(input);
         }
         finally
         {
-            foreach (var layer in Layers)
-            {
-                if (layer is BatchNormalizationLayer<T>)
-                    layer.SetTrainingMode(true);
-            }
+            for (int i = 0; i < Layers.Count; i++)
+                Layers[i].SetTrainingMode(previousModes[i]);
         }
     }
 
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Enable training mode first per Howard et al. 2019
+        SetTrainingMode(true);
+
         // ALL BN layers must use eval mode (running stats) for batch_size=1.
         // Per Ioffe & Szegedy 2015: BN gradient is exactly zero for N=1 in
         // training mode (I - 1/N*11^T = 0). This kills gradient flow.
         // Per Howard et al. 2019: paper uses batch_size=4096 where BN works normally.
         // BN eval mode for batch_size=1 (training mode gives zero gradient)
         foreach (var layer in Layers)
-            layer.SetTrainingMode(false);
+        {
+            if (layer is BatchNormalizationLayer<T>)
+                layer.SetTrainingMode(false);
+        }
 
         // Forward + loss
         var prediction = ForwardWithMemory(input);
