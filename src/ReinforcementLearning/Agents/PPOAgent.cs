@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -446,34 +447,73 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         _valueNetwork.Train(batchStates, batchReturns);
         T valueLoss = _valueNetwork.GetLastLoss();
 
-        // --- Update policy network (PPO clipped surrogate via TrainWithCustomLoss) ---
+        // Build batched old log-probs and advantages tensors for engine ops
+        var oldLogProbsTensor = new Tensor<T>([batchCount]);
+        var advantagesTensor = new Tensor<T>([batchCount]);
+        for (int i = 0; i < batchCount; i++)
+        {
+            oldLogProbsTensor[i] = batchOldLogProbs[i];
+            advantagesTensor[i] = batchAdvantages[i];
+        }
+
+        // Build action indices/tensors for log-prob computation
+        int[] actionIndices = _ppoOptions.IsContinuous ? Array.Empty<int>() : new int[batchCount];
+        Tensor<T>? actionsTensor = null;
+
+        if (_ppoOptions.IsContinuous)
+        {
+            actionsTensor = new Tensor<T>([batchCount, _ppoOptions.ActionSize]);
+            for (int i = 0; i < batchCount; i++)
+                for (int j = 0; j < _ppoOptions.ActionSize; j++)
+                    actionsTensor[i, j] = batchActions[i][j];
+        }
+        else
+        {
+            for (int i = 0; i < batchCount; i++)
+                actionIndices[i] = ArgMax(batchActions[i]);
+        }
+
+        // --- Update policy network (PPO clipped surrogate via engine ops) ---
         var trainablePolicy = (NeuralNetworkBase<T>)_policyNetwork;
         T policyLoss = trainablePolicy.TrainWithCustomLoss(batchStates, policyOutput =>
         {
-            // Compute log-probs and clipped surrogate for each sample
-            // policyOutput shape: [batchCount, actionSize] or [batchCount, actionSize*2] for continuous
-            T totalSurrLoss = NumOps.Zero;
-            for (int i = 0; i < batchCount; i++)
+            // Compute new log-probs using engine ops via PolicyDistributionHelper
+            Tensor<T> newLogProbs;
+            if (_ppoOptions.IsContinuous)
             {
-                var state = _trajectory.States[batchIndices[i]];
-                var newLogProb = ComputeLogProb(state, batchActions[i]);
-                var ratio = NumOps.FromDouble(Math.Exp(
-                    NumOps.ToDouble(NumOps.Subtract(newLogProb, batchOldLogProbs[i]))));
-
-                var surr1 = NumOps.Multiply(ratio, batchAdvantages[i]);
-                var clippedRatio = MathHelper.Clamp<T>(ratio,
-                    NumOps.Subtract(NumOps.One, _ppoOptions.ClipEpsilon),
-                    NumOps.Add(NumOps.One, _ppoOptions.ClipEpsilon));
-                var surr2 = NumOps.Multiply(clippedRatio, batchAdvantages[i]);
-
-                totalSurrLoss = NumOps.Subtract(totalSurrLoss, MathHelper.Min<T>(surr1, surr2));
+                int actSize = _ppoOptions.ActionSize;
+                var means = Engine.TensorSlice(policyOutput, [0, 0], [batchCount, actSize]);
+                var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [batchCount, actSize * 2]);
+                newLogProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(means, logStds, actionsTensor!);
             }
-            var avgLoss = NumOps.Divide(totalSurrLoss, NumOps.FromDouble(batchCount));
+            else
+            {
+                newLogProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(policyOutput, actionIndices);
+            }
 
-            // Return as scalar tensor for tape
-            var lossTensor = new Tensor<T>([1]);
-            lossTensor[0] = avgLoss;
-            return lossTensor;
+            // ratio = exp(new_log_prob - old_log_prob) — all engine ops
+            var logDiff = Engine.TensorSubtract(newLogProbs, oldLogProbsTensor);
+            var ratio = Engine.TensorExp(logDiff);
+
+            // surr1 = ratio * advantage
+            var surr1 = Engine.TensorMultiply(ratio, advantagesTensor);
+
+            // clipped_ratio = clamp(ratio, 1-eps, 1+eps)
+            var clippedRatio = Engine.TensorClamp(ratio,
+                NumOps.Subtract(NumOps.One, _ppoOptions.ClipEpsilon),
+                NumOps.Add(NumOps.One, _ppoOptions.ClipEpsilon));
+            var surr2 = Engine.TensorMultiply(clippedRatio, advantagesTensor);
+
+            // min(surr1, surr2) = -max(-surr1, -surr2)
+            var negSurr1 = Engine.TensorNegate(surr1);
+            var negSurr2 = Engine.TensorNegate(surr2);
+            var negMin = Engine.TensorMax(negSurr1, negSurr2);
+            var minSurr = Engine.TensorNegate(negMin);
+
+            // loss = -mean(min(surr1, surr2)) — negative for gradient ascent
+            var allAxes = Enumerable.Range(0, minSurr.Shape.Length).ToArray();
+            var mean = Engine.ReduceMean(minSurr, allAxes, keepDims: false);
+            return Engine.TensorNegate(mean);
         });
 
         // Combined loss for monitoring

@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -246,21 +247,48 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
             for (int j = 0; j < stateSize; j++)
                 batchStates[i, j] = _trajectory.States[i][j];
 
-        // REINFORCE policy gradient: -mean(log_prob * return)
+        // Build returns and action tensors for batched engine-op computation
+        var returnsTensor = new Tensor<T>([trajLen]);
+        for (int i = 0; i < trajLen; i++)
+            returnsTensor[i] = returns[i];
+
+        // REINFORCE policy gradient: -mean(log_prob * return) via engine ops
         var trainablePolicy = (NeuralNetworkBase<T>)_policyNetwork;
         T avgLoss = trainablePolicy.TrainWithCustomLoss(batchStates, policyOutput =>
         {
-            T totalLoss = NumOps.Zero;
-            for (int t = 0; t < trajLen; t++)
+            var eng = Engine;
+            Tensor<T> logProbs;
+
+            if (_reinforceOptions.IsContinuous)
             {
-                var logProb = ComputeLogProb(_trajectory.States[t], _trajectory.Actions[t]);
-                totalLoss = NumOps.Subtract(totalLoss,
-                    NumOps.Multiply(logProb, returns[t]));
+                // Continuous: policyOutput = [trajLen, actionSize*2] = [means, logStds]
+                int actionSize = _reinforceOptions.ActionSize;
+                var means = Engine.TensorSlice(policyOutput, [0, 0], [trajLen, actionSize]);
+                var logStds = Engine.TensorSlice(policyOutput, [0, actionSize], [trajLen, actionSize * 2]);
+
+                // Build batched actions tensor
+                var actionsTensor = new Tensor<T>([trajLen, actionSize]);
+                for (int i = 0; i < trajLen; i++)
+                    for (int j = 0; j < actionSize; j++)
+                        actionsTensor[i, j] = _trajectory.Actions[i][j];
+
+                logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(means, logStds, actionsTensor);
+            }
+            else
+            {
+                // Discrete: policyOutput = [trajLen, numActions] logits
+                var actionIndices = new int[trajLen];
+                for (int i = 0; i < trajLen; i++)
+                    actionIndices[i] = GetDiscreteAction(_trajectory.Actions[i]);
+
+                logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(policyOutput, actionIndices);
             }
 
-            var lossTensor = new Tensor<T>([1]);
-            lossTensor[0] = NumOps.Divide(totalLoss, NumOps.FromDouble(trajLen));
-            return lossTensor;
+            // loss = -mean(logProbs * returns) — all engine ops, tape-differentiable
+            var weighted = eng.TensorMultiply(logProbs, returnsTensor);
+            var allAxes = Enumerable.Range(0, weighted.Shape.Length).ToArray();
+            var meanLoss = eng.ReduceMean(weighted, allAxes, keepDims: false);
+            return eng.TensorNegate(meanLoss);
         });
 
         LossHistory.Add(avgLoss);
