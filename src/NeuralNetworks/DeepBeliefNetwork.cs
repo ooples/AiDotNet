@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -51,10 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly DeepBeliefNetworkOptions _options;
-    // Optimizer is now handled by TrainWithTape in NeuralNetworkBase
-    #pragma warning disable CS0169
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
-    #pragma warning restore CS0169
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -221,17 +219,18 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public DeepBeliefNetwork(
         NeuralNetworkArchitecture<T> architecture,
-        T? learningRate = default,
         int epochs = 10,
         int batchSize = 32,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DeepBeliefNetworkOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new DeepBeliefNetworkOptions();
         Options = _options;
 
-        _learningRate = learningRate ?? NumOps.FromDouble(0.01);
+        _learningRate = NumOps.FromDouble(_optimizer.GetCurrentLearningRate());
         _epochs = epochs;
         _batchSize = batchSize;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
@@ -483,7 +482,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
 
-        TrainWithTape(input, expectedOutput);
+        TrainWithTape(input, expectedOutput, _optimizer);
 
         foreach (var layer in Layers)
             layer.SetTrainingMode(false);
@@ -737,9 +736,9 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     {
         return new DeepBeliefNetwork<T>(
             Architecture,
-            _learningRate,
             _epochs,
             _batchSize,
+            _optimizer,
             _lossFunction
         );
     }

@@ -129,6 +129,11 @@ public interface IGradientBasedOptimizer<T, TInput, TOutput> : IOptimizer<T, TIn
     void UpdateParameters(List<ILayer<T>> layers);
 
     /// <summary>
+    /// Gets the optimizer's current learning rate, which may have been adjusted by a scheduler.
+    /// </summary>
+    double GetCurrentLearningRate();
+
+    /// <summary>
     /// Performs a parameter update step using the optimizer's update rule and the provided
     /// training context. This is the unified entry point for tape-based training that supports
     /// both first-order and second-order optimizers via the Liskov Substitution Principle.

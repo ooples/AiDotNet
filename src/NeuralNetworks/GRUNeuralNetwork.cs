@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -54,6 +55,7 @@ namespace AiDotNet.NeuralNetworks;
 public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly GRUOptions _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private T _learningRate;
 
     /// <inheritdoc/>
@@ -95,9 +97,10 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     {
     }
 
-    public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, GRUOptions? options = null, double learningRate = 0.001) :
+    public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null, GRUOptions? options = null, double learningRate = 0.001) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new GRUOptions();
         Options = _options;
         _learningRate = NumOps.FromDouble(learningRate);
@@ -271,7 +274,7 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
             layer.SetTrainingMode(true);
         }
 
-        TrainWithTape(input, expectedOutput);
+        TrainWithTape(input, expectedOutput, _optimizer);
 
         SetTrainingMode(false);
     }
