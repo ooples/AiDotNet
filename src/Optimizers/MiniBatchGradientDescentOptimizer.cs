@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Training;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -397,11 +398,11 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     }
 
     /// <inheritdoc />
-    public override void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    public override void Step(TapeStepContext<T> context)
     {
-        foreach (var param in parameters)
+        foreach (var param in context.Parameters)
         {
-            if (gradients.TryGetValue(param, out var grad))
+            if (context.Gradients.TryGetValue(param, out var grad))
             {
                 var update = Engine.TensorMultiplyScalar(grad, CurrentLearningRate);
                 Engine.TensorSubtractInPlace(param, update);

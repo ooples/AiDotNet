@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Training;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
@@ -487,7 +488,7 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     private int _tapeStep;
 
     /// <inheritdoc />
-    public override void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    public override void Step(TapeStepContext<T> context)
     {
         _tapeStep++;
 
@@ -507,9 +508,9 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             ? NumOps.FromDouble(1.0 - Math.Pow(_options.Beta2, _tapeStep))
             : NumOps.One;
 
-        foreach (var param in parameters)
+        foreach (var param in context.Parameters)
         {
-            if (!gradients.TryGetValue(param, out var grad))
+            if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
             if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param.Shape.ToArray()); _tapeM[param] = m; }

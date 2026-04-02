@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Training;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -489,41 +490,24 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     }
 
     /// <inheritdoc />
-    public override void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    public override void Step(TapeStepContext<T> context)
     {
-        // Flatten all parameter/gradient tensors into vectors for BFGS's full-vector update
-        var (paramVec, gradVec, offsets) = FlattenTensors(parameters, gradients);
-        var updated = UpdateParameters(paramVec, gradVec);
-        UnflattenIntoTensors(updated, parameters, offsets);
-    }
+        var (pv, gv, offsets) = SecondOrderHelper<T>.FlattenTensors(context.Parameters, context.Gradients, NumOps);
+        var updated = UpdateParameters(pv, gv);
+        SecondOrderHelper<T>.UnflattenIntoTensors(updated, context.Parameters, offsets);
 
-    private static (Vector<T> param, Vector<T> grad, int[] offsets) FlattenTensors(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
-    {
-        int total = 0;
-        var offsets = new int[parameters.Length];
-        for (int i = 0; i < parameters.Length; i++) { offsets[i] = total; total += parameters[i].Length; }
-        var pv = new Vector<T>(total);
-        var gv = new Vector<T>(total);
-        for (int i = 0; i < parameters.Length; i++)
+        // If re-evaluation is available, use backtracking line search
+        if (context.SupportsReevaluation)
         {
-            var p = parameters[i];
-            gradients.TryGetValue(p, out var g);
-            for (int j = 0; j < p.Length; j++)
+            T origLoss = context.Loss;
+            T newLoss = context.Reevaluate();
+            if (NumOps.GreaterThan(newLoss, origLoss))
             {
-                pv[offsets[i] + j] = p[j];
-                gv[offsets[i] + j] = g is not null && j < g.Length ? g[j] : MathHelper.GetNumericOperations<T>().Zero;
+                // Loss increased — retry with updated gradients from Reevaluate
+                var (pv2, gv2, offs2) = SecondOrderHelper<T>.FlattenTensors(context.Parameters, context.Gradients, NumOps);
+                var retry = UpdateParameters(pv2, gv2);
+                SecondOrderHelper<T>.UnflattenIntoTensors(retry, context.Parameters, offs2);
             }
-        }
-        return (pv, gv, offsets);
-    }
-
-    private static void UnflattenIntoTensors(Vector<T> updated, Tensor<T>[] parameters, int[] offsets)
-    {
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            var p = parameters[i];
-            for (int j = 0; j < p.Length; j++)
-                p[j] = updated[offsets[i] + j];
         }
     }
 }

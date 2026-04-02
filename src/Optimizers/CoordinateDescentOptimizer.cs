@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Training;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -395,5 +396,13 @@ public class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBasedOptim
             byte[] previousUpdateData = reader.ReadBytes(previousUpdateLength);
             _previousUpdate = Vector<T>.Deserialize(previousUpdateData);
         }
+    }
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        var (pv, gv, offsets) = SecondOrderHelper<T>.FlattenTensors(context.Parameters, context.Gradients, NumOps);
+        var updated = UpdateParameters(pv, gv);
+        SecondOrderHelper<T>.UnflattenIntoTensors(updated, context.Parameters, offsets);
     }
 }

@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.Training;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
@@ -418,7 +419,7 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     private int _tapeStep;
 
     /// <inheritdoc />
-    public override void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    public override void Step(TapeStepContext<T> context)
     {
         _tapeStep++;
 
@@ -428,9 +429,9 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         T epsilon = NumOps.FromDouble(_options.Epsilon);
         T baseLr = NumOps.FromDouble(GetWarmupLearningRate());
 
-        foreach (var param in parameters)
+        foreach (var param in context.Parameters)
         {
-            if (!gradients.TryGetValue(param, out var grad))
+            if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
             if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = new Tensor<T>(param.Shape.ToArray()); _tapeVelocity[param] = vel; }

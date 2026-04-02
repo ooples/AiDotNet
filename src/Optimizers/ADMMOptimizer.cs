@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Training;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -423,5 +424,13 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_ADMM_{_options.Rho}_{_regularization?.GetType().Name}_{_options.AbsoluteTolerance}_{_iteration}";
+    }
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        var (pv, gv, offsets) = SecondOrderHelper<T>.FlattenTensors(context.Parameters, context.Gradients, NumOps);
+        var updated = UpdateParameters(pv, gv);
+        SecondOrderHelper<T>.UnflattenIntoTensors(updated, context.Parameters, offsets);
     }
 }

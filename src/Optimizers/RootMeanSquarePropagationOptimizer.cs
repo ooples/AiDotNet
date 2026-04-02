@@ -1,4 +1,5 @@
 using AiDotNet.Engines;
+using AiDotNet.Training;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
@@ -277,15 +278,15 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeSqGrad = new(ReferenceEqualityComparer.Instance);
 
     /// <inheritdoc />
-    public override void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    public override void Step(TapeStepContext<T> context)
     {
         T decay = NumOps.FromDouble(_options.Decay);
         T oneMinusDecay = NumOps.FromDouble(1 - _options.Decay);
         T epsilon = NumOps.FromDouble(_options.Epsilon);
 
-        foreach (var param in parameters)
+        foreach (var param in context.Parameters)
         {
-            if (!gradients.TryGetValue(param, out var grad))
+            if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
             if (!_tapeSqGrad.TryGetValue(param, out var sqGrad)) { sqGrad = new Tensor<T>(param.Shape.ToArray()); _tapeSqGrad[param] = sqGrad; }

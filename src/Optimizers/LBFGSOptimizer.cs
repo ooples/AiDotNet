@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Training;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -510,6 +511,27 @@ public class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
                 int vectorLength = reader.ReadInt32();
                 byte[] vectorData = reader.ReadBytes(vectorLength);
                 _y.Add(Vector<T>.Deserialize(vectorData));
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        var (pv, gv, offsets) = SecondOrderHelper<T>.FlattenTensors(context.Parameters, context.Gradients, NumOps);
+        var updated = UpdateParameters(pv, gv);
+        SecondOrderHelper<T>.UnflattenIntoTensors(updated, context.Parameters, offsets);
+
+        // L-BFGS benefits from re-evaluation for line search
+        if (context.SupportsReevaluation)
+        {
+            T origLoss = context.Loss;
+            T newLoss = context.Reevaluate();
+            if (NumOps.GreaterThan(newLoss, origLoss))
+            {
+                var (pv2, gv2, offs2) = SecondOrderHelper<T>.FlattenTensors(context.Parameters, context.Gradients, NumOps);
+                var retry = UpdateParameters(pv2, gv2);
+                SecondOrderHelper<T>.UnflattenIntoTensors(retry, context.Parameters, offs2);
             }
         }
     }

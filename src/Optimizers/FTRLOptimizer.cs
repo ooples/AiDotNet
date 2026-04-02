@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Training;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -201,16 +202,16 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeN = new(ReferenceEqualityComparer.Instance);
 
     /// <inheritdoc />
-    public override void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    public override void Step(TapeStepContext<T> context)
     {
         var alpha = NumOps.FromDouble(_options.Alpha);
         var beta = NumOps.FromDouble(_options.Beta);
         var lambda1 = NumOps.FromDouble(_options.Lambda1);
         var lambda2 = NumOps.FromDouble(_options.Lambda2);
 
-        foreach (var param in parameters)
+        foreach (var param in context.Parameters)
         {
-            if (!gradients.TryGetValue(param, out var grad))
+            if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
             if (!_tapeZ.TryGetValue(param, out var z)) { z = new Tensor<T>(param.Shape.ToArray()); _tapeZ[param] = z; }

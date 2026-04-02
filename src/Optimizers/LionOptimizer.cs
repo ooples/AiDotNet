@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Training;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -322,15 +323,15 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeMomentum = new(ReferenceEqualityComparer.Instance);
 
     /// <inheritdoc />
-    public override void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    public override void Step(TapeStepContext<T> context)
     {
         var weightDecay = NumOps.FromDouble(_options.WeightDecay);
         var oneMinusBeta1 = NumOps.Subtract(NumOps.One, _currentBeta1);
         var oneMinusBeta2 = NumOps.Subtract(NumOps.One, _currentBeta2);
 
-        foreach (var param in parameters)
+        foreach (var param in context.Parameters)
         {
-            if (!gradients.TryGetValue(param, out var grad))
+            if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
             if (!_tapeMomentum.TryGetValue(param, out var m)) { m = new Tensor<T>(param.Shape.ToArray()); _tapeMomentum[param] = m; }

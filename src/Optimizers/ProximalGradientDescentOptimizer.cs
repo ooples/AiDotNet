@@ -1,4 +1,5 @@
 using AiDotNet.Tensors;
+using AiDotNet.Training;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
@@ -562,11 +563,11 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     }
 
     /// <inheritdoc />
-    public override void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    public override void Step(TapeStepContext<T> context)
     {
-        foreach (var param in parameters)
+        foreach (var param in context.Parameters)
         {
-            if (!gradients.TryGetValue(param, out var grad))
+            if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
             // Gradient descent step: param -= lr * grad
