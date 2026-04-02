@@ -30,7 +30,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-public abstract class LayerBase<T> : ILayer<T>, IDisposable
+public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
 {
     /// <summary>
     /// Counter for generating unique instance IDs across all layer instances.
@@ -309,8 +309,17 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     /// <summary>
     /// Collection of tensors that have been registered as persistent with the engine.
     /// These will be unregistered when the layer is disposed.
+    /// Also serves as the backing store for <see cref="GetTrainableParameters"/> — any tensor
+    /// registered here is automatically visible to the gradient tape for training.
+    /// This is the equivalent of PyTorch's <c>nn.Module.parameters()</c> auto-registration.
     /// </summary>
-    private readonly List<object> _registeredTensors = new();
+    private readonly List<Tensor<T>> _registeredTensors = new();
+
+    /// <summary>
+    /// Child layers registered via <see cref="RegisterSubLayer"/>. Returned by <see cref="GetSubLayers"/>
+    /// for recursive parameter discovery, equivalent to PyTorch's <c>nn.Module.children()</c>.
+    /// </summary>
+    private readonly List<ILayer<T>> _registeredSubLayers = new();
 
     /// <summary>
     /// Gets or sets the initialization strategy for this layer.
@@ -737,8 +746,6 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     public virtual int[] GetInputShape() =>
         InputShape != null && InputShape.Length > 0 ? InputShape : InputShapes[0];
 
-    /// <inheritdoc />
-    public virtual IReadOnlyList<ILayer<T>> GetSubLayers() => Array.Empty<ILayer<T>>();
 
     /// <summary>
     /// Gets all input shapes for this layer.
@@ -2714,6 +2721,85 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     }
 
     /// <summary>
+    /// Registers a child layer for automatic discovery by the recursive parameter collection system.
+    /// This is the equivalent of assigning an <c>nn.Module</c> as an attribute in PyTorch —
+    /// the framework automatically discovers it via <see cref="GetSubLayers"/>.
+    /// </summary>
+    /// <param name="subLayer">The child layer to register.</param>
+    /// <remarks>
+    /// <para>
+    /// Call this in the constructor for each sub-layer your composite layer contains.
+    /// The gradient tape training system will recursively walk these sub-layers to discover
+    /// all trainable parameters without requiring manual <c>ITrainableLayer</c> overrides.
+    /// </para>
+    /// <para><b>For Beginners:</b> If your layer contains other layers inside it (like a
+    /// Transformer block containing Attention + FeedForward layers), call this method for
+    /// each inner layer. The training system will automatically find all the weights inside
+    /// those inner layers and include them in training.</para>
+    /// </remarks>
+    protected void RegisterSubLayer(ILayer<T> subLayer)
+    {
+        if (subLayer is null)
+            throw new ArgumentNullException(nameof(subLayer));
+        _registeredSubLayers.Add(subLayer);
+    }
+
+    #region ITrainableLayer<T> Implementation
+
+    /// <summary>
+    /// Returns all trainable parameter tensors registered via <see cref="RegisterTrainableParameter"/>.
+    /// This is the automatic implementation — layers that register their parameters in the constructor
+    /// get tape-based training support with zero additional code.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Layers that need custom parameter ordering or conditional parameters can override this method.
+    /// For most layers, the automatic registration is sufficient.
+    /// </para>
+    /// </remarks>
+    public virtual Tensor<T>[] GetTrainableParameters() => _registeredTensors.ToArray();
+
+    /// <summary>
+    /// Replaces this layer's trainable parameter tensors with the provided tensors.
+    /// Used by <see cref="AiDotNet.Tensors.Engines.Autodiff.ParameterBuffer{T}"/> to replace
+    /// independently-allocated tensors with views into a contiguous buffer.
+    /// </summary>
+    /// <param name="parameters">Replacement tensors in the same order as <see cref="GetTrainableParameters"/>.</param>
+    /// <remarks>
+    /// <para>
+    /// The default implementation replaces tensors in the registered parameter list.
+    /// Layers with private field references to their parameters should override this
+    /// to also update those fields.
+    /// </para>
+    /// </remarks>
+    public virtual void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != _registeredTensors.Count)
+            throw new ArgumentException(
+                $"{GetType().Name} has {_registeredTensors.Count} registered parameters but received {parameters.Length}.");
+
+        for (int i = 0; i < parameters.Length; i++)
+            _registeredTensors[i] = parameters[i];
+    }
+
+    /// <summary>
+    /// Clears all accumulated gradients. Default implementation is a no-op since
+    /// tape-based training computes fresh gradients each step. Layers with explicit
+    /// gradient tensor fields should override to zero/null them.
+    /// </summary>
+    public virtual void ZeroGrad() { }
+
+    #endregion
+
+    /// <summary>
+    /// Returns all child layers registered via <see cref="RegisterSubLayer"/>.
+    /// The recursive parameter collection system walks these to discover all trainable
+    /// parameters in composite layer hierarchies.
+    /// Override in composite layers that need to expose sub-layers not registered via RegisterSubLayer.
+    /// </summary>
+    public virtual IReadOnlyList<ILayer<T>> GetSubLayers() => _registeredSubLayers;
+
+    /// <summary>
     /// Notifies the engine that a registered persistent tensor's data has changed.
     /// </summary>
     /// <param name="tensor">The tensor whose data has been modified.</param>
@@ -3044,14 +3130,9 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
         {
             // Unregister all persistent tensors from the engine
             // This releases GPU memory that was cached for these tensors
-            foreach (var tensorObj in _registeredTensors)
+            foreach (var tensor in _registeredTensors)
             {
-                // Use reflection to call the generic UnregisterPersistentTensor method
-                // since we stored tensors as object to support multiple generic types
-                if (tensorObj is Tensor<T> tensor)
-                {
-                    Engine.UnregisterPersistentTensor(tensor);
-                }
+                Engine.UnregisterPersistentTensor(tensor);
             }
             _registeredTensors.Clear();
         }
