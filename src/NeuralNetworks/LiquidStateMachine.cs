@@ -487,23 +487,18 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         // Backpropagate to get parameter gradients
         Backpropagate(Tensor<T>.FromVector(outputGradients));
 
-        // Only update trainable (non-reservoir) layers
-        // ReservoirLayer weights are fixed; only readout Dense layers train
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Per Maass et al. 2002: only the readout layer is trained.
+        // Reservoir weights are fixed. Use configurable LR from options.
+        T readoutLr = NumOps.FromDouble(_options.ReadoutLearningRate);
         foreach (var layer in Layers)
         {
             if (layer is ReservoirLayer<T>)
                 continue; // Skip fixed reservoir
 
-            if (layer.SupportsTraining && layer.ParameterCount > 0)
+            if (layer.SupportsTraining)
             {
-                var layerParams = layer.GetParameters();
-                var layerGrads = layer.GetParameterGradients();
-                if (layerParams.Length == layerGrads.Length && layerGrads.Length > 0)
-                {
-                    var updated = _trainOptimizer.UpdateParameters(layerParams, layerGrads);
-                    layer.SetParameters(updated);
-                }
+                try { layer.UpdateParameters(readoutLr); }
+                catch (InvalidOperationException) { /* skip layers without backward */ }
             }
         }
     }
