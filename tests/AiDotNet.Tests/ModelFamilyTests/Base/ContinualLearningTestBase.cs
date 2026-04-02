@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -16,7 +17,10 @@ public abstract class ContinualLearningTestBase
     protected abstract IContinualLearningStrategy<double> CreateStrategy();
 
     /// <summary>Creates a mock neural network for testing.</summary>
-    protected abstract INeuralNetwork<double> CreateMockNetwork();
+    protected virtual INeuralNetwork<double> CreateMockNetwork()
+    {
+        return new FeedForwardNeuralNetwork<double>();
+    }
 
     /// <summary>Number of model parameters for test data generation.</summary>
     protected virtual int NumParameters => 10;
