@@ -157,7 +157,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.BinaryClassification,
             inputSize: 512,
-            outputSize: 1))
+            outputSize: 2))
     {
     }
 

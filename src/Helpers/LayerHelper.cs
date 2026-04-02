@@ -31177,14 +31177,10 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates layers for the AudioVisualEventLocalizationNetwork.
-    /// </summary>
-    /// <summary>
     /// Creates layers for the Audio-Visual Event Localization network.
     /// Based on Tian et al., ECCV 2018 "Audio-Visual Event Localization in Unconstrained Videos".
-    ///
     /// Paper architecture uses LSTM encoders + DMRN fusion + FC head.
-    /// In 1D sequential mode, we approximate with Dense+ReLU blocks matching the paper's
+    /// In 1D sequential mode, we approximate with Dense+Tanh blocks matching the paper's
     /// feature dimension progression, with a single output head (no bottleneck).
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateAudioVisualEventLocalizationLayers(
@@ -31194,28 +31190,25 @@ public static class LayerHelper<T>
         int numCategories = 35)
     {
         IActivationFunction<T>? nullActivation = null;
-        var reluActivation = (IActivationFunction<T>)new TanhActivation<T>();
+        var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
 
         // Audio feature encoder (paper: VGG features -> LSTM -> 256-D)
-        yield return new DenseLayer<T>(inputSize, embeddingDimension, reluActivation);
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, reluActivation);
+        yield return new DenseLayer<T>(inputSize, embeddingDimension, tanhActivation);
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
 
         // Visual feature encoder (paper: VGG features -> attention -> LSTM -> 256-D)
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, reluActivation);
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, reluActivation);
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
 
         // DMRN fusion (paper: dual multimodal residual network)
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, reluActivation);
-        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, reluActivation);
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
+        yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
 
         // Event classification output (paper: FC -> softmax over categories + binary event)
         // Single output head to avoid bottleneck
         yield return new DenseLayer<T>(embeddingDimension, 1, nullActivation);
     }
 
-    /// <summary>
-    /// Creates layers for the AudioVisualCorrespondenceNetwork.
-    /// </summary>
     /// <summary>
     /// Creates layers for the Audio-Visual Correspondence network (L3-Net).
     /// Architecture from "Look, Listen and Learn" (Arandjelovic & Zisserman, ICCV 2017).
@@ -31239,23 +31232,22 @@ public static class LayerHelper<T>
         // [Conv-BN-ReLU, Conv-BN-ReLU, Pool] x 4 pattern with progressive channel expansion.
         // Tanh activation: bounded [-1,1], prevents both neuron death and gradient explosion.
         // Better than LeakyReLU for 1D Dense encoder without BatchNorm.
-        var reluActivation = (IActivationFunction<T>)new TanhActivation<T>();
+        var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
         IActivationFunction<T>? nullActivation = null;
 
         // Audio encoder: VGG-style blocks (Dense replaces Conv for 1D input)
-        // Block 1: 512 -> 64 (paper: 3->64 via conv, we project from input dim)
         // VGG-style blocks without BN (BN requires batch_size > 1; in 1D sequential
         // mode with single samples, BN gradient is exactly zero per Ioffe & Szegedy 2015)
         // VGG-style encoder: 4 blocks with progressive channel expansion
         // Per Arandjelovic & Zisserman 2017: 64/128/256/512 filters
         // 1 Dense per block in 1D mode (prevents dynamic range explosion)
-        yield return new DenseLayer<T>(embeddingDimension, 128, reluActivation);
-        yield return new DenseLayer<T>(128, 256, reluActivation);
-        yield return new DenseLayer<T>(256, 512, reluActivation);
-        yield return new DenseLayer<T>(512, 512, reluActivation);
+        yield return new DenseLayer<T>(embeddingDimension, 128, tanhActivation);
+        yield return new DenseLayer<T>(128, 256, tanhActivation);
+        yield return new DenseLayer<T>(256, 512, tanhActivation);
+        yield return new DenseLayer<T>(512, 512, tanhActivation);
 
         // Fusion FC per paper: 512 -> 128 -> 2
-        yield return new DenseLayer<T>(512, 128, reluActivation);
+        yield return new DenseLayer<T>(512, 128, tanhActivation);
         yield return new DenseLayer<T>(128, 2, nullActivation);
     }
 
