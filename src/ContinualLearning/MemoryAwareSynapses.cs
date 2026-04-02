@@ -100,7 +100,11 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
         Guard.NotNull(network);
         Guard.NotNull(taskData.inputs);
 
-        // Compute importance using output sensitivity (unsupervised)
+        // Compute importance using output sensitivity via tape-based gradients
+        var grads = network.ComputeGradients(taskData.inputs, taskData.targets);
+        var newOmega = new Vector<T>(grads.Length);
+        for (int i = 0; i < grads.Length; i++)
+            newOmega[i] = _numOps.Abs(grads[i]); // Importance = |gradient|
 
         // Accumulate importance
         for (int i = 0; i < _omega.Length; i++)

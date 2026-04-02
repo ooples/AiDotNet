@@ -95,7 +95,12 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
         var currentParams = network.GetParameters();
         _optimalParameters.Add(currentParams.Clone());
 
-        // Compute the diagonal of the Fisher Information Matrix
+        // Compute the diagonal of the Fisher Information Matrix via tape-based gradients
+        var grads = network.ComputeGradients(taskData.inputs, taskData.targets);
+        // Fisher diagonal ≈ squared gradients (empirical Fisher)
+        var fisherDiag = new Vector<T>(grads.Length);
+        for (int i = 0; i < grads.Length; i++)
+            fisherDiag[i] = _numOps.Multiply(grads[i], grads[i]);
         _fisherDiagonals.Add(fisherDiag);
     }
 

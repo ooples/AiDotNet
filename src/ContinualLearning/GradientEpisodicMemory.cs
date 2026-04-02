@@ -116,7 +116,8 @@ public class GradientEpisodicMemory<T> : IContinualLearningStrategy<T>
         var sampledData = SampleMemory(taskData.inputs, taskData.targets);
         _episodicMemory.Add(sampledData);
 
-        // Compute and store reference gradients for this task
+        // Compute and store reference gradients for this task using tape
+        var refGrad = network.ComputeGradients(sampledData.inputs, sampledData.targets);
         _referenceGradients.Add(refGrad);
     }
 

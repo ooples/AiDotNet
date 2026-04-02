@@ -119,6 +119,12 @@ public class OnlineEWC<T> : IContinualLearningStrategy<T>
 
         var currentParams = network.GetParameters();
 
+        // Compute Fisher diagonal via tape-based gradients
+        var grads = network.ComputeGradients(taskData.inputs, taskData.targets);
+        var newFisher = new Vector<T>(grads.Length);
+        for (int i = 0; i < grads.Length; i++)
+            newFisher[i] = _numOps.Multiply(grads[i], grads[i]);
+
         if (_taskCount == 0)
         {
             // First task: just store the values
