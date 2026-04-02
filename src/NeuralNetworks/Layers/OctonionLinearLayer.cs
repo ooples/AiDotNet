@@ -40,19 +40,22 @@ public class OctonionLinearLayer<T> : LayerBase<T>
 {
 
     /// <summary>
-    /// The octonion weight matrix connecting input to output neurons.
+    /// The octonion weight tensor with shape [OutputFeatures, InputFeatures, 8].
+    /// Each [o, i, 0..7] slice stores one octonion's 8 components (Scalar, E1-E7).
     /// </summary>
-    private Octonion<T>[,] _weights;
+    private Tensor<T> _weights;
 
     /// <summary>
-    /// The octonion bias values for each output neuron.
+    /// The octonion bias tensor with shape [OutputFeatures, 8].
+    /// Each [o, 0..7] slice stores one octonion's 8 components.
     /// </summary>
-    private Octonion<T>[] _biases;
+    private Tensor<T> _biases;
 
     /// <summary>
     /// Stored input from forward pass for backpropagation.
+    /// Shape: [batch, inputFeatures, 8]
     /// </summary>
-    private Octonion<T>[,]? _lastInput;
+    private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
@@ -61,18 +64,19 @@ public class OctonionLinearLayer<T> : LayerBase<T>
 
     /// <summary>
     /// Stored pre-activation output for gradient computation.
+    /// Shape: [batch, outputFeatures, 8]
     /// </summary>
-    private Octonion<T>[,]? _lastOutput;
+    private Tensor<T>? _lastOutput;
 
     /// <summary>
-    /// Gradient for weights, stored during backward pass.
+    /// Gradient for weights. Shape: [OutputFeatures, InputFeatures, 8]
     /// </summary>
-    private Octonion<T>[,]? _weightsGradient;
+    private Tensor<T>? _weightsGradient;
 
     /// <summary>
-    /// Gradient for biases, stored during backward pass.
+    /// Gradient for biases. Shape: [OutputFeatures, 8]
     /// </summary>
-    private Octonion<T>[]? _biasesGradient;
+    private Tensor<T>? _biasesGradient;
 
     /// <summary>
     /// Gets the number of input features (octonion-valued).
@@ -129,14 +133,18 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         OutputFeatures = outputFeatures;
 
 
-        _weights = new Octonion<T>[outputFeatures, inputFeatures];
-        _biases = new Octonion<T>[outputFeatures];
+        _weights = new Tensor<T>([outputFeatures, inputFeatures, 8]);
+        _biases = new Tensor<T>([outputFeatures, 8]);
 
         InitializeParameters();
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
     /// Initializes weights using Xavier/Glorot initialization adapted for octonions.
+    /// Writes directly to the Tensor<T> components — no Octonion<T> object allocation.
     /// </summary>
     private void InitializeParameters()
     {
@@ -147,31 +155,11 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         {
             for (int i = 0; i < InputFeatures; i++)
             {
-                _weights[o, i] = CreateRandomOctonion(random, scale);
+                for (int c = 0; c < 8; c++)
+                    _weights[o, i, c] = _numOps.FromDouble((random.NextDouble() - 0.5) * 2 * scale);
             }
-            // Initialize biases to zero
-            _biases[o] = CreateZeroOctonion();
+            // Initialize biases to zero (Tensor<T> is zero-initialized by default)
         }
-    }
-
-    private Octonion<T> CreateRandomOctonion(Random random, double scale)
-    {
-        return new Octonion<T>(
-            _numOps.FromDouble((random.NextDouble() - 0.5) * 2 * scale),
-            _numOps.FromDouble((random.NextDouble() - 0.5) * 2 * scale),
-            _numOps.FromDouble((random.NextDouble() - 0.5) * 2 * scale),
-            _numOps.FromDouble((random.NextDouble() - 0.5) * 2 * scale),
-            _numOps.FromDouble((random.NextDouble() - 0.5) * 2 * scale),
-            _numOps.FromDouble((random.NextDouble() - 0.5) * 2 * scale),
-            _numOps.FromDouble((random.NextDouble() - 0.5) * 2 * scale),
-            _numOps.FromDouble((random.NextDouble() - 0.5) * 2 * scale));
-    }
-
-    private Octonion<T> CreateZeroOctonion()
-    {
-        return new Octonion<T>(
-            _numOps.Zero, _numOps.Zero, _numOps.Zero, _numOps.Zero,
-            _numOps.Zero, _numOps.Zero, _numOps.Zero, _numOps.Zero);
     }
 
     /// <summary>
@@ -219,26 +207,27 @@ public class OctonionLinearLayer<T> : LayerBase<T>
                 $"({InputFeatures} octonions * 8 components).");
         }
 
-        // Convert input tensor to octonion array
-        var inputOctonions = TensorToOctonions(inputTensor, batchSize, InputFeatures);
-        _lastInput = inputOctonions;
+        // Reshape flat input [batch, inputFeatures*8] → [batch, inputFeatures, 8]
+        var input3D = inputTensor.Reshape([batchSize, InputFeatures, 8]);
+        _lastInput = input3D;
 
-        // Perform octonion matrix multiplication
-        var output = Engine.OctonionMatMul(inputOctonions, _weights);
+        // Tensor-based octonion matrix multiplication — no Octonion<T> allocation
+        var output3D = Engine.OctonionMatMulTensor(input3D, _weights);
 
-        // Add biases
+        // Add biases: broadcast [OutputFeatures, 8] across batch dimension
         for (int b = 0; b < batchSize; b++)
         {
             for (int o = 0; o < OutputFeatures; o++)
             {
-                output[b, o] = output[b, o] + _biases[o];
+                for (int c = 0; c < 8; c++)
+                    output3D[b, o, c] = _numOps.Add(output3D[b, o, c], _biases[o, c]);
             }
         }
 
-        _lastOutput = output;
+        _lastOutput = output3D;
 
-        // Convert back to tensor
-        var outputTensor = OctonionsToTensor(output, batchSize, OutputFeatures);
+        // Flatten back to [batch, outputFeatures*8] for activation and output
+        var outputTensor = output3D.Reshape([batchSize, OutputFeatures * 8]);
 
         // Apply activation function
         var activated = ApplyActivation(outputTensor);
@@ -273,37 +262,13 @@ public class OctonionLinearLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
         }
 
-        // Update weights: w = w - lr * grad
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            for (int i = 0; i < InputFeatures; i++)
-            {
-                var grad = _weightsGradient[o, i];
-                var scaledGrad = new Octonion<T>(
-                    _numOps.Multiply(learningRate, grad.Scalar),
-                    _numOps.Multiply(learningRate, grad.E1),
-                    _numOps.Multiply(learningRate, grad.E2),
-                    _numOps.Multiply(learningRate, grad.E3),
-                    _numOps.Multiply(learningRate, grad.E4),
-                    _numOps.Multiply(learningRate, grad.E5),
-                    _numOps.Multiply(learningRate, grad.E6),
-                    _numOps.Multiply(learningRate, grad.E7));
-                _weights[o, i] = _weights[o, i] - scaledGrad;
-            }
+        // Update weights: w = w - lr * grad (tensor ops, no Octonion<T> objects)
+        var scaledWeightGrad = Engine.TensorMultiplyScalar(_weightsGradient, learningRate);
+        Engine.TensorSubtractInPlace(_weights, scaledWeightGrad);
 
-            // Update biases
-            var biasGrad = _biasesGradient[o];
-            var scaledBiasGrad = new Octonion<T>(
-                _numOps.Multiply(learningRate, biasGrad.Scalar),
-                _numOps.Multiply(learningRate, biasGrad.E1),
-                _numOps.Multiply(learningRate, biasGrad.E2),
-                _numOps.Multiply(learningRate, biasGrad.E3),
-                _numOps.Multiply(learningRate, biasGrad.E4),
-                _numOps.Multiply(learningRate, biasGrad.E5),
-                _numOps.Multiply(learningRate, biasGrad.E6),
-                _numOps.Multiply(learningRate, biasGrad.E7));
-            _biases[o] = _biases[o] - scaledBiasGrad;
-        }
+        // Update biases
+        var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
+        Engine.TensorSubtractInPlace(_biases, scaledBiasGrad);
     }
 
     /// <summary>
@@ -312,39 +277,15 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     /// <returns>A vector containing all weights and biases.</returns>
     public override Vector<T> GetParameters()
     {
+        // Weights and biases are Tensor<T>, flatten directly
+        var weightsFlat = _weights.Reshape([OutputFeatures * InputFeatures * 8]);
+        var biasesFlat = _biases.Reshape([OutputFeatures * 8]);
+
         var paramArray = new T[ParameterCount];
-        int idx = 0;
-
-        // Flatten weights
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            for (int i = 0; i < InputFeatures; i++)
-            {
-                var oct = _weights[o, i];
-                paramArray[idx++] = oct.Scalar;
-                paramArray[idx++] = oct.E1;
-                paramArray[idx++] = oct.E2;
-                paramArray[idx++] = oct.E3;
-                paramArray[idx++] = oct.E4;
-                paramArray[idx++] = oct.E5;
-                paramArray[idx++] = oct.E6;
-                paramArray[idx++] = oct.E7;
-            }
-        }
-
-        // Flatten biases
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            var oct = _biases[o];
-            paramArray[idx++] = oct.Scalar;
-            paramArray[idx++] = oct.E1;
-            paramArray[idx++] = oct.E2;
-            paramArray[idx++] = oct.E3;
-            paramArray[idx++] = oct.E4;
-            paramArray[idx++] = oct.E5;
-            paramArray[idx++] = oct.E6;
-            paramArray[idx++] = oct.E7;
-        }
+        for (int i = 0; i < weightsFlat.Length; i++)
+            paramArray[i] = weightsFlat[i];
+        for (int i = 0; i < biasesFlat.Length; i++)
+            paramArray[weightsFlat.Length + i] = biasesFlat[i];
 
         return new Vector<T>(paramArray);
     }
@@ -360,67 +301,33 @@ public class OctonionLinearLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {ParameterCount} parameters, but got {parameters.Length}");
         }
 
-        int idx = 0;
+        int weightSize = OutputFeatures * InputFeatures * 8;
+        int biasSize = OutputFeatures * 8;
 
-        // Restore weights
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            for (int i = 0; i < InputFeatures; i++)
-            {
-                _weights[o, i] = new Octonion<T>(
-                    parameters[idx], parameters[idx + 1], parameters[idx + 2], parameters[idx + 3],
-                    parameters[idx + 4], parameters[idx + 5], parameters[idx + 6], parameters[idx + 7]);
-                idx += 8;
-            }
-        }
-
-        // Restore biases
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            _biases[o] = new Octonion<T>(
-                parameters[idx], parameters[idx + 1], parameters[idx + 2], parameters[idx + 3],
-                parameters[idx + 4], parameters[idx + 5], parameters[idx + 6], parameters[idx + 7]);
-            idx += 8;
-        }
+        // Copy weights from flat vector into tensor
+        for (int i = 0; i < weightSize; i++)
+            _weights.SetFlat(i, parameters[i]);
+        for (int i = 0; i < biasSize; i++)
+            _biases.SetFlat(i, parameters[weightSize + i]);
     }
 
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
         var gradients = new Vector<T>(ParameterCount);
-        int idx = 0;
+        int weightSize = OutputFeatures * InputFeatures * 8;
 
-        if (_weightsGradient != null)
+        if (_weightsGradient is not null)
         {
-            for (int o = 0; o < OutputFeatures; o++)
-            {
-                for (int i = 0; i < InputFeatures; i++)
-                {
-                    var g = _weightsGradient[o, i];
-                    gradients[idx] = g.Scalar; gradients[idx + 1] = g.E1;
-                    gradients[idx + 2] = g.E2; gradients[idx + 3] = g.E3;
-                    gradients[idx + 4] = g.E4; gradients[idx + 5] = g.E5;
-                    gradients[idx + 6] = g.E6; gradients[idx + 7] = g.E7;
-                    idx += 8;
-                }
-            }
-        }
-        else
-        {
-            idx += OutputFeatures * InputFeatures * 8;
+            for (int i = 0; i < weightSize; i++)
+                gradients[i] = _weightsGradient.GetFlat(i);
         }
 
-        if (_biasesGradient != null)
+        if (_biasesGradient is not null)
         {
-            for (int o = 0; o < OutputFeatures; o++)
-            {
-                var g = _biasesGradient[o];
-                gradients[idx] = g.Scalar; gradients[idx + 1] = g.E1;
-                gradients[idx + 2] = g.E2; gradients[idx + 3] = g.E3;
-                gradients[idx + 4] = g.E4; gradients[idx + 5] = g.E5;
-                gradients[idx + 6] = g.E6; gradients[idx + 7] = g.E7;
-                idx += 8;
-            }
+            int biasSize = OutputFeatures * 8;
+            for (int i = 0; i < biasSize; i++)
+                gradients[weightSize + i] = _biasesGradient.GetFlat(i);
         }
 
         return gradients;
@@ -519,90 +426,6 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         }
 
         return outputNode;
-    }
-
-    /// <summary>
-    /// Converts a tensor to an octonion array.
-    /// </summary>
-    private Octonion<T>[,] TensorToOctonions(Tensor<T> tensor, int batchSize, int features)
-    {
-        var result = new Octonion<T>[batchSize, features];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < features; f++)
-            {
-                int baseIdx = f * 8;
-                result[b, f] = new Octonion<T>(
-                    tensor[b, baseIdx],
-                    tensor[b, baseIdx + 1],
-                    tensor[b, baseIdx + 2],
-                    tensor[b, baseIdx + 3],
-                    tensor[b, baseIdx + 4],
-                    tensor[b, baseIdx + 5],
-                    tensor[b, baseIdx + 6],
-                    tensor[b, baseIdx + 7]);
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Converts an octonion array to a tensor.
-    /// </summary>
-    private Tensor<T> OctonionsToTensor(Octonion<T>[,] octonions, int batchSize, int features)
-    {
-        var result = TensorAllocator.Rent<T>([batchSize, features * 8]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < features; f++)
-            {
-                int baseIdx = f * 8;
-                var oct = octonions[b, f];
-                result[b, baseIdx] = oct.Scalar;
-                result[b, baseIdx + 1] = oct.E1;
-                result[b, baseIdx + 2] = oct.E2;
-                result[b, baseIdx + 3] = oct.E3;
-                result[b, baseIdx + 4] = oct.E4;
-                result[b, baseIdx + 5] = oct.E5;
-                result[b, baseIdx + 6] = oct.E6;
-                result[b, baseIdx + 7] = oct.E7;
-            }
-        }
-
-        return result;
-    }
-
-    private Tensor<T> ComputeActivationGradient(Tensor<T> outputGradient, Octonion<T>[,] preActivation)
-    {
-        // For identity/linear activation (or no activation), gradient passes through unchanged
-        if (ScalarActivation is null || ScalarActivation is IdentityActivation<T>)
-        {
-            return outputGradient;
-        }
-
-        // Convert pre-activation octonions to tensor for derivative computation
-        int batchSize = preActivation.GetLength(0);
-        int features = preActivation.GetLength(1);
-        var preActivationTensor = OctonionsToTensor(preActivation, batchSize, features);
-
-        // Compute activation derivative at pre-activation values
-        var derivative = DerivativeTensor(ScalarActivation, preActivationTensor);
-
-        // Multiply output gradient element-wise by derivative
-        var result = TensorAllocator.Rent<T>(outputGradient.Shape.ToArray());
-        int totalElements = 1;
-        foreach (var dim in outputGradient.Shape.ToArray())
-            totalElements *= dim;
-
-        for (int i = 0; i < totalElements; i++)
-        {
-            result.Data.Span[i] = NumOps.Multiply(outputGradient.Data.Span[i], derivative.Data.Span[i]);
-        }
-
-        return result;
     }
 
 }
