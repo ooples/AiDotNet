@@ -46,7 +46,7 @@ public class SSLFineTuningPipeline<T>
     /// <summary>
     /// Event raised for progress updates.
     /// </summary>
-    public event Action<int, int, double>? OnProgress;
+    public event Action<int, int, double>? OnProgress { add { } remove { } }
 
     /// <summary>
     /// Initializes a new fine-tuning pipeline.

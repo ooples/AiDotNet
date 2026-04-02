@@ -156,7 +156,7 @@ public class OctonionLinearLayer<T> : LayerBase<T>
             for (int i = 0; i < InputFeatures; i++)
             {
                 for (int c = 0; c < 8; c++)
-                    _weights[o, i, c] = _numOps.FromDouble((random.NextDouble() - 0.5) * 2 * scale);
+                    _weights[o, i, c] = NumOps.FromDouble((random.NextDouble() - 0.5) * 2 * scale);
             }
             // Initialize biases to zero (Tensor<T> is zero-initialized by default)
         }
@@ -220,7 +220,7 @@ public class OctonionLinearLayer<T> : LayerBase<T>
             for (int o = 0; o < OutputFeatures; o++)
             {
                 for (int c = 0; c < 8; c++)
-                    output3D[b, o, c] = _numOps.Add(output3D[b, o, c], _biases[o, c]);
+                    output3D[b, o, c] = NumOps.Add(output3D[b, o, c], _biases[o, c]);
             }
         }
 

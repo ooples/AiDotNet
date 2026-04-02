@@ -175,7 +175,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine($"            throw new System.ArgumentException($\"Expected {paramFields.Count} parameters, got {{parameters.Count}}.\");");
             for (int i = 0; i < paramFields.Count; i++)
             {
-                sb.AppendLine($"        {paramFields[i].Name} = parameters[{i}];");
+                sb.AppendLine($"        {paramFields[i].Name} = parameters[{i}] ?? throw new System.ArgumentNullException(nameof(parameters), \"Parameter at index {i} is null.\");");
             }
             sb.AppendLine("        base.SetTrainableParameters(parameters);");
             sb.AppendLine("    }");
@@ -196,7 +196,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                     if (grad.IsNullable)
                         sb.AppendLine($"        {grad.Name} = null;");
                     else
-                        sb.AppendLine($"        {grad.Name}.Fill(_numOps.Zero);");
+                        sb.AppendLine($"        {grad.Name}.Fill(NumOps.Zero);");
                 }
             }
             sb.AppendLine("    }");

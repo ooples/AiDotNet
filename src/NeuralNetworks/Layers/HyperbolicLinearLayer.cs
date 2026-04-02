@@ -139,7 +139,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         InputFeatures = inputFeatures;
         OutputFeatures = outputFeatures;
 
-        _curvature = _numOps.FromDouble(curvature);
+        _curvature = NumOps.FromDouble(curvature);
 
         _weights = new Tensor<T>([outputFeatures, inputFeatures]);
         _biases = new Tensor<T>([outputFeatures, inputFeatures]);
@@ -164,9 +164,9 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
             for (int i = 0; i < InputFeatures; i++)
             {
                 // Initialize weights in tangent space (small values)
-                _weights[o, i] = _numOps.FromDouble((random.NextDouble() - 0.5) * 2 * scale * 0.1);
+                _weights[o, i] = NumOps.FromDouble((random.NextDouble() - 0.5) * 2 * scale * 0.1);
                 // Initialize biases close to origin (small values for Poincare ball)
-                _biases[o, i] = _numOps.FromDouble((random.NextDouble() - 0.5) * 2 * 0.01);
+                _biases[o, i] = NumOps.FromDouble((random.NextDouble() - 0.5) * 2 * 0.01);
             }
         }
     }
@@ -527,7 +527,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
         }
 
-        var epsilon = _numOps.FromDouble(1e-5);
+        var epsilon = NumOps.FromDouble(1e-5);
 
         for (int o = 0; o < OutputFeatures; o++)
         {
@@ -535,8 +535,8 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
             for (int i = 0; i < InputFeatures; i++)
             {
                 var grad = _weightsGradient[o, i];
-                var scaledGrad = _numOps.Multiply(learningRate, grad);
-                _weights[o, i] = _numOps.Subtract(_weights[o, i], scaledGrad);
+                var scaledGrad = NumOps.Multiply(learningRate, grad);
+                _weights[o, i] = NumOps.Subtract(_weights[o, i], scaledGrad);
             }
 
             // Update biases using Riemannian gradient descent
@@ -546,7 +546,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
             for (int j = 0; j < InputFeatures; j++)
             {
                 biasPoint[j] = _biases[o, j];
-                tangentVec[j] = _numOps.Negate(_numOps.Multiply(learningRate, _biasesGradient[o, j]));
+                tangentVec[j] = NumOps.Negate(NumOps.Multiply(learningRate, _biasesGradient[o, j]));
             }
 
             // Project bias to valid region and apply exponential map update once per output
@@ -725,7 +725,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         var biasesNode = TensorOperations<T>.Constant(biasTensor, "biases");
 
         // Get curvature as double for TensorOperations
-        double curvature = _numOps.ToDouble(_curvature);
+        double curvature = NumOps.ToDouble(_curvature);
 
         // Apply HyperbolicLinear operation
         var outputNode = TensorOperations<T>.HyperbolicLinear(
@@ -771,7 +771,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         var origin = new Vector<T>(dimension);
         for (int i = 0; i < dimension; i++)
         {
-            origin[i] = _numOps.Zero;
+            origin[i] = NumOps.Zero;
         }
         return origin;
     }

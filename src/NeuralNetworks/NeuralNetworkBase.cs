@@ -2523,7 +2523,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
 
-            if (trainableParams.Length > 0)
+            if (trainableParams.Count > 0)
             {
                 // Tape-based training: delegates forward/backward/update to TrainWithTape
                 // which uses the configured optimizer via Step(TapeStepContext)
@@ -2666,8 +2666,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (layer is ITrainableLayer<T> trainable)
             {
                 var layerParams = trainable.GetTrainableParameters();
-                var layerViews = new Tensor<T>[layerParams.Length];
-                for (int i = 0; i < layerParams.Length; i++)
+                var layerViews = new Tensor<T>[layerParams.Count];
+                for (int i = 0; i < layerParams.Count; i++)
                     layerViews[i] = views[viewIdx++];
                 trainable.SetTrainableParameters(layerViews);
             }
@@ -4022,7 +4022,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         // Try tape-based gradient computation first (preferred path)
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
-        if (trainableParams.Length > 0)
+        if (trainableParams.Count > 0)
         {
             try
             {
