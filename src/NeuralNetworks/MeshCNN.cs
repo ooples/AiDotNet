@@ -555,16 +555,20 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
         for (int i = 0; i < fcLen; i++)
             _options.FullyConnectedSizes[i] = reader.ReadInt32();
 
-        // Deserialize edge adjacency matrix
-        int adjRows = reader.ReadInt32();
-        int adjCols = reader.ReadInt32();
-        if (adjRows > 0 && adjCols > 0)
+        // Deserialize edge adjacency matrix (guard for older serialized models
+        // that don't include adjacency data)
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
         {
-            var adjacency = new int[adjRows, adjCols];
-            for (int r = 0; r < adjRows; r++)
-                for (int c = 0; c < adjCols; c++)
-                    adjacency[r, c] = reader.ReadInt32();
-            SetEdgeAdjacency(adjacency);
+            int adjRows = reader.ReadInt32();
+            int adjCols = reader.ReadInt32();
+            if (adjRows > 0 && adjCols > 0)
+            {
+                var adjacency = new int[adjRows, adjCols];
+                for (int r = 0; r < adjRows; r++)
+                    for (int c = 0; c < adjCols; c++)
+                        adjacency[r, c] = reader.ReadInt32();
+                SetEdgeAdjacency(adjacency);
+            }
         }
     }
 

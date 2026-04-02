@@ -447,7 +447,9 @@ public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtra
             // Handle any tensor rank (2D, 3D, 4D, 5D, etc.)
             // Dimension 0 is batch, dimension 1 is features/channels
             // Dimensions 2+ are spatial dimensions
-            var result = ApplyInferenceAnyRank(input, _cachedInferenceScale, _cachedInferenceShift);
+            var inferenceScale = _cachedInferenceScale ?? throw new InvalidOperationException("Inference scale not initialized.");
+            var inferenceShift = _cachedInferenceShift ?? throw new InvalidOperationException("Inference shift not initialized.");
+            var result = ApplyInferenceAnyRank(input, inferenceScale, inferenceShift);
 
             // Preserve original rank
             if (_inputWas1D)

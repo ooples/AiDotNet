@@ -340,7 +340,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <summary>
     /// Enables deterministic CPU inference by setting MKL to single-threaded.
     /// Call from model constructors that need bitwise-identical forward passes.
-    /// Override EnsureDeterministic() to customize per model.
+    /// Note: This sets a process-global BLAS flag. Consider calling it once at
+    /// application startup rather than from individual model constructors if
+    /// multiple models coexist.
     /// </summary>
     public static void EnableDeterministicMode()
     {

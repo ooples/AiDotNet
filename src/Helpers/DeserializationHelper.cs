@@ -111,14 +111,23 @@ public static class DeserializationHelper
         else if (genericDef == typeof(NeuralNetworks.Layers.ReconstructionLayer<>))
         {
             // ReconstructionLayer(int inputDim, int hidden1Dim, int hidden2Dim, int outputDim, ...)
+            // Two constructor overloads: scalar (IActivationFunction) vs vector (IVectorActivationFunction)
             int inputDim = inputShape[^1];
             int outputDim = outputShape[^1];
             int hidden1 = TryGetInt(additionalParams, "Hidden1Dim") ?? 512;
             int hidden2 = TryGetInt(additionalParams, "Hidden2Dim") ?? 1024;
+            bool useVector = additionalParams != null
+                && additionalParams.TryGetValue("UseVectorActivation", out var uvVal)
+                && bool.TryParse(uvVal as string, out var uv) && uv;
+
+            var vectorActivationType = typeof(IVectorActivationFunction<>).MakeGenericType(typeof(T));
+            var scalarActivationType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var targetActivationType = useVector ? vectorActivationType : scalarActivationType;
 
             var ctor = type.GetConstructors()
                 .FirstOrDefault(c => c.GetParameters().Length >= 4 &&
-                    c.GetParameters().Take(4).All(p => p.ParameterType == typeof(int)));
+                    c.GetParameters().Take(4).All(p => p.ParameterType == typeof(int)) &&
+                    (c.GetParameters().Length < 5 || c.GetParameters()[4].ParameterType == targetActivationType));
             if (ctor is null)
                 throw new InvalidOperationException("Cannot find ReconstructionLayer constructor.");
             var args = new object?[ctor.GetParameters().Length];

@@ -495,10 +495,10 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
             if (layer is ReservoirLayer<T>)
                 continue; // Skip fixed reservoir
 
-            if (layer.SupportsTraining)
+            if (layer.SupportsTraining && layer.ParameterCount > 0)
             {
-                try { layer.UpdateParameters(readoutLr); }
-                catch (InvalidOperationException) { /* skip layers without backward */ }
+                layer.UpdateParameters(readoutLr);
+                layer.ClearGradients();
             }
         }
     }

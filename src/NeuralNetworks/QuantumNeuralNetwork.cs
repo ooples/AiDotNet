@@ -506,7 +506,12 @@ public class QuantumNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private void UpdateQuantumParameters(List<Tensor<T>> gradients)
     {
-        // Per-layer direct update via optimizer (uses configured learning rate)
+        // Per-layer SGD update using the optimizer's configured learning rate.
+        // Note: This uses the base GradientBasedOptimizerBase.UpdateParameters(Layers)
+        // which applies plain SGD via layer.UpdateParameters(lr). Adam moment estimates
+        // are not used here because per-layer updates don't expose gradient vectors
+        // to the optimizer. This is intentional for quantum parameter updates where
+        // layers manage their own gradient application internally.
         _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _trainOptimizer.UpdateParameters(Layers);
     }
