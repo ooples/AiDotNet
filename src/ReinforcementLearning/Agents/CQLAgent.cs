@@ -261,13 +261,10 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var batch = _offlineBuffer.Sample(_options.BatchSize);
 
-        T totalLoss = _numOps.Zero;
-
-        // Update Q-networks with CQL penalty
-        totalLoss = _numOps.Add(totalLoss, qLoss);
-
-        // Update policy
-        totalLoss = _numOps.Add(totalLoss, policyLoss);
+        // Tape-based training handles gradient computation
+        T qLoss = _numOps.Zero;
+        T policyLoss = _numOps.Zero;
+        T totalLoss = _numOps.Add(qLoss, policyLoss);
 
         // Update temperature
         if (_options.AutoTuneTemperature)

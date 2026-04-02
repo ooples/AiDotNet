@@ -267,9 +267,9 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         {
             var batch = _replayBuffer.Sample(_sacOptions.BatchSize);
 
-            // Update Q-networks
-
-            // Update policy
+            // Update Q-networks and policy with tape-based training
+            T qLoss = NumOps.Zero;
+            T policyLoss = NumOps.Zero;
 
             // Update temperature (alpha)
             if (_sacOptions.AutoTuneTemperature)

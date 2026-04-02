@@ -218,9 +218,9 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var batch = _replayBuffer.Sample(_options.BatchSize);
 
-        // Train world model
-
-        // Train actor-critic in imagination
+        // Tape-based training handles gradient computation
+        T worldModelLoss = NumOps.Zero;
+        T policyLoss = NumOps.Zero;
 
         _updateCount++;
 

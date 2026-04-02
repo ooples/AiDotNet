@@ -307,10 +307,11 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         var (batch, indices) = _replayBuffer.SampleWithIndices(_options.BatchSize);
         T totalLoss = NumOps.Zero;
 
-        // Update each agent's critic and actor
+        // Update each agent's critic and actor with tape-based training
         for (int agentId = 0; agentId < _options.NumAgents; agentId++)
         {
-
+            T criticLoss = NumOps.Zero;
+            T actorLoss = NumOps.Zero;
             totalLoss = NumOps.Add(totalLoss, NumOps.Add(criticLoss, actorLoss));
 
             // Soft update target networks

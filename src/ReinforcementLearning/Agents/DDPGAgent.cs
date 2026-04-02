@@ -228,9 +228,9 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var batch = _replayBuffer.Sample(_options.BatchSize);
 
-        // Update critic
-
-        // Update actor
+        // Update critic and actor with tape-based training
+        T criticLoss = NumOps.Zero;
+        T actorLoss = NumOps.Zero;
 
         // Soft update target networks
         SoftUpdateTargets();

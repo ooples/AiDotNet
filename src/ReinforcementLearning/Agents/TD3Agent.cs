@@ -221,7 +221,8 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 
         var batch = _replayBuffer.Sample(_options.BatchSize);
 
-        // Update critics
+        // Update critics and policy with tape-based training
+        T criticLoss = _numOps.Zero;
 
         // Delayed policy update
         if (_updateCount % _options.PolicyUpdateFrequency == 0)

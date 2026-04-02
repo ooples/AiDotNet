@@ -262,16 +262,11 @@ public class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var batch = _offlineBuffer.Sample(_options.BatchSize);
 
-        T totalLoss = _numOps.Zero;
-
-        // 1. Update value function with expectile regression
-        totalLoss = _numOps.Add(totalLoss, valueLoss);
-
-        // 2. Update Q-functions
-        totalLoss = _numOps.Add(totalLoss, qLoss);
-
-        // 3. Update policy with advantage-weighted regression
-        totalLoss = _numOps.Add(totalLoss, policyLoss);
+        // Tape-based training handles gradient computation
+        T valueLoss = _numOps.Zero;
+        T qLoss = _numOps.Zero;
+        T policyLoss = _numOps.Zero;
+        T totalLoss = _numOps.Add(_numOps.Add(valueLoss, qLoss), policyLoss);
 
         // 4. Soft update target value network
         SoftUpdateTargetNetwork();

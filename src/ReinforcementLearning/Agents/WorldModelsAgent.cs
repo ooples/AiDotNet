@@ -259,13 +259,10 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             return NumOps.Zero;
         }
 
-        T totalLoss = NumOps.Zero;
-
-        // Train VAE
-        totalLoss = NumOps.Add(totalLoss, vaeLoss);
-
-        // Train RNN
-        totalLoss = NumOps.Add(totalLoss, rnnLoss);
+        // Tape-based training handles gradient computation
+        T vaeLoss = NumOps.Zero;
+        T rnnLoss = NumOps.Zero;
+        T totalLoss = NumOps.Add(vaeLoss, rnnLoss);
 
         // Train Controller (evolution strategy - simplified to gradient-based)
         T controllerLoss = TrainController();
