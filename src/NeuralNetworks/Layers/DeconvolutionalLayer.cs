@@ -704,8 +704,13 @@ public class DeconvolutionalLayer<T> : LayerBase<T>, ITrainableLayer<T>
         if (_kernelsGradient == null || _biasesGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _kernels = Engine.TensorSubtract(_kernels, Engine.TensorMultiplyScalar(_kernelsGradient, learningRate));
-        _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
+        // Compute updated values and copy back in-place to preserve GPU-registered tensor references
+        var updatedKernels = Engine.TensorSubtract(_kernels, Engine.TensorMultiplyScalar(_kernelsGradient, learningRate));
+        var updatedBiases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
+        for (int i = 0; i < _kernels.Length; i++)
+            _kernels[i] = updatedKernels[i];
+        for (int i = 0; i < _biases.Length; i++)
+            _biases[i] = updatedBiases[i];
 
         // Invalidate GPU cache after parameter update
         Engine.InvalidatePersistentTensor(_kernels);

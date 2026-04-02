@@ -687,7 +687,10 @@ public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtra
     {
         int featureSize = InputShape[0];
         if (extraParameters.Length != featureSize * 2)
-            return; // graceful no-op for legacy data without extras
+            throw new ArgumentException(
+                $"BatchNormalization extra parameters must have length {featureSize * 2} " +
+                $"(mean + variance for {featureSize} features), but got {extraParameters.Length}.",
+                nameof(extraParameters));
 
         var meanVec = extraParameters.Slice(0, featureSize);
         var varVec = extraParameters.Slice(featureSize, featureSize);
@@ -761,12 +764,16 @@ public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtra
 
             gpuEngine.SgdMomentumUpdateGpu(_gamma, _gammaGradient, _gammaVelocity, lr, 0.0f, 0.0f);
             gpuEngine.SgdMomentumUpdateGpu(_beta, _betaGradient, _betaVelocity, lr, 0.0f, 0.0f);
+            _inferenceScaleDirty = true;
         }
         else
         {
             // Production-grade: Use Engine operations instead of manual loops
             _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
             _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+
+            // Invalidate cached inference terms since gamma/beta changed
+            _inferenceScaleDirty = true;
 
             // Notify GPU that tensor data has changed
             Engine.InvalidatePersistentTensor(_gamma);

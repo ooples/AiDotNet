@@ -21,9 +21,9 @@ public sealed record LayerPort
 
     public LayerPort(string Name, int[] Shape, bool Required = true)
     {
-        this.Name = Name;
+        this.Name = Name ?? throw new ArgumentNullException(nameof(Name));
         // Defensive copy to prevent callers from mutating the layer's shape
-        this.Shape = (int[])Shape.Clone();
+        this.Shape = Shape != null ? (int[])Shape.Clone() : throw new ArgumentNullException(nameof(Shape));
         this.Required = Required;
     }
 }

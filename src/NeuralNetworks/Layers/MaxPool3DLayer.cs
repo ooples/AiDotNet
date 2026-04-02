@@ -318,6 +318,8 @@ public class MaxPool3DLayer<T> : LayerBase<T>
         var poolSizeArr = new[] { PoolSize, PoolSize, PoolSize };
         var strideArr = new[] { Stride, Stride, Stride };
 
+        // Dispose previous indices buffer to prevent GPU memory leak
+        (_gpuIndicesBuffer as IDisposable)?.Dispose();
         var output = gpuEngine.MaxPool3DGpu<T>(input5D, poolSizeArr, strideArr, out _gpuIndicesBuffer);
 
         // Store _lastInput for backward pass

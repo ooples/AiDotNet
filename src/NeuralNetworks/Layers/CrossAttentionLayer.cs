@@ -153,7 +153,7 @@ public class CrossAttentionLayer<T> : LayerBase<T>, ITrainableLayer<T>
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (rows + cols)));
 
         var span = weights.AsWritableSpan();
-        var rng = RandomHelper.CreateSeededRandom(42);
+        var rng = RandomHelper.CreateSecureRandom();
         for (int i = 0; i < span.Length; i++)
         {
             double val = (rng.NextDouble() - 0.5) * NumOps.ToDouble(scale);
