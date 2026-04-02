@@ -236,76 +236,32 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Compute discounted returns
         ComputeReturns();
 
-        // Compute policy loss: -log_prob * return
-        T totalLoss = NumOps.Zero;
+        // Build batched state tensor
+        int stateSize = _reinforceOptions.StateSize;
+        int trajLen = _trajectory.Length;
+        var returns = _trajectory.Returns ?? throw new InvalidOperationException("Returns not initialized.");
 
-        for (int t = 0; t < _trajectory.Length; t++)
+        var batchStates = new Tensor<T>([trajLen, stateSize]);
+        for (int i = 0; i < trajLen; i++)
+            for (int j = 0; j < stateSize; j++)
+                batchStates[i, j] = _trajectory.States[i][j];
+
+        // REINFORCE policy gradient: -mean(log_prob * return)
+        var trainablePolicy = (NeuralNetworkBase<T>)_policyNetwork;
+        T avgLoss = trainablePolicy.TrainWithCustomLoss(batchStates, policyOutput =>
         {
-            var state = _trajectory.States[t];
-            var action = _trajectory.Actions[t];
-            var returnVal = (_trajectory.Returns ?? throw new InvalidOperationException("Returns has not been initialized."))[t];
-
-            var logProb = ComputeLogProb(state, action);
-
-            // Policy gradient: -log_prob * return
-            var loss = NumOps.Multiply(NumOps.Negate(logProb), returnVal);
-            totalLoss = NumOps.Add(totalLoss, loss);
-
-            // Compute output gradient for REINFORCE: ∇ loss w.r.t. policy output
-            // For discrete: gradient is -G_t * (1_{a=a_t} - π(a|s)) for each action
-            // For continuous: gradient depends on distribution type
-            var stateTensor = Tensor<T>.FromVector(state);
-            var policyOutputTensor = _policyNetwork.Predict(stateTensor);
-            var policyOutput = policyOutputTensor.ToVector();
-            var outputGradient = new Vector<T>(policyOutput.Length);
-
-            if (_reinforceOptions.IsContinuous)
+            T totalLoss = NumOps.Zero;
+            for (int t = 0; t < trajLen; t++)
             {
-                // Continuous action space: Gaussian policy with mean and log_std
-                // Output is [mean_1, ..., mean_n, log_std_1, ..., log_std_n]
-                int actionSize = _reinforceOptions.ActionSize;
-                for (int i = 0; i < actionSize; i++)
-                {
-                    var mean = policyOutput[i];
-                    var logStd = policyOutput[actionSize + i];
-                    var std = NumOps.Exp(logStd);
-
-                    // Gradient of -log π(a|s) * G_t w.r.t. mean: -(a - μ) / σ² * G_t
-                    var actionDiff = NumOps.Subtract(action[i], mean);
-                    var stdSquared = NumOps.Multiply(std, std);
-                    outputGradient[i] = NumOps.Negate(
-                        NumOps.Multiply(returnVal, NumOps.Divide(actionDiff, stdSquared)));
-
-                    // Gradient w.r.t. log_std: -((a-μ)² / σ² - 1) * G_t
-                    var normalizedDiff = NumOps.Divide(actionDiff, std);
-                    var term = NumOps.Subtract(NumOps.Multiply(normalizedDiff, normalizedDiff), NumOps.One);
-                    outputGradient[actionSize + i] = NumOps.Negate(NumOps.Multiply(returnVal, term));
-                }
-            }
-            else
-            {
-                // Discrete action space: softmax policy
-                // Gradient: -G_t * (1_{a=a_t} - softmax(logits))
-                var softmax = ComputeSoftmax(policyOutput);
-                int selectedAction = GetDiscreteAction(action);
-
-                for (int i = 0; i < policyOutput.Length; i++)
-                {
-                    var indicator = (i == selectedAction) ? NumOps.One : NumOps.Zero;
-                    var grad = NumOps.Subtract(indicator, softmax[i]);
-                    outputGradient[i] = NumOps.Negate(NumOps.Multiply(returnVal, grad));
-                }
+                var logProb = ComputeLogProb(_trajectory.States[t], _trajectory.Actions[t]);
+                totalLoss = NumOps.Subtract(totalLoss,
+                    NumOps.Multiply(logProb, returns[t]));
             }
 
-            // Backpropagate through policy network
-            var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
-        }
-
-        // Average loss
-        var avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(_trajectory.Length));
-
-        // Update policy network
-        UpdatePolicyNetwork();
+            var lossTensor = new Tensor<T>([1]);
+            lossTensor[0] = NumOps.Divide(totalLoss, NumOps.FromDouble(trajLen));
+            return lossTensor;
+        });
 
         LossHistory.Add(avgLoss);
         _trajectory.Clear();
@@ -354,15 +310,8 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
         _trajectory.Returns = returns;
     }
 
-    private void UpdatePolicyNetwork()
-    {
-        var params_ = _policyNetwork.GetParameters();
-        var grads = _policyNetwork.GetParameterGradients();
-
-        // Vectorized SGD
-        params_ = (Vector<T>)Engine.Subtract(params_, Engine.Multiply(grads, LearningRate));
-        _policyNetwork.UpdateParameters(params_);
-    }
+    // UpdatePolicyNetwork removed — policy network now trained via TrainWithCustomLoss
+    // which uses the configured optimizer and tape-based gradient computation.
 
     /// <inheritdoc/>
     public override Dictionary<string, T> GetMetrics()
