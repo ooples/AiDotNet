@@ -108,9 +108,6 @@ public class SoftTreeLayer<T> : LayerBase<T>
 
     private void InitializeParameters(double scale)
     {
-        RegisterTrainableParameter(_splitWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_splitBiases, PersistentTensorRole.Biases);
-
         var random = RandomHelper.ThreadSafeRandom;
 
         // Initialize split weights using Gaussian initialization
@@ -136,6 +133,10 @@ public class SoftTreeLayer<T> : LayerBase<T>
             double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
             _leafValues[i] = NumOps.FromDouble(normal * scale);
         }
+
+        // Register after initialization so tensor references are final
+        RegisterTrainableParameter(_splitWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_splitBiases, PersistentTensorRole.Biases);
     }
 
     /// <summary>

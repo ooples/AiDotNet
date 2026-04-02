@@ -201,6 +201,9 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITrainableL
         _bias = new Tensor<T>([numCapsules * capsuleDimension]);
 
         InitializeParameters();
+
+        RegisterTrainableParameter(_transformationMatrix, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
     }
 
     /// <summary>

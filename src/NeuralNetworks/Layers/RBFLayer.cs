@@ -503,15 +503,16 @@ public class RBFLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        RegisterTrainableParameter(_centers, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_widths, PersistentTensorRole.Weights);
-
         InitializeLayerWeights(_centers, _inputSize, _numCenters);
 
         // Widths are RBF-specific: random positive values, not Xavier
         var widthSpan = _widths.AsWritableSpan();
         for (int i = 0; i < widthSpan.Length; i++)
             widthSpan[i] = NumOps.FromDouble(Random.NextDouble());
+
+        // Register after initialization so tensor references are final
+        RegisterTrainableParameter(_centers, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_widths, PersistentTensorRole.Weights);
     }
 
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)

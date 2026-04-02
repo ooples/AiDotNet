@@ -322,7 +322,9 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             _edgeWeights = new Tensor<T>([edgeFeatureDim, _messageFeatures]);
         }
 
-        // Register all trainable parameters for gradient tape discovery
+        InitializeParameters();
+
+        // Register after initialization so tensor references are final
         RegisterTrainableParameter(_messageWeights1, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_messageWeights2, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_messageBias1, PersistentTensorRole.Biases);
@@ -334,8 +336,6 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         RegisterTrainableParameter(_resetMessageWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_resetBias, PersistentTensorRole.Biases);
         if (_edgeWeights is not null) RegisterTrainableParameter(_edgeWeights, PersistentTensorRole.Weights);
-
-        InitializeParameters();
     }
 
     /// <summary>

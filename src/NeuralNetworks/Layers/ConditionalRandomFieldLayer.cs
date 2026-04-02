@@ -414,10 +414,6 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        RegisterTrainableParameter(_transitionMatrix, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_startScores, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_endScores, PersistentTensorRole.Weights);
-
         // VECTORIZED: Initialize parameters with scaled random values
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_numClasses + _numClasses)));
         T half = NumOps.FromDouble(0.5);
@@ -442,6 +438,11 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         endHalf.Fill(half);
         var endCentered = Engine.TensorSubtract(endRandom, endHalf);
         _endScores = Engine.TensorMultiplyScalar(endCentered, scale);
+
+        // Register after all reassignments so references are to final tensors
+        RegisterTrainableParameter(_transitionMatrix, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_startScores, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_endScores, PersistentTensorRole.Weights);
     }
 
     /// <summary>

@@ -300,9 +300,6 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        RegisterTrainableParameter(_convWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_convBias, PersistentTensorRole.Biases);
-
         int rows = _convWeights.Shape[0];
         int cols = _convWeights.Shape[1];
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (rows + cols)));
@@ -316,6 +313,10 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
 
         // Initialize bias to zero using Fill
         _convBias.Fill(NumOps.Zero);
+
+        // Register after all reassignments so references are to final tensors
+        RegisterTrainableParameter(_convWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_convBias, PersistentTensorRole.Biases);
     }
 
     /// <summary>

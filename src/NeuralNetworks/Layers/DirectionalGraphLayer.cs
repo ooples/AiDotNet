@@ -248,7 +248,9 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             _gateBias = new Tensor<T>([3]);
         }
 
-        // Register all trainable parameters for gradient tape discovery
+        InitializeParameters();
+
+        // Register after initialization so tensor references are final
         RegisterTrainableParameter(_incomingWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outgoingWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_selfWeights, PersistentTensorRole.Weights);
@@ -259,8 +261,6 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         RegisterTrainableParameter(_combinationBias, PersistentTensorRole.Biases);
         if (_gateWeights is not null) RegisterTrainableParameter(_gateWeights, PersistentTensorRole.Weights);
         if (_gateBias is not null) RegisterTrainableParameter(_gateBias, PersistentTensorRole.Biases);
-
-        InitializeParameters();
     }
 
     private void InitializeParameters()

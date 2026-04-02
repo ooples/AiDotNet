@@ -176,12 +176,12 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _mlpBias1 = new Tensor<T>([_mlpHiddenDim]);
         _mlpBias2 = new Tensor<T>([_outputFeatures]);
 
+        InitializeParameters();
+
         RegisterTrainableParameter(_mlpWeights1, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_mlpWeights2, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_mlpBias1, PersistentTensorRole.Biases);
         RegisterTrainableParameter(_mlpBias2, PersistentTensorRole.Biases);
-
-        InitializeParameters();
     }
 
     /// <summary>
