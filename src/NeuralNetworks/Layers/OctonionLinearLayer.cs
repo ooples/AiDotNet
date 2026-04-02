@@ -39,7 +39,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public class OctonionLinearLayer<T> : LayerBase<T>
 {
     private readonly IAdvancedAlgebraEngine _engine;
-    private readonly INumericOperations<T> _numOps;
 
     /// <summary>
     /// The octonion weight matrix connecting input to output neurons.
@@ -75,32 +74,6 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     /// Gradient for biases, stored during backward pass.
     /// </summary>
     private Octonion<T>[]? _biasesGradient;
-
-    // GPU caching fields for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private int[]? _gpuInputShape;
-
-    #region GPU Weight Storage Fields
-
-    // GPU weight tensors for GPU-resident training (octonions stored as flat arrays)
-    private GpuTensor<T>? _gpuWeights;
-    private GpuTensor<T>? _gpuBiases;
-
-    // GPU gradient tensors from BackwardGpu
-    private GpuTensor<T>? _gpuWeightGradient;
-    private GpuTensor<T>? _gpuBiasGradient;
-
-    // Optimizer state tensors for SGD/NAG/LARS (velocity)
-    private GpuTensor<T>? _gpuWeightVelocity;
-    private GpuTensor<T>? _gpuBiasVelocity;
-
-    // Optimizer state tensors for Adam/AdamW/LAMB (M and V)
-    private GpuTensor<T>? _gpuWeightM;
-    private GpuTensor<T>? _gpuWeightV;
-    private GpuTensor<T>? _gpuBiasM;
-    private GpuTensor<T>? _gpuBiasV;
-
-    #endregion
 
     /// <summary>
     /// Gets the number of input features (octonion-valued).
@@ -157,7 +130,6 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         OutputFeatures = outputFeatures;
 
         _engine = CpuAdvancedAlgebraEngine.Instance;
-        _numOps = MathHelper.GetNumericOperations<T>();
 
         _weights = new Octonion<T>[outputFeatures, inputFeatures];
         _biases = new Octonion<T>[outputFeatures];
@@ -293,130 +265,7 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the GPU-accelerated forward pass for octonion linear transformation.
-    /// </summary>
-    /// <param name="inputs">The GPU tensor inputs. First element is the input activation.</param>
-    /// <returns>A GPU tensor containing the octonion transformation output.</returns>
-    /// <remarks>
-    /// The octonion layer performs matrix-vector multiplication in 8-dimensional octonion algebra.
-    /// This method uses a specialized CUDA kernel to perform octonion operations entirely on GPU.
-    /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
-    {
-        if (inputs == null || inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        var input = inputs[0];
-
-        // Validate GPU engine availability
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend is not available.");
-
-        // Determine batch size from input shape
-        int batchSize;
-        if (input.Shape.Length == 1)
-        {
-            batchSize = 1;
-        }
-        else if (input.Shape.Length == 2)
-        {
-            batchSize = input.Shape[0];
-        }
-        else
-        {
-            // Flatten higher-rank tensors to batch
-            batchSize = 1;
-            for (int d = 0; d < input.Shape.Length - 1; d++)
-            {
-                batchSize *= input.Shape[d];
-            }
-        }
-
-        // Cache input for backward pass if in training mode
-        if (IsTrainingMode)
-        {
-            _gpuInput = input;
-            _gpuInputShape = input.Shape.ToArray().ToArray();
-        }
-
-        // Flatten weights to GPU buffer: [outputFeatures * inputFeatures * 8]
-        var weightsFlat = new float[OutputFeatures * InputFeatures * 8];
-        int wIdx = 0;
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            for (int i = 0; i < InputFeatures; i++)
-            {
-                var oct = _weights[o, i];
-                weightsFlat[wIdx++] = _numOps.ToFloat(oct.Scalar);
-                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E1);
-                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E2);
-                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E3);
-                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E4);
-                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E5);
-                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E6);
-                weightsFlat[wIdx++] = _numOps.ToFloat(oct.E7);
-            }
-        }
-        var weightsBuffer = backend.AllocateBuffer(weightsFlat);
-
-        // Flatten biases to GPU buffer: [outputFeatures * 8]
-        var biasesFlat = new float[OutputFeatures * 8];
-        int bIdx = 0;
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            var oct = _biases[o];
-            biasesFlat[bIdx++] = _numOps.ToFloat(oct.Scalar);
-            biasesFlat[bIdx++] = _numOps.ToFloat(oct.E1);
-            biasesFlat[bIdx++] = _numOps.ToFloat(oct.E2);
-            biasesFlat[bIdx++] = _numOps.ToFloat(oct.E3);
-            biasesFlat[bIdx++] = _numOps.ToFloat(oct.E4);
-            biasesFlat[bIdx++] = _numOps.ToFloat(oct.E5);
-            biasesFlat[bIdx++] = _numOps.ToFloat(oct.E6);
-            biasesFlat[bIdx++] = _numOps.ToFloat(oct.E7);
-        }
-        var biasesBuffer = backend.AllocateBuffer(biasesFlat);
-
-        // Allocate output buffer: [batchSize * outputFeatures * 8]
-        var outputBuffer = backend.AllocateBuffer(batchSize * OutputFeatures * 8);
-
-        // Call the GPU kernel for octonion linear forward
-        backend.OctonionLinearForward(
-            input.Buffer, weightsBuffer, biasesBuffer, outputBuffer,
-            batchSize, InputFeatures, OutputFeatures);
-
-        // Clean up temporary GPU buffers
-        weightsBuffer.Dispose();
-        biasesBuffer.Dispose();
-
-        // Determine output shape
-        int[] outputShape;
-        if (input.Shape.Length == 1)
-        {
-            outputShape = [OutputFeatures * 8];
-        }
-        else if (input.Shape.Length == 2)
-        {
-            outputShape = [batchSize, OutputFeatures * 8];
-        }
-        else
-        {
-            // Restore higher-rank shape
-            outputShape = new int[input.Shape.Length];
-            for (int d = 0; d < input.Shape.Length - 1; d++)
-            {
-                outputShape[d] = input.Shape[d];
-            }
-            outputShape[input.Shape.Length - 1] = OutputFeatures * 8;
-        }
-
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <summary> using the calculated gradients.
+    /// Updates the parameters of the layer using the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate to use for the update.</param>
     public override void UpdateParameters(T learningRate)
@@ -758,149 +607,4 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         return result;
     }
 
-    #region GPU Parameter Updates
-
-    /// <summary>
-    /// Updates parameters using GPU-based optimizer.
-    /// </summary>
-    /// <param name="config">GPU optimizer configuration specifying the optimizer type and hyperparameters.</param>
-    public override void UpdateParametersGpu(IGpuOptimizerConfig config)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("UpdateParametersGpu requires DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
-
-        if (_gpuWeightGradient == null || _gpuBiasGradient == null)
-            throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
-
-        // Convert weights and biases to flat tensors for GPU operations (8 components per octonion)
-        int weightSize = OutputFeatures * InputFeatures * 8;
-        int biasSize = OutputFeatures * 8;
-        var weightTensor = new Tensor<T>([weightSize]);
-        var biasTensor = new Tensor<T>([biasSize]);
-
-        int wIdx = 0;
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            for (int i = 0; i < InputFeatures; i++)
-            {
-                var oct = _weights[o, i];
-                weightTensor.Data.Span[wIdx++] = oct.Scalar;
-                weightTensor.Data.Span[wIdx++] = oct.E1;
-                weightTensor.Data.Span[wIdx++] = oct.E2;
-                weightTensor.Data.Span[wIdx++] = oct.E3;
-                weightTensor.Data.Span[wIdx++] = oct.E4;
-                weightTensor.Data.Span[wIdx++] = oct.E5;
-                weightTensor.Data.Span[wIdx++] = oct.E6;
-                weightTensor.Data.Span[wIdx++] = oct.E7;
-            }
-        }
-
-        int bIdx = 0;
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            var oct = _biases[o];
-            biasTensor.Data.Span[bIdx++] = oct.Scalar;
-            biasTensor.Data.Span[bIdx++] = oct.E1;
-            biasTensor.Data.Span[bIdx++] = oct.E2;
-            biasTensor.Data.Span[bIdx++] = oct.E3;
-            biasTensor.Data.Span[bIdx++] = oct.E4;
-            biasTensor.Data.Span[bIdx++] = oct.E5;
-            biasTensor.Data.Span[bIdx++] = oct.E6;
-            biasTensor.Data.Span[bIdx++] = oct.E7;
-        }
-
-        // Ensure GPU weight tensors exist
-        _gpuWeights ??= new GpuTensor<T>(backend, weightTensor, GpuTensorRole.Weight);
-        _gpuBiases ??= new GpuTensor<T>(backend, biasTensor, GpuTensorRole.Bias);
-
-        // Ensure optimizer state buffers exist
-        EnsureOctonionOptimizerState(backend, config.OptimizerType);
-
-        // Apply updates using polymorphic optimizer dispatch
-        config.ApplyUpdate(backend, _gpuWeights.Buffer, _gpuWeightGradient.Buffer, BuildOctonionOptimizerState("weights"), weightSize);
-        config.ApplyUpdate(backend, _gpuBiases.Buffer, _gpuBiasGradient.Buffer, BuildOctonionOptimizerState("biases"), biasSize);
-
-        // Sync back to CPU octonion arrays for compatibility
-        var updatedWeights = _gpuWeights.ToTensor();
-        var updatedBiases = _gpuBiases.ToTensor();
-
-        wIdx = 0;
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            for (int i = 0; i < InputFeatures; i++)
-            {
-                _weights[o, i] = new Octonion<T>(
-                    updatedWeights.Data.Span[wIdx], updatedWeights.Data.Span[wIdx + 1],
-                    updatedWeights.Data.Span[wIdx + 2], updatedWeights.Data.Span[wIdx + 3],
-                    updatedWeights.Data.Span[wIdx + 4], updatedWeights.Data.Span[wIdx + 5],
-                    updatedWeights.Data.Span[wIdx + 6], updatedWeights.Data.Span[wIdx + 7]);
-                wIdx += 8;
-            }
-        }
-
-        bIdx = 0;
-        for (int o = 0; o < OutputFeatures; o++)
-        {
-            _biases[o] = new Octonion<T>(
-                updatedBiases.Data.Span[bIdx], updatedBiases.Data.Span[bIdx + 1],
-                updatedBiases.Data.Span[bIdx + 2], updatedBiases.Data.Span[bIdx + 3],
-                updatedBiases.Data.Span[bIdx + 4], updatedBiases.Data.Span[bIdx + 5],
-                updatedBiases.Data.Span[bIdx + 6], updatedBiases.Data.Span[bIdx + 7]);
-            bIdx += 8;
-        }
-    }
-
-    /// <summary>
-    /// Ensures GPU optimizer state buffers exist for all octonion parameters.
-    /// </summary>
-    private void EnsureOctonionOptimizerState(IDirectGpuBackend backend, GpuOptimizerType optimizerType)
-    {
-        int weightSize = OutputFeatures * InputFeatures * 8;
-        int biasSize = OutputFeatures * 8;
-
-        switch (optimizerType)
-        {
-            case GpuOptimizerType.Sgd:
-            case GpuOptimizerType.Nag:
-            case GpuOptimizerType.Lars:
-                // Velocity buffers
-                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], _numOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], _numOps.Zero), GpuTensorRole.OptimizerState);
-                break;
-
-            case GpuOptimizerType.Adam:
-            case GpuOptimizerType.AdamW:
-            case GpuOptimizerType.Lamb:
-                // M and V buffers for Adam-family
-                _gpuWeightM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], _numOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], _numOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], _numOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], _numOps.Zero), GpuTensorRole.OptimizerState);
-                break;
-
-            case GpuOptimizerType.RmsProp:
-            case GpuOptimizerType.Adagrad:
-                // Squared average buffers (reuse velocity fields)
-                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], _numOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], _numOps.Zero), GpuTensorRole.OptimizerState);
-                break;
-        }
-    }
-
-    /// <summary>
-    /// Builds the optimizer state for a specific octonion parameter.
-    /// </summary>
-    private GpuOptimizerState BuildOctonionOptimizerState(string paramName)
-    {
-        return paramName switch
-        {
-            "weights" => new GpuOptimizerState { Velocity = _gpuWeightVelocity?.Buffer, M = _gpuWeightM?.Buffer, V = _gpuWeightV?.Buffer, SquaredAvg = _gpuWeightVelocity?.Buffer, AccumulatedGrad = _gpuWeightVelocity?.Buffer },
-            "biases" => new GpuOptimizerState { Velocity = _gpuBiasVelocity?.Buffer, M = _gpuBiasM?.Buffer, V = _gpuBiasV?.Buffer, SquaredAvg = _gpuBiasVelocity?.Buffer, AccumulatedGrad = _gpuBiasVelocity?.Buffer },
-            _ => new GpuOptimizerState()
-        };
-    }
-
-    #endregion
 }
