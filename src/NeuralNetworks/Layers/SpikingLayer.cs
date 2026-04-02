@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, NormalizesInput = true, IsStateful = true, ChangesShape = true, UsesSurrogateGradient = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
-public class SpikingLayer<T> : LayerBase<T>
+public class SpikingLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// The type of spiking neuron model to use.
@@ -1849,4 +1849,16 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </remarks>
     public override bool SupportsJitCompilation => true;
 
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_weights, _bias];
+
+    /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
+        _weights = parameters[0]; _bias = parameters[1];
+    }
+
+    /// <inheritdoc />
+    public void ZeroGrad() { _weightGradients.Fill(NumOps.Zero); _biasGradients.Fill(NumOps.Zero); }
 }

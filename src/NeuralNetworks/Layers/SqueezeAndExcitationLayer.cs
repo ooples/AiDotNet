@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IChainableComputationGraph<T>
+public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IChainableComputationGraph<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -1684,5 +1684,22 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             resultSpan[i] = NumOps.Multiply(largeSpan[i], smallSpan[i % small.Length]);
         }
         return result;
+    }
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_weights1, _bias1, _weights2, _bias2];
+
+    /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 4) throw new ArgumentException($"Expected 4 parameters, got {parameters.Length}.");
+        _weights1 = parameters[0]; _bias1 = parameters[1]; _weights2 = parameters[2]; _bias2 = parameters[3];
+    }
+
+    /// <inheritdoc />
+    public void ZeroGrad()
+    {
+        _weights1Gradient = null; _bias1Gradient = null;
+        _weights2Gradient = null; _bias2Gradient = null;
     }
 }

@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "8, 3", TestConstructorArgs = "3, 6, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var e = new int[8, 3]; for (int i = 0; i < 8; i++) for (int j = 0; j < 3; j++) e[i, j] = (i * 3 + j + 1) % 8; ((AiDotNet.NeuralNetworks.Layers.MeshEdgeConvLayer<double>)layer).SetEdgeAdjacency(e);")]
-public class MeshEdgeConvLayer<T> : LayerBase<T>
+public class MeshEdgeConvLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     #region Properties
 
@@ -809,4 +809,17 @@ public class MeshEdgeConvLayer<T> : LayerBase<T>
     }
 
     #endregion
+
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_weights, _biases];
+
+    /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
+        _weights = parameters[0]; _biases = parameters[1];
+    }
+
+    /// <inheritdoc />
+    public void ZeroGrad() { _weightsGradient = null; _biasesGradient = null; }
 }

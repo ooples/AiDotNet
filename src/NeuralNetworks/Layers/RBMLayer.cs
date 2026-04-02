@@ -31,7 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class RBMLayer<T> : LayerBase<T>
+public class RBMLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// Gets the number of units in the visible layer.
@@ -995,4 +995,16 @@ public class RBMLayer<T> : LayerBase<T>
     /// </remarks>
     public override bool SupportsJitCompilation => true;
 
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_weights, _visibleBiases, _hiddenBiases];
+
+    /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 3) throw new ArgumentException($"Expected 3 parameters, got {parameters.Length}.");
+        _weights = parameters[0]; _visibleBiases = parameters[1]; _hiddenBiases = parameters[2];
+    }
+
+    /// <inheritdoc />
+    public void ZeroGrad() { _weightsGradient = null; }
 }

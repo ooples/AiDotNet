@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true)]
-public class ReadoutLayer<T> : LayerBase<T>
+public class ReadoutLayer<T> : LayerBase<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// Tensor storing the weight parameters for connections between inputs and outputs.
@@ -667,4 +667,16 @@ public class ReadoutLayer<T> : LayerBase<T>
     public override bool SupportsJitCompilation =>
         _weights != null && _bias != null;
 
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_weights, _bias];
+
+    /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
+        _weights = parameters[0]; _bias = parameters[1];
+    }
+
+    /// <inheritdoc />
+    public void ZeroGrad() { _weightGradients.Fill(NumOps.Zero); _biasGradients.Fill(NumOps.Zero); }
 }

@@ -33,7 +33,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
-public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IGraphConvolutionLayer<T>
+public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IGraphConvolutionLayer<T>, ITrainableLayer<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -1462,4 +1462,16 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
 
     public override bool SupportsJitCompilation => _weights != null && _bias != null && _adjacencyMatrix != null;
 
+    /// <inheritdoc />
+    public Tensor<T>[] GetTrainableParameters() => [_weights, _bias];
+
+    /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
+        _weights = parameters[0]; _bias = parameters[1];
+    }
+
+    /// <inheritdoc />
+    public void ZeroGrad() { _weightsGradient = null; _biasGradient = null; }
 }
