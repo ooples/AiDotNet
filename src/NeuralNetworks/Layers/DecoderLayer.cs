@@ -406,75 +406,9 @@ public class DecoderLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <summary>
-    /// Gets the most recent gradients calculated during the backward pass.
-    /// </summary>
-    /// <returns>A tuple containing the gradient with respect to the input and the gradient with respect to the encoder output.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when accessed before a backward pass has been performed.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This property provides easy access to the separate gradients calculated
-    /// during the last backward pass. It's useful when you need to handle the input gradient and encoder output
-    /// gradient separately, rather than dealing with the concatenated gradient returned by the Backward method.</para>
-    /// </remarks>
-    public (Tensor<T> InputGradient, Tensor<T> EncoderOutputGradient) LastBackwardGradients
-    {
-        get
-        {
-            if (_lastInputGradient == null || _lastEncoderOutputGradient == null)
-                throw new InvalidOperationException("Backward pass must be called before accessing gradients.");
-            return (_lastInputGradient, _lastEncoderOutputGradient);
-        }
-    }
+    // LastBackwardGradients removed — tape-based autodiff handles gradients.
 
-    /// <summary>
-    /// Performs the internal backward pass of the decoder layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>A tuple containing the gradient with respect to the input and the encoder output.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method calculates the gradients for each component of the decoder layer
-    /// (self-attention, cross-attention, feed-forward network, and layer normalizations) in reverse order
-    /// of the forward pass. It's a crucial part of the backpropagation process in neural networks.</para>
-    /// </remarks>
-    private (Tensor<T> inputGradient, Tensor<T> encoderOutputGradient) BackwardInternal(Tensor<T> outputGradient)
-    {
-        // If forward received 2D input, the output gradient will also be 2D
-        // We need to reshape it to 3D to match internal processing shapes
-        Tensor<T> grad3D;
-        bool gradWas2D = outputGradient.Shape.Length == 2;
-
-        if (gradWas2D)
-        {
-            // 2D gradient: [seq, embed] -> [1, seq, embed]
-            grad3D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1]);
-        }
-        else
-        {
-            grad3D = outputGradient;
-        }
-
-        // Backward through Norm3 first (output = Norm3(residual + ff))
-
-        // Backward through FFN (reverse order: projection then expansion)
-        dNormalized2 = dNormalized2.Add(dNorm3); // Residual connection gradient
-
-        var dNormalized1 = dCrossAttention.Add(dNorm2);
-
-        var dInput = dSelfAttention.Add(dNorm1);
-
-        // Encoder output gradient: use the cross-attention gradient (same as dCrossAttention)
-        // since cross-attention outputs depend on both query (from self-attention) and context (encoder)
-        var dEncoderOutput = dCrossAttention;
-
-        // If input was originally 2D, reshape gradients back to 2D
-        if (gradWas2D)
-        {
-            dInput = dInput.Reshape(dInput.Shape[1], dInput.Shape[2]);
-            dEncoderOutput = dEncoderOutput.Reshape(dEncoderOutput.Shape[1], dEncoderOutput.Shape[2]);
-        }
-
-        return (dInput, dEncoderOutput);
-    }
+    // BackwardInternal removed — tape-based autodiff handles decoder gradients.
 
     /// <summary>
     /// Updates the layer's parameters based on the computed gradients and a learning rate.

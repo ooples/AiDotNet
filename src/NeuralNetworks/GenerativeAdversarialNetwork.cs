@@ -798,21 +798,23 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         var realLabels = CreateLabelTensor(batchSize, NumOps.One);
         var fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
 
-        // Train discriminator on real images using tensor operations
+        // Train discriminator with tape-based autodiff
+        Discriminator.Train(realImages, realLabels);
+        Discriminator.Train(fakeImages, fakeLabels);
 
-        // Train discriminator on fake images using tensor operations
-
-        // Compute average discriminator loss
-        var discriminatorLoss = NumOps.Add(realLoss, fakeLoss);
-        discriminatorLoss = NumOps.Divide(discriminatorLoss, NumOps.FromDouble(2.0));
+        // Compute discriminator loss for monitoring
+        var realPred = Discriminator.Predict(realImages);
+        var fakePred = Discriminator.Predict(fakeImages);
+        T realLoss = LossFunction.CalculateLoss(realPred.ToVector(), realLabels.ToVector());
+        T fakeLoss = LossFunction.CalculateLoss(fakePred.ToVector(), fakeLabels.ToVector());
+        var discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
         _lastDiscriminatorLoss = discriminatorLoss;
 
-        // ------------ Train Generator ------------
-
-        // For generator training, we want discriminator to think fake images are real
+        // Train generator with tape
         var allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
-
-        // Train generator to fool discriminator using tensor operations
+        Generator.Train(noise, allRealLabels);
+        var genPred = Discriminator.Predict(GenerateImages(noise));
+        T generatorLoss = LossFunction.CalculateLoss(genPred.ToVector(), allRealLabels.ToVector());
         _lastGeneratorLoss = generatorLoss;
 
         // Calculate auxiliary losses if enabled
