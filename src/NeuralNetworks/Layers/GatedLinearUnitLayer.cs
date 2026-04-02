@@ -625,10 +625,15 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>, ITrainableLayer<T>
         var scaledLinearBiasGrad = Engine.TensorMultiplyScalar(_linearBiasGradient, learningRate);
         var scaledGateBiasGrad = Engine.TensorMultiplyScalar(_gateBiasGradient, learningRate);
 
-        _linearWeights = Engine.TensorSubtract(_linearWeights, scaledLinearWeightsGrad);
-        _gateWeights = Engine.TensorSubtract(_gateWeights, scaledGateWeightsGrad);
-        _linearBias = Engine.TensorSubtract(_linearBias, scaledLinearBiasGrad);
-        _gateBias = Engine.TensorSubtract(_gateBias, scaledGateBiasGrad);
+        // Update in-place to preserve GPU-registered tensor references
+        var updLW = Engine.TensorSubtract(_linearWeights, scaledLinearWeightsGrad);
+        var updGW = Engine.TensorSubtract(_gateWeights, scaledGateWeightsGrad);
+        var updLB = Engine.TensorSubtract(_linearBias, scaledLinearBiasGrad);
+        var updGB = Engine.TensorSubtract(_gateBias, scaledGateBiasGrad);
+        for (int i = 0; i < _linearWeights.Length; i++) _linearWeights[i] = updLW[i];
+        for (int i = 0; i < _gateWeights.Length; i++) _gateWeights[i] = updGW[i];
+        for (int i = 0; i < _linearBias.Length; i++) _linearBias[i] = updLB[i];
+        for (int i = 0; i < _gateBias.Length; i++) _gateBias[i] = updGB[i];
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_linearWeights);
