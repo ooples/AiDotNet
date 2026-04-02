@@ -274,6 +274,28 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     }
 
 
+    // Per-parameter velocity for tape-based training
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeVelocity = new(ReferenceEqualityComparer.Instance);
+
+    /// <inheritdoc />
+    public override void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    {
+        foreach (var param in parameters)
+        {
+            if (!gradients.TryGetValue(param, out var grad))
+                continue;
+
+            if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = new Tensor<T>(param.Shape.ToArray()); _tapeVelocity[param] = vel; }
+
+            // velocity = momentum * velocity + lr * grad
+            var velNew = Engine.TensorAdd(Engine.TensorMultiplyScalar(vel, CurrentMomentum), Engine.TensorMultiplyScalar(grad, CurrentLearningRate));
+            Engine.TensorCopy(velNew, vel);
+
+            // param -= velocity
+            Engine.TensorSubtractInPlace(param, vel);
+        }
+    }
+
     /// <summary>
     /// Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.
     /// </summary>

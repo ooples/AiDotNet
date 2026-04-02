@@ -395,4 +395,17 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
             0.0f, // No weight decay
             parameterCount);
     }
+
+    /// <inheritdoc />
+    public override void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    {
+        foreach (var param in parameters)
+        {
+            if (gradients.TryGetValue(param, out var grad))
+            {
+                var update = Engine.TensorMultiplyScalar(grad, CurrentLearningRate);
+                Engine.TensorSubtractInPlace(param, update);
+            }
+        }
+    }
 }

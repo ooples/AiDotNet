@@ -487,4 +487,43 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_BFGS_{_options.InitialLearningRate}_{_options.Tolerance}_{_iteration}";
     }
+
+    /// <inheritdoc />
+    public override void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    {
+        // Flatten all parameter/gradient tensors into vectors for BFGS's full-vector update
+        var (paramVec, gradVec, offsets) = FlattenTensors(parameters, gradients);
+        var updated = UpdateParameters(paramVec, gradVec);
+        UnflattenIntoTensors(updated, parameters, offsets);
+    }
+
+    private static (Vector<T> param, Vector<T> grad, int[] offsets) FlattenTensors(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    {
+        int total = 0;
+        var offsets = new int[parameters.Length];
+        for (int i = 0; i < parameters.Length; i++) { offsets[i] = total; total += parameters[i].Length; }
+        var pv = new Vector<T>(total);
+        var gv = new Vector<T>(total);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            var p = parameters[i];
+            gradients.TryGetValue(p, out var g);
+            for (int j = 0; j < p.Length; j++)
+            {
+                pv[offsets[i] + j] = p[j];
+                gv[offsets[i] + j] = g is not null && j < g.Length ? g[j] : MathHelper.GetNumericOperations<T>().Zero;
+            }
+        }
+        return (pv, gv, offsets);
+    }
+
+    private static void UnflattenIntoTensors(Vector<T> updated, Tensor<T>[] parameters, int[] offsets)
+    {
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            var p = parameters[i];
+            for (int j = 0; j < p.Length; j++)
+                p[j] = updated[offsets[i] + j];
+        }
+    }
 }

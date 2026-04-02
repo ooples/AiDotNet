@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Training;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -458,7 +459,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     private int _tapeStep;
 
     /// <inheritdoc />
-    public override void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    public override void Step(TapeStepContext<T> context)
     {
         _tapeStep++;
 
@@ -470,9 +471,9 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _tapeStep));
         T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _tapeStep));
 
-        foreach (var param in parameters)
+        foreach (var param in context.Parameters)
         {
-            if (!gradients.TryGetValue(param, out var grad))
+            if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
             // Lazily initialize per-parameter moment tensors

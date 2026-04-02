@@ -318,6 +318,44 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         return updatedParams;
     }
 
+    // Per-parameter momentum for tape-based Lion training
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeMomentum = new(ReferenceEqualityComparer.Instance);
+
+    /// <inheritdoc />
+    public override void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    {
+        var weightDecay = NumOps.FromDouble(_options.WeightDecay);
+        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, _currentBeta1);
+        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, _currentBeta2);
+
+        foreach (var param in parameters)
+        {
+            if (!gradients.TryGetValue(param, out var grad))
+                continue;
+
+            if (!_tapeMomentum.TryGetValue(param, out var m)) { m = new Tensor<T>(param.Shape.ToArray()); _tapeMomentum[param] = m; }
+
+            // Interpolate: c = beta1 * m + (1 - beta1) * grad
+            var interpolated = Engine.TensorAdd(Engine.TensorMultiplyScalar(m, _currentBeta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1));
+
+            // Sign update
+            var signUpdate = Engine.TensorSign(interpolated);
+
+            // Weight decay: update += weightDecay * param
+            if (!NumOps.Equals(weightDecay, NumOps.Zero))
+            {
+                var decayTerm = Engine.TensorMultiplyScalar(param, weightDecay);
+                Engine.TensorAddInPlace(signUpdate, decayTerm);
+            }
+
+            // param -= lr * update
+            Engine.TensorSubtractInPlace(param, Engine.TensorMultiplyScalar(signUpdate, CurrentLearningRate));
+
+            // Update momentum: m = beta2 * m + (1 - beta2) * grad
+            Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(m, _currentBeta2), Engine.TensorMultiplyScalar(grad, oneMinusBeta2)), m);
+        }
+    }
+
     /// <summary>
     /// Reverses a Lion gradient update to recover original parameters.
     /// </summary>

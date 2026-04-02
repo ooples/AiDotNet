@@ -273,6 +273,34 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
         return updatedParams;
     }
 
+    // Per-parameter squared gradient cache for tape-based training
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeSqGrad = new(ReferenceEqualityComparer.Instance);
+
+    /// <inheritdoc />
+    public override void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    {
+        T decay = NumOps.FromDouble(_options.Decay);
+        T oneMinusDecay = NumOps.FromDouble(1 - _options.Decay);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+
+        foreach (var param in parameters)
+        {
+            if (!gradients.TryGetValue(param, out var grad))
+                continue;
+
+            if (!_tapeSqGrad.TryGetValue(param, out var sqGrad)) { sqGrad = new Tensor<T>(param.Shape.ToArray()); _tapeSqGrad[param] = sqGrad; }
+
+            // sqGrad = decay * sqGrad + (1 - decay) * grad^2
+            var sqGradNew = Engine.TensorAdd(Engine.TensorMultiplyScalar(sqGrad, decay), Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusDecay));
+            Engine.TensorCopy(sqGradNew, sqGrad);
+
+            // param -= lr * grad / (sqrt(sqGrad) + epsilon)
+            var denom = Engine.TensorAddScalar(Engine.TensorSqrt(sqGrad), epsilon);
+            var update = Engine.TensorMultiplyScalar(Engine.TensorDivide(grad, denom), CurrentLearningRate);
+            Engine.TensorSubtractInPlace(param, update);
+        }
+    }
+
     /// <summary>
     /// Reverses an RMSProp gradient update to recover original parameters.
     /// </summary>

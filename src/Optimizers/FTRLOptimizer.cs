@@ -196,6 +196,57 @@ public class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         return newParameters;
     }
 
+    // Per-parameter FTRL state for tape-based training
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeZ = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeN = new(ReferenceEqualityComparer.Instance);
+
+    /// <inheritdoc />
+    public override void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    {
+        var alpha = NumOps.FromDouble(_options.Alpha);
+        var beta = NumOps.FromDouble(_options.Beta);
+        var lambda1 = NumOps.FromDouble(_options.Lambda1);
+        var lambda2 = NumOps.FromDouble(_options.Lambda2);
+
+        foreach (var param in parameters)
+        {
+            if (!gradients.TryGetValue(param, out var grad))
+                continue;
+
+            if (!_tapeZ.TryGetValue(param, out var z)) { z = new Tensor<T>(param.Shape.ToArray()); _tapeZ[param] = z; }
+            if (!_tapeN.TryGetValue(param, out var n)) { n = new Tensor<T>(param.Shape.ToArray()); _tapeN[param] = n; }
+
+            // n_new = n + grad^2
+            var gradSq = Engine.TensorMultiply(grad, grad);
+            var nNew = Engine.TensorAdd(n, gradSq);
+
+            // sigma = (sqrt(n_new) - sqrt(n)) / alpha
+            var sigma = Engine.TensorDivideScalar(Engine.TensorSubtract(Engine.TensorSqrt(nNew), Engine.TensorSqrt(n)), alpha);
+
+            // z = z + grad - sigma * param
+            Engine.TensorAddInPlace(z, Engine.TensorSubtract(grad, Engine.TensorMultiply(sigma, param)));
+
+            // n = n_new
+            Engine.TensorCopy(nNew, n);
+
+            // Vectorized L1 proximal operator:
+            // mask = |z| > lambda1 (nonzero = true for TensorWhere)
+            var absZ = Engine.TensorAbs(z);
+            var sparseMask = Engine.TensorGreaterThan(absZ, lambda1);
+
+            // For non-sparse elements: w = -sign(z) * (|z| - lambda1) / (lambda2 + (sqrt(n) + beta) / alpha)
+            var signZ = Engine.TensorSign(z);
+            var numerator = Engine.TensorMultiply(Engine.TensorNegate(signZ), Engine.TensorSubtractScalar(absZ, lambda1));
+            var denom = Engine.TensorAddScalar(Engine.TensorDivideScalar(Engine.TensorAddScalar(Engine.TensorSqrt(nNew), beta), alpha), lambda2);
+            var ftrlUpdate = Engine.TensorDivide(numerator, denom);
+
+            // Apply: where |z| > lambda1 use ftrl_update, else zero
+            var zeros = new Tensor<T>(param.Shape.ToArray());
+            var result = Engine.TensorWhere(sparseMask, ftrlUpdate, zeros);
+            Engine.TensorCopy(result, param);
+        }
+    }
+
     /// <summary>
     /// Performs the main optimization process using the FTRL algorithm.
     /// </summary>

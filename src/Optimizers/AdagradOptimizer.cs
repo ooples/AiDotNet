@@ -304,6 +304,31 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         return updatedParams;
     }
 
+    // Per-parameter accumulated squared gradient for tape-based training
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeAccSqGrad = new(ReferenceEqualityComparer.Instance);
+
+    /// <inheritdoc />
+    public override void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    {
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+
+        foreach (var param in parameters)
+        {
+            if (!gradients.TryGetValue(param, out var grad))
+                continue;
+
+            if (!_tapeAccSqGrad.TryGetValue(param, out var accSq)) { accSq = new Tensor<T>(param.Shape.ToArray()); _tapeAccSqGrad[param] = accSq; }
+
+            // accSqGrad += grad^2
+            Engine.TensorAddInPlace(accSq, Engine.TensorMultiply(grad, grad));
+
+            // param -= lr * grad / (sqrt(accSqGrad) + epsilon)
+            var denom = Engine.TensorAddScalar(Engine.TensorSqrt(accSq), epsilon);
+            var update = Engine.TensorMultiplyScalar(Engine.TensorDivide(grad, denom), CurrentLearningRate);
+            Engine.TensorSubtractInPlace(param, update);
+        }
+    }
+
     /// <summary>
     /// Updates the adaptive parameters of the Adagrad optimizer.
     /// </summary>

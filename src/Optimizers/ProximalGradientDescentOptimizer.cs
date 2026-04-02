@@ -560,6 +560,26 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_PGD_{_options.InitialLearningRate}_{_regularization.GetType().Name}_{_options.Tolerance}_{_iteration}";
     }
+
+    /// <inheritdoc />
+    public override void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    {
+        foreach (var param in parameters)
+        {
+            if (!gradients.TryGetValue(param, out var grad))
+                continue;
+
+            // Gradient descent step: param -= lr * grad
+            var update = Engine.TensorMultiplyScalar(grad, CurrentLearningRate);
+            Engine.TensorSubtractInPlace(param, update);
+
+            // Apply proximal operator (regularization) via Vector<T> interface
+            var paramVec = param.ToVector();
+            var regularized = _regularization.Regularize(paramVec);
+            for (int i = 0; i < param.Length && i < regularized.Length; i++)
+                param[i] = regularized[i];
+        }
+    }
 }
 
 

@@ -4,6 +4,7 @@ using AiDotNet.LearningRateSchedulers;
 using AiDotNet.MixedPrecision;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Training;
 
 namespace AiDotNet.Optimizers;
 
@@ -1358,7 +1359,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <inheritdoc />
-    public abstract void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients);
+    public abstract void Step(TapeStepContext<T> context);
 
     /// <summary>
     /// Updates a matrix of parameters based on the calculated gradient.

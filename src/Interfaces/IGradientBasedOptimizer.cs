@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Training;
 
 namespace AiDotNet.Interfaces;
 
@@ -128,24 +129,27 @@ public interface IGradientBasedOptimizer<T, TInput, TOutput> : IOptimizer<T, TIn
     void UpdateParameters(List<ILayer<T>> layers);
 
     /// <summary>
-    /// Applies tape-computed gradients to parameter tensors using this optimizer's update rule.
+    /// Performs a parameter update step using the optimizer's update rule and the provided
+    /// training context. This is the unified entry point for tape-based training that supports
+    /// both first-order and second-order optimizers via the Liskov Substitution Principle.
     /// </summary>
-    /// <param name="parameters">The trainable parameter tensors (same references used in Forward).</param>
-    /// <param name="gradients">Gradient tensors keyed by parameter tensor identity, as returned by
-    /// <see cref="AiDotNet.Tensors.Engines.Autodiff.GradientTape{T}.ComputeGradients"/>.</param>
+    /// <param name="context">The training step context containing parameters, gradients, loss,
+    /// and optional re-evaluation/HVP capabilities for second-order optimizers.</param>
     /// <remarks>
     /// <para>
-    /// This is the PyTorch-style <c>optimizer.step()</c> for tape-based training. Each optimizer
-    /// applies its own update rule (Adam moments, SGD momentum, weight decay, etc.) directly
-    /// to the parameter tensors in-place. The optimizer maintains per-parameter state keyed by
-    /// tensor reference identity.
+    /// This replaces PyTorch's <c>optimizer.step(closure=...)</c> with a structured, type-safe
+    /// context object. First-order optimizers (Adam, SGD, etc.) read <c>context.Parameters</c>
+    /// and <c>context.Gradients</c>, update parameters in-place, and ignore the rest.
+    /// Second-order optimizers (L-BFGS, Trust Region) additionally call <c>context.Reevaluate()</c>
+    /// for line search and <c>context.HessianVectorProduct()</c> for curvature information.
     /// </para>
     /// <para><b>For Beginners:</b> After the gradient tape figures out how to improve each parameter,
     /// this method actually applies those improvements. Different optimizers apply them differently —
-    /// Adam uses adaptive learning rates per parameter, SGD uses a fixed rate, etc.
+    /// Adam uses adaptive learning rates per parameter, SGD uses a fixed rate, L-BFGS explores
+    /// multiple step sizes to find the best one.
     /// </para>
     /// </remarks>
-    void Step(Tensor<T>[] parameters, Dictionary<Tensor<T>, Tensor<T>> gradients);
+    void Step(TapeStepContext<T> context);
 
     /// <summary>
     /// Gets the gradients computed during the last optimization step.
