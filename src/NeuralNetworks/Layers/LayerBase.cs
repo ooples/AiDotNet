@@ -737,6 +737,9 @@ public abstract class LayerBase<T> : ILayer<T>, IDisposable
     public virtual int[] GetInputShape() =>
         InputShape != null && InputShape.Length > 0 ? InputShape : InputShapes[0];
 
+    /// <inheritdoc />
+    public virtual IReadOnlyList<ILayer<T>> GetSubLayers() => Array.Empty<ILayer<T>>();
+
     /// <summary>
     /// Gets all input shapes for this layer.
     /// </summary>

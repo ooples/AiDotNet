@@ -498,4 +498,12 @@ public class BasicBlock<T> : LayerBase<T>
         var derivative = preActivation.Transform((x, _) => _relu.Derivative(x));
         return Engine.TensorMultiply(gradient, derivative);
     }
+
+    public override IReadOnlyList<ILayer<T>> GetSubLayers()
+    {
+        var layers = new List<ILayer<T>> { _conv1, _bn1, _conv2, _bn2 };
+        if (_downsampleConv is not null) layers.Add(_downsampleConv);
+        if (_downsampleBn is not null) layers.Add(_downsampleBn);
+        return layers;
+    }
 }

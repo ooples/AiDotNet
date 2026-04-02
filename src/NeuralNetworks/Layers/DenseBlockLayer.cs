@@ -319,4 +319,6 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         return outputNode;
     }
+
+    public override IReadOnlyList<ILayer<T>> GetSubLayers() => new ILayer<T>[] { _bn1, _conv1x1, _bn2, _conv3x3 };
 }

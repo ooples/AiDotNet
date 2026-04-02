@@ -774,4 +774,13 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
         metadata["UseSE"] = _useSE.ToString();
         return metadata;
     }
+
+    public override IReadOnlyList<ILayer<T>> GetSubLayers()
+    {
+        var layers = new List<ILayer<T>> { _dwConv, _dwBn, _projectConv, _projectBn };
+        if (_expandConv is not null) layers.Add(_expandConv);
+        if (_expandBn is not null) layers.Add(_expandBn);
+        if (_se is not null) layers.Add(_se);
+        return layers;
+    }
 }

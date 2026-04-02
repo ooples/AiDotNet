@@ -577,4 +577,5 @@ public class ReconstructionLayer<T> : LayerBase<T>
     public override bool SupportsJitCompilation =>
         _fc1.SupportsJitCompilation && _fc2.SupportsJitCompilation && _fc3.SupportsJitCompilation;
 
+    public override IReadOnlyList<ILayer<T>> GetSubLayers() => new ILayer<T>[] { _fc1, _fc2, _fc3 };
 }

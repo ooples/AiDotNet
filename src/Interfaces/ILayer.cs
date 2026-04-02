@@ -293,7 +293,7 @@ public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider, IWeightLoa
     /// This method lets the framework look inside composite layers to find all the
     /// weights that need to be trained.</para>
     /// </remarks>
-    IReadOnlyList<ILayer<T>> GetSubLayers() => Array.Empty<ILayer<T>>();
+    IReadOnlyList<ILayer<T>> GetSubLayers();
 
     /// <summary>
     /// Gets the gradients of all trainable parameters.

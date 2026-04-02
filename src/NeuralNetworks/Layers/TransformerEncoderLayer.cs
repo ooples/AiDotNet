@@ -1082,4 +1082,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                    _norm2 != null && _norm2.SupportsJitCompilation;
         }
     }
+
+    public override IReadOnlyList<ILayer<T>> GetSubLayers() =>
+        new ILayer<T>[] { _selfAttention, _norm1, _feedForward1, _feedForward2, _norm2 };
 }

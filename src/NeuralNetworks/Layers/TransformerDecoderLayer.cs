@@ -1374,4 +1374,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                    _norm3 != null && _norm3.SupportsJitCompilation;
         }
     }
+
+    public override IReadOnlyList<ILayer<T>> GetSubLayers() =>
+        new ILayer<T>[] { _selfAttention, _norm1, _crossAttention, _norm2, _feedForward, _feedForwardProjection, _norm3 };
 }

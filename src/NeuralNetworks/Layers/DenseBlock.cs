@@ -418,4 +418,6 @@ public class DenseBlock<T> : LayerBase<T>
     }
 
     #endregion
+
+    public override IReadOnlyList<ILayer<T>> GetSubLayers() => _layers;
 }

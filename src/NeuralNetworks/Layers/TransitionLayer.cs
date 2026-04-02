@@ -500,4 +500,6 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         return poolNode;
     }
+
+    public override IReadOnlyList<ILayer<T>> GetSubLayers() => new ILayer<T>[] { _bn, _conv, _pool };
 }
