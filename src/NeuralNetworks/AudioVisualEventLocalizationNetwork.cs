@@ -198,15 +198,17 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         // Distribute layers per Tian et al. 2018: Dense+ReLU encoder blocks + output head
         int idx = 0;
 
-        // Audio encoder: 2 Dense+ReLU layers
+        // Audio encoder: input projection + encoder layer (distinct layers, not aliased)
         _audioInputProjection = (DenseLayer<T>)Layers[idx++];
-        _audioEncoderLayers = new ILayer<T>[] { Layers[idx++] };
-        _audioOutputProjection = (DenseLayer<T>)_audioEncoderLayers[0];
+        var audioEncoder = Layers[idx++];
+        _audioEncoderLayers = Array.Empty<ILayer<T>>();
+        _audioOutputProjection = (DenseLayer<T>)audioEncoder;
 
-        // Visual encoder: 2 Dense+ReLU layers
+        // Visual encoder: input projection + encoder layer (distinct layers, not aliased)
         _visualInputProjection = (DenseLayer<T>)Layers[idx++];
-        _visualEncoderLayers = new ILayer<T>[] { Layers[idx++] };
-        _visualOutputProjection = (DenseLayer<T>)_visualEncoderLayers[0];
+        var visualEncoder = Layers[idx++];
+        _visualEncoderLayers = Array.Empty<ILayer<T>>();
+        _visualOutputProjection = (DenseLayer<T>)visualEncoder;
 
         // DMRN fusion: 2 Dense+ReLU layers
         _temporalAttentionLayers = new ILayer<T>[] { Layers[idx++] };
