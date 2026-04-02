@@ -224,7 +224,7 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
             if (layer is BatchNormalizationLayer<T>)
                 layer.SetTrainingMode(false);
         }
-        TrainWithTape(input, expectedOutput);
+        TrainWithTape(input, expectedOutput, _optimizer);
         SetTrainingMode(false);
     }
 

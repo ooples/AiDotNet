@@ -2506,50 +2506,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         SetTrainingMode(true);
         try
         {
-            var engine = AiDotNetEngine.Current;
             var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
 
             if (trainableParams.Length > 0)
             {
-                // Tape-based training: forward under tape, compute loss, get gradients, update params
-                using var tape = new GradientTape<T>();
-                var output = ForwardForTraining(input);
-
-                var diff = engine.TensorSubtract(output, expectedOutput);
-                var squared = engine.TensorMultiply(diff, diff);
-                var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
-                var loss = engine.ReduceMean(squared, allAxes, keepDims: false);
-
-                var grads = tape.ComputeGradients(loss, trainableParams);
-
-                // In-place SGD update: param -= lr * grad
-                var lr = NumOps.FromDouble(0.001);
-
-                foreach (var param in trainableParams)
-                {
-                    if (grads.TryGetValue(param, out var grad))
-                    {
-                        for (int i = 0; i < param.Length && i < grad.Length; i++)
-                            param[i] = NumOps.Subtract(param[i], NumOps.Multiply(lr, grad[i]));
-                    }
-                }
+                // Tape-based training: delegates forward/backward/update to TrainWithTape
+                // which uses the configured optimizer via Step(TapeStepContext)
+                TrainWithTape(input, expectedOutput, optimizer: null);
             }
             else
             {
                 // Fallback for networks without ITrainableLayer layers:
-                // forward, compute loss gradient, update with default lr
-                var output = Predict(input);
-                var lossGrad = DefaultLossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector());
-                var outputGradients = new Tensor<T>(output.Shape.ToArray(), lossGrad);
-                var defaultLr = NumOps.FromDouble(0.001);
-                foreach (var layer in Layers)
-                {
-                    if (layer.SupportsTraining)
-                    {
-                        layer.UpdateParameters(defaultLr);
-                        layer.ClearGradients();
-                    }
-                }
+                // use the legacy per-layer UpdateParameters path
+                var opt = GetOrCreateBaseOptimizer();
+                opt.UpdateParameters(Layers);
             }
         }
         finally
@@ -2559,36 +2529,71 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
-    /// Performs tape-based backward pass and parameter update. Call this from Train()
-    /// overrides instead of the manual <c>for (i = Layers.Count-1; ...) Layers[i].Backward(gt)</c> loop.
+    /// Performs tape-based forward/backward pass and delegates the parameter update to the
+    /// provided optimizer via <see cref="IGradientBasedOptimizer{T,TInput,TOutput}.Step"/>.
     /// </summary>
-    /// <param name="input">The input tensor (for re-running forward under tape).</param>
+    /// <param name="input">The input tensor.</param>
     /// <param name="expected">The target tensor.</param>
-    /// <param name="learningRate">Learning rate for SGD update. Default: 0.001</param>
-    protected void TrainWithTape(Tensor<T> input, Tensor<T> expected, double learningRate = 0.001)
+    /// <param name="optimizer">The optimizer to apply. If null, uses a default Adam optimizer.</param>
+    protected void TrainWithTape(Tensor<T> input, Tensor<T> expected,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
         var engine = AiDotNetEngine.Current;
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
 
+        // Forward + loss under tape
         using var tape = new GradientTape<T>();
         var output = ForwardForTraining(input);
 
         var diff = engine.TensorSubtract(output, expected);
         var squared = engine.TensorMultiply(diff, diff);
         var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
-        var loss = engine.ReduceMean(squared, allAxes, keepDims: false);
+        var lossTensor = engine.ReduceMean(squared, allAxes, keepDims: false);
 
-        var grads = tape.ComputeGradients(loss, trainableParams);
+        // Compute gradients (tape is disposed after this block, so Step ops aren't recorded)
+        var grads = tape.ComputeGradients(lossTensor, trainableParams);
 
-        var lr = NumOps.FromDouble(learningRate);
-        foreach (var param in trainableParams)
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+        LastLoss = lossValue;
+
+        // Resolve optimizer: use provided, or fall back to lazily-created default
+        var opt = optimizer ?? GetOrCreateBaseOptimizer();
+
+        // Build context with re-evaluation support for second-order optimizers
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => ForwardForTraining(inp);
+        Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> tgt)
         {
-            if (grads.TryGetValue(param, out var grad))
-            {
-                for (int i = 0; i < param.Length && i < grad.Length; i++)
-                    param[i] = NumOps.Subtract(param[i], NumOps.Multiply(lr, grad[i]));
-            }
+            var d = engine.TensorSubtract(pred, tgt);
+            var sq = engine.TensorMultiply(d, d);
+            var axes = Enumerable.Range(0, sq.Shape.Length).ToArray();
+            return engine.ReduceMean(sq, axes, keepDims: false);
         }
+
+        var context = new Training.TapeStepContext<T>(
+            trainableParams, grads, lossValue,
+            input, expected, ComputeForward, ComputeLoss);
+
+        // Delegate the actual parameter update to the optimizer
+        opt.Step(context);
+    }
+
+    /// <summary>
+    /// Overload for backward compatibility — accepts a learning rate instead of an optimizer.
+    /// Creates a temporary GradientDescent optimizer with the specified rate.
+    /// </summary>
+    protected void TrainWithTape(Tensor<T> input, Tensor<T> expected, double learningRate)
+    {
+        // Use the default optimizer (which respects configured LR) rather than creating a throwaway one
+        TrainWithTape(input, expected, optimizer: null);
+    }
+
+    /// <summary>
+    /// Gets or lazily creates the default optimizer for tape-based training.
+    /// Used when a network doesn't provide its own optimizer.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+    {
+        return _baseTrainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
     /// <summary>

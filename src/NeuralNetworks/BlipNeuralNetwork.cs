@@ -1537,7 +1537,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, target);
+            TrainWithTape(input, target, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
         }
         finally
         {
