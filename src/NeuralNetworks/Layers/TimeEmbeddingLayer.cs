@@ -136,6 +136,13 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>, ITrainableLayer<T>
         [_linear1Weights, _linear1Bias, _linear2Weights, _linear2Bias];
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 4) throw new ArgumentException($"Expected 4 parameters, got {parameters.Length}.");
+        _linear1Weights = parameters[0]; _linear1Bias = parameters[1]; _linear2Weights = parameters[2]; _linear2Bias = parameters[3];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad()
     {
         _linear1WeightsGradient = null; _linear1BiasGradient = null;

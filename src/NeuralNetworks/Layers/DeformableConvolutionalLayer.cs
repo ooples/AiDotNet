@@ -1072,6 +1072,19 @@ public class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputati
     }
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        int idx = 0;
+        if (parameters.Length < 4) throw new ArgumentException($"Expected at least 4 parameters, got {parameters.Length}.");
+        _weights = parameters[idx++];
+        _bias = parameters[idx++];
+        _offsetWeights = parameters[idx++];
+        _offsetBias = parameters[idx++];
+        if (_maskWeights is not null && idx < parameters.Length) _maskWeights = parameters[idx++];
+        if (_maskBias is not null && idx < parameters.Length) _maskBias = parameters[idx++];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad()
     {
         _weightGradients = null; _biasGradients = null;

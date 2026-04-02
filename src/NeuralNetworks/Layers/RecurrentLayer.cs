@@ -857,6 +857,13 @@ public class RecurrentLayer<T> : LayerBase<T>, ITrainableLayer<T>
     public Tensor<T>[] GetTrainableParameters() => [_inputWeights, _hiddenWeights, _biases];
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 3) throw new ArgumentException($"Expected 3 parameters, got {parameters.Length}.");
+        _inputWeights = parameters[0]; _hiddenWeights = parameters[1]; _biases = parameters[2];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad()
     {
         _inputWeightsGradient = null;

@@ -902,6 +902,13 @@ public class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITrainab
         [_keyWeights, _valueWeights, _outputWeights, _outputBias];
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 4) throw new ArgumentException($"Expected 4 parameters, got {parameters.Length}.");
+        _keyWeights = parameters[0]; _valueWeights = parameters[1]; _outputWeights = parameters[2]; _outputBias = parameters[3];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad()
     {
         _keyWeightsGradient = null; _valueWeightsGradient = null;

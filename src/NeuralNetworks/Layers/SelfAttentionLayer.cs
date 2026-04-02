@@ -1052,6 +1052,13 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITrai
     public Tensor<T>[] GetTrainableParameters() => [_queryWeights, _keyWeights, _valueWeights, _outputBias];
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 4) throw new ArgumentException($"Expected 4 parameters, got {parameters.Length}.");
+        _queryWeights = parameters[0]; _keyWeights = parameters[1]; _valueWeights = parameters[2]; _outputBias = parameters[3];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad()
     {
         _queryWeightsGradient = null;

@@ -819,6 +819,14 @@ public class CrossAttentionLayer<T> : LayerBase<T>, ITrainableLayer<T>
         [_queryWeights, _keyWeights, _valueWeights, _outputWeights, _outputBias];
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 5) throw new ArgumentException($"Expected 5 parameters, got {parameters.Length}.");
+        _queryWeights = parameters[0]; _keyWeights = parameters[1]; _valueWeights = parameters[2];
+        _outputWeights = parameters[3]; _outputBias = parameters[4];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad()
     {
         _queryWeightsGradient = null;

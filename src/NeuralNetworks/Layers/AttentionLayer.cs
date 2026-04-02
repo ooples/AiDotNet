@@ -1144,6 +1144,13 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITrainabl
     public Tensor<T>[] GetTrainableParameters() => [_Wq, _Wk, _Wv, _Wo];
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 4) throw new ArgumentException($"Expected 4 parameters, got {parameters.Length}.");
+        _Wq = parameters[0]; _Wk = parameters[1]; _Wv = parameters[2]; _Wo = parameters[3];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad()
     {
         _dWq = null;

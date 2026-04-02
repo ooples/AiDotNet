@@ -1045,6 +1045,22 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
     }
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (_projectionWeights is not null)
+        {
+            if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters (with projection), got {parameters.Length}.");
+            _embeddingTensor = parameters[0];
+            _projectionWeights = parameters[1];
+        }
+        else
+        {
+            if (parameters.Length != 1) throw new ArgumentException($"Expected 1 parameter (no projection), got {parameters.Length}.");
+            _embeddingTensor = parameters[0];
+        }
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad()
     {
         _embeddingGradient = null;

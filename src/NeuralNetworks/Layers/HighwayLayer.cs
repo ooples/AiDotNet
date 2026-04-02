@@ -932,6 +932,13 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITrainableL
         [_transformWeights, _transformBias, _gateWeights, _gateBias];
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 4) throw new ArgumentException($"Expected 4 parameters, got {parameters.Length}.");
+        _transformWeights = parameters[0]; _transformBias = parameters[1]; _gateWeights = parameters[2]; _gateBias = parameters[3];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad()
     {
         _transformWeightsGradient = null; _transformBiasGradient = null;

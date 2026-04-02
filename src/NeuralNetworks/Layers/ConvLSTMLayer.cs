@@ -1664,6 +1664,15 @@ public class ConvLSTMLayer<T> : LayerBase<T>, ITrainableLayer<T>
     ];
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 12) throw new ArgumentException($"Expected 12 parameters, got {parameters.Length}.");
+        _weightsFi = parameters[0]; _weightsIi = parameters[1]; _weightsCi = parameters[2]; _weightsOi = parameters[3];
+        _weightsFh = parameters[4]; _weightsIh = parameters[5]; _weightsCh = parameters[6]; _weightsOh = parameters[7];
+        _biasF = parameters[8]; _biasI = parameters[9]; _biasC = parameters[10]; _biasO = parameters[11];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad() { _gradients?.Clear(); }
 
     public override void SetParameters(Vector<T> parameters)

@@ -351,6 +351,13 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>, ITrainableLayer<T>
     public Tensor<T>[] GetTrainableParameters() => [_depthwiseKernels, _pointwiseKernels, _biases];
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 3) throw new ArgumentException($"Expected 3 parameters, got {parameters.Length}.");
+        _depthwiseKernels = parameters[0]; _pointwiseKernels = parameters[1]; _biases = parameters[2];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad()
     {
         _depthwiseKernelsGradient = null; _pointwiseKernelsGradient = null; _biasesGradient = null;

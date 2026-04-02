@@ -1469,6 +1469,15 @@ public class GRULayer<T> : LayerBase<T>, ITrainableLayer<T>
         [_Wz, _Wr, _Wh, _Uz, _Ur, _Uh, _bz, _br, _bh];
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 9) throw new ArgumentException($"Expected 9 parameters, got {parameters.Length}.");
+        _Wz = parameters[0]; _Wr = parameters[1]; _Wh = parameters[2];
+        _Uz = parameters[3]; _Ur = parameters[4]; _Uh = parameters[5];
+        _bz = parameters[6]; _br = parameters[7]; _bh = parameters[8];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad()
     {
         _dWz = null; _dWr = null; _dWh = null;

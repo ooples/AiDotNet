@@ -783,6 +783,13 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>, ITrainableLayer<T>
         [_linearWeights, _gateWeights, _linearBias, _gateBias];
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 4) throw new ArgumentException($"Expected 4 parameters, got {parameters.Length}.");
+        _linearWeights = parameters[0]; _gateWeights = parameters[1]; _linearBias = parameters[2]; _gateBias = parameters[3];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad()
     {
         _linearWeightsGradient = null; _gateWeightsGradient = null;

@@ -1078,6 +1078,13 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>, I
     public Tensor<T>[] GetTrainableParameters() => [_weights, _attentionWeights, _bias];
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 3) throw new ArgumentException($"Expected 3 parameters, got {parameters.Length}.");
+        _weights = parameters[0]; _attentionWeights = parameters[1]; _bias = parameters[2];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad()
     {
         _weightsGradient = null; _attentionWeightsGradient = null; _biasGradient = null;

@@ -947,6 +947,15 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         [_edgeNetworkWeights1, _edgeNetworkWeights2, _edgeNetworkBias1, _edgeNetworkBias2, _selfWeights, _bias];
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 6) throw new ArgumentException($"Expected 6 parameters, got {parameters.Length}.");
+        _edgeNetworkWeights1 = parameters[0]; _edgeNetworkWeights2 = parameters[1];
+        _edgeNetworkBias1 = parameters[2]; _edgeNetworkBias2 = parameters[3];
+        _selfWeights = parameters[4]; _bias = parameters[5];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad()
     {
         _edgeNetworkWeights1Gradient = null; _edgeNetworkWeights2Gradient = null;
