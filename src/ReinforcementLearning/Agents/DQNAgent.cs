@@ -254,7 +254,10 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         // Single batched training step — tape-based forward + loss + optimizer update
         _qNetwork.Train(batchStates, targetQBatch);
-        var avgLoss = _qNetwork.GetLastLoss();
+
+        // Compute loss for monitoring
+        var predictions = _qNetwork.Predict(batchStates);
+        var avgLoss = LossFunction.CalculateLoss(predictions.ToVector(), targetQBatch.ToVector());
         LossHistory.Add(avgLoss);
 
         // Update target network periodically

@@ -586,6 +586,13 @@ namespace AiDotNet.PhysicsInformed
             T scale = NumOps.Divide(NumOps.FromDouble(2.0), NumOps.FromDouble(predicted.Length));
             return (Vector<T>)Engine.Multiply(Engine.Subtract(predicted, actual), scale);
         }
+
+        /// <inheritdoc />
+        public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+        {
+            throw new NotImplementedException(
+                "PhysicsInformed ComputeTapeLoss requires tape-aware PDE evaluation. See task #75.");
+        }
     }
 
     /// <summary>

@@ -153,4 +153,11 @@ public class PerceptualLoss<T> : LossFunctionBase<T>
             "Perceptual Loss requires image matrices and is typically calculated using automatic differentiation."
         );
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        throw new NotImplementedException(
+            "Perceptual ComputeTapeLoss requires tape-tracked feature extractor forward pass. See task #76.");
+    }
 }

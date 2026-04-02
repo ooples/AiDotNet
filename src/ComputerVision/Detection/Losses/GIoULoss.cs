@@ -158,4 +158,11 @@ public class GIoULoss<T> : LossFunctionBase<T>
     {
         return 1.0 - _nms.ComputeGIoU(predicted, target);
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        throw new NotImplementedException(
+            "GIoU ComputeTapeLoss requires differentiable IoU engine ops. See task #73.");
+    }
 }

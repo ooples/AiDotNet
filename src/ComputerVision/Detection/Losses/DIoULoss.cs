@@ -167,4 +167,11 @@ public class DIoULoss<T> : LossFunctionBase<T>
             tensor[batch, boxIdx, 3],
             BoundingBoxFormat.XYXY);
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        throw new NotImplementedException(
+            "DIoU ComputeTapeLoss requires differentiable IoU engine ops. See task #73.");
+    }
 }
