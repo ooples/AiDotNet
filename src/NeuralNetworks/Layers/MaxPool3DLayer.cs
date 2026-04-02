@@ -275,7 +275,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">The input tensors on GPU (uses first input).</param>
     /// <returns>The pooled output as a GPU-resident tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -289,7 +289,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
         if (input.Shape.Length < 4)
             throw new ArgumentException($"MaxPool3D layer requires at least 4D tensor [C,D,H,W]. Got rank {input.Shape.Length}.");
 
-        IGpuTensor<T> input5D;
+        Tensor<T> input5D;
         bool addedBatch = false;
         _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;
@@ -318,6 +318,8 @@ public class MaxPool3DLayer<T> : LayerBase<T>
         var poolSizeArr = new[] { PoolSize, PoolSize, PoolSize };
         var strideArr = new[] { Stride, Stride, Stride };
 
+        // Dispose previous indices buffer to prevent GPU memory leak
+        (_gpuIndicesBuffer as IDisposable)?.Dispose();
         var output = gpuEngine.MaxPool3DGpu<T>(input5D, poolSizeArr, strideArr, out _gpuIndicesBuffer);
 
         // Store _lastInput for backward pass

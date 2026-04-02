@@ -354,7 +354,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
     /// GPU-accelerated forward pass for PrincipalNeighbourhoodAggregationLayer.
     /// Implements multiple aggregators and scalers on GPU using sparse operations.
     /// </summary>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

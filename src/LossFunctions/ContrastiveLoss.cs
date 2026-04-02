@@ -171,8 +171,8 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
     /// <param name="output2">The second output GPU tensor.</param>
     /// <param name="labels">The similarity labels GPU tensor (1 for similar, 0 for dissimilar).</param>
     /// <returns>A tuple containing the loss value and gradient tensors for both outputs.</returns>
-    public (T Loss, IGpuTensor<T> Gradient1, IGpuTensor<T> Gradient2) CalculateLossAndGradientGpu(
-        IGpuTensor<T> output1, IGpuTensor<T> output2, IGpuTensor<T> labels)
+    public (T Loss, Tensor<T> Gradient1, Tensor<T> Gradient2) CalculateLossAndGradientGpu(
+        Tensor<T> output1, Tensor<T> output2, Tensor<T> labels)
     {
         var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
         var backend = engine?.GetBackend();
@@ -203,5 +203,21 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
         var grad2Tensor = new GpuTensor<T>(backend, grad2Buffer, output2._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), grad1Tensor, grad2Tensor);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Contrastive = mean(y * d² + (1-y) * max(0, margin - d)²)
+        var squared = Engine.TensorMultiply(predicted, predicted);
+        var oneMinusY = Engine.ScalarMinusTensor(NumOps.One, target);
+        var marginMinusD = Engine.ScalarMinusTensor(_margin, predicted);
+        var clampedMargin = Engine.ReLU(marginMinusD);
+        var clampedSq = Engine.TensorMultiply(clampedMargin, clampedMargin);
+        var positivePart = Engine.TensorMultiply(target, squared);
+        var negativePart = Engine.TensorMultiply(oneMinusY, clampedSq);
+        var result = Engine.TensorAdd(positivePart, negativePart);
+        var allAxes = Enumerable.Range(0, result.Shape.Length).ToArray();
+        return Engine.ReduceMean(result, allAxes, keepDims: false);
     }
 }

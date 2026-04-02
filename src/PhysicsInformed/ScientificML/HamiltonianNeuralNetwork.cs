@@ -435,7 +435,8 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         {
             try
             {
-                return NeuralNetworkDerivatives<T>.ComputeGradient(this, state, 1);
+                return NeuralNetworkDerivatives<T>.ComputeDerivatives(this, state, 1).FirstDerivatives
+                    ?? new T[1, state.Length];
             }
             catch (InvalidOperationException)
             {

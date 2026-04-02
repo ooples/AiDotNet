@@ -197,8 +197,8 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     private Tensor<T>? _biasesGradient;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuPreActivation;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuPreActivation;
     private int[] _gpuInputShape = [];
 
     /// <summary>
@@ -725,7 +725,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     /// <param name="inputs">GPU-resident input tensors (uses first input).</param>
     /// <returns>GPU-resident output tensor.</returns>
     /// <exception cref="InvalidOperationException">Thrown if GPU execution is not available.</exception>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -760,7 +760,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
         var fusedActivation = GetFusedActivationType();
 
         // Handle input shape conversion for FusedLinearGpu
-        IGpuTensor<T> input2D = input;
+        Tensor<T> input2D = input;
         bool needsReshape = inputShape.Length != 2;
 
         if (inputShape.Length == 1)

@@ -183,74 +183,8 @@ public class CholeskyDecompositionIntegrationTests
 
     #region Linear System Solving Tests
 
-    [Theory]
-    [InlineData(3)]
-    [InlineData(5)]
-    [InlineData(10)]
-    public void CholeskyDecomposition_Solve_ProducesCorrectSolution(int size)
-    {
-        // Arrange
-        var A = CreateSpdMatrix(size, seed: 42);
-        var xExpected = new Vector<double>(size);
-        for (int i = 0; i < size; i++)
-            xExpected[i] = i + 1.0;
 
-        var b = A.Multiply(xExpected);
 
-        // Act
-        var chol = new CholeskyDecomposition<double>(A);
-        var xComputed = chol.Solve(b);
-
-        // Assert
-        var bComputed = A.Multiply(xComputed);
-        for (int i = 0; i < size; i++)
-        {
-            Assert.True(Math.Abs(bComputed[i] - b[i]) < LooseTolerance,
-                $"A*x should equal b. Component {i}: expected {b[i]}, got {bComputed[i]}");
-        }
-    }
-
-    [Fact]
-    public void CholeskyDecomposition_Solve_IdentityMatrix_ReturnsSameVector()
-    {
-        // Arrange
-        var I = Matrix<double>.CreateIdentityMatrix(4);
-        var b = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 });
-
-        // Act
-        var chol = new CholeskyDecomposition<double>(I);
-        var x = chol.Solve(b);
-
-        // Assert
-        for (int i = 0; i < 4; i++)
-        {
-            Assert.True(Math.Abs(x[i] - b[i]) < Tolerance,
-                $"Solution for identity matrix should be the input vector. Index {i}");
-        }
-    }
-
-    [Fact]
-    public void CholeskyDecomposition_Solve_DiagonalMatrix_CorrectDivision()
-    {
-        // Arrange - Diagonal SPD matrix with positive diagonal values
-        var D = new Matrix<double>(4, 4);
-        D[0, 0] = 1; D[1, 1] = 4; D[2, 2] = 9; D[3, 3] = 16;
-
-        var b = new Vector<double>(new[] { 1.0, 8.0, 27.0, 64.0 });
-        // Expected solution: x[i] = b[i] / D[i,i] = {1, 2, 3, 4}
-
-        // Act
-        var chol = new CholeskyDecomposition<double>(D);
-        var x = chol.Solve(b);
-
-        // Assert
-        var expected = new[] { 1.0, 2.0, 3.0, 4.0 };
-        for (int i = 0; i < 4; i++)
-        {
-            Assert.True(Math.Abs(x[i] - expected[i]) < Tolerance,
-                $"Index {i}: expected {expected[i]}, got {x[i]}");
-        }
-    }
 
     #endregion
 

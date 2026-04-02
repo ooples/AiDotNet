@@ -466,8 +466,8 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastFeedForwardOutput;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuNormalized1;
-    private IGpuTensor<T>? _gpuNormalized2;
+    private Tensor<T>? _gpuNormalized1;
+    private Tensor<T>? _gpuNormalized2;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -765,7 +765,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// feed-forward networks, residual connections) remain GPU-resident for maximum performance.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length < 2)
             throw new ArgumentException("TransformerDecoderLayer requires two inputs: [decoderInput, encoderOutput]");
@@ -773,8 +773,8 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
-        IGpuTensor<T> decoderInput = inputs[0];
-        IGpuTensor<T> encoderOutput = inputs[1];
+        Tensor<T> decoderInput = inputs[0];
+        Tensor<T> encoderOutput = inputs[1];
 
         // 1. Self-attention sublayer
         var selfAttentionOutput = _selfAttention.ForwardGpu(decoderInput);

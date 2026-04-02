@@ -145,7 +145,7 @@ public class SequenceLastLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">GPU-resident input tensors.</param>
     /// <returns>GPU-resident output tensor containing the last timestep.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

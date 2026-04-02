@@ -282,8 +282,8 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _biasesVelocity;
 
     #region GPU Training Fields
-    private IGpuTensor<T>? _gpuLastInput;
-    private IGpuTensor<T>? _gpuLastOutput;
+    private Tensor<T>? _gpuLastInput;
+    private Tensor<T>? _gpuLastOutput;
 
     // GPU weight buffers
     private GpuTensor<T>? _gpuDepthwiseKernels;
@@ -910,7 +910,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// <item>Activation is fused into the pointwise convolution when possible</item>
     /// </list>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -935,7 +935,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
         bool addedBatchDimension = false;
 
         // Reshape input to 4D [B, C, H, W] for convolution
-        IGpuTensor<T> input4D;
+        Tensor<T> input4D;
         if (rank == 3)
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]

@@ -314,4 +314,11 @@ public class RealESRGANLoss<T> : LossFunctionBase<T>
         // Assume vector is flattened image data
         return new Tensor<T>([vector.Length], vector);
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        throw new NotImplementedException(
+            "RealESRGAN ComputeTapeLoss requires composite L1 + perceptual + adversarial loss. See task #78.");
+    }
 }

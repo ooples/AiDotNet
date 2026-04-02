@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -262,14 +263,100 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         T totalLoss = NumOps.Zero;
 
-        // Multiple gradient steps per environment step
+        // Multiple gradient steps per environment step (Haarnoja et al. 2018)
         for (int g = 0; g < _sacOptions.GradientSteps; g++)
         {
             var batch = _replayBuffer.Sample(_sacOptions.BatchSize);
+            int stateSize = _sacOptions.StateSize;
+            int actionSize = _sacOptions.ActionSize;
+            int batchCount = batch.Count;
+            T alpha = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(_logAlpha)));
 
-            // Update Q-networks and policy with tape-based training
-            T qLoss = NumOps.Zero;
-            T policyLoss = NumOps.Zero;
+            // Build batched state-action tensors for critic training
+            var batchStateActions = new Tensor<T>([batchCount, stateSize + actionSize]);
+            var batchStates = new Tensor<T>([batchCount, stateSize]);
+            for (int i = 0; i < batchCount; i++)
+            {
+                for (int j = 0; j < stateSize; j++)
+                {
+                    batchStates[i, j] = batch[i].State[j];
+                    batchStateActions[i, j] = batch[i].State[j];
+                }
+                for (int j = 0; j < actionSize; j++)
+                    batchStateActions[i, stateSize + j] = batch[i].Action[j];
+            }
+
+            // --- Compute Q targets (outside tape — target networks not trained) ---
+            // y = r + gamma * (1-done) * (min(Q_tgt1, Q_tgt2) - alpha * log_pi_next)
+            var targetQ = new Tensor<T>([batchCount, 1]);
+            for (int i = 0; i < batchCount; i++)
+            {
+                var (nextAction, nextLogProb) = SampleAction(batch[i].NextState, false);
+                var nextSA = ConcatenateStateAction(batch[i].NextState, nextAction);
+                var nextSATensor = Tensor<T>.FromVector(nextSA, [1, stateSize + actionSize]);
+                var q1Next = _q1TargetNetwork.Predict(nextSATensor).ToVector()[0];
+                var q2Next = _q2TargetNetwork.Predict(nextSATensor).ToVector()[0];
+                var minQNext = NumOps.LessThan(q1Next, q2Next) ? q1Next : q2Next;
+                var softV = NumOps.Subtract(minQNext, NumOps.Multiply(alpha, nextLogProb));
+                var doneT = batch[i].Done ? NumOps.Zero : NumOps.One;
+                targetQ[i, 0] = NumOps.Add(batch[i].Reward,
+                    NumOps.Multiply(DiscountFactor, NumOps.Multiply(doneT, softV)));
+            }
+
+            // --- Update both Q-networks (MSE on TD targets) ---
+            _q1Network.Train(batchStateActions, targetQ);
+            T q1Loss = _q1Network.GetLastLoss();
+            _q2Network.Train(batchStateActions, targetQ);
+            T q2Loss = _q2Network.GetLastLoss();
+            T qLoss = NumOps.Divide(NumOps.Add(q1Loss, q2Loss), NumOps.FromDouble(2.0));
+
+            // --- Update actor (minimize alpha * log_pi - Q via engine ops) ---
+            var trainableActor = (NeuralNetworkBase<T>)_policyNetwork;
+            T policyLoss = trainableActor.TrainWithCustomLoss(batchStates, actorOutput =>
+            {
+                // actorOutput = [batchCount, actionSize*2] for continuous = [means, logStds]
+                var means = Engine.TensorSlice(actorOutput, [0, 0], [batchCount, actionSize]);
+                var logStds = Engine.TensorSlice(actorOutput, [0, actionSize], [batchCount, actionSize * 2]);
+
+                // Compute log-probabilities via engine ops
+                // Sample actions from policy for reparameterization
+                var stds = Engine.TensorExp(logStds);
+                var noise = new Tensor<T>([batchCount, actionSize]);
+                var rng = Tensors.Helpers.RandomHelper.CreateSecureRandom();
+                for (int i = 0; i < noise.Length; i++)
+                    noise[i] = NumOps.FromDouble(rng.NextDouble() * 2.0 - 1.0);
+                var sampledActions = Engine.TensorAdd(means, Engine.TensorMultiply(stds, noise));
+
+                var logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(means, logStds, sampledActions);
+
+                // Build state-action for Q evaluation
+                var stateActionForQ = new Tensor<T>([batchCount, stateSize + actionSize]);
+                for (int i = 0; i < batchCount; i++)
+                {
+                    for (int j = 0; j < stateSize; j++)
+                        stateActionForQ[i, j] = batchStates[i, j];
+                    for (int j = 0; j < actionSize; j++)
+                        stateActionForQ[i, stateSize + j] = sampledActions[i * actionSize + j];
+                }
+
+                // Q values (detached — critics not updated here)
+                var q1 = _q1Network.Predict(stateActionForQ);
+                var q2 = _q2Network.Predict(stateActionForQ);
+                // min(Q1, Q2): use -max(-Q1, -Q2)
+                var negQ1 = Engine.TensorNegate(q1);
+                var negQ2 = Engine.TensorNegate(q2);
+                var minQ = Engine.TensorNegate(Engine.TensorMax(negQ1, negQ2));
+
+                // policy loss = mean(alpha * log_pi - min_Q)
+                var alphaLogPi = Engine.TensorMultiplyScalar(logProbs, alpha);
+                var flatMinQ = new Tensor<T>([batchCount]);
+                for (int i = 0; i < batchCount; i++)
+                    flatMinQ[i] = minQ[i];
+
+                var loss = Engine.TensorSubtract(alphaLogPi, flatMinQ);
+                var allAxes = Enumerable.Range(0, loss.Shape.Length).ToArray();
+                return Engine.ReduceMean(loss, allAxes, keepDims: false);
+            });
 
             // Update temperature (alpha)
             if (_sacOptions.AutoTuneTemperature)
@@ -277,7 +364,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
                 UpdateTemperature(batch);
             }
 
-            // Soft update target networks
+            // Soft update target networks (Polyak averaging)
             SoftUpdateTargets();
 
             totalLoss = NumOps.Add(totalLoss, NumOps.Add(qLoss, policyLoss));
@@ -409,19 +496,8 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
         target.UpdateParameters(targetParams);
     }
 
-    private void UpdateNetworkParameters(INeuralNetwork<T> network, T learningRate)
-    {
-        var params_ = network.GetParameters();
-        var grads = network.GetParameterGradients();
-
-        for (int i = 0; i < params_.Length; i++)
-        {
-            var update = NumOps.Multiply(learningRate, grads[i]);
-            params_[i] = NumOps.Subtract(params_[i], update);
-        }
-
-        network.UpdateParameters(params_);
-    }
+    // UpdateNetworkParameters removed — networks now trained via Train() and
+    // TrainWithCustomLoss which use configured optimizers and tape-based gradients.
 
     private Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)
     {

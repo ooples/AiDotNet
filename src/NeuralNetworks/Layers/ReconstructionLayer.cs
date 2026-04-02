@@ -279,7 +279,7 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">Input GPU tensors (uses first input).</param>
     /// <returns>GPU-resident output tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

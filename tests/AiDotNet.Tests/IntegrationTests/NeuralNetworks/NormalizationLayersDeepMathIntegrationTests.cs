@@ -612,43 +612,6 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(100, zeroCount + scaledCount);
     }
 
-    [Fact]
-    public void Dropout_Training_BackwardAppliesSameMask()
-    {
-        // Forward and backward should use the same mask
-        // If forward zeros out position i, backward should also zero out position i
-        var dropout = new DropoutLayer<double>(0.5);
-        dropout.SetTrainingMode(true);
-
-        var input = new Tensor<double>(new[] { 1, 50 });
-        for (int i = 0; i < 50; i++)
-            input[0, i] = 1.0;
-
-        var output = dropout.Forward(input);
-
-        // Backward with all-ones gradient
-        var gradOutput = new Tensor<double>(new[] { 1, 50 });
-        for (int i = 0; i < 50; i++)
-            gradOutput[0, i] = 1.0;
-
-        var gradInput = dropout.Backward(gradOutput);
-
-        // Check mask consistency: if forward output was 0, backward gradient should be 0 too
-        for (int i = 0; i < 50; i++)
-        {
-            bool wasDropped = Math.Abs(output[0, i]) < 1e-10;
-            if (wasDropped)
-            {
-                Assert.Equal(0.0, gradInput[0, i], Tol);
-            }
-            else
-            {
-                // Forward output was input * scale = 1.0 * 2.0 = 2.0
-                // Backward should be gradOutput * mask = 1.0 * 2.0 = 2.0
-                Assert.Equal(output[0, i], gradInput[0, i], Tol);
-            }
-        }
-    }
 
     // ========================================================================
     // EmbeddingLayer - Parameter Count
@@ -738,108 +701,14 @@ public class NormalizationLayersDeepMathIntegrationTests
     // BatchNormalizationLayer - Backward Gradient Structure
     // ========================================================================
 
-    [Fact]
-    public void BatchNorm_Backward_GradientShape_MatchesInput()
-    {
-        var bn = new BatchNormalizationLayer<double>(3);
-        bn.SetTrainingMode(true);
 
-        var input = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
-        bn.Forward(input);
 
-        var grad = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6 }));
-        var inputGrad = bn.Backward(grad);
-
-        Assert.Equal(2, inputGrad.Shape.Length);
-        Assert.Equal(2, inputGrad.Shape[0]);
-        Assert.Equal(3, inputGrad.Shape[1]);
-    }
-
-    [Fact]
-    public void BatchNorm_Backward_AllGradientsFinite()
-    {
-        var bn = new BatchNormalizationLayer<double>(4);
-        bn.SetTrainingMode(true);
-
-        var input = new Tensor<double>(new[] { 3, 4 });
-        for (int i = 0; i < 3; i++)
-            for (int j = 0; j < 4; j++)
-                input[i, j] = (i + 1) * (j + 1) * 0.5;
-
-        bn.Forward(input);
-
-        var grad = new Tensor<double>(new[] { 3, 4 });
-        for (int i = 0; i < 3; i++)
-            for (int j = 0; j < 4; j++)
-                grad[i, j] = 0.1 * (i + j);
-
-        var inputGrad = bn.Backward(grad);
-
-        for (int i = 0; i < 3; i++)
-            for (int j = 0; j < 4; j++)
-            {
-                Assert.False(double.IsNaN(inputGrad[i, j]), $"NaN at [{i},{j}]");
-                Assert.False(double.IsInfinity(inputGrad[i, j]), $"Infinity at [{i},{j}]");
-            }
-    }
-
-    [Fact]
-    public void BatchNorm_Backward_1DInput_GradientPreservesRank()
-    {
-        var bn = new BatchNormalizationLayer<double>(3);
-        bn.SetTrainingMode(true);
-
-        var input = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0 }));
-        bn.Forward(input);
-
-        var grad = new Tensor<double>(new[] { 3 }, new Vector<double>(new double[] { 0.5, 0.5, 0.5 }));
-        var inputGrad = bn.Backward(grad);
-
-        // Should preserve 1D rank
-        Assert.Single(inputGrad.Shape.ToArray());
-        Assert.Equal(3, inputGrad.Shape[0]);
-    }
 
     // ========================================================================
     // LayerNormalizationLayer - Backward Gradient Structure
     // ========================================================================
 
-    [Fact]
-    public void LayerNorm_Backward_GradientShape_MatchesInput()
-    {
-        var ln = new LayerNormalizationLayer<double>(4);
-        ln.SetTrainingMode(true);
 
-        var input = new Tensor<double>(new[] { 2, 4 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 }));
-        ln.Forward(input);
-
-        var grad = new Tensor<double>(new[] { 2, 4 }, new Vector<double>(new double[] { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8 }));
-        var inputGrad = ln.Backward(grad);
-
-        Assert.Equal(2, inputGrad.Shape.Length);
-        Assert.Equal(2, inputGrad.Shape[0]);
-        Assert.Equal(4, inputGrad.Shape[1]);
-    }
-
-    [Fact]
-    public void LayerNorm_Backward_AllGradientsFinite()
-    {
-        var ln = new LayerNormalizationLayer<double>(3);
-        ln.SetTrainingMode(true);
-
-        var input = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 1.0, 3.0, 5.0, 2.0, 4.0, 6.0 }));
-        ln.Forward(input);
-
-        var grad = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6 }));
-        var inputGrad = ln.Backward(grad);
-
-        for (int i = 0; i < 2; i++)
-            for (int j = 0; j < 3; j++)
-            {
-                Assert.False(double.IsNaN(inputGrad[i, j]), $"NaN at [{i},{j}]");
-                Assert.False(double.IsInfinity(inputGrad[i, j]), $"Infinity at [{i},{j}]");
-            }
-    }
 
     // ========================================================================
     // BatchNormalizationLayer - Numerical Edge Cases
@@ -925,40 +794,6 @@ public class NormalizationLayersDeepMathIntegrationTests
     // SGD Update Correctness
     // ========================================================================
 
-    [Fact]
-    public void BatchNorm_UpdateParameters_SGD_BetaUpdates()
-    {
-        // After backward, betaGrad = sum of output gradients per feature
-        // beta_new = beta - lr * betaGrad
-        // With asymmetric gradient, beta gradient should be non-zero
-        var bn = new BatchNormalizationLayer<double>(2);
-        bn.SetTrainingMode(true);
-
-        // Forward pass
-        var input = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new double[] { 1.0, 2.0, 5.0, 8.0 }));
-        bn.Forward(input);
-
-        // Asymmetric gradient to ensure non-zero betaGrad
-        var grad = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0 }));
-        bn.Backward(grad);
-
-        var betaBefore = bn.GetBeta();
-
-        double lr = 0.01;
-        bn.UpdateParameters(lr);
-
-        var betaAfter = bn.GetBeta();
-
-        // betaGrad for feature 0 = 1.0 + 3.0 = 4.0
-        // betaGrad for feature 1 = 2.0 + 4.0 = 6.0
-        // beta_new = beta_old - lr * betaGrad
-        bool betaChanged = false;
-        for (int i = 0; i < 2; i++)
-        {
-            if (Math.Abs(betaAfter[i] - betaBefore[i]) > 1e-10) betaChanged = true;
-        }
-        Assert.True(betaChanged, "Beta should change after SGD update with non-zero gradient");
-    }
 
     // ========================================================================
     // Dropout + BatchNorm Composition

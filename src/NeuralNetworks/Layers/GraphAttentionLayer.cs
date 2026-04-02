@@ -149,7 +149,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     private Tensor<T>? _biasGradient;
 
     // GPU cache fields for backward pass
-    private IGpuTensor<T>? _gpuLastInput;
+    private Tensor<T>? _gpuLastInput;
     private IGpuBuffer? _gpuTransformedCache;  // [numNodes * outputFeatures * numHeads]
     private IGpuBuffer? _gpuAttentionCache;    // [numNodes * numNodes * numHeads]
     private IGpuBuffer? _gpuPreActivationCache;  // [batchSize * numNodes * outputFeatures] - pre-activation output for backward
@@ -1136,7 +1136,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// For sparse graphs, uses efficient O(E) edge-based computation instead of O(N²) dense operations.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs == null || inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

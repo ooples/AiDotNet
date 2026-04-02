@@ -108,10 +108,10 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
     private Tensor<T>? _linear2BiasGradient;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuTimesteps;
-    private IGpuTensor<T>? _gpuSinusoidalEmbed;
-    private IGpuTensor<T>? _gpuHidden;
-    private IGpuTensor<T>? _gpuPreActivation;
+    private Tensor<T>? _gpuTimesteps;
+    private Tensor<T>? _gpuSinusoidalEmbed;
+    private Tensor<T>? _gpuHidden;
+    private Tensor<T>? _gpuPreActivation;
     private int[]? _gpuInputShape;
 
     /// <summary>
@@ -144,7 +144,7 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
     private Tensor<T>? _frequencies;
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0) throw new ArgumentException("TimeEmbeddingLayer requires an input tensor.");
         var input = inputs[0];
@@ -166,7 +166,7 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
         }
 
         int batch = input.Shape[0];
-        IGpuTensor<T> timesteps = input.Shape.Length == 1
+        Tensor<T> timesteps = input.Shape.Length == 1
             ? gpuEngine.ReshapeGpu(input, [batch, 1])
             : input;
 

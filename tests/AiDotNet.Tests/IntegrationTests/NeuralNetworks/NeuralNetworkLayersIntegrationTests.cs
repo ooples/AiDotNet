@@ -72,38 +72,6 @@ public class NeuralNetworkLayersIntegrationTests
         Assert.Equal(outputSize, output.Shape[1]);
     }
 
-    [Fact]
-    public void DenseLayer_BackwardPass_ProducesCorrectGradientShape()
-    {
-        // Arrange
-        int inputSize = 10;
-        int outputSize = 5;
-        var layer = new DenseLayer<double>(inputSize, outputSize);
-        layer.SetTrainingMode(true);
-
-        var input = new Tensor<double>([1, inputSize]);
-        for (int i = 0; i < inputSize; i++)
-        {
-            input[0, i] = i * 0.1;
-        }
-
-        var output = layer.Forward(input);
-
-        // Create upstream gradient
-        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
-        for (int i = 0; i < outputSize; i++)
-        {
-            upstreamGradient[0, i] = 1.0;
-        }
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.Length, gradient.Shape.Length);
-        Assert.Equal(inputSize, gradient.Shape[^1]); // Last dimension should be input size
-    }
 
     [Fact]
     public void DenseLayer_WithActivation_AppliesActivationFunction()
@@ -218,34 +186,6 @@ public class NeuralNetworkLayersIntegrationTests
         Assert.Equal(14, output.Shape[3]); // width
     }
 
-    [Fact]
-    public void ConvolutionalLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int inputDepth = 1;
-        int inputHeight = 8;
-        int inputWidth = 8;
-        int outputDepth = 2;
-        int kernelSize = 3;
-
-        var layer = new ConvolutionalLayer<double>(
-            inputDepth, inputHeight, inputWidth, outputDepth, kernelSize);
-        layer.SetTrainingMode(true);
-
-        var input = new Tensor<double>([1, inputDepth, inputHeight, inputWidth]);
-        InitializeRandomTensor(input);
-
-        var output = layer.Forward(input);
-        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
-        InitializeTensorWithValue(upstreamGradient, 1.0);
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.Length, gradient.Shape.Length);
-    }
 
     [Fact]
     public void ConvolutionalLayer_BatchProcessing_HandlesMultipleSamples()
@@ -301,33 +241,6 @@ public class NeuralNetworkLayersIntegrationTests
         Assert.Equal(hiddenSize, output.Shape[^1]); // Hidden dimension
     }
 
-    [Fact]
-    public void LSTMLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int inputSize = 5;
-        int hiddenSize = 10;
-        int sequenceLength = 3;
-        int batchSize = 1;
-        int[] inputShape = [batchSize, sequenceLength, inputSize];
-
-        IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new LSTMLayer<double>(inputSize, hiddenSize, inputShape, tanh);
-        layer.SetTrainingMode(true);
-
-        var input = new Tensor<double>(inputShape);
-        InitializeRandomTensor(input);
-
-        var output = layer.Forward(input);
-        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
-        InitializeTensorWithValue(upstreamGradient, 1.0);
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-    }
 
     [Fact]
     public void LSTMLayer_SupportsTraining_ReturnsTrue()
@@ -427,29 +340,6 @@ public class NeuralNetworkLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void BatchNormalizationLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int numFeatures = 10;
-        var layer = new BatchNormalizationLayer<double>(numFeatures);
-        layer.SetTrainingMode(true);
-
-        var input = new Tensor<double>([16, numFeatures]);
-        InitializeRandomTensor(input);
-
-        var output = layer.Forward(input);
-        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
-        InitializeTensorWithValue(upstreamGradient, 1.0);
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape[0], gradient.Shape[0]);
-        Assert.Equal(input.Shape[1], gradient.Shape[1]);
-    }
 
     [Fact]
     public void BatchNormalizationLayer_SupportsTraining_ReturnsTrue()
@@ -540,39 +430,6 @@ public class NeuralNetworkLayersIntegrationTests
             $"Expected roughly 50% zeros but got {zeroCount} zeros");
     }
 
-    [Fact]
-    public void DropoutLayer_BackwardPass_PreservesMask()
-    {
-        // Arrange
-        var layer = new DropoutLayer<double>(0.5);
-        layer.SetTrainingMode(true);
-
-        var input = new Tensor<double>([1, 20]);
-        InitializeTensorWithValue(input, 1.0);
-
-        var output = layer.Forward(input);
-        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
-        InitializeTensorWithValue(upstreamGradient, 1.0);
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        // Gradient should be zero where output was zero (same mask applied)    
-        for (int i = 0; i < output.Shape[1]; i++)
-        {
-            if (Math.Abs(output[0, i]) < Tolerance)
-            {
-                Assert.True(Math.Abs(gradient[0, i]) < Tolerance,
-                    $"Gradient[{i}] should be zero where output was dropped");
-            }
-            else
-            {
-                Assert.Equal(output[0, i], gradient[0, i], Tolerance);
-            }
-        }
-    }
 
     #endregion
 
@@ -620,30 +477,6 @@ public class NeuralNetworkLayersIntegrationTests
         Assert.Equal(embeddingDimension / headCount, headDimension);
     }
 
-    [Fact]
-    public void MultiHeadAttentionLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int sequenceLength = 5;
-        int embeddingDimension = 32;
-        int headCount = 4;
-
-        var layer = new MultiHeadAttentionLayer<double>(sequenceLength, embeddingDimension, headCount);
-        layer.SetTrainingMode(true);
-
-        var input = new Tensor<double>([1, sequenceLength, embeddingDimension]);
-        InitializeRandomTensor(input);
-
-        var output = layer.Forward(input);
-        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
-        InitializeTensorWithValue(upstreamGradient, 1.0);
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-    }
 
     [Fact]
     public void MultiHeadAttentionLayer_BatchProcessing_HandlesMultipleSamples()

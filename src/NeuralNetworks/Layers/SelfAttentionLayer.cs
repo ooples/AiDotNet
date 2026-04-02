@@ -223,11 +223,11 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     private Tensor<T>? _outputBiasVelocity;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput2D;
-    private IGpuTensor<T>? _gpuQ;
-    private IGpuTensor<T>? _gpuK;
-    private IGpuTensor<T>? _gpuV;
-    private IGpuTensor<T>? _gpuAttentionWeights;
+    private Tensor<T>? _gpuInput2D;
+    private Tensor<T>? _gpuQ;
+    private Tensor<T>? _gpuK;
+    private Tensor<T>? _gpuV;
+    private Tensor<T>? _gpuAttentionWeights;
     private int _gpuBatchSize;
     private int _gpuSequenceLength;
     private int _gpuEmbeddingDimension;
@@ -611,7 +611,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// remain GPU-resident for maximum performance.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -628,7 +628,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         int batchSize;
         int sequenceLength;
         int embeddingDimension;
-        IGpuTensor<T> input3D;
+        Tensor<T> input3D;
 
         if (rank == 2)
         {
@@ -684,8 +684,8 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         // 2. Compute Scaled Dot-Product Attention
         // Use overload that returns attention weights during training for backward pass
         double scale = 1.0 / Math.Sqrt(_headDimension);
-        IGpuTensor<T> attnOutput4D;
-        IGpuTensor<T>? attentionWeightsGpu = null;
+        Tensor<T> attnOutput4D;
+        Tensor<T>? attentionWeightsGpu = null;
 
         if (IsTrainingMode)
         {
@@ -706,7 +706,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         var outputBiased = gpuEngine.AddBiasGpu(outputFlat, _outputBias);
 
         // 5. Apply activation if not identity
-        IGpuTensor<T> output;
+        Tensor<T> output;
         if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
         {
             var fusedType = MapActivationToFused();

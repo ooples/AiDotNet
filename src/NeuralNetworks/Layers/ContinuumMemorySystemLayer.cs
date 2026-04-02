@@ -202,7 +202,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">GPU-resident input tensors (uses first input).</param>
     /// <returns>GPU-resident output tensor after chaining through all MLP blocks.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

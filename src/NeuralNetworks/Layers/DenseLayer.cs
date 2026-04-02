@@ -237,9 +237,9 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastOutput; // Pre-activation output for proper gradient computation
 
     // GPU-resident cached tensors for GPU training pipeline
-    private IGpuTensor<T>? _lastInputGpu;
-    private IGpuTensor<T>? _lastPreActivationGpu; // Pre-activation for GPU backward pass
-    private IGpuTensor<T>? _lastOutputGpu; // Post-activation for sigmoid/tanh backward
+    private Tensor<T>? _lastInputGpu;
+    private Tensor<T>? _lastPreActivationGpu; // Pre-activation for GPU backward pass
+    private Tensor<T>? _lastOutputGpu; // Post-activation for sigmoid/tanh backward
     private int[]? _gpuOriginalInputShape;
 
 
@@ -898,7 +898,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <param name="inputs">GPU-resident input tensors (uses first input). Last dimension is features.</param>
     /// <returns>GPU-resident output tensor with same batch dimensions, outputSize as last dim.</returns>
     /// <exception cref="InvalidOperationException">Thrown if GPU execution is not available.</exception>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -958,7 +958,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Reshape ND input to 2D [totalBatch, features] for matrix multiply
-        IGpuTensor<T> input2D = input;
+        Tensor<T> input2D = input;
         if (needsReshape && input.Shape.Length > 2)
         {
             input2D = input.CreateView(0, [batchDim, actualInputSize]);
@@ -1024,7 +1024,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Computes activation gradient using GPU-resident backward operations.
     /// </summary>
-    private IGpuTensor<T> ComputeActivationGradientGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> gradOutput)
+    private Tensor<T> ComputeActivationGradientGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> gradOutput)
     {
         // Determine activation type and apply appropriate backward
         var fusedActivation = GetFusedActivationType();

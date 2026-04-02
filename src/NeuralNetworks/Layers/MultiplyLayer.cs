@@ -278,7 +278,7 @@ public class MultiplyLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">The GPU input tensors.</param>
     /// <returns>The GPU output tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length < 2)
             throw new ArgumentException("MultiplyLayer requires at least two inputs.", nameof(inputs));
@@ -338,7 +338,7 @@ public class MultiplyLayer<T> : LayerBase<T>
     /// For element-wise multiplication z = x * y, the gradient with respect to each input
     /// is the product of the output gradient and all other inputs.
     /// </remarks>
-    public IGpuTensor<T>[] BackwardGpu(IGpuTensor<T> outputGradient)
+    public Tensor<T>[] BackwardGpu(Tensor<T> outputGradient)
     {
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
@@ -361,7 +361,7 @@ public class MultiplyLayer<T> : LayerBase<T>
 
         // Compute gradient for each input
         // Gradient for input i = outputGradient * product(inputs[j] for j != i)
-        var inputGradients = new IGpuTensor<T>[numInputs];
+        var inputGradients = new Tensor<T>[numInputs];
         for (int i = 0; i < numInputs; i++)
         {
             // Start with output gradient

@@ -109,10 +109,10 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     private int[]? _originalInputShape;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuMean;
-    private IGpuTensor<T>? _gpuLogVar;
-    private IGpuTensor<T>? _gpuEpsilon;
-    private IGpuTensor<T>? _gpuStdDev;
+    private Tensor<T>? _gpuMean;
+    private Tensor<T>? _gpuLogVar;
+    private Tensor<T>? _gpuEpsilon;
+    private Tensor<T>? _gpuStdDev;
     private int _gpuBatchSize;
     private int _gpuLatentSize;
 
@@ -273,7 +273,7 @@ public class RepParameterizationLayer<T> : LayerBase<T>
     /// </remarks>
     /// <param name="inputs">Input GPU tensors (uses first input containing [mean, logvar]).</param>
     /// <returns>GPU-resident output tensor with sampled latent values.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

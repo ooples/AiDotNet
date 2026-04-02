@@ -127,7 +127,7 @@ public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider, IWeightLoa
     ///
     /// The result stays on the GPU until you call ToTensor() to download it to CPU memory.
     /// </remarks>
-    IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs);
+    Tensor<T> ForwardGpu(params Tensor<T>[] inputs);
 
     /// <summary>
     /// Gets whether this layer can execute on GPU.

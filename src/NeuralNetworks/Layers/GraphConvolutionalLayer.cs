@@ -804,7 +804,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// sparse aggregation provides significant speedup over dense operations.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -828,7 +828,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
         // Determine batch size and reshape if needed
         int batchSize;
-        IGpuTensor<T> processInput;
+        Tensor<T> processInput;
 
         if (rank == 2)
         {
@@ -865,7 +865,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         backend.Gemm(inputFlat.Buffer, weightsGpu.Buffer, xwBuffer, batchSize * numNodes, outputFeatures, inputFeatures);
         var xwFlat = new GpuTensor<T>(backend, xwBuffer, [batchSize * numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
 
-        IGpuTensor<T> output;
+        Tensor<T> output;
 
         if (_useSparseAggregation && _edgeSourceIndices != null && _edgeTargetIndices != null)
         {

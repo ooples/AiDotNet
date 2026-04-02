@@ -31,9 +31,9 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     private Tensor<T>? _relu2Out;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuBn1Out;
-    private IGpuTensor<T>? _gpuConv1Out;
-    private IGpuTensor<T>? _gpuBn2Out;
+    private Tensor<T>? _gpuBn1Out;
+    private Tensor<T>? _gpuConv1Out;
+    private Tensor<T>? _gpuBn2Out;
 
     public override int ParameterCount => _bn1.ParameterCount + _conv1x1.ParameterCount + _bn2.ParameterCount + _conv3x3.ParameterCount;
     public override bool SupportsTraining => true;
@@ -120,7 +120,7 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// Chains GPU operations: BN1 → ReLU → Conv1x1 → BN2 → ReLU → Conv3x3.
     /// All computations stay on GPU.
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

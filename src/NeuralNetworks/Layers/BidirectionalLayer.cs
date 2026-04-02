@@ -114,9 +114,9 @@ public class BidirectionalLayer<T> : LayerBase<T>
         _forwardLayer.SupportsGpuTraining && _backwardLayer.SupportsGpuTraining;
 
     #region GPU Training Fields
-    private IGpuTensor<T>? _gpuLastInput;
-    private IGpuTensor<T>? _gpuLastForwardOutput;
-    private IGpuTensor<T>? _gpuLastBackwardOutput;
+    private Tensor<T>? _gpuLastInput;
+    private Tensor<T>? _gpuLastForwardOutput;
+    private Tensor<T>? _gpuLastBackwardOutput;
     #endregion
 
     /// <summary>
@@ -300,7 +300,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// and the results are merged on the GPU.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -384,9 +384,9 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// <param name="timeSteps">Number of time steps.</param>
     /// <param name="features">Feature dimension size.</param>
     /// <returns>GPU tensor with the sequence reversed along the time dimension.</returns>
-    private static IGpuTensor<T> ReverseSequenceGpu(
+    private static Tensor<T> ReverseSequenceGpu(
         IDirectGpuBackend backend,
-        IGpuTensor<T> input,
+        Tensor<T> input,
         int batchSize,
         int timeSteps,
         int features)
@@ -420,10 +420,10 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// <param name="batchSize">Batch size.</param>
     /// <param name="timeSteps">Number of time steps.</param>
     /// <returns>Merged GPU tensor.</returns>
-    private IGpuTensor<T> MergeOutputsGpu(
+    private Tensor<T> MergeOutputsGpu(
         IDirectGpuBackend backend,
-        IGpuTensor<T> forward,
-        IGpuTensor<T> backward,
+        Tensor<T> forward,
+        Tensor<T> backward,
         int batchSize,
         int timeSteps)
     {

@@ -75,12 +75,12 @@ public class DecoderLayer<T> : LayerBase<T>
     private Tensor<T>? _lastEncoderOutput;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuDecoderInput;
-    private IGpuTensor<T>? _gpuEncoderOutput;
-    private IGpuTensor<T>? _gpuNormalized1;
-    private IGpuTensor<T>? _gpuNormalized2;
-    private IGpuTensor<T>? _gpuResidual1;
-    private IGpuTensor<T>? _gpuResidual2;
+    private Tensor<T>? _gpuDecoderInput;
+    private Tensor<T>? _gpuEncoderOutput;
+    private Tensor<T>? _gpuNormalized1;
+    private Tensor<T>? _gpuNormalized2;
+    private Tensor<T>? _gpuResidual1;
+    private Tensor<T>? _gpuResidual2;
 
     /// <summary>
     /// Gets the size of the input features for this layer.
@@ -356,7 +356,7 @@ public class DecoderLayer<T> : LayerBase<T>
     /// <remarks>
     /// All computations stay on GPU. Chains: SelfAttention → Norm1 → CrossAttention → Norm2 → FFN → Norm3.
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length < 2)
             throw new ArgumentException("DecoderLayer requires two inputs: [decoderInput, encoderOutput]", nameof(inputs));

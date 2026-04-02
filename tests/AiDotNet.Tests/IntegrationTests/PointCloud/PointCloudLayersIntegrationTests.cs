@@ -41,33 +41,7 @@ public class PointCloudLayersIntegrationTests
         AssertAllFinite(output);
     }
 
-    [Fact]
-    public void PointConvolution_Backward_ProducesCorrectGradientShape()
-    {
-        var layer = new PointConvolutionLayer<double>(3, 8);
-        var input = CreateRandomTensor(16, 3, seed: 11);
-        layer.Forward(input);
 
-        var outputGrad = CreateRandomTensor(16, 8, seed: 13);
-        var inputGrad = layer.Backward(outputGrad);
-
-        Assert.Equal(2, inputGrad.Shape.Length);
-        Assert.Equal(16, inputGrad.Shape[0]); // same as input numPoints
-        Assert.Equal(3, inputGrad.Shape[1]);  // same as input channels
-    }
-
-    [Fact]
-    public void PointConvolution_Backward_GradientsAreFinite()
-    {
-        var layer = new PointConvolutionLayer<double>(4, 12);
-        var input = CreateRandomTensor(20, 4, seed: 17);
-        layer.Forward(input);
-
-        var outputGrad = CreateRandomTensor(20, 12, seed: 19);
-        var inputGrad = layer.Backward(outputGrad);
-
-        AssertAllFinite(inputGrad);
-    }
 
     [Fact]
     public void PointConvolution_ParameterCount_EqualsWeightsPlusBiases()
@@ -89,47 +63,7 @@ public class PointCloudLayersIntegrationTests
         Assert.Equal(layer.ParameterCount, parameters.Length);
     }
 
-    [Fact]
-    public void PointConvolution_UpdateParameters_ChangesOutput()
-    {
-        var layer = new PointConvolutionLayer<double>(3, 4);
-        var input = CreateRandomTensor(8, 3, seed: 23);
 
-        var output1 = layer.Forward(input);
-        var val1 = output1[0];
-
-        // Update with learning rate
-        layer.Forward(input);
-        var grad = CreateRandomTensor(8, 4, seed: 29);
-        layer.Backward(grad);
-        layer.UpdateParameters(0.01);
-
-        var output2 = layer.Forward(input);
-        var val2 = output2[0];
-
-        // Output should change after parameter update
-        Assert.NotEqual(val1, val2);
-    }
-
-    [Fact]
-    public void PointConvolution_ClearGradients_ResetsAccumulation()
-    {
-        var layer = new PointConvolutionLayer<double>(3, 4);
-        var input = CreateRandomTensor(8, 3, seed: 31);
-        layer.Forward(input);
-
-        var grad = CreateRandomTensor(8, 4, seed: 37);
-        layer.Backward(grad);
-
-        // Clear and do another forward/backward
-        layer.ClearGradients();
-        layer.Forward(input);
-        layer.Backward(grad);
-
-        // Should not throw and should produce valid gradients
-        var inputGrad = layer.Backward(grad);
-        AssertAllFinite(inputGrad);
-    }
 
     [Fact]
     public void PointConvolution_SinglePoint_ProducesValidOutput()
@@ -224,33 +158,6 @@ public class PointCloudLayersIntegrationTests
         Assert.Equal(output1[1], output2[1], Tolerance);
     }
 
-    [Fact]
-    public void MaxPooling_Backward_RoutesGradientToMaxElements()
-    {
-        var data = new double[]
-        {
-            1.0, 5.0,
-            3.0, 2.0,
-        };
-        var input = new Tensor<double>(data, new[] { 2, 2 });
-        var layer = new MaxPoolingLayer<double>(2);
-        layer.Forward(input);
-
-        var outGrad = new Tensor<double>(new[] { 10.0, 20.0 }, new[] { 1, 2 });
-        var inputGrad = layer.Backward(outGrad);
-
-        Assert.Equal(2, inputGrad.Shape[0]);
-        Assert.Equal(2, inputGrad.Shape[1]);
-        AssertAllFinite(inputGrad);
-
-        // Gradient should flow to max elements:
-        // Channel 0: max at index 1 (value 3.0), so grad[0,0]=0, grad[1,0]=10
-        // Channel 1: max at index 0 (value 5.0), so grad[0,1]=20, grad[1,1]=0
-        Assert.Equal(0.0, inputGrad[0], Tolerance);  // point 0, ch 0 (not max)
-        Assert.Equal(20.0, inputGrad[1], Tolerance);  // point 0, ch 1 (max)
-        Assert.Equal(10.0, inputGrad[2], Tolerance);  // point 1, ch 0 (max)
-        Assert.Equal(0.0, inputGrad[3], Tolerance);   // point 1, ch 1 (not max)
-    }
 
     [Fact]
     public void MaxPooling_ParameterCount_IsZero()
@@ -313,20 +220,6 @@ public class PointCloudLayersIntegrationTests
         AssertAllFinite(output);
     }
 
-    [Fact]
-    public void TNet_Backward_ProducesCorrectShape()
-    {
-        var tnet = new TNetLayer<double>(3, 3, new[] { 16, 32 }, new[] { 16 });
-        var input = CreateRandomTensor(16, 3, seed: 61);
-        tnet.Forward(input);
-
-        var grad = CreateRandomTensor(16, 3, seed: 67);
-        var inputGrad = tnet.Backward(grad);
-
-        Assert.Equal(16, inputGrad.Shape[0]);
-        Assert.Equal(3, inputGrad.Shape[1]);
-        AssertAllFinite(inputGrad);
-    }
 
     [Fact]
     public void TNet_ParameterCount_IsPositive()
@@ -360,17 +253,6 @@ public class PointCloudLayersIntegrationTests
             new TNetLayer<double>(3, -1));
     }
 
-    [Fact]
-    public void TNet_UpdateParameters_DoesNotThrow()
-    {
-        var tnet = new TNetLayer<double>(3, 3, new[] { 8, 16 }, new[] { 8 });
-        var input = CreateRandomTensor(8, 3, seed: 71);
-        tnet.Forward(input);
-
-        var grad = CreateRandomTensor(8, 3, seed: 73);
-        tnet.Backward(grad);
-        tnet.UpdateParameters(0.001);
-    }
 
     [Fact]
     public void TNet_FeatureTransform_PreservesExtraFeatures()
@@ -398,28 +280,7 @@ public class PointCloudLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void TNet_ResetState_ClearsCachedData()
-    {
-        var tnet = new TNetLayer<double>(3, 3, new[] { 16, 32 }, new[] { 16 });
-        var input = CreateRandomTensor(8, 3, seed: 83);
-        tnet.Forward(input);
 
-        tnet.ResetState();
-
-        // Backward should fail after reset since no forward was done
-        var grad = CreateRandomTensor(8, 3, seed: 89);
-        Assert.Throws<InvalidOperationException>(() => tnet.Backward(grad));
-    }
-
-    [Fact]
-    public void TNet_BackwardWithoutForward_Throws()
-    {
-        var tnet = new TNetLayer<double>(3, 3, new[] { 16, 32 }, new[] { 16 });
-        var grad = CreateRandomTensor(8, 3, seed: 97);
-
-        Assert.Throws<InvalidOperationException>(() => tnet.Backward(grad));
-    }
 
     #endregion
 
@@ -568,24 +429,6 @@ public class PointCloudLayersIntegrationTests
         AssertAllFinite(h3);
     }
 
-    [Fact]
-    public void PointCloudPipeline_BackwardPropagates_ThroughConvLayers()
-    {
-        var conv1 = new PointConvolutionLayer<double>(3, 8);
-        var conv2 = new PointConvolutionLayer<double>(8, 4);
-
-        var input = CreateRandomTensor(16, 3, seed: 127);
-        var h1 = conv1.Forward(input);
-        var h2 = conv2.Forward(h1);
-
-        var outGrad = CreateRandomTensor(16, 4, seed: 131);
-        var grad1 = conv2.Backward(outGrad);
-        var grad0 = conv1.Backward(grad1);
-
-        Assert.Equal(16, grad0.Shape[0]);
-        Assert.Equal(3, grad0.Shape[1]);
-        AssertAllFinite(grad0);
-    }
 
     #endregion
 

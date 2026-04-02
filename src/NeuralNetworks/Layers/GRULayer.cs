@@ -349,12 +349,12 @@ public partial class GRULayer<T> : LayerBase<T>
     private GpuTensor<T>? _gpuBhV;
 
     // Cached forward pass state for backpropagation (BPTT)
-    private IGpuTensor<T>? _gpuLastInput;
-    private IGpuTensor<T>[]? _gpuCachedZGates;
-    private IGpuTensor<T>[]? _gpuCachedRGates;
-    private IGpuTensor<T>[]? _gpuCachedHCandidates;
-    private IGpuTensor<T>[]? _gpuCachedHiddenStates;
-    private IGpuTensor<T>? _gpuInitialHiddenState;
+    private Tensor<T>? _gpuLastInput;
+    private Tensor<T>[]? _gpuCachedZGates;
+    private Tensor<T>[]? _gpuCachedRGates;
+    private Tensor<T>[]? _gpuCachedHCandidates;
+    private Tensor<T>[]? _gpuCachedHiddenStates;
+    private Tensor<T>? _gpuInitialHiddenState;
 
     // Cached stacked weights for fused kernel (PyTorch format: r, z, n)
     private IGpuBuffer? _gpuStackedWeightsIh;
@@ -944,7 +944,7 @@ public partial class GRULayer<T> : LayerBase<T>
     /// <returns>GPU tensor output after GRU processing.</returns>
     /// <exception cref="ArgumentException">Thrown when no input tensor is provided.</exception>
     /// <exception cref="InvalidOperationException">Thrown when GPU backend is unavailable.</exception>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

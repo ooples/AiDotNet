@@ -61,7 +61,7 @@ public class InputLayer<T> : LayerBase<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         return inputs[0];
     }

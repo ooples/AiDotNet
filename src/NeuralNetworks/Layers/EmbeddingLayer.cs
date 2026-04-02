@@ -102,7 +102,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     private bool? _autoDetectedContinuous;
 
     // GPU-resident cached tensors for GPU training pipeline
-    private IGpuTensor<T>? _lastInputGpu;
+    private Tensor<T>? _lastInputGpu;
     private int[]? _lastInputGpuShape;
     private Tensor<int>? _lastIndicesForGpu;
 
@@ -537,7 +537,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// making it much faster for large vocabularies and batch sizes.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

@@ -103,7 +103,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     private Tensor<T>? _betaVelocity;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuLastInput;
+    private Tensor<T>? _gpuLastInput;
     private Tensor<T>? _gpuSaveMean;
     private Tensor<T>? _gpuSaveInvVar;
 
@@ -284,7 +284,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">GPU-resident input tensor.</param>
     /// <returns>GPU-resident normalized output tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -364,8 +364,11 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
         }
         else
         {
-            _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
-            _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+            // Update in-place to preserve GPU-registered tensor references
+            var updGamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
+            var updBeta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+            for (int i = 0; i < _gamma.Length; i++) _gamma[i] = updGamma[i];
+            for (int i = 0; i < _beta.Length; i++) _beta[i] = updBeta[i];
 
             Engine.InvalidatePersistentTensor(_gamma);
             Engine.InvalidatePersistentTensor(_beta);

@@ -96,8 +96,8 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private int[]? _originalInputShape;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput3D;
-    private IGpuTensor<T>? _gpuNormalized1;
+    private Tensor<T>? _gpuInput3D;
+    private Tensor<T>? _gpuNormalized1;
 
     /// <summary>
     /// The size of the embeddings for queries, keys, values, and outputs.
@@ -523,7 +523,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// feed-forward networks, residual connections) remain GPU-resident for maximum performance.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -537,7 +537,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int[] inputShape = input.Shape.ToArray();
         int rank = inputShape.Length;
 
-        IGpuTensor<T> input3D;
+        Tensor<T> input3D;
         int[] originalShape = inputShape;
         bool was2D = rank == 2;
 

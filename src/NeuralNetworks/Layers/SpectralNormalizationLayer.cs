@@ -115,8 +115,8 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// GPU-resident power iteration vectors.
     /// </summary>
-    private IGpuTensor<T>? _uGpu;
-    private IGpuTensor<T>? _vGpu;
+    private Tensor<T>? _uGpu;
+    private Tensor<T>? _vGpu;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SpectralNormalizationLayer{T}"/> class.
@@ -325,7 +325,7 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     /// keeping all computations on GPU for maximum performance.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

@@ -251,7 +251,7 @@ public class QuantumLayer<T> : LayerBase<T>
     /// The quantum layer processes data through a simulated quantum circuit with complex-valued operations.
     /// This method uses specialized CUDA kernels to perform quantum operations entirely on GPU.
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs == null || inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

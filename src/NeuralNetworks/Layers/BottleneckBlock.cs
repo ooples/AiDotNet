@@ -80,9 +80,9 @@ public class BottleneckBlock<T> : LayerBase<T>
     private Tensor<T>? _lastPreActivation;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuBn1Out;
-    private IGpuTensor<T>? _gpuBn2Out;
-    private IGpuTensor<T>? _gpuPreActivation;
+    private Tensor<T>? _gpuBn1Out;
+    private Tensor<T>? _gpuBn2Out;
+    private Tensor<T>? _gpuPreActivation;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -239,7 +239,7 @@ public class BottleneckBlock<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">The input tensors (expects single input).</param>
     /// <returns>The output tensor on GPU.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -268,7 +268,7 @@ public class BottleneckBlock<T> : LayerBase<T>
         var bn3Out = _bn3.ForwardGpu(conv3Out);
 
         // Identity/skip branch
-        IGpuTensor<T> identity;
+        Tensor<T> identity;
         if (_hasDownsample && _downsampleConv is not null && _downsampleBn is not null)
         {
             var dsConvOut = _downsampleConv.ForwardGpu(input);

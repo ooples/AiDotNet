@@ -144,7 +144,7 @@ public class ResidualLayer<T> : LayerBase<T>
     /// All operations remain on GPU until explicit download is requested.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -154,7 +154,7 @@ public class ResidualLayer<T> : LayerBase<T>
 
         var input = inputs[0];
 
-        IGpuTensor<T> result;
+        Tensor<T> result;
 
         if (_innerLayer != null && _innerLayer.CanExecuteOnGpu)
         {

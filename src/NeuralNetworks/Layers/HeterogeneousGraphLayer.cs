@@ -514,7 +514,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
     /// GPU-accelerated forward pass for HeterogeneousGraphLayer.
     /// Implements type-specific graph convolution with fully GPU-native operations.
     /// </summary>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

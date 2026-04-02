@@ -799,22 +799,33 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         var fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
 
         // Train discriminator with tape-based autodiff
-        Discriminator.Train(realImages, realLabels);
+        Discriminator.Train(expectedOutput, realLabels);
         Discriminator.Train(fakeImages, fakeLabels);
 
         // Compute discriminator loss for monitoring
-        var realPred = Discriminator.Predict(realImages);
+        var realPred = Discriminator.Predict(expectedOutput);
         var fakePred = Discriminator.Predict(fakeImages);
         T realLoss = LossFunction.CalculateLoss(realPred.ToVector(), realLabels.ToVector());
         T fakeLoss = LossFunction.CalculateLoss(fakePred.ToVector(), fakeLabels.ToVector());
         var discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
         _lastDiscriminatorLoss = discriminatorLoss;
 
-        // Train generator with tape
+        // Train generator to fool discriminator (adversarial objective)
+        // Generator wants discriminator to output "real" (1) for fake images
         var allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
-        Generator.Train(noise, allRealLabels);
-        var genPred = Discriminator.Predict(GenerateImages(noise));
-        T generatorLoss = LossFunction.CalculateLoss(genPred.ToVector(), allRealLabels.ToVector());
+        var trainableGen = (NeuralNetworkBase<T>)Generator;
+        T generatorLoss = trainableGen.TrainWithCustomLoss(input, genOutput =>
+        {
+            // genOutput = generated fake images from ForwardForTraining (tape-tracked)
+            // Pass through discriminator (detached — only generator weights update)
+            var discScore = Discriminator.Predict(genOutput);
+            // Generator loss: BCE(discriminator(fake), real_labels)
+            // Use engine ops for tape differentiability
+            var diff = Engine.TensorSubtract(discScore, allRealLabels);
+            var squared = Engine.TensorMultiply(diff, diff);
+            var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+            return Engine.ReduceMean(squared, allAxes, keepDims: false);
+        });
         _lastGeneratorLoss = generatorLoss;
 
         // Calculate auxiliary losses if enabled
@@ -1812,16 +1823,17 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Reset layer states to ensure clean forward pass
         Discriminator.ResetState();
 
-        // Forward pass through discriminator
-        var output = Discriminator.Predict(input);
-
-        // Create gradient signal: we want d(output)/d(input)
-        // Start with gradient of 1.0 with respect to the output
-        var outputGradient = new Tensor<T>(output._shape);
-        outputGradient.Fill(NumOps.One);
-
-        // Run backward pass through discriminator layers to compute input gradient
-        // The discriminator's Backward method will propagate gradients back to the input
+        // Compute input gradients using tape-based autodiff
+        var eng = AiDotNetEngine.Current;
+        Tensor<T> inputGradient;
+        using (var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>())
+        {
+            var output = Discriminator.Predict(input);
+            var allAxes = Enumerable.Range(0, output.Shape.Length).ToArray();
+            var sumOutput = eng.ReduceSum(output, allAxes, keepDims: false);
+            var grads = tape.ComputeGradients(sumOutput, [input]);
+            inputGradient = grads.TryGetValue(input, out var g) ? g : new Tensor<T>(input._shape);
+        }
 
         // Restore original training mode
         Discriminator.SetTrainingMode(originalMode);

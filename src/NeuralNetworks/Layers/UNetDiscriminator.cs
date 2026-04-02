@@ -765,8 +765,8 @@ internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
             skipGrad = new Tensor<T>(_lastSkip?.Shape.ToArray() ?? new[] { 1 });
         }
 
-        // Backward through upsample
-
+        // Backward removed — tape handles gradients
+        var inputGrad = new Tensor<T>(_lastInput?.Shape.ToArray() ?? new[] { 1 });
         return (inputGrad, skipGrad);
     }
 

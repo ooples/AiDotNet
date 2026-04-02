@@ -144,7 +144,7 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
     public override bool SupportsGpuTraining => true;
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0) throw new ArgumentException("GaussianNoiseLayer requires an input tensor.");
         var input = inputs[0];

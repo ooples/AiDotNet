@@ -100,7 +100,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     #endregion
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0) throw new ArgumentException("SpiralConvLayer requires an input tensor.");
         var input = inputs[0];
@@ -136,7 +136,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
         var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
 
         // Helper for single batch processing
-        IGpuTensor<T> ProcessBatchItem(IGpuTensor<T> batchInput)
+        Tensor<T> ProcessBatchItem(Tensor<T> batchInput)
         {
             // batchInput: [V, C]
             // Gather: [V*S, C]
@@ -174,10 +174,10 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
             return output;
         }
 
-        IGpuTensor<T> result;
+        Tensor<T> result;
         if (hasBatch)
         {
-            var outputs = new IGpuTensor<T>[batchSize];
+            var outputs = new Tensor<T>[batchSize];
             for (int b = 0; b < batchSize; b++)
             {
                 // Slice input [B, V, C] -> [V, C]

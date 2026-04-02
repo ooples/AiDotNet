@@ -299,7 +299,7 @@ public class ReshapeLayer<T> : LayerBase<T>
     /// the view will have shape [32, 784] but still points to the same GPU memory.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

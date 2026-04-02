@@ -56,7 +56,7 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>
     private int[] _originalInputShape = [];
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
+    private Tensor<T>? _gpuInput;
     private IGpuBuffer? _gpuMean;
     private IGpuBuffer? _gpuInvVar;
     private int _gpuBatch;
@@ -245,7 +245,7 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>
     /// normalization where each channel is normalized independently.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -361,8 +361,11 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>
         if (_gammaGradient == null || _betaGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
-        _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+        // Update in-place to preserve GPU-registered tensor references
+        var updGamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
+        var updBeta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+        for (int i = 0; i < _gamma.Length; i++) _gamma[i] = updGamma[i];
+        for (int i = 0; i < _beta.Length; i++) _beta[i] = updBeta[i];
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_gamma);

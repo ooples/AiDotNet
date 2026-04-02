@@ -222,37 +222,6 @@ public class GraphLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void GraphConvolutionalLayer_Backward_ComputesGradients()
-    {
-        // Arrange
-        int numNodes = 5;
-        int inputFeatures = 8;
-        int outputFeatures = 16;
-
-        var layer = new GraphConvolutionalLayer<float>(inputFeatures, outputFeatures, (IActivationFunction<float>?)null);
-        var adj = CreateSimpleAdjacencyMatrix(numNodes);
-        var nodeFeatures = CreateNodeFeatures(numNodes, inputFeatures);
-
-        layer.SetAdjacencyMatrix(adj);
-
-        // Forward pass first
-        var output = layer.Forward(nodeFeatures);
-
-        // Create gradient for backward pass
-        var gradient = new Tensor<float>(output.Shape.ToArray());
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            gradient[i] = 1.0f;
-        }
-
-        // Act
-        var inputGradient = layer.Backward(gradient);
-
-        // Assert
-        Assert.NotNull(inputGradient);
-        Assert.Equal(nodeFeatures.Shape.ToArray(), inputGradient.Shape.ToArray());
-    }
 
     [Fact]
     public void GraphConvolutionalLayer_Clone_CreatesIndependentCopy()
@@ -405,37 +374,6 @@ public class GraphLayersIntegrationTests
         Assert.True(outputs.Count == 5);
     }
 
-    [Fact]
-    public void GraphAttentionLayer_Backward_ComputesGradients()
-    {
-        // Arrange
-        int numNodes = 5;
-        int inputFeatures = 8;
-        int outputFeatures = 16;
-
-        var layer = new GraphAttentionLayer<float>(inputFeatures, outputFeatures, numHeads: 2);
-        var adj = CreateSimpleAdjacencyMatrix(numNodes);
-        var nodeFeatures = CreateNodeFeatures(numNodes, inputFeatures);
-
-        layer.SetAdjacencyMatrix(adj);
-
-        // Forward pass
-        var output = layer.Forward(nodeFeatures);
-
-        // Create gradient
-        var gradient = new Tensor<float>(output.Shape.ToArray());
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            gradient[i] = 1.0f;
-        }
-
-        // Act
-        var inputGradient = layer.Backward(gradient);
-
-        // Assert
-        Assert.NotNull(inputGradient);
-        Assert.Equal(nodeFeatures.Shape.ToArray(), inputGradient.Shape.ToArray());
-    }
 
     [Fact]
     public void GraphAttentionLayer_Clone_CreatesIndependentCopy()
@@ -568,37 +506,6 @@ public class GraphLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void GraphSAGELayer_Backward_ComputesGradients()
-    {
-        // Arrange
-        int numNodes = 5;
-        int inputFeatures = 8;
-        int outputFeatures = 16;
-
-        var layer = new GraphSAGELayer<float>(inputFeatures, outputFeatures);
-        var adj = CreateSimpleAdjacencyMatrix(numNodes);
-        var nodeFeatures = CreateNodeFeatures(numNodes, inputFeatures);
-
-        layer.SetAdjacencyMatrix(adj);
-
-        // Forward pass
-        var output = layer.Forward(nodeFeatures);
-
-        // Create gradient
-        var gradient = new Tensor<float>(output.Shape.ToArray());
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            gradient[i] = 1.0f;
-        }
-
-        // Act
-        var inputGradient = layer.Backward(gradient);
-
-        // Assert
-        Assert.NotNull(inputGradient);
-        Assert.Equal(nodeFeatures.Shape.ToArray(), inputGradient.Shape.ToArray());
-    }
 
     #endregion
 
@@ -783,37 +690,6 @@ public class GraphLayersIntegrationTests
         Assert.Equal(numNodes, output.Shape[0]);
     }
 
-    [Fact]
-    public void GraphTransformerLayer_Backward_ComputesGradients()
-    {
-        // Arrange
-        int numNodes = 5;
-        int inputFeatures = 32;
-        int outputFeatures = 32;
-
-        var layer = new GraphTransformerLayer<float>(inputFeatures, outputFeatures, activationFunction: (IActivationFunction<float>?)null);
-        var adj = CreateSimpleAdjacencyMatrix(numNodes);
-        var nodeFeatures = CreateNodeFeatures(numNodes, inputFeatures);
-
-        layer.SetAdjacencyMatrix(adj);
-
-        // Forward pass
-        var output = layer.Forward(nodeFeatures);
-
-        // Create gradient
-        var gradient = new Tensor<float>(output.Shape.ToArray());
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            gradient[i] = 1.0f;
-        }
-
-        // Act
-        var inputGradient = layer.Backward(gradient);
-
-        // Assert
-        Assert.NotNull(inputGradient);
-        Assert.Equal(nodeFeatures.Shape.ToArray(), inputGradient.Shape.ToArray());
-    }
 
     #endregion
 
@@ -898,37 +774,6 @@ public class GraphLayersIntegrationTests
         Assert.True(hasNonZero, "DirectionalGraphLayer output should have non-zero values");
     }
 
-    [Fact]
-    public void DirectionalGraphLayer_Backward_ComputesGradients()
-    {
-        // Arrange
-        int numNodes = 5;
-        int inputFeatures = 8;
-        int outputFeatures = 16;
-
-        var layer = new DirectionalGraphLayer<float>(inputFeatures, outputFeatures);
-        var adj = CreateDirectedAdjacencyMatrix(numNodes);
-        var nodeFeatures = CreateNodeFeatures(numNodes, inputFeatures);
-
-        layer.SetAdjacencyMatrix(adj);
-
-        // Forward pass
-        var output = layer.Forward(nodeFeatures);
-
-        // Create gradient
-        var gradient = new Tensor<float>(output.Shape.ToArray());
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            gradient[i] = 1.0f;
-        }
-
-        // Act
-        var inputGradient = layer.Backward(gradient);
-
-        // Assert
-        Assert.NotNull(inputGradient);
-        Assert.Equal(nodeFeatures.Shape.ToArray(), inputGradient.Shape.ToArray());
-    }
 
     #endregion
 

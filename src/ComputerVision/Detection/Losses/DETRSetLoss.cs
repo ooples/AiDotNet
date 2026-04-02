@@ -454,4 +454,11 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
 
         return classes;
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        throw new NotImplementedException(
+            "DETR ComputeTapeLoss requires differentiable Hungarian matching + multi-component loss. See task #74.");
+    }
 }

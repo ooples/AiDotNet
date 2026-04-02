@@ -680,7 +680,7 @@ public class SAGAN<T> : NeuralNetworkBase<T>
             return gradient;
         }
 
-        public (TLoss Loss, IGpuTensor<TLoss> Gradient) CalculateLossAndGradientGpu(IGpuTensor<TLoss> predicted, IGpuTensor<TLoss> actual)
+        public (TLoss Loss, Tensor<TLoss> Gradient) CalculateLossAndGradientGpu(Tensor<TLoss> predicted, Tensor<TLoss> actual)
         {
             // Fall back to CPU for now
             var predictedCpu = predicted.ToTensor();

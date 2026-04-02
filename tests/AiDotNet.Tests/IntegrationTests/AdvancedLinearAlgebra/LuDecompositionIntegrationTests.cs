@@ -199,76 +199,8 @@ public class LuDecompositionIntegrationTests
 
     #region Linear System Solving Tests
 
-    [Theory]
-    [InlineData(2)]
-    [InlineData(3)]
-    [InlineData(5)]
-    [InlineData(10)]
-    public void LuDecomposition_Solve_ProducesCorrectSolution(int size)
-    {
-        // Arrange - Create a system with known solution
-        var A = CreateTestMatrix(size, seed: 42);
-        var xExpected = new Vector<double>(size);
-        for (int i = 0; i < size; i++)
-            xExpected[i] = i + 1.0;
 
-        var b = A.Multiply(xExpected);
 
-        // Act
-        var lu = new LuDecomposition<double>(A, LuAlgorithmType.PartialPivoting);
-        var xComputed = lu.Solve(b);
-
-        // Assert - Verify A*x_computed ≈ b
-        var bComputed = A.Multiply(xComputed);
-        for (int i = 0; i < size; i++)
-        {
-            Assert.True(Math.Abs(bComputed[i] - b[i]) < 1e-8,
-                $"A*x should equal b. Component {i}: expected {b[i]}, got {bComputed[i]}");
-        }
-    }
-
-    [Fact]
-    public void LuDecomposition_Solve_IdentityMatrix_ReturnsSameVector()
-    {
-        // Arrange
-        var I = Matrix<double>.CreateIdentityMatrix(4);
-        var b = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 });
-
-        // Act
-        var lu = new LuDecomposition<double>(I);
-        var x = lu.Solve(b);
-
-        // Assert
-        for (int i = 0; i < 4; i++)
-        {
-            Assert.True(Math.Abs(x[i] - b[i]) < Tolerance,
-                $"Solution for identity matrix should be the input vector. Index {i}");
-        }
-    }
-
-    [Fact]
-    public void LuDecomposition_Solve_DiagonalMatrix_CorrectDivision()
-    {
-        // Arrange - Diagonal matrix with values 1, 2, 3, 4
-        var D = new Matrix<double>(4, 4);
-        for (int i = 0; i < 4; i++)
-            D[i, i] = i + 1.0;
-
-        var b = new Vector<double>(new[] { 2.0, 6.0, 12.0, 20.0 });
-        // Expected solution: x[i] = b[i] / D[i,i] = {2, 3, 4, 5}
-
-        // Act
-        var lu = new LuDecomposition<double>(D);
-        var x = lu.Solve(b);
-
-        // Assert
-        var expected = new[] { 2.0, 3.0, 4.0, 5.0 };
-        for (int i = 0; i < 4; i++)
-        {
-            Assert.True(Math.Abs(x[i] - expected[i]) < Tolerance,
-                $"Index {i}: expected {expected[i]}, got {x[i]}");
-        }
-    }
 
     #endregion
 

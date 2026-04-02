@@ -51,5 +51,5 @@ public interface ILossFunction<T>
     /// This method is more efficient than calling separate loss and gradient calculations
     /// as it can compute both in a single GPU kernel invocation.
     /// </remarks>
-    (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual);
+    (T Loss, Tensor<T> Gradient) CalculateLossAndGradientGpu(Tensor<T> predicted, Tensor<T> actual);
 }

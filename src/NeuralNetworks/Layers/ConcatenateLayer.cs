@@ -48,7 +48,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
     private Tensor<T>? _lastOutput;
 
     // GPU-resident cached tensors for GPU training pipeline
-    private IGpuTensor<T>? _lastOutputGpu;
+    private Tensor<T>? _lastOutputGpu;
     private int[]? _lastInputSizesGpu;
 
     /// <summary>
@@ -84,7 +84,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
     public override bool SupportsGpuTraining => true;
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length < 2)
         {
@@ -102,7 +102,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
         int rank = inputs[0].Shape.Length;
         int axis = _axis < 0 ? rank + _axis : _axis;
 
-        IGpuTensor<T>[] processedInputs = inputs;
+        Tensor<T>[] processedInputs = inputs;
         bool needsPermute = axis != rank - 1;
         int[]? permutation = null;
         int[]? invPermutation = null;
@@ -120,7 +120,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
 
             for (int i = 0; i < rank; i++) invPermutation[permutation[i]] = i;
 
-            processedInputs = new IGpuTensor<T>[inputs.Length];
+            processedInputs = new Tensor<T>[inputs.Length];
             for (int i = 0; i < inputs.Length; i++)
             {
                 processedInputs[i] = gpuEngine.PermuteGpu(inputs[i], permutation);
@@ -175,7 +175,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
             permutedOutputShape[axis] = totalAxisDim;
         }
 
-        IGpuTensor<T> result = new GpuTensor<T>(backend, outputBuffer, permutedOutputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        Tensor<T> result = new GpuTensor<T>(backend, outputBuffer, permutedOutputShape, GpuTensorRole.Activation, ownsBuffer: true);
 
         // 6. Inverse Permute if needed
         if (needsPermute)
@@ -215,7 +215,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
     /// <summary>
     /// Computes the activation backward gradient on GPU.
     /// </summary>
-    private IGpuTensor<T> ComputeActivationBackwardGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> gradOutput, IGpuTensor<T> output, FusedActivationType activationType)
+    private Tensor<T> ComputeActivationBackwardGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> gradOutput, Tensor<T> output, FusedActivationType activationType)
     {
         return activationType switch
         {

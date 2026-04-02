@@ -117,7 +117,7 @@ public class ModifiedHuberLoss<T> : LossFunctionBase<T>
     /// <param name="predicted">The predicted GPU tensor from the model.</param>
     /// <param name="actual">The actual (target) GPU tensor.</param>
     /// <returns>A tuple containing the loss value and gradient tensor.</returns>
-    public override (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    public override (T Loss, Tensor<T> Gradient) CalculateLossAndGradientGpu(Tensor<T> predicted, Tensor<T> actual)
     {
         var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
         var backend = engine?.GetBackend();
@@ -140,5 +140,22 @@ public class ModifiedHuberLoss<T> : LossFunctionBase<T>
         var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Modified Huber: max(0, 1-y*f)² if y*f >= -1, else -4*y*f
+        var product = Engine.TensorMultiply(target, predicted);
+        var margin = Engine.ScalarMinusTensor(NumOps.One, product);
+        var hinged = Engine.ReLU(margin);
+        var squaredHinge = Engine.TensorMultiply(hinged, hinged);
+        var linearPart = Engine.TensorMultiplyScalar(product, NumOps.FromDouble(-4.0));
+        // Use TensorClamp-based selection: y*f >= -1 means product + 1 >= 0
+        var shifted = Engine.TensorAddScalar(product, NumOps.One);
+        var mask = Engine.TensorGreaterThan(shifted, NumOps.Zero);
+        var result = Engine.TensorWhere(mask, squaredHinge, linearPart);
+        var allAxes = Enumerable.Range(0, result.Shape.Length).ToArray();
+        return Engine.ReduceMean(result, allAxes, keepDims: false);
     }
 }

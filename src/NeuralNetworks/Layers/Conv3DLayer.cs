@@ -196,8 +196,8 @@ public partial class Conv3DLayer<T> : LayerBase<T>
     #endregion
 
     #region GPU Training Fields
-    private IGpuTensor<T>? _gpuLastInput;
-    private IGpuTensor<T>? _gpuLastOutput;
+    private Tensor<T>? _gpuLastInput;
+    private Tensor<T>? _gpuLastOutput;
 
     // GPU weight buffers
     private GpuTensor<T>? _gpuKernels;
@@ -570,7 +570,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
     /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.</para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -593,7 +593,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>
         int rank = input.Shape.Length;
 
         // Reshape input to 5D NCDHW [B, C, D, H, W] for 3D convolution
-        IGpuTensor<T> input5D;
+        Tensor<T> input5D;
         bool addedBatchDimension = false;
         if (rank == 4)
         {

@@ -140,7 +140,7 @@ public class CharbonnierLoss<T> : LossFunctionBase<T>
     /// <param name="predicted">The predicted GPU tensor from the model.</param>
     /// <param name="actual">The actual (target) GPU tensor.</param>
     /// <returns>A tuple containing the loss value and gradient tensor.</returns>
-    public override (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    public override (T Loss, Tensor<T> Gradient) CalculateLossAndGradientGpu(Tensor<T> predicted, Tensor<T> actual)
     {
         var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
         var backend = engine?.GetBackend();
@@ -164,5 +164,19 @@ public class CharbonnierLoss<T> : LossFunctionBase<T>
         var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Charbonnier = mean(sqrt((pred - target)² + ε²))
+        var diff = Engine.TensorSubtract(predicted, target);
+        var squared = Engine.TensorMultiply(diff, diff);
+        var epsSq = new Tensor<T>(squared.Shape.ToArray());
+        epsSq.Fill(_epsilonSquared);
+        var sum = Engine.TensorAdd(squared, epsSq);
+        var result = Engine.TensorSqrt(sum);
+        var allAxes = Enumerable.Range(0, result.Shape.Length).ToArray();
+        return Engine.ReduceMean(result, allAxes, keepDims: false);
     }
 }

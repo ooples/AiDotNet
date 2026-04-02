@@ -628,7 +628,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -656,7 +656,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int outputDim = _outputBias.Shape[0];
 
         // Get memory from inputs or use default memory if available
-        IGpuTensor<T>? memoryTensor = inputs.Length >= 2 ? inputs[1] : null;
+        Tensor<T>? memoryTensor = inputs.Length >= 2 ? inputs[1] : null;
         int memorySlots;
         IGpuBuffer memoryBuffer;
         bool memoryBufferOwned = false;

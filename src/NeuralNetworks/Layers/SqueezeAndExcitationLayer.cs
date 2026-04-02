@@ -806,7 +806,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     /// FusedLinearGpu for excitation, and BroadcastMultiplyFirstAxis for scaling.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -855,7 +855,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     /// <summary>
     /// GPU forward pass for 2D inputs [B, C] - no squeeze needed.
     /// </summary>
-    private IGpuTensor<T> ForwardGpu2D(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+    private Tensor<T> ForwardGpu2D(Tensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
         IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
     {
         var shape = input.Shape.ToArray();
@@ -887,7 +887,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     /// <summary>
     /// GPU forward pass for 4D inputs [B, H, W, C] - uses GlobalAvgPool2D.
     /// </summary>
-    private IGpuTensor<T> ForwardGpu4D(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+    private Tensor<T> ForwardGpu4D(Tensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
         IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
     {
         var shape = input.Shape.ToArray();
@@ -944,7 +944,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     /// <summary>
     /// GPU forward pass for 3D inputs [B, L, C] - uses MeanAxis for squeeze.
     /// </summary>
-    private IGpuTensor<T> ForwardGpu3D(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+    private Tensor<T> ForwardGpu3D(Tensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
         IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
     {
         var shape = input.Shape.ToArray();
@@ -1000,7 +1000,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     /// <summary>
     /// GPU forward pass for 1D inputs [C] - reshape to [1, C] and process.
     /// </summary>
-    private IGpuTensor<T> ForwardGpu1D(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+    private Tensor<T> ForwardGpu1D(Tensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
         IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
     {
         var shape = input.Shape.ToArray();
@@ -1017,7 +1017,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     /// <summary>
     /// GPU forward pass for higher-rank tensors [B, D1, D2, ..., C] - flatten spatial dims.
     /// </summary>
-    private IGpuTensor<T> ForwardGpuND(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+    private Tensor<T> ForwardGpuND(Tensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
         IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
     {
         var shape = input.Shape.ToArray();

@@ -299,10 +299,10 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _biasMomentum;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuConvOutput;
-    private IGpuTensor<T>? _gpuShuffled;
-    private IGpuTensor<T>? _gpuActivationOutput;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuConvOutput;
+    private Tensor<T>? _gpuShuffled;
+    private Tensor<T>? _gpuActivationOutput;
     private bool _gpuAddedBatch;
     private int _gpuBatch;
     private int _gpuHeight;
@@ -663,7 +663,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// <remarks>
     /// All computations stay on GPU: Conv2D → PixelShuffle (reshape+permute+reshape) → Activation.
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -676,7 +676,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
         var shape = input.Shape.ToArray();
 
         // Ensure 4D [B, C, H, W] format
-        IGpuTensor<T> input4D;
+        Tensor<T> input4D;
         bool addedBatch = false;
         if (shape.Length == 3)
         {
@@ -717,7 +717,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
 
         // Step 3: Apply activation
         var fusedActivation = GetFusedActivationType();
-        IGpuTensor<T> result;
+        Tensor<T> result;
         if (fusedActivation != FusedActivationType.None)
         {
             result = gpuEngine.ActivationGpu(shuffled, fusedActivation);

@@ -376,7 +376,7 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// - Scale and Add for leaking rate blending
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs == null || inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

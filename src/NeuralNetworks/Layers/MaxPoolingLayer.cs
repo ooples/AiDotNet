@@ -140,7 +140,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">The input tensor on GPU.</param>
     /// <returns>The pooled output as a GPU-resident tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -154,7 +154,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         if (input.Shape.Length < 3)
             throw new ArgumentException($"MaxPooling layer requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
 
-        IGpuTensor<T> input4D;
+        Tensor<T> input4D;
         bool addedBatch = false;
         _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;

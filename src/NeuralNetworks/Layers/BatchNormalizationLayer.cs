@@ -157,7 +157,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     private Tensor<T>? _betaGradient;
 
     // GPU-resident cached tensors for GPU training pipeline
-    private IGpuTensor<T>? _lastInputGpu;
+    private Tensor<T>? _lastInputGpu;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training mode.
@@ -529,7 +529,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// and then downloaded back to CPU for persistence.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -689,7 +689,10 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     {
         int featureSize = InputShape[0];
         if (extraParameters.Length != featureSize * 2)
-            return; // graceful no-op for legacy data without extras
+            throw new ArgumentException(
+                $"BatchNormalization extra parameters must have length {featureSize * 2} " +
+                $"(mean + variance for {featureSize} features), but got {extraParameters.Length}.",
+                nameof(extraParameters));
 
         var meanVec = extraParameters.Slice(0, featureSize);
         var varVec = extraParameters.Slice(featureSize, featureSize);
@@ -763,12 +766,16 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
 
             gpuEngine.SgdMomentumUpdateGpu(_gamma, _gammaGradient, _gammaVelocity, lr, 0.0f, 0.0f);
             gpuEngine.SgdMomentumUpdateGpu(_beta, _betaGradient, _betaVelocity, lr, 0.0f, 0.0f);
+            _inferenceScaleDirty = true;
         }
         else
         {
             // Production-grade: Use Engine operations instead of manual loops
             _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
             _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+
+            // Invalidate cached inference terms since gamma/beta changed
+            _inferenceScaleDirty = true;
 
             // Notify GPU that tensor data has changed
             Engine.InvalidatePersistentTensor(_gamma);

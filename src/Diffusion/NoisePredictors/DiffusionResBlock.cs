@@ -225,7 +225,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
     /// Gets the accumulated time embedding gradient from the last backward pass.
     /// Called by UNetNoisePredictor to propagate gradients through the time MLP.
     /// </summary>
-    public Tensor<T>? GetTimeEmbedGradient() => _timeEmbedGradient;
+    internal Tensor<T>? GetTimeEmbedGradient() => _timeEmbedGradient;
 
     private Tensor<T> ApplySiLU(Tensor<T> x)
     {

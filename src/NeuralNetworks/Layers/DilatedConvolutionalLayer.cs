@@ -316,8 +316,8 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _biasGradients;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuOutput;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuOutput;
     private int[]? _gpuOriginalInputShape;
     private bool _gpuAddedBatchDimension;
     private FusedActivationType _gpuActivationType;
@@ -639,7 +639,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
     /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.</para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -664,7 +664,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
         bool addedBatchDimension = false;
 
         // Reshape input to 4D [B, C, H, W] for convolution
-        IGpuTensor<T> input4D;
+        Tensor<T> input4D;
         if (rank == 3)
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]

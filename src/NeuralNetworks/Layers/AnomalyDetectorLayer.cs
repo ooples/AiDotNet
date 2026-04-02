@@ -287,7 +287,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">The input GPU tensor containing both predicted and actual states.</param>
     /// <returns>A GPU tensor containing the anomaly score.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");

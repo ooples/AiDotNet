@@ -363,7 +363,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// The spatial pooler converts input patterns into sparse distributed representations.
     /// This method processes the input using GPU operations for matrix multiplication and thresholding.
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs == null || inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -395,7 +395,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         }
         float range = maxVal - minVal;
 
-        IGpuTensor<T> normalizedActivations;
+        Tensor<T> normalizedActivations;
         if (range > 1e-10f)
         {
             // normalized = (activations - minVal) / range = activations / range - minVal / range

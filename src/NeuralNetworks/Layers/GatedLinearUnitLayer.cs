@@ -200,9 +200,9 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
     private Tensor<T>? _lastGateOutput;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuLinearOutput;
-    private IGpuTensor<T>? _gpuGateOutput;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuLinearOutput;
+    private Tensor<T>? _gpuGateOutput;
 
     /// <summary>
     /// The gradients for the linear weights, computed during backpropagation.
@@ -540,7 +540,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">The GPU input tensors.</param>
     /// <returns>The GPU output tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -629,10 +629,15 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
         var scaledLinearBiasGrad = Engine.TensorMultiplyScalar(_linearBiasGradient, learningRate);
         var scaledGateBiasGrad = Engine.TensorMultiplyScalar(_gateBiasGradient, learningRate);
 
-        _linearWeights = Engine.TensorSubtract(_linearWeights, scaledLinearWeightsGrad);
-        _gateWeights = Engine.TensorSubtract(_gateWeights, scaledGateWeightsGrad);
-        _linearBias = Engine.TensorSubtract(_linearBias, scaledLinearBiasGrad);
-        _gateBias = Engine.TensorSubtract(_gateBias, scaledGateBiasGrad);
+        // Update in-place to preserve GPU-registered tensor references
+        var updLW = Engine.TensorSubtract(_linearWeights, scaledLinearWeightsGrad);
+        var updGW = Engine.TensorSubtract(_gateWeights, scaledGateWeightsGrad);
+        var updLB = Engine.TensorSubtract(_linearBias, scaledLinearBiasGrad);
+        var updGB = Engine.TensorSubtract(_gateBias, scaledGateBiasGrad);
+        for (int i = 0; i < _linearWeights.Length; i++) _linearWeights[i] = updLW[i];
+        for (int i = 0; i < _gateWeights.Length; i++) _gateWeights[i] = updGW[i];
+        for (int i = 0; i < _linearBias.Length; i++) _linearBias[i] = updLB[i];
+        for (int i = 0; i < _gateBias.Length; i++) _gateBias[i] = updGB[i];
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_linearWeights);

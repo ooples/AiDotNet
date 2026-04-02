@@ -470,7 +470,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">GPU-resident input tensors (uses first input).</param>
     /// <returns>GPU-resident output tensor with positional encodings added.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -484,7 +484,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
 
         // Handle 1D input by treating as [1, embed]
         bool was1D = rank == 1;
-        IGpuTensor<T> workingInput = input;
+        Tensor<T> workingInput = input;
 
         if (was1D)
         {
@@ -555,7 +555,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         // Upload encodings to GPU
         var gpuEncodings = gpuEngine.UploadToGpu(slicedEncodings, GpuTensorRole.Activation);
 
-        IGpuTensor<T> result;
+        Tensor<T> result;
         if (rank == 2)
         {
             // Direct add for 2D input

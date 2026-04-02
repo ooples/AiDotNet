@@ -142,7 +142,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0) throw new ArgumentException("TimeDistributedLayer requires an input tensor.");
         var input = inputs[0];

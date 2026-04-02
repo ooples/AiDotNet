@@ -107,7 +107,7 @@ public class MaskingLayer<T> : LayerBase<T>
     /// <summary>
     /// The GPU mask tensor from the last GPU forward pass (for backward pass caching).
     /// </summary>
-    private IGpuTensor<T>? _lastMaskGpu;
+    private Tensor<T>? _lastMaskGpu;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training through backpropagation.
@@ -206,7 +206,7 @@ public class MaskingLayer<T> : LayerBase<T>
     /// All computations stay on the GPU. Uses NotEqualScalar to create the mask
     /// and Multiply for element-wise application.
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

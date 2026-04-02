@@ -238,7 +238,7 @@ public class MeanLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">Input GPU tensors (uses first input).</param>
     /// <returns>GPU-resident output tensor with mean values.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -261,7 +261,7 @@ public class MeanLayer<T> : LayerBase<T>
 
         // GPU-resident mean reduction using permutation pattern from MaxAxisGpu
         // If axis is not last, permute to move it to the last position
-        IGpuTensor<T> processedInput = input;
+        Tensor<T> processedInput = input;
         bool needsPermute = Axis != inputRank - 1;
 
         if (needsPermute)

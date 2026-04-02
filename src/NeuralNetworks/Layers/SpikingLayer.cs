@@ -794,7 +794,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// that require sequential updates. This method uses GPU for input/output transfer while
     /// processing neuron dynamics on CPU due to their inherently sequential nature.
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs == null || inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

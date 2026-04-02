@@ -104,7 +104,7 @@ public class SquaredHingeLoss<T> : LossFunctionBase<T>
     /// <param name="predicted">The predicted GPU tensor from the model.</param>
     /// <param name="actual">The actual (target) GPU tensor.</param>
     /// <returns>A tuple containing the loss value and gradient tensor.</returns>
-    public override (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    public override (T Loss, Tensor<T> Gradient) CalculateLossAndGradientGpu(Tensor<T> predicted, Tensor<T> actual)
     {
         var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
         var backend = engine?.GetBackend();
@@ -127,5 +127,16 @@ public class SquaredHingeLoss<T> : LossFunctionBase<T>
         var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        var product = Engine.TensorMultiply(target, predicted);
+        var margin = Engine.ScalarMinusTensor(NumOps.One, product);
+        var hinged = Engine.ReLU(margin);
+        var squared = Engine.TensorMultiply(hinged, hinged);
+        var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+        return Engine.ReduceMean(squared, allAxes, keepDims: false);
     }
 }

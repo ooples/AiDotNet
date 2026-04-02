@@ -176,8 +176,8 @@ public class MultiFidelityAndDomainDecompositionTests
             boundaryConditions,
             numCollocationPoints: 100);
 
-        var inputs = new double[10, 2];
-        var outputs = new double[10, 1];
+        var inputs = new Tensor<double>([10, 2]);
+        var outputs = new Tensor<double>([10, 1]);
 
         // Act & Assert (no exception)
         pinn.SetLowFidelityData(inputs, outputs);
@@ -205,8 +205,8 @@ public class MultiFidelityAndDomainDecompositionTests
             boundaryConditions,
             numCollocationPoints: 100);
 
-        var inputs = new double[5, 2];
-        var outputs = new double[5, 1];
+        var inputs = new Tensor<double>([5, 2]);
+        var outputs = new Tensor<double>([5, 1]);
 
         // Act & Assert (no exception)
         pinn.SetHighFidelityData(inputs, outputs);

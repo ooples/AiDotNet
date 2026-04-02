@@ -74,13 +74,13 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     private int[]? _originalQueryShape;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuQuery;
-    private IGpuTensor<T>? _gpuContext;
-    private IGpuTensor<T>? _gpuQ;
-    private IGpuTensor<T>? _gpuK;
-    private IGpuTensor<T>? _gpuV;
-    private IGpuTensor<T>? _gpuAttnOutput;
-    private IGpuTensor<T>? _gpuAttnWeights;
+    private Tensor<T>? _gpuQuery;
+    private Tensor<T>? _gpuContext;
+    private Tensor<T>? _gpuQ;
+    private Tensor<T>? _gpuK;
+    private Tensor<T>? _gpuV;
+    private Tensor<T>? _gpuAttnOutput;
+    private Tensor<T>? _gpuAttnWeights;
     private int _gpuBatch;
     private int _gpuQueryLen;
     private int _gpuContextLen;
@@ -157,7 +157,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (rows + cols)));
 
         var span = weights.AsWritableSpan();
-        var rng = RandomHelper.CreateSeededRandom(42);
+        var rng = RandomHelper.CreateSecureRandom();
         for (int i = 0; i < span.Length; i++)
         {
             double val = (rng.NextDouble() - 0.5) * NumOps.ToDouble(scale);
@@ -540,7 +540,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">Array containing [query] or [query, context] GPU tensors.</param>
     /// <returns>GPU-resident output tensor with same shape as query.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.");
@@ -549,8 +549,8 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
         // Handle single or dual input
-        IGpuTensor<T> query = inputs[0];
-        IGpuTensor<T> context = inputs.Length >= 2 ? inputs[1] : inputs[0];
+        Tensor<T> query = inputs[0];
+        Tensor<T> context = inputs.Length >= 2 ? inputs[1] : inputs[0];
 
         int[] queryShape = query.Shape.ToArray();
         int[] contextShape = context.Shape.ToArray();
@@ -655,8 +655,8 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
         // Scaled dot-product attention
         // Use overload that returns attention weights during training for backward pass
         double scale = 1.0 / Math.Sqrt(_headDim);
-        IGpuTensor<T> attended;
-        IGpuTensor<T>? attentionWeightsGpu = null;
+        Tensor<T> attended;
+        Tensor<T>? attentionWeightsGpu = null;
 
         if (IsTrainingMode)
         {
@@ -728,7 +728,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
         return output;
     }
 
-    private static IGpuTensor<T> ReshapeNCHWToNLCGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> input)
+    private static Tensor<T> ReshapeNCHWToNLCGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> input)
     {
         int[] shape = input.Shape.ToArray();
         int batch = shape[0];
@@ -744,7 +744,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
         return gpuEngine.ReshapeGpu(nhwc, new[] { batch, seqLen, channels });
     }
 
-    private static IGpuTensor<T> ReshapeNLCToNCHWGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> input, int batch, int channels, int height, int width)
+    private static Tensor<T> ReshapeNLCToNCHWGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> input, int batch, int channels, int height, int width)
     {
         // Reshape NLC to NHWC: [B, H*W, C] -> [B, H, W, C]
         var nhwc = gpuEngine.ReshapeGpu(input, new[] { batch, height, width, channels });

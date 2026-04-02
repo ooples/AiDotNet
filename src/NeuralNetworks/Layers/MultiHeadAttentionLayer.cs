@@ -122,12 +122,12 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private Tensor<T>? _lastProjectedValues = null;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput2D;
-    private IGpuTensor<T>? _gpuQ;
-    private IGpuTensor<T>? _gpuK;
-    private IGpuTensor<T>? _gpuV;
-    private IGpuTensor<T>? _gpuContextFlat;
-    private IGpuTensor<T>? _gpuAttentionWeights;
+    private Tensor<T>? _gpuInput2D;
+    private Tensor<T>? _gpuQ;
+    private Tensor<T>? _gpuK;
+    private Tensor<T>? _gpuV;
+    private Tensor<T>? _gpuContextFlat;
+    private Tensor<T>? _gpuAttentionWeights;
     private int _gpuBatchSize;
     private int _gpuSeqLength;
     private int _gpuEmbeddingDim;
@@ -866,7 +866,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </summary>
     /// <param name="input">GPU-resident input tensor.</param>
     /// <returns>GPU-resident output tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -924,8 +924,8 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // 5. Compute scaled dot-product attention
         // Use overload that returns attention weights during training for backward pass
         double scale = 1.0 / Math.Sqrt(_headDimension);
-        IGpuTensor<T> attentionOutput;
-        IGpuTensor<T>? attentionWeightsGpu = null;
+        Tensor<T> attentionOutput;
+        Tensor<T>? attentionWeightsGpu = null;
 
         if (IsTrainingMode)
         {

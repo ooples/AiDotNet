@@ -954,7 +954,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     public override bool SupportsTraining => true;
 
     // GPU Caches
-    private readonly Dictionary<(int batch, int height, int width), IGpuTensor<T>> _identityGridCache = new();
+    private readonly Dictionary<(int batch, int height, int width), Tensor<T>> _identityGridCache = new();
     private readonly Dictionary<(int batch, int channels, int height, int width), (IGpuBuffer idx1, IGpuBuffer idx2)> _sliceIndicesCache = new();
 
     /// <summary>
@@ -963,7 +963,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0) throw new ArgumentException("SpyNetLayer requires an input tensor.");
         var input = inputs[0];
@@ -1014,8 +1014,8 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         }
     }
 
-    private (IGpuTensor<T> frame1, IGpuTensor<T> frame2) SliceChannelsGpu(
-        IGpuTensor<T> input, int batch, int channels, int height, int width,
+    private (Tensor<T> frame1, Tensor<T> frame2) SliceChannelsGpu(
+        Tensor<T> input, int batch, int channels, int height, int width,
         DirectGpuTensorEngine engine, IDirectGpuBackend backend)
     {
         var key = (batch, channels, height, width);
@@ -1056,7 +1056,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         return (f1Reshaped, f2Reshaped);
     }
 
-    private IGpuTensor<T> EstimateFlowGpu(IGpuTensor<T> frame1, IGpuTensor<T> frame2, int batch, int height, int width,
+    private Tensor<T> EstimateFlowGpu(Tensor<T> frame1, Tensor<T> frame2, int batch, int height, int width,
         DirectGpuTensorEngine engine, IDirectGpuBackend backend)
     {
         var cleanup = new List<IDisposable>();
@@ -1134,8 +1134,8 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         }
     }
 
-    private (IGpuTensor<T> warped, IGpuTensor<T> grid) WarpImageWithGridGpu(
-        IGpuTensor<T> image, IGpuTensor<T> flow, DirectGpuTensorEngine engine, IDirectGpuBackend backend)
+    private (Tensor<T> warped, Tensor<T> grid) WarpImageWithGridGpu(
+        Tensor<T> image, Tensor<T> flow, DirectGpuTensorEngine engine, IDirectGpuBackend backend)
     {
         int batch = image.Shape[0];
         int height = image.Shape[2];
@@ -1183,9 +1183,9 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         return (warped, grid);
     }
 
-    private List<IGpuTensor<T>> BuildPyramidGpu(IGpuTensor<T> image, DirectGpuTensorEngine engine)
+    private List<Tensor<T>> BuildPyramidGpu(Tensor<T> image, DirectGpuTensorEngine engine)
     {
-        var pyramid = new List<IGpuTensor<T>> { image };
+        var pyramid = new List<Tensor<T>> { image };
         var current = image;
         for (int i = 1; i < _numLevels; i++)
         {

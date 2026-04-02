@@ -345,15 +345,15 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>
     public override int ParameterCount => _weights.Length;
     public override bool SupportsTraining => true;
 
-    private IGpuTensor<T>? _lastInputGpu;
-    private IGpuTensor<T>? _lastOutputGpu;
-    private IGpuTensor<T>? _presynapticTracesGpu;
-    private IGpuTensor<T>? _postsynapticTracesGpu;
-    private IGpuTensor<T>? _presynapticSpikesGpu;
-    private IGpuTensor<T>? _postsynapticSpikesGpu;
+    private Tensor<T>? _lastInputGpu;
+    private Tensor<T>? _lastOutputGpu;
+    private Tensor<T>? _presynapticTracesGpu;
+    private Tensor<T>? _postsynapticTracesGpu;
+    private Tensor<T>? _presynapticSpikesGpu;
+    private Tensor<T>? _postsynapticSpikesGpu;
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         var input = inputs[0];
 

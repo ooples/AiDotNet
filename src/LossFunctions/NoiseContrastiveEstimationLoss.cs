@@ -187,4 +187,12 @@ public class NoiseContrastiveEstimationLoss<T> : LossFunctionBase<T>
             NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(x)))
         );
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        throw new NotImplementedException(
+            "NCE ComputeTapeLoss requires tape-differentiable implementation. " +
+            "See task #77 for proper implementation using TensorSigmoid + TensorLog engine ops.");
+    }
 }

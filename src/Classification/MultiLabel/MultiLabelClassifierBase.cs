@@ -488,7 +488,7 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
             return derivative;
         }
 
-        public (TLoss Loss, IGpuTensor<TLoss> Gradient) CalculateLossAndGradientGpu(IGpuTensor<TLoss> predicted, IGpuTensor<TLoss> actual)
+        public (TLoss Loss, Tensor<TLoss> Gradient) CalculateLossAndGradientGpu(Tensor<TLoss> predicted, Tensor<TLoss> actual)
         {
             var predictedCpu = predicted.ToTensor();
             var actualCpu = actual.ToTensor();

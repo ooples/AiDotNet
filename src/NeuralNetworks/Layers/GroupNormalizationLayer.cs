@@ -57,15 +57,15 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
     #region GPU Training Fields
 
     // Cached GPU tensors for GPU-resident training
-    private IGpuTensor<T>? _gpuLastInput;
+    private Tensor<T>? _gpuLastInput;
 
     // GPU weight buffers
     private GpuTensor<T>? _gpuGamma;
     private GpuTensor<T>? _gpuBeta;
 
     // GPU gradient buffers
-    private IGpuTensor<T>? _gpuGammaGradient;
-    private IGpuTensor<T>? _gpuBetaGradient;
+    private Tensor<T>? _gpuGammaGradient;
+    private Tensor<T>? _gpuBetaGradient;
 
     // GPU optimizer state buffers (velocity/momentum)
     private GpuTensor<T>? _gpuGammaVelocity;
@@ -229,7 +229,7 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
     /// intermediate results to CPU. Uses native GroupNorm GPU kernel for maximum performance.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -358,8 +358,11 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
         if (_gammaGradient == null || _betaGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
-        _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+        // Update in-place to preserve GPU-registered tensor references
+        var updGamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
+        var updBeta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+        for (int i = 0; i < _gamma.Length; i++) _gamma[i] = updGamma[i];
+        for (int i = 0; i < _beta.Length; i++) _beta[i] = updBeta[i];
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_gamma);

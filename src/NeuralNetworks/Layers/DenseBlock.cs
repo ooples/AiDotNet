@@ -61,7 +61,7 @@ public class DenseBlock<T> : LayerBase<T>
     private List<Tensor<T>>? _layerOutputs;
 
     // GPU cached tensors for backward pass
-    private List<IGpuTensor<T>>? _gpuFeatureMaps;
+    private List<Tensor<T>>? _gpuFeatureMaps;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -165,7 +165,7 @@ public class DenseBlock<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">The input tensors (expects single input).</param>
     /// <returns>The output tensor on GPU.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -178,7 +178,7 @@ public class DenseBlock<T> : LayerBase<T>
         // Cache feature maps for backward pass during training
         if (IsTrainingMode)
         {
-            _gpuFeatureMaps = new List<IGpuTensor<T>>(_numLayers + 1) { currentFeatures };
+            _gpuFeatureMaps = new List<Tensor<T>>(_numLayers + 1) { currentFeatures };
         }
 
         foreach (var layer in _layers)

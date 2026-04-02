@@ -94,7 +94,7 @@ public class PaddingLayer<T> : LayerBase<T>
     public override bool SupportsGpuTraining => true;
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0) throw new ArgumentException("PaddingLayer requires an input tensor.");
         var input = inputs[0];
@@ -107,7 +107,7 @@ public class PaddingLayer<T> : LayerBase<T>
         if (_padding.Length != input.Shape.Length)
             throw new ArgumentException("Padding array length must match input dimensions.");
 
-        IGpuTensor<T> currentTensor = input;
+        Tensor<T> currentTensor = input;
         bool tensorModified = false; // Track if we created new tensors to dispose them
 
         // Apply padding dimension by dimension
@@ -122,7 +122,7 @@ public class PaddingLayer<T> : LayerBase<T>
             bool needsPermute = d != rank - 1;
             int[]? permutation = null;
             int[]? invPermutation = null;
-            IGpuTensor<T> permutedInput = currentTensor;
+            Tensor<T> permutedInput = currentTensor;
 
             if (needsPermute)
             {

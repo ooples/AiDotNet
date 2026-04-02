@@ -189,11 +189,11 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _gateBiasGradient;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuTransformOutput;
-    private IGpuTensor<T>? _gpuGateOutput;
-    private IGpuTensor<T>? _gpuTransformPreActivation;
-    private IGpuTensor<T>? _gpuGatePreActivation;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuTransformOutput;
+    private Tensor<T>? _gpuGateOutput;
+    private Tensor<T>? _gpuTransformPreActivation;
+    private Tensor<T>? _gpuGatePreActivation;
     private int[]? _gpuInputShape;
 
     /// <summary>
@@ -550,7 +550,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     /// <param name="inputs">The GPU input tensors.</param>
     /// <returns>The GPU output tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -588,7 +588,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var transformPreActivation = gpuEngine.FusedLinearGpu(input, _transformWeights, _transformBias, FusedActivationType.None);
 
         // Apply transform activation
-        IGpuTensor<T> transformOutput;
+        Tensor<T> transformOutput;
         if (transformActivationType != FusedActivationType.None)
         {
             // Re-run with activation for output (we need pre-activation separately for backward)
@@ -612,7 +612,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var gatePreActivation = gpuEngine.FusedLinearGpu(input, _gateWeights, _gateBias, FusedActivationType.None);
 
         // Apply gate activation (sigmoid)
-        IGpuTensor<T> gateOutput;
+        Tensor<T> gateOutput;
         if (gateActivationType != FusedActivationType.None)
         {
             gateOutput = gpuEngine.FusedLinearGpu(input, _gateWeights, _gateBias, gateActivationType);

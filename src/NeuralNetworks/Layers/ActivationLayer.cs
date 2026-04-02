@@ -37,8 +37,8 @@ public class ActivationLayer<T> : LayerBase<T>
     private Tensor<T>? _lastInput;
 
     // GPU-resident cached tensors for GPU training pipeline
-    private IGpuTensor<T>? _lastInputGpu;
-    private IGpuTensor<T>? _lastOutputGpu; // Post-activation for sigmoid/tanh backward
+    private Tensor<T>? _lastInputGpu;
+    private Tensor<T>? _lastOutputGpu; // Post-activation for sigmoid/tanh backward
 
     /// <summary>
     /// Indicates whether this layer uses a vector activation function instead of a scalar one.
@@ -492,7 +492,7 @@ public class ActivationLayer<T> : LayerBase<T>
     /// because GPUs can process thousands of values in parallel.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

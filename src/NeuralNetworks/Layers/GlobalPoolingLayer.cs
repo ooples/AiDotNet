@@ -126,7 +126,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     private int[]? _maxIndices;
 
     // GPU-resident cached tensors for GPU training pipeline
-    private IGpuTensor<T>? _lastOutputGpu;
+    private Tensor<T>? _lastOutputGpu;
     private int[]? _lastInputGpuShape;
 
     /// <summary>
@@ -419,7 +419,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="input">The GPU-resident input tensor.</param>
     /// <returns>The GPU-resident output tensor after global pooling.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -429,7 +429,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
 
         var input = inputs[0];
 
-        IGpuTensor<T> output;
+        Tensor<T> output;
         if (_poolingType == PoolingType.Average)
         {
             output = gpuEngine.GlobalMeanPoolGpu(input);
@@ -463,7 +463,7 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
     /// <summary>
     /// Computes the activation backward gradient on GPU.
     /// </summary>
-    private IGpuTensor<T> ComputeActivationBackwardGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> gradOutput, IGpuTensor<T> output, FusedActivationType activationType)
+    private Tensor<T> ComputeActivationBackwardGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> gradOutput, Tensor<T> output, FusedActivationType activationType)
     {
         return activationType switch
         {

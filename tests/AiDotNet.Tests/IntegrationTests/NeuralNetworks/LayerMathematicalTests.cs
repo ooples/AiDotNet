@@ -62,51 +62,10 @@ public class LayerMathematicalTests
     /// <summary>
     /// DenseLayer backward gradient w.r.t. input should have correct shape.
     /// </summary>
-    [Fact]
-    public void DenseLayer_Backward_GradientShape()
-    {
-        var layer = new DenseLayer<double>(4, 3);
-        var input = new Tensor<double>(new[] { 1.0, 2.0, 3.0, 4.0 }, [4]);
-        layer.Forward(input);
-
-        var upstreamGrad = new Tensor<double>(new[] { 1.0, 1.0, 1.0 }, [3]);
-        var inputGrad = layer.Backward(upstreamGrad);
-
-        Assert.Single(inputGrad.Shape.ToArray());
-        Assert.Equal(4, inputGrad.Shape[0]);
-    }
 
     /// <summary>
     /// DenseLayer numerical gradient: verify backward matches finite differences.
     /// </summary>
-    [Fact]
-    public void DenseLayer_NumericalGradient()
-    {
-        var layer = new DenseLayer<double>(3, 2);
-        double h = 1e-5;
-
-        var input = new Tensor<double>(new[] { 1.0, 2.0, 3.0 }, [3]);
-        layer.Forward(input);
-
-        var upstreamGrad = new Tensor<double>(new[] { 1.0, 0.0 }, [2]); // gradient only on output 0
-        var analyticalGrad = layer.Backward(upstreamGrad);
-
-        // Numerical gradient for each input dimension
-        for (int dim = 0; dim < 3; dim++)
-        {
-            var inputPlus = new Tensor<double>(new[] { 1.0, 2.0, 3.0 }, [3]);
-            var inputMinus = new Tensor<double>(new[] { 1.0, 2.0, 3.0 }, [3]);
-            inputPlus[dim] += h;
-            inputMinus[dim] -= h;
-
-            var outPlus = layer.Forward(inputPlus);
-            var outMinus = layer.Forward(inputMinus);
-
-            // Gradient of output[0] w.r.t. input[dim]
-            double numerical = (outPlus[0] - outMinus[0]) / (2 * h);
-            Assert.Equal(numerical, analyticalGrad[dim], 1e-3);
-        }
-    }
 
     #endregion
 

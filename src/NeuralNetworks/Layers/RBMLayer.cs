@@ -425,7 +425,7 @@ public partial class RBMLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">The GPU input tensors.</param>
     /// <returns>The GPU output tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -450,7 +450,7 @@ public partial class RBMLayer<T> : LayerBase<T>
             flatBatch *= input.Shape[d];
 
         // Reshape input to 2D [batch, visibleUnits] for matrix multiply
-        IGpuTensor<T> input2D = input;
+        Tensor<T> input2D = input;
         if (rank == 1)
         {
             input2D = input.CreateView(0, [1, _visibleUnits]);

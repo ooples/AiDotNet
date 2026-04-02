@@ -502,7 +502,7 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// The convolution and reshape operations are kept on GPU for efficiency.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -525,10 +525,10 @@ public class PrimaryCapsuleLayer<T> : LayerBase<T>
 
         // Get spatial dimensions based on format
         int batchSize, inputHeight, inputWidth;
-        IGpuTensor<T>? inputNCHW = null;
-        IGpuTensor<T>? convOutput = null;
-        IGpuTensor<T>? convNHWC = null;
-        IGpuTensor<T>? capsuleLayout = null;
+        Tensor<T>? inputNCHW = null;
+        Tensor<T>? convOutput = null;
+        Tensor<T>? convNHWC = null;
+        Tensor<T>? capsuleLayout = null;
 
         try
         {

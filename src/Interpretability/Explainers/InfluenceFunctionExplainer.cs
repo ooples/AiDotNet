@@ -287,7 +287,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
     {
         EnsureTrainingGradientsComputed();
 
-        var selfInfluences = new T[_trainingData.Rows];
+        var selfInfluences = new Vector<T>(_trainingData.Rows);
 
         for (int i = 0; i < _trainingData.Rows; i++)
         {
@@ -308,7 +308,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         }
 
         return new SelfInfluenceResult<T>(
-            selfInfluences: new Vector<T>(selfInfluences),
+            selfInfluences: selfInfluences,
             trainingData: _trainingData,
             trainingLabels: _trainingLabels);
     }
@@ -347,7 +347,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
             throw new ArgumentException("At least one checkpoint is required.", nameof(checkpointGradients));
 
         int numTrainingSamples = _trainingData.Rows;
-        var tracInScores = new T[numTrainingSamples];
+        var tracInScores = new Vector<T>(numTrainingSamples);
 
         // Compute test gradient at current parameters
         var testGradient = ComputeGradient(testInput, new Vector<T>(new[] { testLabel }));
@@ -373,7 +373,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         return new TracInResult<T>(
             testInput: testInput,
             testLabel: testLabel,
-            tracInScores: new Vector<T>(tracInScores),
+            tracInScores: tracInScores,
             numCheckpoints: checkpointGradients.Count);
     }
 
@@ -394,7 +394,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         // Influence functions require ∂L/∂θ, but we're computing ∂L/∂x as a proxy.
         // Results are approximate and may be mathematically incorrect.
         double epsilon = 1e-5;
-        var gradients = new T[input.Length];
+        var gradients = new Vector<T>(input.Length);
 
         var prediction = _predictFunction(input);
         double baseLoss = NumOps.ToDouble(_lossFunction(prediction, target));
@@ -410,7 +410,7 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
             gradients[i] = NumOps.FromDouble((perturbedLoss - baseLoss) / epsilon);
         }
 
-        return new Vector<T>(gradients);
+        return gradients;
     }
 
     /// <summary>
@@ -684,6 +684,43 @@ public class InfluenceFunctionExplainer<T> : IGPUAcceleratedExplainer<T>
         }
     }
 
+
+    /// <summary>
+    /// Computes the gradient of the loss for a single sample w.r.t. model parameters.
+    /// </summary>
+    private Vector<T> ComputeGradient(Vector<T> input, Vector<T> target)
+    {
+        // If an explicit gradient function was provided, use it
+        if (_gradientFunction != null)
+        {
+            return _gradientFunction(input, target);
+        }
+
+        // If we have a neural network, use tape-based gradient computation
+        if (_network != null)
+        {
+            var inputTensor = Tensor<T>.FromVector(input);
+            var targetTensor = Tensor<T>.FromVector(target);
+            return _network.ComputeGradients(inputTensor, targetTensor);
+        }
+
+        // Fallback: numerical gradient of loss w.r.t. input (not parameters, but useful for influence)
+        var prediction = _predictFunction(input);
+        var baseLoss = _lossFunction(prediction, target);
+        var grad = new Vector<T>(input.Length);
+        var eps = NumOps.FromDouble(1e-5);
+
+        for (int i = 0; i < input.Length; i++)
+        {
+            var perturbed = input.Clone();
+            perturbed[i] = NumOps.Add(perturbed[i], eps);
+            var pertPred = _predictFunction(perturbed);
+            var pertLoss = _lossFunction(pertPred, target);
+            grad[i] = NumOps.Divide(NumOps.Subtract(pertLoss, baseLoss), eps);
+        }
+
+        return grad;
+    }
 
     /// <summary>
     /// Solves a positive definite system using Cholesky decomposition.

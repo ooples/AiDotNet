@@ -316,8 +316,8 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T> _lastOutput;
 
     // GPU-resident cached tensors for GPU training pipeline
-    private IGpuTensor<T>? _lastInputGpu;
-    private IGpuTensor<T>? _lastOutputGpu;
+    private Tensor<T>? _lastInputGpu;
+    private Tensor<T>? _lastOutputGpu;
     private int[]? _gpuInputShape4D;
 
     /// <summary>
@@ -1015,7 +1015,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
     /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.</para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -1041,7 +1041,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         int rank = input.Shape.Length;
 
         // Reshape input to 4D [B, C, H, W] for convolution
-        IGpuTensor<T> input4D;
+        Tensor<T> input4D;
         if (rank == 3)
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]
@@ -1127,7 +1127,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// <summary>
     /// Computes activation gradient for convolutional layer using GPU-resident backward operations.
     /// </summary>
-    private IGpuTensor<T> ComputeConvActivationGradientGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> gradOutput, FusedActivationType activation)
+    private Tensor<T> ComputeConvActivationGradientGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> gradOutput, FusedActivationType activation)
     {
         // For convolutional layers, we need to reshape to 2D for activation backward, then reshape back
         // Most activations are element-wise, so we can flatten the tensor
@@ -1137,7 +1137,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         var lastOutputGpu = _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu has not been initialized.");
         var flatOutput = lastOutputGpu.CreateView(0, flat2DShape);
 
-        IGpuTensor<T> flatResult = activation switch
+        Tensor<T> flatResult = activation switch
         {
             FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(flatGrad, flatOutput), // ReLU uses pre-activation, but we only have post-activation here
             FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(flatGrad, flatOutput),

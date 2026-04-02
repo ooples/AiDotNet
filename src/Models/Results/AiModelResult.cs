@@ -26,6 +26,7 @@ using AiDotNet.Inference;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.Interpretability.Explainers;
+using AiDotNet.Interpretability.Helpers;
 using AiDotNet.LanguageModels;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Models;
@@ -3303,9 +3304,17 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         var options = InterpretabilityOptions ?? new InterpretabilityOptions();
         Func<Vector<T>, Vector<T>> vectorPredictFunc = CreateVectorPredictionFunction();
 
+        // Create gradient function from neural network if available, otherwise use numerical
+        Func<Vector<T>, int, Vector<T>>? vectorGradientFunc = null;
+        if (Model is INeuralNetwork<T> nn)
+        {
+            var gradHelper = new InputGradientHelper<T>(nn);
+            vectorGradientFunc = gradHelper.ComputeGradient;
+        }
+
         var explainer = new IntegratedGradientsExplainer<T>(
             vectorPredictFunc,
-            gradientFunc,
+            vectorGradientFunc,
             instance.Length,
             numSteps,
             baseline,
@@ -3470,9 +3479,17 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         var options = InterpretabilityOptions ?? new InterpretabilityOptions();
         Func<Vector<T>, Vector<T>> vectorPredictFunc = CreateVectorPredictionFunction();
 
+        // Create gradient function from neural network if available
+        Func<Vector<T>, int, Vector<T>>? vectorGradientFunc = null;
+        if (Model is INeuralNetwork<T> nn)
+        {
+            var gradHelper = new InputGradientHelper<T>(nn);
+            vectorGradientFunc = gradHelper.ComputeGradient;
+        }
+
         var explainer = new GradientSHAPExplainer<T>(
             vectorPredictFunc,
-            gradientFunc,
+            vectorGradientFunc,
             backgroundData,
             numSamples,
             numSteps,
@@ -3560,9 +3577,17 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         var options = InterpretabilityOptions ?? new InterpretabilityOptions();
         Func<Vector<T>, Vector<T>> vectorPredictFunc = CreateVectorPredictionFunction();
 
+        // Create gradient function from neural network if available
+        Func<Vector<T>, int, Vector<T>>? vectorGradientFunc = null;
+        if (Model is INeuralNetwork<T> nn)
+        {
+            var gradHelper = new InputGradientHelper<T>(nn);
+            vectorGradientFunc = gradHelper.ComputeGradient;
+        }
+
         var explainer = new SaliencyMapExplainer<T>(
             vectorPredictFunc,
-            gradientFunc,
+            vectorGradientFunc,
             instance.Length,
             method,
             smoothGradSamples,

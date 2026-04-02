@@ -93,7 +93,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// <summary>
     /// GPU cached input tensor for backward pass.
     /// </summary>
-    private IGpuTensor<T>? _gpuLastInput;
+    private Tensor<T>? _gpuLastInput;
 
     #endregion
 
@@ -230,7 +230,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// </summary>
     /// <param name="inputs">GPU tensor inputs.</param>
     /// <returns>GPU tensor output after RRDB processing.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

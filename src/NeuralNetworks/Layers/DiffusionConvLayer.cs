@@ -210,7 +210,7 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
     /// <summary>
     /// Cached GPU input from the last forward pass.
     /// </summary>
-    private IGpuTensor<T>? _gpuInput;
+    private Tensor<T>? _gpuInput;
 
     /// <summary>
     /// Cached GPU input shape from the last forward pass.
@@ -220,17 +220,17 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
     /// <summary>
     /// Cached GPU diffused features for backward pass.
     /// </summary>
-    private IGpuTensor<T>? _gpuDiffusedFeatures;
+    private Tensor<T>? _gpuDiffusedFeatures;
 
     /// <summary>
     /// Cached GPU pre-activation output for backward pass.
     /// </summary>
-    private IGpuTensor<T>? _gpuPreActivation;
+    private Tensor<T>? _gpuPreActivation;
 
     /// <summary>
     /// Cached GPU activated output for backward pass.
     /// </summary>
-    private IGpuTensor<T>? _gpuOutput;
+    private Tensor<T>? _gpuOutput;
 
     /// <summary>
     /// GPU weight tensor.
@@ -844,7 +844,7 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
     /// </remarks>
     /// <param name="inputs">Input GPU tensors (uses first input).</param>
     /// <returns>GPU-resident output tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

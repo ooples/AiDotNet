@@ -518,7 +518,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     /// DynamicRoutingGpu for the routing iterations, keeping all data on GPU.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -536,7 +536,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
 
         // Determine batch size and reshape to [B, I, D_in] for capsule processing
         int batchSize;
-        IGpuTensor<T> input3D;
+        Tensor<T> input3D;
 
         if (rank == 1)
         {

@@ -137,7 +137,7 @@ public class MeshPoolLayer<T> : LayerBase<T>
     /// <summary>
     /// Cached GPU input for backward pass.
     /// </summary>
-    private IGpuTensor<T>? _gpuInput;
+    private Tensor<T>? _gpuInput;
 
     /// <summary>
     /// Cached GPU input shape for backward pass.
@@ -387,7 +387,7 @@ public class MeshPoolLayer<T> : LayerBase<T>
     /// </remarks>
     /// <param name="inputs">Input GPU tensors (uses first input).</param>
     /// <returns>GPU-resident output tensor with pooled features.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

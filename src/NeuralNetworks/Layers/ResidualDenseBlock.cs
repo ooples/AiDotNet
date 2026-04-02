@@ -113,20 +113,20 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     private Tensor<T>[]? _concatInputs;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuConv1Out;
-    private IGpuTensor<T>? _gpuX1Activated;
-    private IGpuTensor<T>? _gpuConcat1;
-    private IGpuTensor<T>? _gpuConv2Out;
-    private IGpuTensor<T>? _gpuX2Activated;
-    private IGpuTensor<T>? _gpuConcat2;
-    private IGpuTensor<T>? _gpuConv3Out;
-    private IGpuTensor<T>? _gpuX3Activated;
-    private IGpuTensor<T>? _gpuConcat3;
-    private IGpuTensor<T>? _gpuConv4Out;
-    private IGpuTensor<T>? _gpuX4Activated;
-    private IGpuTensor<T>? _gpuConcat4;
-    private IGpuTensor<T>? _gpuConv5Out;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuConv1Out;
+    private Tensor<T>? _gpuX1Activated;
+    private Tensor<T>? _gpuConcat1;
+    private Tensor<T>? _gpuConv2Out;
+    private Tensor<T>? _gpuX2Activated;
+    private Tensor<T>? _gpuConcat2;
+    private Tensor<T>? _gpuConv3Out;
+    private Tensor<T>? _gpuX3Activated;
+    private Tensor<T>? _gpuConcat3;
+    private Tensor<T>? _gpuConv4Out;
+    private Tensor<T>? _gpuX4Activated;
+    private Tensor<T>? _gpuConcat4;
+    private Tensor<T>? _gpuConv5Out;
     private int _gpuBatch;
     private int _gpuHeight;
     private int _gpuWidth;
@@ -341,7 +341,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// </summary>
     /// <param name="inputs">GPU tensor inputs.</param>
     /// <returns>GPU tensor output after residual dense block processing.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

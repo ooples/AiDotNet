@@ -125,42 +125,7 @@ public class VisionMambaModelTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void Backpropagate_ProducesValidGradients()
-    {
-        int height = 16;
-        int width = 16;
-        int channels = 1;
-        int patchSize = 4;
-        int numClasses = 3;
 
-        var model = new VisionMambaModel<float>(
-            CreateArch(height, width, channels, numClasses),
-            height, width, patchSize, channels,
-            modelDimension: 16, numLayers: 2, numClasses: numClasses,
-            stateDimension: 4, scanPattern: VisionScanPattern.Continuous);
-
-        model.SetTrainingMode(true);
-        var input = CreateRandomTensor(new[] { 1, channels, height, width });
-        var output = model.Predict(input);
-        model.SetTrainingMode(true); // Re-enable after Predict set it to false
-        var grad = CreateRandomTensor(output.Shape.ToArray());
-        var inputGrad = model.Backpropagate(grad);
-
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGrad));
-    }
-
-    [Fact]
-    public void Backpropagate_ThrowsWithoutTrainingMode()
-    {
-        var model = new VisionMambaModel<float>(
-            CreateArch(16, 16, 1, 3),
-            16, 16, 4, 1, modelDimension: 16, numLayers: 2, numClasses: 3, stateDimension: 4);
-        var grad = CreateRandomTensor(new[] { 1, 3 });
-
-        Assert.Throws<InvalidOperationException>(() => model.Backpropagate(grad));
-    }
 
     [Fact]
     public void Train_ForwardBackwardUpdate_NoErrors()

@@ -1701,7 +1701,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Only downloads to CPU in training mode for gradient caching.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -1714,7 +1714,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int numExperts = _experts.Count;
 
         // Step 1: Route input through router to get logits (GPU-resident)
-        IGpuTensor<T> routingLogitsGpu;
+        Tensor<T> routingLogitsGpu;
         if (_router is LayerBase<T> routerBase && routerBase.CanExecuteOnGpu)
         {
             routingLogitsGpu = routerBase.ForwardGpu(input);
@@ -1732,7 +1732,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Step 3: Apply Top-K selection on GPU if enabled
         IGpuTensor<int>? topKIndicesGpu = null;
-        IGpuTensor<T>? topKValuesGpu = null;
+        Tensor<T>? topKValuesGpu = null;
         int[]? topKIndicesFlat = null;
 
         if (_topK > 0)
@@ -1768,7 +1768,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Step 4: Process through each expert on GPU (GPU-resident)
-        var expertOutputsGpu = new List<IGpuTensor<T>>();
+        var expertOutputsGpu = new List<Tensor<T>>();
 
         // Determine which experts are active using downloaded indices
         HashSet<int> activeExperts = new HashSet<int>();
@@ -1792,7 +1792,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             if (activeExperts.Contains(i))
             {
-                IGpuTensor<T> expertOutput;
+                Tensor<T> expertOutput;
                 if (_experts[i] is LayerBase<T> expertBase && expertBase.CanExecuteOnGpu)
                 {
                     expertOutput = expertBase.ForwardGpu(input);
@@ -1817,7 +1817,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Step 5: Combine expert outputs using routing weights on GPU
         // For Top-K: Use sparse weights from topKValuesGpu and pre-downloaded indices
         // For dense routing: Use full routingWeightsGpu
-        IGpuTensor<T> combinedGpu;
+        Tensor<T> combinedGpu;
         if (_topK > 0 && topKValuesGpu != null && topKIndicesFlat != null)
         {
             combinedGpu = CombineExpertOutputsGpuSparse(
@@ -1831,7 +1831,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Step 6: Apply activation function on GPU
         var activationType = MapActivationToFused();
-        IGpuTensor<T> resultGpu;
+        Tensor<T> resultGpu;
         if (activationType == FusedActivationType.ReLU)
         {
             resultGpu = gpuEngine.ReluGpu(combinedGpu);
@@ -1862,10 +1862,10 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Combines expert outputs using sparse routing weights (Top-K) on GPU.
     /// Uses pre-downloaded indices to avoid additional GPU-to-CPU transfers.
     /// </summary>
-    private IGpuTensor<T> CombineExpertOutputsGpuSparse(
+    private Tensor<T> CombineExpertOutputsGpuSparse(
         DirectGpuTensorEngine gpuEngine,
-        List<IGpuTensor<T>> expertOutputsGpu,
-        IGpuTensor<T> topKValuesGpu,
+        List<Tensor<T>> expertOutputsGpu,
+        Tensor<T> topKValuesGpu,
         int[] topKIndicesFlat,
         int batchSize,
         int numExperts)
@@ -1918,10 +1918,10 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// Combines expert outputs using dense routing weights on GPU.
     /// </summary>
-    private IGpuTensor<T> CombineExpertOutputsGpuDense(
+    private Tensor<T> CombineExpertOutputsGpuDense(
         DirectGpuTensorEngine gpuEngine,
-        List<IGpuTensor<T>> expertOutputsGpu,
-        IGpuTensor<T> routingWeightsGpu,
+        List<Tensor<T>> expertOutputsGpu,
+        Tensor<T> routingWeightsGpu,
         int batchSize)
     {
         // For dense routing, combine all experts weighted by their routing weights
@@ -1954,7 +1954,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Divides tensor A by broadcast of tensor B along axis 1.
     /// A: [batchSize, features], B: [batchSize, 1] -> Result: A[i,j] / B[i,0]
     /// </summary>
-    private IGpuTensor<T> DivideByBroadcastGpuHelper(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> a, IGpuTensor<T> b)
+    private Tensor<T> DivideByBroadcastGpuHelper(DirectGpuTensorEngine gpuEngine, Tensor<T> a, Tensor<T> b)
     {
         // For normalization: a / b where b is [batchSize, 1]
         // We can compute 1/b then multiply

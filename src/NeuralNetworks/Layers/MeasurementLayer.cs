@@ -220,7 +220,7 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// The measurement layer converts quantum amplitudes to probabilities via the Born rule.
     /// This method uses a specialized CUDA kernel to perform measurement entirely on GPU.
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs == null || inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

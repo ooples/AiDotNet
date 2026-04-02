@@ -107,9 +107,9 @@ public partial class ReadoutLayer<T> : LayerBase<T>
     private int[] _originalInputShape = [];
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuPreActivation;
-    private IGpuTensor<T>? _gpuOutput;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuPreActivation;
+    private Tensor<T>? _gpuOutput;
     private int _gpuBatchDim;
     private int _gpuInputSize;
     private FusedActivationType _gpuActivationType;
@@ -327,7 +327,7 @@ public partial class ReadoutLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">The GPU input tensors.</param>
     /// <returns>The GPU output tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -351,7 +351,7 @@ public partial class ReadoutLayer<T> : LayerBase<T>
             batchDim *= input.Shape[d];
 
         // Reshape input to 2D [batch, inputSize] for matrix multiply
-        IGpuTensor<T> input2D = input;
+        Tensor<T> input2D = input;
         if (input.Shape.Length == 1)
         {
             input2D = input.CreateView(0, [1, inputSize]);
@@ -367,7 +367,7 @@ public partial class ReadoutLayer<T> : LayerBase<T>
         var weightsT = Engine.TensorTranspose(_weights);
         int outputSize = OutputShape[0];
 
-        IGpuTensor<T> result;
+        Tensor<T> result;
 
         if (UsingVectorActivation)
         {

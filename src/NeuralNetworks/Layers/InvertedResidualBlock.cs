@@ -302,7 +302,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
     /// </summary>
     /// <param name="inputs">The input tensors (expects single input).</param>
     /// <returns>The output tensor on GPU.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -311,7 +311,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        IGpuTensor<T> x = input;
+        Tensor<T> x = input;
 
         // Expansion phase (if expansion > 1)
         if (_hasExpansion && _expandConv is not null && _expandBn is not null)

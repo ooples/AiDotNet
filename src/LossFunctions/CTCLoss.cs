@@ -615,4 +615,11 @@ public class CTCLossAdapter<T> : LossFunctionBase<T>
 
         return gradientVector;
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        throw new NotImplementedException(
+            "CTC ComputeTapeLoss requires differentiable forward algorithm via tensor ops. See task #72.");
+    }
 }

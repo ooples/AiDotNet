@@ -93,7 +93,7 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
     /// <summary>
     /// Cached GPU input for backward pass.
     /// </summary>
-    private IGpuTensor<T>? _gpuInput;
+    private Tensor<T>? _gpuInput;
 
     /// <summary>
     /// Cached GPU input shape for backward pass.
@@ -664,7 +664,7 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
     /// needed by BackwardGpu to perform full BPTT on GPU.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

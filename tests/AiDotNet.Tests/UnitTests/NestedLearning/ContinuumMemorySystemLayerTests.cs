@@ -208,49 +208,7 @@ namespace AiDotNetTests.UnitTests.NestedLearning
             }
         }
 
-        [Fact]
-        public void Backward_AccumulatesGradientsCorrectly()
-        {
-            // Arrange
-            var layer = new ContinuumMemorySystemLayer<double>(
-                inputShape: new[] { 64 },
-                hiddenDim: 128,
-                numFrequencyLevels: 2); // Use 2 levels for simpler test
 
-            var input = new Tensor<double>(new[] { 1, 64 });
-            for (int i = 0; i < input.Length; i++)
-            {
-                input[i] = 0.5;
-            }
-
-            // Forward pass first
-            var output = layer.Forward(input);
-
-            var outputGradient = new Tensor<double>(output.Shape.ToArray());
-            for (int i = 0; i < outputGradient.Length; i++)
-            {
-                outputGradient[i] = 0.1;
-            }
-
-            // Act
-            var inputGradient = layer.Backward(outputGradient);
-
-            // Assert
-            Assert.NotNull(inputGradient);
-        }
-
-        [Fact]
-        public void Backward_WithNullGradient_ThrowsArgumentNullException()
-        {
-            // Arrange
-            var layer = new ContinuumMemorySystemLayer<double>(
-                inputShape: new[] { 64 },
-                hiddenDim: 128,
-                numFrequencyLevels: 3);
-
-            // Act & Assert
-            Assert.Throws<ArgumentNullException>(() => layer.Backward(null!));
-        }
 
         [Fact]
         public void ResetMemory_ResetsAllMLPBlocksSuccessfully()

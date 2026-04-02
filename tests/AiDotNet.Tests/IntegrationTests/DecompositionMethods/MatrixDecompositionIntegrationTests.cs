@@ -921,26 +921,6 @@ public class MatrixDecompositionIntegrationTests
 
     #region CramerDecomposition Tests
 
-    [Fact]
-    public void Cramer_Solve_SatisfiesAxEqualsB()
-    {
-        // Solve A*x = b using Cramer's rule
-        var matrix = CreateGeneralMatrix();
-        var b = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
-        var cramer = new CramerDecomposition<double>(matrix);
-        var x = cramer.Solve(b);
-
-        Assert.Equal(3, x.Length);
-
-        // Verify A*x = b
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            double sum = 0;
-            for (int j = 0; j < matrix.Columns; j++)
-                sum += matrix[i, j] * x[j];
-            Assert.Equal(b[i], sum, LooseTolerance);
-        }
-    }
 
     [Fact]
     public void Cramer_Invert_TimesA_IsIdentity()
@@ -958,43 +938,7 @@ public class MatrixDecompositionIntegrationTests
 
     #region NormalDecomposition Tests
 
-    [Fact]
-    public void Normal_Solve_SatisfiesAxEqualsB()
-    {
-        // For square full-rank matrix, Normal equations give exact solution
-        var matrix = CreateGeneralMatrix();
-        var b = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
-        var normal = new NormalDecomposition<double>(matrix);
-        var x = normal.Solve(b);
 
-        Assert.Equal(3, x.Length);
-
-        // Verify A*x = b
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            double sum = 0;
-            for (int j = 0; j < matrix.Columns; j++)
-                sum += matrix[i, j] * x[j];
-            Assert.Equal(b[i], sum, LooseTolerance);
-        }
-    }
-
-    [Fact]
-    public void Normal_Solve_AgreesWith_Cramer()
-    {
-        // Both methods should give the same solution for square system
-        var matrix = CreateGeneralMatrix();
-        var b = new Vector<double>(new double[] { 7.0, 11.0, 13.0 });
-
-        var cramer = new CramerDecomposition<double>(matrix);
-        var xCramer = cramer.Solve(b);
-
-        var normal = new NormalDecomposition<double>(matrix);
-        var xNormal = normal.Solve(b);
-
-        for (int i = 0; i < xCramer.Length; i++)
-            Assert.Equal(xCramer[i], xNormal[i], LooseTolerance);
-    }
 
     #endregion
 

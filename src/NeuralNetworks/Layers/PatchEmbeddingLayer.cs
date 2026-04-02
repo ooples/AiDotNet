@@ -115,8 +115,8 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     private Tensor<T>? _lastPreActivation;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuPatchesFlat;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuPatchesFlat;
     private int _gpuBatchSize;
     private bool _gpuHasBatch;
 
@@ -515,7 +515,7 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     /// 4. Linear projection with fused bias addition
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -528,7 +528,7 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
         // PatchEmbedding expects 4D input [B, C, H, W]
         bool hasBatch = shape.Length == 4;
         int batchSize;
-        IGpuTensor<T> processInput;
+        Tensor<T> processInput;
 
         if (shape.Length == 3)
         {

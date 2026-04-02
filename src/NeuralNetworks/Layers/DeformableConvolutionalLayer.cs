@@ -84,10 +84,10 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableC
     private Tensor<T>? _lastMask;
 
     // GPU caching for backward pass
-    private IGpuTensor<T>? _gpuInput;
+    private Tensor<T>? _gpuInput;
     private int[]? _gpuInputShape;
-    private IGpuTensor<T>? _gpuOffsets;
-    private IGpuTensor<T>? _gpuMask;
+    private Tensor<T>? _gpuOffsets;
+    private Tensor<T>? _gpuMask;
 
     #endregion
 
@@ -283,7 +283,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableC
     /// The main convolution operation stays on GPU, though offset and mask prediction
     /// requires a brief CPU round-trip due to the current DeformableConv2D GPU implementation.</para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -306,7 +306,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableC
         int rank = input.Shape.Length;
 
         // Reshape input to 4D NCHW [B, C, H, W] for convolution
-        IGpuTensor<T> input4D;
+        Tensor<T> input4D;
         bool addedBatchDimension = false;
         if (rank == 3)
         {
@@ -351,7 +351,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableC
 
         // Predict modulation mask if using DCNv2
         Tensor<T>? mask = null;
-        IGpuTensor<T>? maskGpu = null;
+        Tensor<T>? maskGpu = null;
         if (_useModulation && _maskWeights != null && _maskBias != null)
         {
             // Use FusedConv2DGpu with Sigmoid activation for mask prediction

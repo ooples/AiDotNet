@@ -45,7 +45,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
     private int[]? _lastInputShape;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
+    private Tensor<T>? _gpuInput;
     private int _gpuBatch;
     private int _gpuChannels;
     private int _gpuInputHeight;
@@ -200,7 +200,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
     /// pooling to any target output size.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

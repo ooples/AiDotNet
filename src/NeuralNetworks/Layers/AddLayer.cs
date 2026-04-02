@@ -59,7 +59,7 @@ public class AddLayer<T> : LayerBase<T>
     private Tensor<T>? _lastOutput;
 
     // GPU-resident cached tensors for GPU training pipeline
-    private IGpuTensor<T>? _lastOutputGpu;
+    private Tensor<T>? _lastOutputGpu;
     private int _lastInputCountGpu;
 
     /// <summary>
@@ -91,7 +91,7 @@ public class AddLayer<T> : LayerBase<T>
     public override bool SupportsGpuTraining => true;
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length < 2)
         {
@@ -138,7 +138,7 @@ public class AddLayer<T> : LayerBase<T>
     /// <summary>
     /// Computes the activation backward gradient on GPU.
     /// </summary>
-    private IGpuTensor<T> ComputeActivationBackwardGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> gradOutput, IGpuTensor<T> output, FusedActivationType activationType)
+    private Tensor<T> ComputeActivationBackwardGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> gradOutput, Tensor<T> output, FusedActivationType activationType)
     {
         return activationType switch
         {

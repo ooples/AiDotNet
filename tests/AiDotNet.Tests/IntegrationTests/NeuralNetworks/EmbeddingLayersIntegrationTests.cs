@@ -53,54 +53,7 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void EmbeddingLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int vocabSize = 100;
-        int embeddingDim = 32;
-        var layer = new EmbeddingLayer<float>(vocabSize, embeddingDim);
-        var input = CreateTokenIndices([4, 8], vocabSize);
 
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert - input gradient should match input shape (zero tensor for embeddings)
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-    }
-
-    [Fact]
-    public void EmbeddingLayer_UpdateParameters_ModifiesWeights()
-    {
-        // Arrange
-        int vocabSize = 50;
-        int embeddingDim = 16;
-        var layer = new EmbeddingLayer<float>(vocabSize, embeddingDim);
-        var input = CreateTokenIndices([2, 4], vocabSize);
-
-        // Get initial parameters
-        var initialParams = layer.GetParameters();
-
-        // Act - forward, backward, update
-        var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        layer.Backward(outputGradient);
-        layer.UpdateParameters(0.01f);
-
-        // Get updated parameters
-        var updatedParams = layer.GetParameters();
-
-        // Assert - parameters should have changed
-        bool anyDifferent = false;
-        for (int i = 0; i < initialParams.Length && !anyDifferent; i++)
-        {
-            if (Math.Abs(initialParams[i] - updatedParams[i]) > 1e-10)
-                anyDifferent = true;
-        }
-        Assert.True(anyDifferent, "Parameters should change after update");
-    }
 
     [Fact]
     public void EmbeddingLayer_GetSetParameters_RoundTrips()
@@ -195,27 +148,6 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void PatchEmbeddingLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int imageHeight = 16;
-        int imageWidth = 16;
-        int channels = 3;
-        int patchSize = 4;
-        int embeddingDim = 32;
-        var layer = new PatchEmbeddingLayer<float>(imageHeight, imageWidth, channels, patchSize, embeddingDim);
-        var input = CreateRandomTensor<float>([2, channels, imageHeight, imageWidth]);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGradient));
-    }
 
     [Fact]
     public void PatchEmbeddingLayer_GetSetParameters_RoundTrips()
@@ -282,52 +214,7 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void TimeEmbeddingLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int embeddingDim = 32;
-        int outputDim = 64;
-        var layer = new TimeEmbeddingLayer<float>(embeddingDim, outputDim);
-        var input = CreateTimesteps([4], 1000);
 
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert - gradient shape should match input
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-    }
-
-    [Fact]
-    public void TimeEmbeddingLayer_UpdateParameters_ModifiesWeights()
-    {
-        // Arrange
-        int embeddingDim = 32;
-        int outputDim = 64;
-        var layer = new TimeEmbeddingLayer<float>(embeddingDim, outputDim);
-        var input = CreateTimesteps([4], 1000);
-
-        var initialParams = layer.GetParameters();
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        layer.Backward(outputGradient);
-        layer.UpdateParameters(0.01f);
-
-        var updatedParams = layer.GetParameters();
-
-        // Assert
-        bool anyDifferent = false;
-        for (int i = 0; i < initialParams.Length && !anyDifferent; i++)
-        {
-            if (Math.Abs(initialParams[i] - updatedParams[i]) > 1e-10)
-                anyDifferent = true;
-        }
-        Assert.True(anyDifferent, "Parameters should change after update");
-    }
 
     [Fact]
     public void TimeEmbeddingLayer_SinusoidalEncoding_UniquePerTimestep()
@@ -397,24 +284,6 @@ public class EmbeddingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void PositionalEncodingLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int maxSeqLen = 128;
-        int embeddingSize = 32;
-        var layer = new PositionalEncodingLayer<float>(maxSeqLen, embeddingSize);
-        var input = CreateRandomTensor<float>([4, 32, embeddingSize]);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert - gradient flows through unchanged for positional encoding
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGradient));
-    }
 
     [Fact]
     public void PositionalEncodingLayer_AddsPositionalInformation()

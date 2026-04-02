@@ -946,7 +946,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// <summary>
     /// GPU multi-input forward pass. Default delegates to single-input ForwardGpu.
     /// </summary>
-    public virtual IGpuTensor<T> ForwardGpu(IReadOnlyDictionary<string, IGpuTensor<T>> inputs)
+    public virtual Tensor<T> ForwardGpu(IReadOnlyDictionary<string, Tensor<T>> inputs)
     {
         if (inputs.TryGetValue("input", out var input))
             return ForwardGpu(input);
@@ -1468,7 +1468,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// Override this in derived classes that support GPU acceleration.
     /// </para>
     /// </remarks>
-    public virtual IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public virtual Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         throw new NotSupportedException(
             $"GPU execution is not supported by {GetType().Name}. Use Forward() instead or check CanExecuteOnGpu first.");

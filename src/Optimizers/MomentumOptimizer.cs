@@ -1,6 +1,7 @@
 ﻿using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Optimizers;
 
@@ -276,7 +277,7 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
 
     // Per-parameter velocity for tape-based training
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeVelocity = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeVelocity = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)

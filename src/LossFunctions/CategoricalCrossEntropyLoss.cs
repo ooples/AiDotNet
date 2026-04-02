@@ -94,7 +94,7 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
     /// <param name="predicted">The predicted GPU tensor from the model.</param>
     /// <param name="actual">The actual (target) GPU tensor.</param>
     /// <returns>A tuple containing the loss value and gradient tensor.</returns>
-    public override (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    public override (T Loss, Tensor<T> Gradient) CalculateLossAndGradientGpu(Tensor<T> predicted, Tensor<T> actual)
     {
         var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
         var backend = engine?.GetBackend();
@@ -117,5 +117,18 @@ public class CategoricalCrossEntropyLoss<T> : LossFunctionBase<T>
         var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Categorical CE = -mean(target * log(softmax(predicted) + eps))
+        var softmaxed = Engine.Softmax(predicted);
+        var safeSoftmax = Engine.TensorAddScalar(softmaxed, NumOps.FromDouble(1e-7));
+        var logP = Engine.TensorLog(safeSoftmax);
+        var product = Engine.TensorMultiply(target, logP);
+        var allAxes = Enumerable.Range(0, product.Shape.Length).ToArray();
+        var mean = Engine.ReduceMean(product, allAxes, keepDims: false);
+        return Engine.TensorNegate(mean);
     }
 }

@@ -94,7 +94,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0) throw new ArgumentException("CRF requires an input tensor.");
         var input = inputs[0];
@@ -105,7 +105,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         // Input normalization [Batch, Seq, Class]
         int rank = input.Shape.Length;
         int batchSize, seqLen, numClasses;
-        IGpuTensor<T> input3D;
+        Tensor<T> input3D;
 
         if (rank == 3)
         {
@@ -156,7 +156,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         // But acceptable for sequence length ~100.
 
         // Viterbi variables
-        IGpuTensor<T> viterbi;
+        Tensor<T> viterbi;
 
         // Step 0
         {

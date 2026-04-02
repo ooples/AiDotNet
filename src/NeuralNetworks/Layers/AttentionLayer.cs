@@ -251,12 +251,12 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _dWo;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuQ;
-    private IGpuTensor<T>? _gpuK;
-    private IGpuTensor<T>? _gpuV;
-    private IGpuTensor<T>? _gpuAttnOutput;
-    private IGpuTensor<T>? _gpuAttnWeights;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuQ;
+    private Tensor<T>? _gpuK;
+    private Tensor<T>? _gpuV;
+    private Tensor<T>? _gpuAttnOutput;
+    private Tensor<T>? _gpuAttnWeights;
     private int[]? _gpuInputShape;
     private int _gpuBatchSize;
     private int _gpuSeqLen;
@@ -595,7 +595,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The output GPU tensor after applying the attention mechanism.</returns>
     /// <exception cref="ArgumentException">Thrown when no inputs provided.</exception>
     /// <exception cref="InvalidOperationException">Thrown when engine is not a DirectGpuTensorEngine.</exception>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -612,7 +612,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Handle 2D [Batch, InputSize] or 3D [Batch, Seq, InputSize] input
         int batchSize;
         int seqLen;
-        IGpuTensor<T> input3D;
+        Tensor<T> input3D;
 
         if (shape.Length == 2)
         {
@@ -726,7 +726,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Reshape to final output shape
-        IGpuTensor<T> output;
+        Tensor<T> output;
         if (_inputWas2D)
         {
             output = gpuEngine.ReshapeGpu(outputFlat, [batchSize, _inputSize]);

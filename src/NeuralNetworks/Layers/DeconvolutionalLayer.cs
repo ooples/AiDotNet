@@ -172,8 +172,8 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _biasesGradient;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuOutput;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuOutput;
     private int[]? _gpuInputShape4D;
     private bool _gpuAddedBatchDimension;
 
@@ -555,7 +555,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
     /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.</para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -580,7 +580,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
         bool addedBatchDimension = false;
 
         // Reshape input to 4D [B, C, H, W] for transposed convolution
-        IGpuTensor<T> input4D;
+        Tensor<T> input4D;
         if (rank == 3)
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]
@@ -672,7 +672,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// <summary>
     /// Fallback activation gradient computation for unsupported GPU activation types.
     /// </summary>
-    private IGpuTensor<T> ComputeActivationGradientGpuFallback(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> output, IGpuTensor<T> gradOutput)
+    private Tensor<T> ComputeActivationGradientGpuFallback(DirectGpuTensorEngine gpuEngine, Tensor<T> output, Tensor<T> gradOutput)
     {
         // Fallback: download, compute on CPU, upload
         var outputData = output.ToTensor();
@@ -708,8 +708,13 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
         if (_kernelsGradient == null || _biasesGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _kernels = Engine.TensorSubtract(_kernels, Engine.TensorMultiplyScalar(_kernelsGradient, learningRate));
-        _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
+        // Compute updated values and copy back in-place to preserve GPU-registered tensor references
+        var updatedKernels = Engine.TensorSubtract(_kernels, Engine.TensorMultiplyScalar(_kernelsGradient, learningRate));
+        var updatedBiases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
+        for (int i = 0; i < _kernels.Length; i++)
+            _kernels[i] = updatedKernels[i];
+        for (int i = 0; i < _biases.Length; i++)
+            _biases[i] = updatedBiases[i];
 
         // Invalidate GPU cache after parameter update
         Engine.InvalidatePersistentTensor(_kernels);

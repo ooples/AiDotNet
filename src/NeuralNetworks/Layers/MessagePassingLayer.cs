@@ -205,7 +205,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 #pragma warning restore CS0169
 
     // GPU cache fields for backward pass
-    private IGpuTensor<T>? _gpuLastInput;
+    private Tensor<T>? _gpuLastInput;
     private IGpuBuffer? _gpuEdgeSrcIndices;
     private IGpuBuffer? _gpuEdgeTgtIndices;
     private IGpuBuffer? _gpuEdgeConcatCache;
@@ -1002,7 +1002,7 @@ public class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// 4. GRU-style update: h'_i = (1-z)*h_i + z*m_i
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs == null || inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

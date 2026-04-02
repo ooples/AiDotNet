@@ -125,8 +125,8 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     private Tensor<T>? _biasGradients;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuOutput;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuOutput;
     private int[]? _gpuInputShape4D;
     private bool _gpuAddedBatchDimension;
 
@@ -641,7 +641,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
     /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.</para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -665,7 +665,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
         int rank = input.Shape.Length;
 
         // Reshape input to 4D NCHW [B, C, H, W] for locally connected operation
-        IGpuTensor<T> input4D;
+        Tensor<T> input4D;
         if (rank == 3)
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]
@@ -745,7 +745,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     /// <summary>
     /// Computes the activation gradient on GPU for locally connected layer backward pass.
     /// </summary>
-    private IGpuTensor<T> ComputeActivationGradientGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> gradOutput, IGpuTensor<T> output, FusedActivationType activation)
+    private Tensor<T> ComputeActivationGradientGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> gradOutput, Tensor<T> output, FusedActivationType activation)
     {
         // Flatten tensors for element-wise activation backward
         int totalElements = gradOutput.ElementCount;
@@ -753,7 +753,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
         var flatGrad = gradOutput.CreateView(0, flat2DShape);
         var flatOutput = output.CreateView(0, flat2DShape);
 
-        IGpuTensor<T> flatResult = activation switch
+        Tensor<T> flatResult = activation switch
         {
             FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(flatGrad, flatOutput),
             FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(flatGrad, flatOutput),

@@ -227,7 +227,7 @@ public class UpsamplingLayer<T> : LayerBase<T>
     /// <returns>GPU tensor output after upsampling.</returns>
     /// <exception cref="ArgumentException">Thrown when no input tensor is provided.</exception>
     /// <exception cref="InvalidOperationException">Thrown when GPU backend is unavailable.</exception>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

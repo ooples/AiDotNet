@@ -126,4 +126,21 @@ public class OrdinalRegressionLoss<T> : LossFunctionBase<T>
 
         return derivative;
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Ordinal regression: sum of BCE over cumulative thresholds
+        var clamped = Engine.TensorClamp(predicted, NumOps.FromDouble(1e-7), NumOps.FromDouble(1.0 - 1e-7));
+        var logP = Engine.TensorLog(clamped);
+        var oneMinusP = Engine.ScalarMinusTensor(NumOps.One, clamped);
+        var logOneMinusP = Engine.TensorLog(oneMinusP);
+        var oneMinusT = Engine.ScalarMinusTensor(NumOps.One, target);
+        var term1 = Engine.TensorMultiply(target, logP);
+        var term2 = Engine.TensorMultiply(oneMinusT, logOneMinusP);
+        var sum = Engine.TensorAdd(term1, term2);
+        var allAxes = Enumerable.Range(0, sum.Shape.Length).ToArray();
+        var mean = Engine.ReduceMean(sum, allAxes, keepDims: false);
+        return Engine.TensorNegate(mean);
+    }
 }

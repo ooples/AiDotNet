@@ -83,4 +83,11 @@ public class QuantumLoss<T> : LossFunctionBase<T>
 
         return gradient;
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        throw new NotImplementedException(
+            "Quantum ComputeTapeLoss requires tape-differentiable fidelity computation. See task #79.");
+    }
 }

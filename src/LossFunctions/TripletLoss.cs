@@ -215,8 +215,8 @@ public class TripletLoss<T> : LossFunctionBase<T>
     /// <param name="positive">The positive GPU tensor (similar to anchors).</param>
     /// <param name="negative">The negative GPU tensor (dissimilar to anchors).</param>
     /// <returns>A tuple containing the loss value and gradient tensors for anchor, positive, and negative.</returns>
-    public (T Loss, IGpuTensor<T> AnchorGradient, IGpuTensor<T> PositiveGradient, IGpuTensor<T> NegativeGradient) CalculateLossAndGradientGpu(
-        IGpuTensor<T> anchor, IGpuTensor<T> positive, IGpuTensor<T> negative)
+    public (T Loss, Tensor<T> AnchorGradient, Tensor<T> PositiveGradient, Tensor<T> NegativeGradient) CalculateLossAndGradientGpu(
+        Tensor<T> anchor, Tensor<T> positive, Tensor<T> negative)
     {
         var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
         var backend = engine?.GetBackend();
@@ -250,5 +250,19 @@ public class TripletLoss<T> : LossFunctionBase<T>
         var negativeGradTensor = new GpuTensor<T>(backend, negativeGradBuffer, negative._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), anchorGradTensor, positiveGradTensor, negativeGradTensor);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Triplet: mean(max(0, d_pos - d_neg + margin))
+        // predicted contains distance differences, target unused
+        var marginTensor = new Tensor<T>(predicted.Shape.ToArray());
+        marginTensor.Fill(_margin);
+        var shifted = Engine.TensorAdd(predicted, marginTensor);
+        var zeros = new Tensor<T>(shifted.Shape.ToArray());
+        var clamped = Engine.TensorMax(shifted, zeros);
+        var allAxes = Enumerable.Range(0, clamped.Shape.Length).ToArray();
+        return Engine.ReduceMean(clamped, allAxes, keepDims: false);
     }
 }

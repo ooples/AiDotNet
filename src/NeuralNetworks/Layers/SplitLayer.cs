@@ -264,7 +264,7 @@ public class SplitLayer<T> : LayerBase<T>
     /// No data is downloaded to CPU during inference.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -279,7 +279,7 @@ public class SplitLayer<T> : LayerBase<T>
         // Determine batch size and input size
         int batchSize;
         int inputSize;
-        IGpuTensor<T> processInput;
+        Tensor<T> processInput;
 
         if (rank == 1)
         {

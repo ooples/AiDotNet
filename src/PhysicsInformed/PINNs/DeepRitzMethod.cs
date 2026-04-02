@@ -234,10 +234,11 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 T[] u = EvaluateAtPoint(point);
 
                 // Compute gradient
-                T[,] gradU = NeuralNetworkDerivatives<T>.ComputeGradient(
+                var derivs = NeuralNetworkDerivatives<T>.ComputeDerivatives(
                     this,
                     point,
                     Architecture.OutputSize);
+                T[,] gradU = derivs.FirstDerivatives ?? new T[Architecture.OutputSize, point.Length];
 
                 // Evaluate energy density
                 T energyDensity = _energyFunctional(point, u, gradU);

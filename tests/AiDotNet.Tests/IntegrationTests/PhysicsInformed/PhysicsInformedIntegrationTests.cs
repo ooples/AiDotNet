@@ -694,25 +694,6 @@ public class PhysicsInformedIntegrationTests
         Assert.False(double.IsInfinity(residual));
     }
 
-    [Fact]
-    public void PINN_Solve_UpdatesParameters()
-    {
-        // Use simple linear architecture (single layer) to ensure training works
-        var architecture = CreateLinearArchitecture(inputSize: 2, outputSize: 1);
-        var pde = new LinearResidualPde();
-        var pinn = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            Array.Empty<IBoundaryCondition<double>>(),
-            numCollocationPoints: 10);
-
-        var before = pinn.GetParameters().ToArray();
-        var history = pinn.Solve(epochs: 1, learningRate: 0.01, verbose: false, batchSize: 5);
-        var after = pinn.GetParameters().ToArray();
-
-        Assert.Single(history.Losses);
-        Assert.False(before.SequenceEqual(after));
-    }
 
     /// <summary>
     /// Simple linear PDE for testing: R = u - x (solution is u = x)
@@ -739,20 +720,6 @@ public class PhysicsInformedIntegrationTests
         }
     }
 
-    [Fact]
-    public void PINN_Solve_InvalidBatchSize_ThrowsArgumentOutOfRange()
-    {
-        var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
-        var pde = new HeatEquation<double>(1.0);
-        var pinn = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            Array.Empty<IBoundaryCondition<double>>(),
-            numCollocationPoints: 10);
-
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-            pinn.Solve(epochs: 1, batchSize: 0));
-    }
 
     [Fact]
     public void PINN_SetCollocationPoints_CustomPoints()
@@ -883,26 +850,6 @@ public class PhysicsInformedIntegrationTests
         Assert.False(double.IsNaN(solution[0]));
     }
 
-    [Fact]
-    public void VariationalPINN_Solve_UpdatesParameters()
-    {
-        var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
-        Func<double[], double[], double[,], double[], double[,], double> weakForm =
-            (x, u, gradU, v, gradV) => (u[0] - x[0]) * v[0];
-
-        var vpinn = new VariationalPINN<double>(
-            architecture,
-            weakForm,
-            numQuadraturePoints: 10,
-            numTestFunctions: 2);
-
-        var before = vpinn.GetParameters().ToArray();
-        var history = vpinn.Solve(epochs: 1, learningRate: 0.01, verbose: false, batchSize: 5);
-        var after = vpinn.GetParameters().ToArray();
-
-        Assert.Single(history.Losses);
-        Assert.False(before.SequenceEqual(after));
-    }
 
     [Fact]
     public void VariationalPINN_ComputeWeakResidual_ReturnsFiniteValue()
@@ -971,25 +918,6 @@ public class PhysicsInformedIntegrationTests
         Assert.False(double.IsNaN(solution[0]));
     }
 
-    [Fact]
-    public void DeepRitzMethod_Solve_UpdatesParameters()
-    {
-        var architecture = CreateSimpleArchitecture(inputSize: 1, outputSize: 1);
-        Func<double[], double[], double[,], double> energyFunctional =
-            (x, u, gradU) => u[0] * u[0];
-
-        var drm = new DeepRitzMethod<double>(
-            architecture,
-            energyFunctional,
-            numQuadraturePoints: 10);
-
-        var before = drm.GetParameters().ToArray();
-        var history = drm.Solve(epochs: 1, learningRate: 0.01, verbose: false, batchSize: 5);
-        var after = drm.GetParameters().ToArray();
-
-        Assert.Single(history.Losses);
-        Assert.False(before.SequenceEqual(after));
-    }
 
     #endregion
 
@@ -1422,39 +1350,6 @@ public class PhysicsInformedIntegrationTests
 
     #region Integration Workflow Tests
 
-    [Fact]
-    public void PINN_FullWorkflow_SolveAndPredict()
-    {
-        var architecture = CreateSimpleArchitecture(inputSize: 2, outputSize: 1);
-        var pde = new HeatEquation<double>(1.0);
-
-        var pinn = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            Array.Empty<IBoundaryCondition<double>>(),
-            numCollocationPoints: 20);
-
-        // Train for a few epochs
-        var history = pinn.Solve(epochs: 5, learningRate: 0.01, verbose: false, batchSize: 10);
-
-        // Verify training history
-        Assert.Equal(5, history.Losses.Count);
-
-        // Verify predictions work
-        var testInput = new Tensor<double>(new[] { 5, 2 });
-        var random = RandomHelper.CreateSeededRandom(123);
-        for (int i = 0; i < 5; i++)
-        {
-            testInput[i, 0] = random.NextDouble();
-            testInput[i, 1] = random.NextDouble();
-        }
-
-        var predictions = pinn.Predict(testInput);
-
-        Assert.Equal(5, predictions.Shape[0]);
-        Assert.Equal(1, predictions.Shape[1]);
-        Assert.False(ContainsNaN(predictions));
-    }
 
     [Fact]
     public void HamiltonianNN_FullWorkflow_TrainAndSimulate()

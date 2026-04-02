@@ -219,7 +219,7 @@ public class ExpertLayer<T> : LayerBase<T>
     /// ForwardGpu method. If any layer doesn't support GPU execution, falls back to CPU.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

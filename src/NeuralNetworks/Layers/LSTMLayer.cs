@@ -582,15 +582,15 @@ public partial class LSTMLayer<T> : LayerBase<T>
     private GpuTensor<T>? _gpuBiasOV;
 
     // Cached forward pass state for backpropagation (per timestep arrays)
-    private IGpuTensor<T>? _gpuLastInput;
-    private IGpuTensor<T>[]? _gpuCachedForgetGates;
-    private IGpuTensor<T>[]? _gpuCachedInputGates;
-    private IGpuTensor<T>[]? _gpuCachedCellCandidates;
-    private IGpuTensor<T>[]? _gpuCachedOutputGates;
-    private IGpuTensor<T>[]? _gpuCachedCellStates;
-    private IGpuTensor<T>[]? _gpuCachedHiddenStates;
-    private IGpuTensor<T>? _gpuInitialHiddenState;
-    private IGpuTensor<T>? _gpuInitialCellState;
+    private Tensor<T>? _gpuLastInput;
+    private Tensor<T>[]? _gpuCachedForgetGates;
+    private Tensor<T>[]? _gpuCachedInputGates;
+    private Tensor<T>[]? _gpuCachedCellCandidates;
+    private Tensor<T>[]? _gpuCachedOutputGates;
+    private Tensor<T>[]? _gpuCachedCellStates;
+    private Tensor<T>[]? _gpuCachedHiddenStates;
+    private Tensor<T>? _gpuInitialHiddenState;
+    private Tensor<T>? _gpuInitialCellState;
 
     // Cached stacked weights for fused kernel (PyTorch format: i, f, g, o)
     private IGpuBuffer? _gpuStackedWeightsIh;
@@ -1200,7 +1200,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.
     /// The LSTM gates (forget, input, cell, output) are computed using GPU matrix operations.</para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));

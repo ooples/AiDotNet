@@ -93,4 +93,12 @@ public class MeanBiasErrorLoss<T> : LossFunctionBase<T>
 
         return derivative;
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        var diff = Engine.TensorSubtract(predicted, target);
+        var allAxes = Enumerable.Range(0, diff.Shape.Length).ToArray();
+        return Engine.ReduceMean(diff, allAxes, keepDims: false);
+    }
 }

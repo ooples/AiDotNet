@@ -62,8 +62,8 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     private Tensor<T>? _convOut;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuBnOut;
-    private IGpuTensor<T>? _gpuConvOut;
+    private Tensor<T>? _gpuBnOut;
+    private Tensor<T>? _gpuConvOut;
     private bool _gpuAdded3DBatch;
 
     /// <summary>
@@ -227,7 +227,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// All intermediate results stay GPU-resident.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -242,7 +242,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         if (shape.Length < 3)
             throw new ArgumentException($"TransitionLayer requires at least 3D tensor [C, H, W]. Got rank {shape.Length}.");
 
-        IGpuTensor<T> processInput;
+        Tensor<T> processInput;
         bool added3DBatch = false;
 
         if (shape.Length == 4)

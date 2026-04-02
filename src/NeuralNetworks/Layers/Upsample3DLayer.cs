@@ -300,7 +300,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">The input tensors on GPU (uses first input).</param>
     /// <returns>The upsampled output as a GPU-resident tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -314,7 +314,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
         if (input.Shape.Length < 4)
             throw new ArgumentException($"Upsample3D layer requires at least 4D tensor [C,D,H,W]. Got rank {input.Shape.Length}.");
 
-        IGpuTensor<T> input5D;
+        Tensor<T> input5D;
         bool addedBatch = false;
         _originalInputShape = input.Shape.ToArray();
         int rank = input.Shape.Length;

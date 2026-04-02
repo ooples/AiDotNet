@@ -200,8 +200,8 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     private Tensor<T> BiasesGradient { get; set; }
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuOutput;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuOutput;
     private int[] _gpuInputShape = [];
 
     /// <summary>
@@ -400,7 +400,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// without downloading intermediate results to CPU.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -417,7 +417,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
         var biased = gpuEngine.AddBiasGpu(matmul, Biases);
 
         // Apply activation
-        IGpuTensor<T> output;
+        Tensor<T> output;
         if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
         {
             var fusedType = MapActivationToFused();

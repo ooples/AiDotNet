@@ -108,4 +108,21 @@ public class CosineSimilarityLoss<T> : LossFunctionBase<T>
 
         return derivative;
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // CosineSimilarity = 1 - dot(p,t) / (||p|| * ||t|| + eps)
+        var dotProduct = Engine.TensorMultiply(predicted, target);
+        var allAxes = Enumerable.Range(0, dotProduct.Shape.Length).ToArray();
+        var dot = Engine.ReduceSum(dotProduct, allAxes, keepDims: false);
+        var predSq = Engine.TensorMultiply(predicted, predicted);
+        var targSq = Engine.TensorMultiply(target, target);
+        var predNorm = Engine.TensorSqrt(Engine.ReduceSum(predSq, allAxes, keepDims: false));
+        var targNorm = Engine.TensorSqrt(Engine.ReduceSum(targSq, allAxes, keepDims: false));
+        var normProduct = Engine.TensorMultiply(predNorm, targNorm);
+        var safeNorm = Engine.TensorAddScalar(normProduct, NumOps.FromDouble(1e-8));
+        var similarity = Engine.TensorDivide(dot, safeNorm);
+        return Engine.ScalarMinusTensor(NumOps.One, similarity);
+    }
 }
