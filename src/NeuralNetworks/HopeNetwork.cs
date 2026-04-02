@@ -60,6 +60,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     private Vector<T>? _metaState;
     private int _adaptationStep;
     private T _selfModificationRate;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
@@ -85,6 +86,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         HopeNetworkOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm: 1.0)
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new HopeNetworkOptions();
         Options = _options;
         _hiddenDim = hiddenDim;
@@ -463,7 +465,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
 
-        TrainWithTape(input, expectedOutput);
+        TrainWithTape(input, expectedOutput, _optimizer);
 
         // Periodically consolidate memory
         if (_adaptationStep % 100 == 0)

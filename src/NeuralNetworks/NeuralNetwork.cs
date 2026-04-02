@@ -49,6 +49,7 @@ namespace AiDotNet.NeuralNetworks;
 public class NeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly NeuralNetworkDefaultOptions _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -105,9 +106,10 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     {
     }
 
-    public NeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, NeuralNetworkDefaultOptions? options = null) :
+    public NeuralNetwork(NeuralNetworkArchitecture<T> architecture, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null, NeuralNetworkDefaultOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new NeuralNetworkDefaultOptions();
         Options = _options;
         InitializeLayers();
@@ -283,7 +285,7 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
+        TrainWithTape(input, expectedOutput, _optimizer);
         SetTrainingMode(false);
     }
 
