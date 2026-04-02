@@ -68,8 +68,8 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     public override ModelOptions GetOptions() => _dqnOptions;
     private readonly UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
 
-    private INeuralNetwork<T> _qNetwork;
-    private INeuralNetwork<T> _targetNetwork;
+    private NeuralNetwork<T> _qNetwork;
+    private NeuralNetwork<T> _targetNetwork;
     private double _epsilon;
     private int _steps;
 
@@ -254,10 +254,7 @@ public class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         // Single batched training step — tape-based forward + loss + optimizer update
         _qNetwork.Train(batchStates, targetQBatch);
-
-        // Compute loss for monitoring
-        var predictions = _qNetwork.Predict(batchStates);
-        var avgLoss = LossFunction.CalculateLoss(predictions.ToVector(), targetQBatch.ToVector());
+        var avgLoss = _qNetwork.GetLastLoss();
         LossHistory.Add(avgLoss);
 
         // Update target network periodically
