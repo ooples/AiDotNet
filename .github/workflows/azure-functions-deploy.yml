@@ -10,6 +10,10 @@ on:
       - '.github/workflows/azure-functions-deploy.yml'
   workflow_dispatch:  # Allow manual trigger
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   AZURE_FUNCTIONAPP_NAME: aidotnet-playground
   AZURE_FUNCTIONAPP_PACKAGE_PATH: src/AiDotNet.Playground.Functions

@@ -135,19 +135,33 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     private void ValidateSymmetric(Matrix<T> matrix)
     {
         int n = matrix.Rows;
-        // Use an absolute tolerance for floating-point comparison
-        // This is necessary because computations like A^T*A may have tiny numerical errors
-        T tolerance = NumOps.FromDouble(1e-10);
+        // Two-tier tolerance (matches scikit-learn/GPy pattern):
+        // - Small asymmetry (< 1e-6 relative to diagonal): auto-fix (floating-point noise)
+        // - Large asymmetry: throw (genuine non-symmetric matrix — caller bug)
+        T half = NumOps.FromDouble(0.5);
+
+        // Compute reference scale from diagonal for relative tolerance
+        double diagScale = 0;
+        for (int i = 0; i < n; i++)
+            diagScale = Math.Max(diagScale, Math.Abs(NumOps.ToDouble(matrix[i, i])));
+        double relativeTolerance = Math.Max(diagScale * 1e-6, 1e-10);
 
         for (int i = 0; i < n; i++)
         {
             for (int j = i + 1; j < n; j++)
             {
-                T diff = NumOps.Abs(NumOps.Subtract(matrix[i, j], matrix[j, i]));
-                if (NumOps.GreaterThan(diff, tolerance))
+                double diff = Math.Abs(NumOps.ToDouble(NumOps.Subtract(matrix[i, j], matrix[j, i])));
+                if (diff > relativeTolerance * 1000)
                 {
-                    throw new ArgumentException("Matrix must be symmetric for Cholesky decomposition.");
+                    // Large asymmetry relative to matrix scale — genuine bug
+                    throw new ArgumentException(
+                        $"Matrix must be symmetric for Cholesky decomposition. " +
+                        $"Asymmetry at [{i},{j}]: {diff:E3} exceeds tolerance {relativeTolerance * 1000:E3}.");
                 }
+                // Small asymmetry: auto-fix (K + K^T) / 2
+                T avg = NumOps.Multiply(half, NumOps.Add(matrix[i, j], matrix[j, i]));
+                matrix[i, j] = avg;
+                matrix[j, i] = avg;
             }
         }
     }

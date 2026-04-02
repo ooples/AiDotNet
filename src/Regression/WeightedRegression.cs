@@ -80,6 +80,16 @@ public class WeightedRegression<T> : RegressionBase<T>
     private readonly Vector<T> _weights;
 
     /// <summary>
+    /// Relative scale factor for the adaptive stability ridge (fraction of mean diagonal magnitude).
+    /// </summary>
+    private const double StabilityRidgeScale = 1e-6;
+
+    /// <summary>
+    /// Absolute floor for the stability ridge when diagonal magnitude is near zero.
+    /// </summary>
+    private const double MinimumStabilityRidge = 1e-10;
+
+    /// <summary>
     /// The polynomial order for feature expansion.
     /// </summary>
     /// <remarks>
@@ -180,10 +190,16 @@ public class WeightedRegression<T> : RegressionBase<T>
         var xTWx = expandedX.Transpose().Multiply(weightMatrix).Multiply(expandedX);
         var regularizedXTWx = xTWx.Add(Regularization.Regularize(xTWx));
 
-        // Add small ridge for numerical stability (prevents singularity with collinear features)
+        // Add scale-aware ridge for numerical stability (prevents singularity with collinear features)
+        double diagMean = 0;
+        for (int i = 0; i < regularizedXTWx.Rows; i++)
+            diagMean += Math.Abs(NumOps.ToDouble(regularizedXTWx[i, i]));
+        diagMean = regularizedXTWx.Rows > 0 ? diagMean / regularizedXTWx.Rows : 1.0;
+        var stabilityRidge = NumOps.FromDouble(
+            Math.Max(MinimumStabilityRidge, diagMean * StabilityRidgeScale));
         for (int i = 0; i < regularizedXTWx.Rows; i++)
         {
-            regularizedXTWx[i, i] = NumOps.Add(regularizedXTWx[i, i], NumOps.FromDouble(1e-10));
+            regularizedXTWx[i, i] = NumOps.Add(regularizedXTWx[i, i], stabilityRidge);
         }
 
         var xTWy = expandedX.Transpose().Multiply(weightMatrix).Multiply(y);

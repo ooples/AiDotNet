@@ -67,6 +67,21 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     private readonly LocallyWeightedRegressionOptions _options;
 
     /// <summary>
+    /// Tolerance below which total kernel weight is treated as zero (no neighbors in bandwidth).
+    /// </summary>
+    private const double ZeroWeightTolerance = 1e-15;
+
+    /// <summary>
+    /// Relative scale factor for the adaptive ridge penalty (fraction of mean diagonal magnitude).
+    /// </summary>
+    private const double StabilityStrengthScale = 1e-6;
+
+    /// <summary>
+    /// Absolute floor for the ridge penalty when diagonal magnitude is near zero.
+    /// </summary>
+    private const double MinimumStabilityStrength = 1e-6;
+
+    /// <summary>
     /// Matrix containing the feature vectors of the training samples.
     /// </summary>
     private Matrix<T> _xTrain;
@@ -263,12 +278,18 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         // Compute weights for each training point
         var weights = ComputeWeights(input);
 
+        // Fail fast if the model hasn't been trained yet
+        if (_xTrain.Rows == 0 || _yTrain.Length == 0)
+        {
+            throw new InvalidOperationException("Call Train() before Predict().");
+        }
+
         // If all weights are zero (query point is outside bandwidth of all training data),
         // fall back to the global mean of y to avoid NaN from a zero-weight solve.
         double totalWeight = 0;
         for (int i = 0; i < weights.Length; i++)
             totalWeight += NumOps.ToDouble(weights[i]);
-        if (totalWeight < 1e-15)
+        if (totalWeight < ZeroWeightTolerance)
         {
             return _yTrain.Mean();
         }
@@ -292,11 +313,11 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         for (int i = 0; i < xTx.Rows; i++)
             diagMean += Math.Abs(NumOps.ToDouble(xTx[i, i]));
         diagMean = xTx.Rows > 0 ? diagMean / xTx.Rows : 1.0;
-        var userStrength = Regularization?.GetOptions().Strength ?? 0.0;
-        var effectiveStrength = NumOps.FromDouble(Math.Max(diagMean * 1e-6, Math.Max(1e-6, userStrength)));
+        var stabilityStrength = NumOps.FromDouble(
+            Math.Max(diagMean * StabilityStrengthScale, MinimumStabilityStrength));
         for (int i = 0; i < xTx.Rows; i++)
         {
-            xTx[i, i] = NumOps.Add(xTx[i, i], effectiveStrength);
+            xTx[i, i] = NumOps.Add(xTx[i, i], stabilityStrength);
         }
 
         var xTy = weightedX.Transpose().Multiply(weightedY);
