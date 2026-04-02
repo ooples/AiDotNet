@@ -1,5 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
-using AiDotNet.Training;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Interfaces;
 

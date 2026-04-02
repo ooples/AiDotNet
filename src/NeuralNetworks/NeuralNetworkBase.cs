@@ -2569,9 +2569,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return engine.ReduceMean(sq, axes, keepDims: false);
         }
 
-        var context = new Training.TapeStepContext<T>(
+        // Attach contiguous parameter buffer for zero-copy flat access by second-order optimizers
+        var paramBuffer = GetOrCreateParameterBuffer(trainableParams);
+
+        var context = new TapeStepContext<T>(
             trainableParams, grads, lossValue,
-            input, expected, ComputeForward, ComputeLoss);
+            input, expected, ComputeForward, ComputeLoss,
+            paramBuffer);
 
         // Delegate the actual parameter update to the optimizer
         opt.Step(context);
@@ -2601,6 +2605,37 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Lazily initialized on first use (Adam with default settings).
     /// </summary>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTrainOptimizer;
+
+    /// <summary>
+    /// Contiguous parameter buffer for zero-copy flat parameter access.
+    /// Lazily initialized on first training step when trainable parameters are available.
+    /// </summary>
+    private ParameterBuffer<T>? _parameterBuffer;
+
+    /// <summary>
+    /// Gets or lazily creates the contiguous parameter buffer from the current trainable parameters.
+    /// </summary>
+    private ParameterBuffer<T>? GetOrCreateParameterBuffer(Tensor<T>[] trainableParams)
+    {
+        if (trainableParams.Length == 0)
+            return null;
+
+        if (_parameterBuffer is not null && _parameterBuffer.Count == trainableParams.Length)
+            return _parameterBuffer;
+
+        // Build buffer from current parameter shapes
+        var shapes = new int[trainableParams.Length][];
+        for (int i = 0; i < trainableParams.Length; i++)
+            shapes[i] = trainableParams[i].Shape.ToArray();
+
+        var buffer = new ParameterBuffer<T>(shapes);
+
+        // Copy current weights into the buffer
+        buffer.CopyFrom(trainableParams);
+
+        _parameterBuffer = buffer;
+        return buffer;
+    }
 
     /// <summary>
     /// Gets the metadata for this neural network model.

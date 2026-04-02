@@ -4,7 +4,7 @@ using AiDotNet.LearningRateSchedulers;
 using AiDotNet.MixedPrecision;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.Engines.DirectGpu;
-using AiDotNet.Training;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Optimizers;
 
