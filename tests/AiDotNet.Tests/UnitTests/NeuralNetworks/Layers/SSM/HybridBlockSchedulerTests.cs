@@ -96,41 +96,7 @@ public class HybridBlockSchedulerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void Backward_ProducesValidGradients()
-    {
-        int seqLen = 4;
-        int modelDim = 32;
-        int stateDim = 8;
-        var blocks = CreateMambaBlocks(seqLen, modelDim, 2, stateDim);
-        var isAttention = new bool[] { false, false };
 
-        var scheduler = new HybridBlockScheduler<float>(
-            seqLen, blocks, isAttention, HybridSchedulePattern.JambaStyle, modelDim);
-
-        var input = CreateRandomTensor(new[] { 1, seqLen, modelDim });
-        var output = scheduler.Forward(input);
-        var grad = CreateRandomTensor(output.Shape.ToArray(), seed: 99);
-        var inputGrad = scheduler.Backward(grad);
-
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGrad));
-    }
-
-    [Fact]
-    public void Backward_ThrowsWithoutForward()
-    {
-        int seqLen = 4;
-        int modelDim = 32;
-        var blocks = CreateMambaBlocks(seqLen, modelDim, 2);
-        var isAttention = new bool[] { false, false };
-
-        var scheduler = new HybridBlockScheduler<float>(
-            seqLen, blocks, isAttention, HybridSchedulePattern.JambaStyle, modelDim);
-
-        var grad = CreateRandomTensor(new[] { 1, seqLen, modelDim });
-        Assert.Throws<InvalidOperationException>(() => scheduler.Backward(grad));
-    }
 
     [Fact]
     public void GetParameters_SetParameters_RoundTrip()
@@ -330,24 +296,6 @@ public class HybridBlockSchedulerTests
             HybridBlockScheduler<float>.CreateJambaSchedule(8, 32, 4, attentionFrequency: 0));
     }
 
-    [Fact]
-    public void CreateJambaSchedule_FullTrainingStep()
-    {
-        var scheduler = HybridBlockScheduler<float>.CreateJambaSchedule(
-            sequenceLength: 4, modelDimension: 16, numLayers: 4,
-            attentionFrequency: 2, stateDimension: 4, numAttentionHeads: 4);
-
-        var input = CreateRandomTensor(new[] { 1, 4, 16 });
-        var output = scheduler.Forward(input);
-        var grad = CreateRandomTensor(output.Shape.ToArray());
-        scheduler.Backward(grad);
-        scheduler.UpdateParameters(0.001f);
-
-        scheduler.ResetState();
-        var output2 = scheduler.Forward(input);
-        Assert.Equal(output.Shape.ToArray(), output2.Shape.ToArray());
-        Assert.False(ContainsNaN(output2));
-    }
 
     [Fact]
     public void Forward_Double_ProducesValidOutput()

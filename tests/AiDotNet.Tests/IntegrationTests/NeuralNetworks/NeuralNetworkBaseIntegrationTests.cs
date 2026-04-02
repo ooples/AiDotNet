@@ -66,32 +66,8 @@ public class NeuralNetworkBaseIntegrationTests
         Assert.Equal(new[] { 2, 2 }, features[1].Shape.ToArray());
     }
 
-    [Fact]
-    public void NeuralNetworkBase_Backpropagate_ReturnsInputGradientShape()
-    {
-        TestNeuralNetwork network = BuildNetwork();
-        network.SetTrainingMode(true);
 
-        var input = CreateRandomTensor(new[] { 2, 4 });
-        var output = network.ForwardWithMemory(input);
-        var outputGradient = CreateRandomTensor(output.Shape.ToArray(), seed: 7);
-        var inputGradient = network.Backpropagate(outputGradient);
-
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-    }
-
-    [Fact]
-    public void NeuralNetworkBase_ComputeInputGradient_RespectsInputShape()
-    {
-        TestNeuralNetwork network = BuildNetwork();
-        var input = CreateRandomTensor(new[] { 2, 4 });
-        var output = network.Predict(input);
-        var outputGradient = CreateRandomTensor(output.Shape.ToArray(), seed: 11);
-
-        var inputGradient = network.ComputeInputGradient(input, outputGradient);
-
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-    }
+    // ComputeInputGradient test removed — method deleted in tape-based autodiff migration
 
     [Fact]
     public void NeuralNetworkBase_ParameterCount_UpdatesWhenLayersChange()
@@ -162,11 +138,8 @@ public class NeuralNetworkBaseIntegrationTests
 
         public override void Train(Tensor<float> input, Tensor<float> expectedOutput)
         {
-            SetTrainingMode(true);
-            var prediction = ForwardWithMemory(input);
-            LastLoss = LossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-            var gradient = LossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            Backpropagate(Tensor<float>.FromVector(gradient));
+            // Use tape-based training via base class
+            TrainWithTape(input, expectedOutput);
         }
 
         public override ModelMetadata<float> GetModelMetadata()

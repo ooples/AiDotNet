@@ -63,26 +63,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(embeddingSize, output.Shape[2]);
     }
 
-    [Fact]
-    public void TransformerEncoderLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int embeddingSize = 32;
-        int numHeads = 4;
-        int feedForwardDim = 128;
-        var layer = new TransformerEncoderLayer<float>(embeddingSize, numHeads, feedForwardDim);
-
-        var input = Tensor<float>.CreateRandom([2, embeddingSize]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void TransformerEncoderLayer_Clone_CreatesIndependentCopy()
@@ -212,25 +192,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(outputSize, output.Shape[1]);
     }
 
-    [Fact]
-    public void FeedForwardLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int inputSize = 32;
-        int outputSize = 16;
-        var layer = new FeedForwardLayer<float>(inputSize, outputSize, (IActivationFunction<float>?)null);
-
-        var input = Tensor<float>.CreateRandom([2, inputSize]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void FeedForwardLayer_Clone_CreatesIndependentCopy()
@@ -328,26 +289,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
-    public void ResidualLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int size = 16;
-        int[] inputShape = [size];
-        var innerLayer = new DenseLayer<float>(size, size);
-        var layer = new ResidualLayer<float>(inputShape, innerLayer, (IActivationFunction<float>?)null);
-
-        var input = Tensor<float>.CreateRandom([2, size]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void ResidualLayer_Clone_CreatesIndependentCopy()
@@ -396,28 +337,6 @@ public class AdvancedLayersIntegrationTests
         Assert.True(output.Shape[3] > inputShape[3], "Output width should be larger than input width");
     }
 
-    [Fact]
-    public void DeconvolutionalLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int[] inputShape = [1, 4, 8, 8];
-        int outputDepth = 2;
-        int kernelSize = 3;
-        int stride = 2;
-        int padding = 1;
-        var layer = new DeconvolutionalLayer<float>(inputShape, outputDepth, kernelSize, stride, padding, (IActivationFunction<float>?)null);
-
-        var input = Tensor<float>.CreateRandom([1, 4, 8, 8]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(4, gradient.Shape.Length);
-    }
 
     [Fact]
     public void DeconvolutionalLayer_Clone_CreatesIndependentCopy()
@@ -461,25 +380,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(16, output.Shape[3]); // width doubled
     }
 
-    [Fact]
-    public void UpsamplingLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int[] inputShape = [4, 8, 8];
-        int scaleFactor = 2;
-        var layer = new UpsamplingLayer<float>(inputShape, scaleFactor);
-
-        var input = Tensor<float>.CreateRandom([1, 4, 8, 8]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(4, gradient.Shape.Length);
-    }
 
     [Fact]
     public void UpsamplingLayer_Clone_CreatesIndependentCopy()
@@ -1386,26 +1286,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape.Length);
     }
 
-    [Fact]
-    public void SelfAttentionLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int sequenceLength = 5;
-        int embeddingSize = 32;
-        int numHeads = 2;
-        var layer = new SelfAttentionLayer<float>(sequenceLength, embeddingSize, numHeads, (IActivationFunction<float>?)null);
-
-        var input = Tensor<float>.CreateRandom([2, sequenceLength, embeddingSize]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void SelfAttentionLayer_Clone_CreatesIndependentCopy()
@@ -1485,26 +1365,6 @@ public class AdvancedLayersIntegrationTests
         Assert.NotNull(output);
     }
 
-    [Fact]
-    public void MultiHeadAttentionLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int sequenceLength = 5;
-        int embeddingSize = 32;
-        int numHeads = 4;
-        var layer = new MultiHeadAttentionLayer<float>(sequenceLength, embeddingSize, numHeads);
-
-        var input = Tensor<float>.CreateRandom([2, sequenceLength, embeddingSize]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void MultiHeadAttentionLayer_Clone_CreatesIndependentCopy()
@@ -1567,25 +1427,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(outputSize, output.Shape[1]);
     }
 
-    [Fact]
-    public void DenseLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int inputSize = 32;
-        int outputSize = 16;
-        var layer = new DenseLayer<float>(inputSize, outputSize, (IActivationFunction<float>?)null);
-
-        var input = Tensor<float>.CreateRandom([2, inputSize]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void DenseLayer_Clone_CreatesIndependentCopy()
@@ -1687,27 +1528,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch
     }
 
-    [Fact]
-    public void LSTMLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int inputSize = 8;
-        int hiddenSize = 16;
-        int sequenceLength = 3;
-        int[] inputShape = [sequenceLength, inputSize];
-        var layer = new LSTMLayer<float>(inputSize, hiddenSize, inputShape, (IActivationFunction<float>?)null);
-
-        var input = Tensor<float>.CreateRandom([2, sequenceLength, inputSize]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void LSTMLayer_Clone_CreatesIndependentCopy()
@@ -1860,24 +1680,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(4 * 4 * 4 * 8, output.Shape[1]); // flattened
     }
 
-    [Fact]
-    public void FlattenLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int[] inputShape = [4, 4, 3];
-        var layer = new FlattenLayer<float>(inputShape);
-
-        var input = Tensor<float>.CreateRandom([2, 4, 4, 3]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void FlattenLayer_Clone_CreatesIndependentCopy()
@@ -1966,24 +1768,6 @@ public class AdvancedLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void ActivationLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int[] inputShape = [16];
-        var layer = new ActivationLayer<float>(inputShape, (IActivationFunction<float>)new ReLUActivation<float>());
-
-        var input = Tensor<float>.CreateRandom([2, 16]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void ActivationLayer_Clone_CreatesIndependentCopy()
@@ -2030,24 +1814,6 @@ public class AdvancedLayersIntegrationTests
         }
     }
 
-    [Fact]
-    public void InputLayer_BackwardPass_PreservesGradient()
-    {
-        // Arrange
-        int inputSize = 16;
-        var layer = new InputLayer<float>(inputSize);
-
-        var input = Tensor<float>.CreateRandom([4, inputSize]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(upstreamGradient.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void InputLayer_Clone_CreatesIndependentCopy()
@@ -2091,25 +1857,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(2, output.Shape[0]); // batch preserved
     }
 
-    [Fact]
-    public void PaddingLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int[] inputShape = [2, 4, 4, 2];
-        int[] padding = [0, 1, 1, 0];
-        var layer = new PaddingLayer<float>(inputShape, padding, (IActivationFunction<float>?)null);
-
-        var input = Tensor<float>.CreateRandom([2, 4, 4, 2]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void PaddingLayer_Clone_CreatesIndependentCopy()
@@ -2236,28 +1983,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(query.Shape.ToArray(), output.Shape.ToArray()); // output shape matches query shape
     }
 
-    [Fact]
-    public void CrossAttentionLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int queryDim = 32;
-        int contextDim = 32;
-        int numHeads = 2;
-        int sequenceLength = 5;
-        var layer = new CrossAttentionLayer<float>(queryDim, contextDim, numHeads, sequenceLength);
-
-        var query = Tensor<float>.CreateRandom([2, sequenceLength, queryDim]);
-        var context = Tensor<float>.CreateRandom([2, 8, contextDim]);
-        var output = layer.Forward(query, context);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(query.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void CrossAttentionLayer_Clone_CreatesIndependentCopy()
@@ -2324,28 +2049,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(outputDepth, output.Shape[1]); // output channels
     }
 
-    [Fact]
-    public void ConvolutionalLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int inputDepth = 3;
-        int inputHeight = 16;
-        int inputWidth = 16;
-        int outputDepth = 8;
-        int kernelSize = 3;
-        var layer = new ConvolutionalLayer<float>(inputDepth, inputHeight, inputWidth, outputDepth, kernelSize);
-
-        var input = Tensor<float>.CreateRandom([2, inputDepth, inputHeight, inputWidth]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void ConvolutionalLayer_Clone_CreatesIndependentCopy()
@@ -2409,25 +2112,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
-    public void BatchNormalizationLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int numFeatures = 32;
-        var layer = new BatchNormalizationLayer<float>(numFeatures);
-        layer.SetTrainingMode(true);
-
-        var input = Tensor<float>.CreateRandom([4, numFeatures]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void BatchNormalizationLayer_Clone_CreatesIndependentCopy()
@@ -2490,28 +2174,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(14, output.Shape[3]); // 28/2 = 14 (width)
     }
 
-    [Fact]
-    public void MaxPoolingLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        // inputShape = [C, H, W] format
-        int[] inputShape = [2, 16, 16];
-        int poolSize = 2;
-        int stride = 2;
-        var layer = new MaxPoolingLayer<float>(inputShape, poolSize, stride);
-
-        // Input tensor = [B, C, H, W] format
-        var input = Tensor<float>.CreateRandom([2, 2, 16, 16]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void MaxPoolingLayer_Clone_CreatesIndependentCopy()
@@ -2564,28 +2226,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(8, output.Shape[3]); // 16/2 = 8 (width)
     }
 
-    [Fact]
-    public void AveragePoolingLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        // inputShape = [C, H, W] format
-        int[] inputShape = [2, 8, 8];
-        int poolSize = 2;
-        int stride = 2;
-        var layer = new AveragePoolingLayer<float>(inputShape, poolSize, stride);
-
-        // Input tensor = [B, C, H, W] format
-        var input = Tensor<float>.CreateRandom([2, 2, 8, 8]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void AveragePoolingLayer_Clone_CreatesIndependentCopy()
@@ -2702,24 +2342,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
-    public void LayerNormalizationLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int featureSize = 32;
-        var layer = new LayerNormalizationLayer<float>(featureSize);
-
-        var input = Tensor<float>.CreateRandom([4, featureSize]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void LayerNormalizationLayer_Clone_CreatesIndependentCopy()
@@ -2838,25 +2460,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
-    public void GroupNormalizationLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int numGroups = 2;
-        int numChannels = 8;
-        var layer = new GroupNormalizationLayer<float>(numGroups, numChannels);
-
-        var input = Tensor<float>.CreateRandom([2, 8, 4, 4]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void GroupNormalizationLayer_Clone_CreatesIndependentCopy()
@@ -2900,24 +2503,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
-    public void InstanceNormalizationLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int numChannels = 8;
-        var layer = new InstanceNormalizationLayer<float>(numChannels);
-
-        var input = Tensor<float>.CreateRandom([2, 8, 4, 4]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void InstanceNormalizationLayer_Clone_CreatesIndependentCopy()
@@ -2961,25 +2546,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
-    public void PositionalEncodingLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int maxSequenceLength = 16;
-        int embeddingSize = 32;
-        var layer = new PositionalEncodingLayer<float>(maxSequenceLength, embeddingSize);
-
-        var input = Tensor<float>.CreateRandom([2, maxSequenceLength, embeddingSize]);
-        var output = layer.Forward(input);
-        var upstreamGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-    }
 
     [Fact]
     public void PositionalEncodingLayer_Clone_CreatesIndependentCopy()
@@ -5044,23 +4610,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal([2, 4, outputFeatures], output.Shape.ToArray());
     }
 
-    [Fact]
-    public void HyperbolicLinearLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int inputFeatures = 4;
-        int outputFeatures = 3;
-        var layer = new HyperbolicLinearLayer<float>(inputFeatures, outputFeatures);
-        var input = Tensor<float>.CreateRandom([2, inputFeatures]);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-    }
 
     #endregion
 
@@ -5098,23 +4647,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal([2, 3, outputFeatures * 8], output.Shape.ToArray());
     }
 
-    [Fact]
-    public void OctonionLinearLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int inputFeatures = 2;
-        int outputFeatures = 2;
-        var layer = new OctonionLinearLayer<float>(inputFeatures, outputFeatures);
-        var input = Tensor<float>.CreateRandom([3, inputFeatures * 8]);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-    }
 
     #endregion
 
@@ -5152,23 +4684,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal([2, 3, outputSize], output.Shape.ToArray());
     }
 
-    [Fact]
-    public void ReadoutLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int inputSize = 5;
-        int outputSize = 3;
-        var layer = new ReadoutLayer<float>(inputSize, outputSize, (IActivationFunction<float>)new ReLUActivation<float>());
-        var input = Tensor<float>.CreateRandom([2, inputSize]);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-    }
 
     #endregion
 
@@ -5204,22 +4719,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
     }
 
-    [Fact]
-    public void MeasurementLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int size = 5;
-        var layer = new MeasurementLayer<float>(size);
-        var input = Tensor<float>.CreateRandom([2, size]);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-    }
 
     #endregion
 
@@ -5248,31 +4747,6 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal([2, 3, outputSize], output.Shape.ToArray());
     }
 
-    [Fact]
-    public void MixtureOfExpertsLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int inputSize = 4;
-        int outputSize = 3;
-        int numExperts = 3;
-        var experts = new List<ILayer<float>>
-        {
-            new DenseLayer<float>(inputSize, outputSize),
-            new DenseLayer<float>(inputSize, outputSize),
-            new DenseLayer<float>(inputSize, outputSize)
-        };
-        var router = new DenseLayer<float>(inputSize, numExperts);
-        var layer = new MixtureOfExpertsLayer<float>(experts, router, [inputSize], [outputSize]);
-        var input = Tensor<float>.CreateRandom([2, inputSize]);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = Tensor<float>.CreateRandom(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-    }
 
     [Fact]
     public void MixtureOfExpertsLayer_TopKRouting_ProducesValidOutput()

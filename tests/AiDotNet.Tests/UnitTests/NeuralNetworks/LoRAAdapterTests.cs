@@ -105,85 +105,8 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(5, adapterOutput.Shape[1]);
         }
 
-        [Fact]
-        public void Backward_WithFrozenBase_UpdatesOnlyLoRAGradients()
-        {
-            // Arrange
-            var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
 
-            var input = new Tensor<double>(new[] { 1, 10 });
-            adapter.Forward(input);
 
-            var outputGradient = new Tensor<double>(new[] { 1, 5 });
-            for (int i = 0; i < 5; i++)
-            {
-                outputGradient[0, i] = 0.1;
-            }
-
-            // Act
-            var inputGradient = adapter.Backward(outputGradient);
-
-            // Assert
-            Assert.NotNull(inputGradient);
-            Assert.Equal(10, inputGradient.Shape[1]);
-
-            // Gradients should only be for LoRA parameters
-            var gradients = adapter.GetParameterGradients();
-            Assert.Equal(45, gradients.Length); // Only LoRA parameters
-        }
-
-        [Fact]
-        public void Backward_WithUnfrozenBase_UpdatesAllGradients()
-        {
-            // Arrange
-            var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: false);
-
-            var input = new Tensor<double>(new[] { 1, 10 });
-            adapter.Forward(input);
-
-            var outputGradient = new Tensor<double>(new[] { 1, 5 });
-
-            // Act
-            var inputGradient = adapter.Backward(outputGradient);
-
-            // Assert
-            var gradients = adapter.GetParameterGradients();
-            Assert.Equal(100, gradients.Length); // Base + LoRA parameters
-        }
-
-        [Fact]
-        public void UpdateParameters_WithFrozenBase_UpdatesOnlyLoRA()
-        {
-            // Arrange
-            var baseLayer = new DenseLayer<double>(10, 5, (IActivationFunction<double>?)null);
-            var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
-
-            var input = new Tensor<double>(new[] { 1, 10 });
-            adapter.Forward(input);
-
-            var outputGradient = new Tensor<double>(new[] { 1, 5 });
-            for (int i = 0; i < 5; i++)
-            {
-                outputGradient[0, i] = 0.1;
-            }
-            adapter.Backward(outputGradient);
-
-            var baseParamsBefore = baseLayer.GetParameters();
-
-            // Act
-            adapter.UpdateParameters(0.01);
-
-            // Assert
-            var baseParamsAfter = baseLayer.GetParameters();
-
-            // Base parameters should not change (frozen)
-            for (int i = 0; i < baseParamsBefore.Length; i++)
-            {
-                Assert.Equal(baseParamsBefore[i], baseParamsAfter[i], precision: 10);
-            }
-        }
 
         [Fact]
         public void GetParameters_ReturnsCorrectCount()

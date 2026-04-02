@@ -788,24 +788,6 @@ public class PrototypesIntegrationTests
         Assert.Equal(-1.0, gradient[0], 6);
     }
 
-    [Fact]
-    public void SimpleNeuralNetwork_Backward_ReturnsGradients()
-    {
-        // Arrange
-        var network = new SimpleNeuralNetwork<double>(2, 4, 1);
-        var input = PrototypeVector<double>.FromArray(new double[] { 0.5, 0.5 });
-        network.Forward(input); // Need to forward first to set up internal state
-        var lossGrad = PrototypeVector<double>.FromArray(new double[] { 1.0 });
-
-        // Act
-        var (wihGrad, bhGrad, whoGrad, boGrad) = network.Backward(lossGrad);
-
-        // Assert: check gradient dimensions
-        Assert.Equal(2 * 4, wihGrad.Length);  // input * hidden
-        Assert.Equal(4, bhGrad.Length);        // hidden
-        Assert.Equal(4 * 1, whoGrad.Length);   // hidden * output
-        Assert.Equal(1, boGrad.Length);        // output
-    }
 
     [Fact]
     public void SimpleNeuralNetwork_SetParameters_UpdatesNetwork()
@@ -825,66 +807,6 @@ public class PrototypesIntegrationTests
         }
     }
 
-    [Fact]
-    public void SimpleNeuralNetwork_TrainOnXOR_ReducesLoss()
-    {
-        // Arrange
-        var network = new SimpleNeuralNetwork<double>(2, 8, 1, seed: 42);
-        var optimizer = new PrototypeAdamOptimizer<double>(learningRate: 0.1);
-
-        // XOR dataset
-        var inputs = new double[][]
-        {
-            new[] { 0.0, 0.0 },
-            new[] { 0.0, 1.0 },
-            new[] { 1.0, 0.0 },
-            new[] { 1.0, 1.0 }
-        };
-        var targets = new double[] { 0.0, 1.0, 1.0, 0.0 };
-
-        // Compute initial loss
-        double initialLoss = 0;
-        for (int i = 0; i < 4; i++)
-        {
-            var input = PrototypeVector<double>.FromArray(inputs[i]);
-            var target = PrototypeVector<double>.FromArray(new[] { targets[i] });
-            var output = network.Forward(input);
-            initialLoss += network.ComputeLoss(output, target);
-        }
-
-        // Act: train for 100 epochs
-        for (int epoch = 0; epoch < 100; epoch++)
-        {
-            for (int i = 0; i < 4; i++)
-            {
-                var input = PrototypeVector<double>.FromArray(inputs[i]);
-                var target = PrototypeVector<double>.FromArray(new[] { targets[i] });
-
-                var output = network.Forward(input);
-                var lossGrad = network.ComputeLossGradient(output, target);
-                var (wihGrad, bhGrad, whoGrad, boGrad) = network.Backward(lossGrad);
-
-                // Flatten gradients
-                var gradients = FlattenGradients(wihGrad, bhGrad, whoGrad, boGrad);
-                var parameters = network.GetParameters();
-                var updated = optimizer.UpdateParameters(parameters, gradients);
-                network.SetParameters(updated);
-            }
-        }
-
-        // Compute final loss
-        double finalLoss = 0;
-        for (int i = 0; i < 4; i++)
-        {
-            var input = PrototypeVector<double>.FromArray(inputs[i]);
-            var target = PrototypeVector<double>.FromArray(new[] { targets[i] });
-            var output = network.Forward(input);
-            finalLoss += network.ComputeLoss(output, target);
-        }
-
-        // Assert
-        Assert.True(finalLoss < initialLoss, $"Loss did not decrease: {initialLoss} -> {finalLoss}");
-    }
 
     [Fact]
     public void SimpleNeuralNetwork_WorksWithFloat()
@@ -944,29 +866,6 @@ public class PrototypesIntegrationTests
 
     #region Cross-Component Integration Tests
 
-    [Fact]
-    public void Integration_AdamOptimizer_WithNeuralNetwork()
-    {
-        // Arrange
-        var network = new SimpleNeuralNetwork<double>(2, 4, 1, seed: 42);
-        var optimizer = new PrototypeAdamOptimizer<double>(learningRate: 0.1);
-        var input = PrototypeVector<double>.FromArray(new double[] { 0.5, 0.5 });
-        var target = PrototypeVector<double>.FromArray(new double[] { 1.0 });
-
-        // Act: one training step
-        var output = network.Forward(input);
-        var lossGrad = network.ComputeLossGradient(output, target);
-        var (wihGrad, bhGrad, whoGrad, boGrad) = network.Backward(lossGrad);
-        var gradients = FlattenGradients(wihGrad, bhGrad, whoGrad, boGrad);
-        var parameters = network.GetParameters();
-        var updated = optimizer.UpdateParameters(parameters, gradients);
-        network.SetParameters(updated);
-
-        // Assert
-        Assert.Equal(1, optimizer.TimeStep);
-        var newOutput = network.Forward(input);
-        Assert.NotEqual(output[0], newOutput[0]);
-    }
 
     [Fact]
     public void Integration_LinearRegression_EndToEnd()

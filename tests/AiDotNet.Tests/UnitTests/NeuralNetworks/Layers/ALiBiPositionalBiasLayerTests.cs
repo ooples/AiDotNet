@@ -177,27 +177,6 @@ public class ALiBiPositionalBiasLayerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void Backward_PassesGradientThrough()
-    {
-        int numHeads = 2;
-        int seqLen = 4;
-        var layer = new ALiBiPositionalBiasLayer<float>(numHeads);
-        var input = CreateRandomTensor(new[] { numHeads, seqLen, seqLen });
-
-        layer.Forward(input);
-        var grad = CreateRandomTensor(new[] { numHeads, seqLen, seqLen });
-        var inputGrad = layer.Backward(grad);
-
-        // Backward should pass gradient through unchanged (constant additive bias)
-        Assert.Equal(grad.Shape.ToArray(), inputGrad.Shape.ToArray());
-        var gradArr = grad.ToArray();
-        var inputGradArr = inputGrad.ToArray();
-        for (int i = 0; i < gradArr.Length; i++)
-        {
-            Assert.Equal(gradArr[i], inputGradArr[i]);
-        }
-    }
 
     [Fact]
     public void GetParameters_ReturnsEmpty()

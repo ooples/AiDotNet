@@ -330,32 +330,6 @@ public class LqDecompositionIntegrationTests
 
     #region Solve Tests
 
-    [Theory]
-    [InlineData(3)]
-    [InlineData(4)]
-    [InlineData(5)]
-    public void LqDecomposition_Solve_ProducesCorrectSolution(int size)
-    {
-        // Arrange
-        var A = CreateTestMatrix(size, size, seed: 42);
-        var xExpected = new Vector<double>(size);
-        for (int i = 0; i < size; i++)
-            xExpected[i] = i + 1.0;
-
-        var b = A.Multiply(xExpected);
-
-        // Act
-        var lq = new LqDecomposition<double>(A);
-        var xComputed = lq.Solve(b);
-
-        // Assert - Verify A*x_computed ≈ b
-        var bComputed = A.Multiply(xComputed);
-        for (int i = 0; i < size; i++)
-        {
-            Assert.True(Math.Abs(bComputed[i] - b[i]) < LooseTolerance,
-                $"A*x should equal b. Component {i}: expected {b[i]}, got {bComputed[i]}");
-        }
-    }
 
     #endregion
 

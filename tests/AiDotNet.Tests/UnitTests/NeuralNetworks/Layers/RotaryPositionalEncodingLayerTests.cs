@@ -34,19 +34,6 @@ public class RotaryPositionalEncodingLayerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void Backward_PreservesShape()
-    {
-        var layer = new RotaryPositionalEncodingLayer<float>(64, 32);
-        var input = CreateRandomTensor(new[] { 1, 2, 8, 32 });
-
-        var output = layer.Forward(input);
-        var grad = CreateRandomTensor(output.Shape.ToArray());
-        var inputGrad = layer.Backward(grad);
-
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGrad));
-    }
 
     [Fact]
     public void ApplyRoPE_RotatesQueriesAndKeys()

@@ -136,25 +136,6 @@ public abstract class MultiInputLayerTestBase
     // INVARIANT 4: Backward produces finite gradient
     // =========================================================================
 
-    [Fact]
-    public void Backward_ShouldProduceFiniteGradient()
-    {
-        var layer = CreateLayer();
-        layer.SetTrainingMode(true);
-        var inputs = CreateInputs();
-
-        var output = ForwardMulti(layer, inputs);
-        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), seed: 99);
-
-        var inputGrad = layer.Backward(outputGrad);
-
-        Assert.True(inputGrad.Length > 0, "Input gradient should not be empty.");
-        for (int i = 0; i < inputGrad.Length; i++)
-        {
-            Assert.False(double.IsNaN(inputGrad[i]), $"InputGradient[{i}] is NaN.");
-            Assert.False(double.IsInfinity(inputGrad[i]), $"InputGradient[{i}] is Infinity.");
-        }
-    }
 
     // =========================================================================
     // INVARIANT 5: Parameter count consistency

@@ -1196,64 +1196,6 @@ public class SelfSupervisedLearningExtendedIntegrationTests
 
     #region LinearProjector Gradient Consistency
 
-    [Fact]
-    public void LinearProjector_GradientConsistency_ForwardBackwardChain()
-    {
-        // Verify that the backward pass produces correct input gradients
-        // by checking that loss decreases when stepping in negative gradient direction
-        var projector = new LinearProjector<double>(inputDim: 4, outputDim: 2, seed: 42);
-        var input = CreateRandomTensor(2, 4, seed: 43);
-        var target = CreateRandomTensor(2, 2, seed: 44);
-
-        // Forward
-        var output = projector.Project(input);
-
-        // Compute MSE loss
-        double loss = 0;
-        var gradOutput = new double[2 * 2];
-        for (int b = 0; b < 2; b++)
-        {
-            for (int d = 0; d < 2; d++)
-            {
-                double diff = output[b, d] - target[b, d];
-                loss += diff * diff;
-                gradOutput[b * 2 + d] = 2 * diff / 4; // 2*diff / (batch*dim)
-            }
-        }
-        loss /= 4;
-
-        // Backward
-        var gradTensor = new Tensor<double>(gradOutput, [2, 2]);
-        var gradInput = projector.Backward(gradTensor);
-
-        // Step input in negative gradient direction
-        double lr = 0.01;
-        var newInput = CopyTensor(input);
-        for (int b = 0; b < 2; b++)
-        {
-            for (int d = 0; d < 4; d++)
-            {
-                newInput[b, d] = input[b, d] - lr * gradInput[b, d];
-            }
-        }
-
-        // New loss should be less
-        projector.Reset();
-        var newOutput = projector.Project(newInput);
-        double newLoss = 0;
-        for (int b = 0; b < 2; b++)
-        {
-            for (int d = 0; d < 2; d++)
-            {
-                double diff = newOutput[b, d] - target[b, d];
-                newLoss += diff * diff;
-            }
-        }
-        newLoss /= 4;
-
-        Assert.True(newLoss < loss,
-            $"Loss should decrease after gradient step: {loss:F6} -> {newLoss:F6}");
-    }
 
     #endregion
 

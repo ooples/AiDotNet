@@ -56,25 +56,6 @@ public class PoolingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void MaxPoolingLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int[] inputShape = [2, 6, 6];
-        int poolSize = 2;
-        int stride = 2;
-        var layer = new MaxPoolingLayer<float>(inputShape, poolSize, stride);
-        var input = CreateRandomTensor<float>(inputShape);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGradient));
-    }
 
     [Fact]
     public void MaxPoolingLayer_Clone_CreatesIndependentCopy()
@@ -143,25 +124,6 @@ public class PoolingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void AveragePoolingLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int[] inputShape = [2, 6, 6];
-        int poolSize = 2;
-        int stride = 2;
-        var layer = new AveragePoolingLayer<float>(inputShape, poolSize, stride);
-        var input = CreateRandomTensor<float>(inputShape);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGradient));
-    }
 
     [Fact]
     public void AveragePoolingLayer_Clone_CreatesIndependentCopy()
@@ -218,23 +180,6 @@ public class PoolingLayersIntegrationTests
         Assert.True(output.Length <= input.Length);
     }
 
-    [Fact]
-    public void GlobalPoolingLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int[] inputShape = [4, 6, 6];
-        var layer = new GlobalPoolingLayer<float>(inputShape, PoolingType.Max);
-        var input = CreateRandomTensor<float>(inputShape);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGradient));
-    }
 
     [Fact]
     public void GlobalPoolingLayer_Clone_CreatesIndependentCopy()
@@ -277,26 +222,6 @@ public class PoolingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void AdaptiveAveragePoolingLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int inputChannels = 4;
-        int inputHeight = 12;
-        int inputWidth = 12;
-        int outputHeight = 3;
-        int outputWidth = 3;
-        var layer = new AdaptiveAveragePoolingLayer<float>(inputChannels, inputHeight, inputWidth, outputHeight, outputWidth);
-        var input = CreateRandomTensor<float>([inputChannels, inputHeight, inputWidth]);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.False(ContainsNaN(inputGradient));
-    }
 
     [Fact]
     public void AdaptiveAveragePoolingLayer_Clone_CreatesIndependentCopy()
@@ -357,27 +282,6 @@ public class PoolingLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void PoolingLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int inputDepth = 2;
-        int inputHeight = 6;
-        int inputWidth = 6;
-        int poolSize = 2;
-        int stride = 2;
-        var layer = new PoolingLayer<float>(inputDepth, inputHeight, inputWidth, poolSize, stride, PoolingType.Max);
-        var input = CreateRandomTensor<float>([inputDepth, inputHeight, inputWidth]);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGradient));
-    }
 
     [Fact]
     public void PoolingLayer_Clone_CreatesIndependentCopy()

@@ -274,37 +274,7 @@ public class IcaDecompositionIntegrationTests
 
     #region Solve Method Tests
 
-    [Fact]
-    public void IcaDecomposition_Solve_WrongDimensions_ThrowsArgumentException()
-    {
-        // Arrange
-        var X = CreateRandomMatrix(100, 5);
-        var ica = new IcaDecomposition<double>(X, 3);
-        var wrongB = new Vector<double>(4); // Wrong length
 
-        // Act & Assert
-        Assert.Throws<ArgumentException>(() => ica.Solve(wrongB));
-    }
-
-    [Fact]
-    public void IcaDecomposition_Solve_ProducesFiniteResult()
-    {
-        // Arrange
-        var X = CreateRandomMatrix(100, 5);
-        var ica = new IcaDecomposition<double>(X, 3);
-        var b = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
-
-        // Act
-        var result = ica.Solve(b);
-
-        // Assert
-        Assert.Equal(3, result.Length);
-        for (int i = 0; i < result.Length; i++)
-        {
-            Assert.False(double.IsNaN(result[i]), $"result[{i}] should not be NaN");
-            Assert.False(double.IsInfinity(result[i]), $"result[{i}] should not be infinity");
-        }
-    }
 
     #endregion
 

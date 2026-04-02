@@ -75,41 +75,7 @@ public class NeuralOperatorTrainingTests
         Assert.False(before.SequenceEqual(after));
     }
 
-    [Fact]
-    public void GraphNeuralOperator_TrainOnGraphUpdatesParameters()
-    {
-        var architecture = new NeuralNetworkArchitecture<double>(
-            inputType: InputType.OneDimensional,
-            taskType: NeuralNetworkTaskType.Regression,
-            complexity: NetworkComplexity.Simple,
-            inputSize: 2,
-            outputSize: 2);
-
-        var model = new GraphNeuralOperator<double>(architecture, numLayers: 1, hiddenDim: 2);
-
-        var nodeFeatures = new double[,]
-        {
-            { 0.1, 0.2 },
-            { 0.0, -0.1 }
-        };
-        var adjacency = new double[,]
-        {
-            { 1.0, 0.5 },
-            { 0.5, 1.0 }
-        };
-        var targets = new double[,]
-        {
-            { 0.2, 0.1 },
-            { 0.0, 0.0 }
-        };
-
-        var before = model.GetParameters().ToArray();
-        var history = model.TrainOnGraph(nodeFeatures, adjacency, targets, epochs: 1, learningRate: 0.01, verbose: false);
-        var after = model.GetParameters().ToArray();
-
-        Assert.Single(history.Losses);
-        Assert.False(before.SequenceEqual(after));
-    }
+    // TrainOnGraph test removed — method deleted in tape-based autodiff migration
 
     private static NeuralNetworkArchitecture<double> CreateLinearArchitecture(int inputSize, int outputSize)
     {

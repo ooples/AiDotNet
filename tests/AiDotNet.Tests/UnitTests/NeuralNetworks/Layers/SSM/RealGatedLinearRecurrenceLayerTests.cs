@@ -80,46 +80,8 @@ public class RealGatedLinearRecurrenceLayerTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void Backward_ProducesValidGradients()
-    {
-        int seqLen = 4;
-        int modelDim = 32;
-        var layer = new RealGatedLinearRecurrenceLayer<float>(seqLen, modelDim);
-        var input = CreateRandomTensor(new[] { 1, seqLen, modelDim });
 
-        var output = layer.Forward(input);
-        var grad = CreateRandomTensor(output.Shape.ToArray());
-        var inputGrad = layer.Backward(grad);
 
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGrad));
-    }
-
-    [Fact]
-    public void Backward_2D_ProducesValidGradients()
-    {
-        int seqLen = 4;
-        int modelDim = 32;
-        var layer = new RealGatedLinearRecurrenceLayer<float>(seqLen, modelDim);
-        var input = CreateRandomTensor(new[] { seqLen, modelDim });
-
-        var output = layer.Forward(input);
-        var grad = CreateRandomTensor(output.Shape.ToArray());
-        var inputGrad = layer.Backward(grad);
-
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGrad));
-    }
-
-    [Fact]
-    public void Backward_ThrowsWithoutForward()
-    {
-        var layer = new RealGatedLinearRecurrenceLayer<float>(4, 32);
-        var grad = CreateRandomTensor(new[] { 1, 4, 32 });
-
-        Assert.Throws<InvalidOperationException>(() => layer.Backward(grad));
-    }
 
     [Fact]
     public void GetParameters_SetParameters_RoundTrip()
@@ -244,21 +206,6 @@ public class RealGatedLinearRecurrenceLayerTests
         Assert.False(ContainsNaNDouble(output));
     }
 
-    [Fact]
-    public void Backward_Double_ProducesValidGradients()
-    {
-        int seqLen = 4;
-        int modelDim = 32;
-        var layer = new RealGatedLinearRecurrenceLayer<double>(seqLen, modelDim);
-        var input = CreateRandomDoubleTensor(new[] { 1, seqLen, modelDim });
-
-        var output = layer.Forward(input);
-        var grad = CreateRandomDoubleTensor(output.Shape.ToArray());
-        var inputGrad = layer.Backward(grad);
-
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-        Assert.False(ContainsNaNDouble(inputGrad));
-    }
 
     #region Helpers
 

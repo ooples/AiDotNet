@@ -109,37 +109,7 @@ public class MambaLanguageModelTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void Backpropagate_ProducesValidGradients()
-    {
-        int seqLen = 4;
-        int vocabSize = 50;
-        int modelDim = 32;
 
-        var model = new MambaLanguageModel<float>(
-            CreateArch(vocabSize),
-            vocabSize, modelDim, numLayers: 2, stateDimension: 8, maxSeqLength: seqLen);
-
-        model.SetTrainingMode(true);
-        var input = CreateOneHotInput(1, seqLen, vocabSize);
-        var output = model.Predict(input);
-        model.SetTrainingMode(true); // Re-enable after Predict set it to false
-        var grad = CreateRandomTensor(output.Shape.ToArray());
-        var inputGrad = model.Backpropagate(grad);
-
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGrad));
-    }
-
-    [Fact]
-    public void Backpropagate_ThrowsWithoutTrainingMode()
-    {
-        var model = new MambaLanguageModel<float>(
-            CreateArch(50), 50, 32, 2, 8, maxSeqLength: 4);
-        var grad = CreateRandomTensor(new[] { 1, 4, 50 });
-
-        Assert.Throws<InvalidOperationException>(() => model.Backpropagate(grad));
-    }
 
     [Fact]
     public void Train_ForwardBackwardUpdate_NoErrors()

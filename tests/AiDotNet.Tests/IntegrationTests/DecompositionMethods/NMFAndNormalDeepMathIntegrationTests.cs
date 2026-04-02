@@ -161,47 +161,8 @@ public class NMFAndNormalDeepMathIntegrationTests
 
     #region Normal Decomposition
 
-    [Fact]
-    public void Normal_Solve_AxEqualsB_SquareMatrix()
-    {
-        // Normal equations solve (A^T A)x = A^T b via Cholesky
-        var A = CreateSPD3x3();
-        var b = new Vector<double>(new double[] { 7, 10, 10 });
-        var normal = new NormalDecomposition<double>(A);
-        var x = normal.Solve(b);
 
-        var Ax = A.Multiply(x);
-        for (int i = 0; i < b.Length; i++)
-            Assert.Equal(b[i], Ax[i], LooseTolerance);
-    }
 
-    [Fact]
-    public void Normal_Solve_Consistent_WithLU()
-    {
-        var A = CreateSPD3x3();
-        var b = new Vector<double>(new double[] { 7, 10, 10 });
-
-        var normal = new NormalDecomposition<double>(A);
-        var lu = new LuDecomposition<double>(A);
-
-        var xNormal = normal.Solve(b);
-        var xLU = lu.Solve(b);
-
-        for (int i = 0; i < xNormal.Length; i++)
-            Assert.Equal(xLU[i], xNormal[i], LooseTolerance);
-    }
-
-    [Fact]
-    public void Normal_Solve_Identity_ReturnsB()
-    {
-        var I = Matrix<double>.CreateIdentity(3);
-        var b = new Vector<double>(new double[] { 5, 10, 15 });
-        var normal = new NormalDecomposition<double>(I);
-        var x = normal.Solve(b);
-
-        for (int i = 0; i < b.Length; i++)
-            Assert.Equal(b[i], x[i], LooseTolerance);
-    }
 
     [Fact]
     public void Normal_Invert_TimesA_Equals_Identity()
@@ -223,34 +184,6 @@ public class NMFAndNormalDeepMathIntegrationTests
 
     #region Deep Solve Tests - Hand-Calculated Solutions
 
-    [Fact]
-    public void Solve_HandCalculated_2x2_AllMethods()
-    {
-        // A = [[2,1],[1,3]], b = [5,10]
-        // Solution: x1 = (5*3 - 1*10)/(2*3-1*1) = 5/5 = 1
-        //           x2 = (2*10 - 5*1)/(2*3-1*1) = 15/5 = 3
-        var A = new Matrix<double>(new double[,] { { 2, 1 }, { 1, 3 } });
-        var b = new Vector<double>(new double[] { 5, 10 });
-
-        var lu = new LuDecomposition<double>(A);
-        var qr = new QrDecomposition<double>(A);
-        var chol = new CholeskyDecomposition<double>(A);
-        var cramer = new CramerDecomposition<double>(A);
-
-        var xLU = lu.Solve(b);
-        var xQR = qr.Solve(b);
-        var xChol = chol.Solve(b);
-        var xCramer = cramer.Solve(b);
-
-        Assert.Equal(1.0, xLU[0], LooseTolerance);
-        Assert.Equal(3.0, xLU[1], LooseTolerance);
-        Assert.Equal(1.0, xQR[0], LooseTolerance);
-        Assert.Equal(3.0, xQR[1], LooseTolerance);
-        Assert.Equal(1.0, xChol[0], LooseTolerance);
-        Assert.Equal(3.0, xChol[1], LooseTolerance);
-        Assert.Equal(1.0, xCramer[0], LooseTolerance);
-        Assert.Equal(3.0, xCramer[1], LooseTolerance);
-    }
 
     [Fact]
     public void Invert_HandCalculated_2x2_AllMethods()

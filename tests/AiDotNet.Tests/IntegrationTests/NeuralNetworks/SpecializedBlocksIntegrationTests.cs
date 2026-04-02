@@ -52,25 +52,6 @@ public class SpecializedBlocksIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void BasicBlock_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int channels = 32;
-        int height = 8;
-        int width = 8;
-        var block = new BasicBlock<float>(channels, channels, inputHeight: height, inputWidth: width);
-        var input = CreateRandomTensor<float>([2, channels, height, width]);
-
-        // Act
-        var output = block.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = block.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGradient));
-    }
 
     [Fact]
     public void BasicBlock_Clone_CreatesIndependentCopy()
@@ -158,26 +139,6 @@ public class SpecializedBlocksIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void BottleneckBlock_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int inChannels = 64;
-        int outChannels = 64;
-        int height = 8;
-        int width = 8;
-        var block = new BottleneckBlock<float>(inChannels, outChannels, inputHeight: height, inputWidth: width);
-        var input = CreateRandomTensor<float>([2, inChannels, height, width]);
-
-        // Act
-        var output = block.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = block.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGradient));
-    }
 
     [Fact]
     public void BottleneckBlock_Clone_CreatesIndependentCopy()
@@ -266,26 +227,6 @@ public class SpecializedBlocksIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void InvertedResidualBlock_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int inChannels = 32;
-        int outChannels = 32; // Same channels for residual connection
-        int height = 8;
-        int width = 8;
-        var block = new InvertedResidualBlock<float>(inChannels, outChannels, height, width);
-        var input = CreateRandomTensor<float>([2, inChannels, height, width]);
-
-        // Act
-        var output = block.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = block.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGradient));
-    }
 
     [Fact]
     public void InvertedResidualBlock_Clone_CreatesIndependentCopy()
@@ -392,27 +333,6 @@ public class SpecializedBlocksIntegrationTests
         Assert.Equal(growthRate, block.GrowthRate);
     }
 
-    [Fact]
-    public void DenseBlock_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int inputChannels = 32;
-        int numLayers = 3;
-        int growthRate = 16;
-        int height = 8;
-        int width = 8;
-        var block = new DenseBlock<float>(inputChannels, numLayers, growthRate, height, width);
-        var input = CreateRandomTensor<float>([2, inputChannels, height, width]);
-
-        // Act
-        var output = block.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = block.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGradient));
-    }
 
     [Fact]
     public void DenseBlock_Clone_CreatesIndependentCopy()

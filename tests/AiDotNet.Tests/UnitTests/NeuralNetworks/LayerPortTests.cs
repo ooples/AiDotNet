@@ -165,13 +165,7 @@ public class LayerPortTests
         Assert.ThrowsAny<Exception>(() => layer.ForwardGpu(dict));
     }
 
-    [Fact]
-    public void LayerBase_BackwardGpuMulti_ThrowsOnEmptyDict()
-    {
-        var layer = new DenseLayer<double>(4, 2);
-        var dict = new Dictionary<string, AiDotNet.Tensors.Engines.Gpu.IGpuTensor<double>>();
-        Assert.ThrowsAny<Exception>(() => layer.BackwardGpuMulti(dict));
-    }
+    // BackwardGpuMulti test removed — Backward deleted in tape-based autodiff migration
 
     [Fact]
     public void SingleInputLayer_MultiInputForward_IgnoresExtraKeys()

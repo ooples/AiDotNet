@@ -59,26 +59,6 @@ public class ConvolutionalLayersIntegrationTests
         Assert.Equal(4, output.Shape[2]); // width: same calculation
     }
 
-    [Fact]
-    public void ConvolutionalLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        var layer = new ConvolutionalLayer<double>(
-            inputDepth: 3, inputHeight: 8, inputWidth: 8,
-            outputDepth: 8, kernelSize: 3, stride: 1, padding: 1);
-
-        var input = Tensor<double>.CreateRandom(3, 8, 8);
-        var output = layer.Forward(input);
-        var outputGradient = Tensor<double>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.NotNull(inputGradient);
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        AssertNoNaNOrInf(inputGradient);
-    }
 
     [Fact]
     public void ConvolutionalLayer_Clone_CreatesIndependentCopy()
@@ -150,28 +130,6 @@ public class ConvolutionalLayersIntegrationTests
         AssertNoNaNOrInf(output);
     }
 
-    [Fact]
-    public void Conv3DLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        IActivationFunction<double> relu = new ReLUActivation<double>();
-        var layer = new Conv3DLayer<double>(
-            inputChannels: 1, outputChannels: 2, kernelSize: 3,
-            inputDepth: 4, inputHeight: 4, inputWidth: 4,
-            stride: 1, padding: 1, activationFunction: relu);
-
-        var input = Tensor<double>.CreateRandom(1, 4, 4, 4);
-        var output = layer.Forward(input);
-        var outputGradient = Tensor<double>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.NotNull(inputGradient);
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        AssertNoNaNOrInf(inputGradient);
-    }
 
     #endregion
 
@@ -199,28 +157,6 @@ public class ConvolutionalLayersIntegrationTests
         AssertNoNaNOrInf(output);
     }
 
-    [Fact]
-    public void DilatedConvolutionalLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        IActivationFunction<double> relu = new ReLUActivation<double>();
-        var layer = new DilatedConvolutionalLayer<double>(
-            inputDepth: 2, outputDepth: 4, kernelSize: 3,
-            inputHeight: 8, inputWidth: 8, dilation: 2,
-            stride: 1, padding: 2, activation: relu);
-
-        var input = Tensor<double>.CreateRandom(2, 8, 8);
-        var output = layer.Forward(input);
-        var outputGradient = Tensor<double>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.NotNull(inputGradient);
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        AssertNoNaNOrInf(inputGradient);
-    }
 
     [Fact]
     public void DilatedConvolutionalLayer_LargeDilation_ProducesValidOutput()
@@ -268,28 +204,6 @@ public class ConvolutionalLayersIntegrationTests
         AssertNoNaNOrInf(output);
     }
 
-    [Fact]
-    public void DepthwiseSeparableConvolutionalLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        IActivationFunction<double> relu = new ReLUActivation<double>();
-        var layer = new DepthwiseSeparableConvolutionalLayer<double>(
-            inputDepth: 4, outputDepth: 8, kernelSize: 3,
-            inputHeight: 8, inputWidth: 8, stride: 1, padding: 1,
-            activation: relu);
-
-        var input = Tensor<double>.CreateRandom(4, 8, 8);
-        var output = layer.Forward(input);
-        var outputGradient = Tensor<double>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.NotNull(inputGradient);
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        AssertNoNaNOrInf(inputGradient);
-    }
 
     #endregion
 
@@ -315,28 +229,6 @@ public class ConvolutionalLayersIntegrationTests
         AssertNoNaNOrInf(output);
     }
 
-    [Fact]
-    public void SeparableConvolutionalLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange - inputShape is [batch, height, width, channels]
-        int[] inputShape = [1, 8, 8, 2];
-        IActivationFunction<double> relu = new ReLUActivation<double>();
-        var layer = new SeparableConvolutionalLayer<double>(
-            inputShape: inputShape, outputDepth: 8, kernelSize: 3,
-            stride: 1, padding: 1, scalarActivation: relu);
-
-        var input = Tensor<double>.CreateRandom(1, 8, 8, 2);
-        var output = layer.Forward(input);
-        var outputGradient = Tensor<double>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.NotNull(inputGradient);
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        AssertNoNaNOrInf(inputGradient);
-    }
 
     #endregion
 
@@ -366,27 +258,6 @@ public class ConvolutionalLayersIntegrationTests
         AssertNoNaNOrInf(output);
     }
 
-    [Fact]
-    public void SubpixelConvolutionalLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        IActivationFunction<double> relu = new ReLUActivation<double>();
-        var layer = new SubpixelConvolutionalLayer<double>(
-            inputDepth: 1, outputDepth: 1, upscaleFactor: 2, kernelSize: 3,
-            inputHeight: 4, inputWidth: 4, activation: relu);
-
-        var input = Tensor<double>.CreateRandom(1, 4, 4);
-        var output = layer.Forward(input);
-        var outputGradient = Tensor<double>.CreateRandom(output.Shape.ToArray());
-
-        // Act
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.NotNull(inputGradient);
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        AssertNoNaNOrInf(inputGradient);
-    }
 
     #endregion
 

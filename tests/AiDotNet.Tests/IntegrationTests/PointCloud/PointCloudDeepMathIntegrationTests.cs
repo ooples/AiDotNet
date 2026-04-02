@@ -104,56 +104,8 @@ public class PointCloudDeepMathIntegrationTests
     // PointConvolution Backward Tests
     // ============================
 
-    [Fact]
-    public void PointConvolution_Backward_OutputShapeMatchesInput()
-    {
-        var layer = new PointConvolutionLayer<double>(3, 8);
-        var input = CreateRandomTensor(4, 3, 42);
 
-        var output = layer.Forward(input);
-        var gradOutput = CreateRandomTensor(4, 8, 99);
-        var gradInput = layer.Backward(gradOutput);
 
-        // Gradient w.r.t. input should have same shape as input
-        Assert.Equal(4, gradInput.Shape[0]);
-        Assert.Equal(3, gradInput.Shape[1]);
-    }
-
-    [Fact]
-    public void PointConvolution_Backward_BeforeForward_Throws()
-    {
-        var layer = new PointConvolutionLayer<double>(3, 8);
-        var gradOutput = CreateRandomTensor(4, 8, 99);
-
-        Assert.Throws<InvalidOperationException>(() => layer.Backward(gradOutput));
-    }
-
-    [Fact]
-    public void PointConvolution_Backward_InputGradient_IsWeightsTransposeTimesOutputGrad()
-    {
-        // dL/dX = dL/dY * W^T
-        // With known weights, verify the gradient computation
-        var layer = new PointConvolutionLayer<double>(2, 2);
-
-        // W = [[1, 2], [3, 4]], b = [0, 0]
-        var p = new Vector<double>(6);
-        p[0] = 1.0; p[1] = 2.0;
-        p[2] = 3.0; p[3] = 4.0;
-        p[4] = 0.0; p[5] = 0.0;
-        layer.UpdateParameters(p);
-
-        var input = new Tensor<double>(new[] { 1.0, 0.0 }, [1, 2]);
-        layer.Forward(input);
-
-        // Gradient of loss w.r.t. output: [1.0, 1.0]
-        var gradOutput = new Tensor<double>(new[] { 1.0, 1.0 }, [1, 2]);
-        var gradInput = layer.Backward(gradOutput);
-
-        // dL/dX = gradOutput * W^T = [1, 1] * [[1, 3], [2, 4]] = [1*1+1*2, 1*3+1*4] = [3, 7]
-        var gradArr = gradInput.ToArray();
-        Assert.Equal(3.0, gradArr[0], Tolerance);
-        Assert.Equal(7.0, gradArr[1], Tolerance);
-    }
 
     // ============================
     // He Initialization Tests
@@ -284,35 +236,6 @@ public class PointCloudDeepMathIntegrationTests
         Assert.False(layer.SupportsTraining);
     }
 
-    [Fact]
-    public void MaxPooling_Backward_GradientOnlyFlowsToMaxElement()
-    {
-        // In max pooling backward, only the index that had the max value receives gradient
-        var layer = new MaxPoolingLayer<double>(2);
-        var input = new Tensor<double>(new[] { 1.0, 5.0, 3.0, 2.0, 2.0, 4.0 }, [3, 2]);
-
-        layer.Forward(input);
-
-        // Gradient w.r.t. output
-        var gradOutput = new Tensor<double>(new[] { 1.0, 1.0 }, [1, 2]);
-        var gradInput = layer.Backward(gradOutput);
-
-        // Feature 0 max at index 1 (value 3.0): grad should be [0, 1, 0]
-        // Feature 1 max at index 0 (value 5.0): grad should be [1, 0, 0]
-        Assert.Equal(3, gradInput.Shape[0]);
-        Assert.Equal(2, gradInput.Shape[1]);
-
-        var gradArr = gradInput.ToArray();
-        // Point 0: feature 0 not max (0), feature 1 is max (1)
-        Assert.Equal(0.0, gradArr[0], Tolerance);
-        Assert.Equal(1.0, gradArr[1], Tolerance);
-        // Point 1: feature 0 is max (1), feature 1 not max (0)
-        Assert.Equal(1.0, gradArr[2], Tolerance);
-        Assert.Equal(0.0, gradArr[3], Tolerance);
-        // Point 2: neither is max (0, 0)
-        Assert.Equal(0.0, gradArr[4], Tolerance);
-        Assert.Equal(0.0, gradArr[5], Tolerance);
-    }
 
     // ============================
     // TNetLayer Tests
@@ -352,14 +275,6 @@ public class PointCloudDeepMathIntegrationTests
         Assert.Equal(3, output.Shape[1]);  // same features
     }
 
-    [Fact]
-    public void TNet_Backward_BeforeForward_Throws()
-    {
-        var layer = new TNetLayer<double>(3, 3, new[] { 16, 32 }, new[] { 16 });
-        var grad = CreateRandomTensor(10, 3, 42);
-
-        Assert.Throws<InvalidOperationException>(() => layer.Backward(grad));
-    }
 
     [Fact]
     public void TNet_SupportsTraining()
@@ -495,64 +410,7 @@ public class PointCloudDeepMathIntegrationTests
         Assert.Equal(10.0, out2Arr[1], Tolerance); // 1*0 + 1*10 + 0
     }
 
-    [Fact]
-    public void PointConvolution_ClearGradients_ResetsAccumulatedGradients()
-    {
-        var layer = new PointConvolutionLayer<double>(2, 2);
 
-        var p = new Vector<double>(6);
-        p[0] = 1.0; p[1] = 0.0;
-        p[2] = 0.0; p[3] = 1.0;
-        p[4] = 0.0; p[5] = 0.0;
-        layer.UpdateParameters(p);
-
-        var input = new Tensor<double>(new[] { 1.0, 2.0 }, [1, 2]);
-        layer.Forward(input);
-
-        var grad = new Tensor<double>(new[] { 1.0, 1.0 }, [1, 2]);
-        layer.Backward(grad);
-
-        // Clear and do another forward/backward - gradients should not accumulate from before clear
-        layer.ClearGradients();
-
-        layer.Forward(input);
-        layer.Backward(grad);
-
-        // After clear + 1 backward, gradients should be from just 1 pass
-        // (We can't easily inspect gradients directly, but we verify the clear doesn't crash)
-    }
-
-    [Fact]
-    public void PointConvolution_SGDUpdate_MovesWeightsInGradientDirection()
-    {
-        var layer = new PointConvolutionLayer<double>(2, 2);
-
-        // Set known weights
-        var p = new Vector<double>(6);
-        p[0] = 1.0; p[1] = 0.0;
-        p[2] = 0.0; p[3] = 1.0;
-        p[4] = 0.0; p[5] = 0.0;
-        layer.UpdateParameters(p);
-
-        // Forward
-        var input = new Tensor<double>(new[] { 1.0, 0.0 }, [1, 2]);
-        layer.Forward(input);
-
-        // Backward with output gradient
-        var gradOutput = new Tensor<double>(new[] { 1.0, 0.0 }, [1, 2]);
-        layer.Backward(gradOutput);
-
-        // Update with small learning rate
-        double lr = 0.01;
-        layer.UpdateParameters(lr);
-
-        // Check parameters changed
-        var newParams = layer.GetParameters();
-
-        // Weight gradient for W[0,0]: dL/dW[0,0] = input[0] * gradOutput[0] = 1.0 * 1.0 = 1.0
-        // New W[0,0] = 1.0 - 0.01 * 1.0 = 0.99
-        Assert.Equal(0.99, newParams[0], 1e-4);
-    }
 
     // ============================
     // Mathematical Property Tests
@@ -636,19 +494,6 @@ public class PointCloudDeepMathIntegrationTests
         Assert.Equal(3, output.Shape[1]);
     }
 
-    [Fact]
-    public void TNet_ResetState_ClearsInternalState()
-    {
-        var layer = new TNetLayer<double>(3, 3, new[] { 8 }, new[] { 4 });
-        var input = CreateRandomTensor(5, 3, 42);
-
-        layer.Forward(input);
-        layer.ResetState();
-
-        // After reset, backward should throw (no stored forward state)
-        var grad = CreateRandomTensor(5, 3, 99);
-        Assert.Throws<InvalidOperationException>(() => layer.Backward(grad));
-    }
 
     // ============================
     // Helper Methods

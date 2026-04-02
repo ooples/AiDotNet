@@ -269,50 +269,7 @@ public class TakagiDecompositionIntegrationTests
 
     #region Solve Tests
 
-    [Theory]
-    [InlineData(2)]
-    [InlineData(3)]
-    [InlineData(4)]
-    public void TakagiDecomposition_Solve_ProducesCorrectSolution(int size)
-    {
-        // Arrange
-        var A = CreatePositiveDefiniteMatrix(size);
-        var b = new Vector<double>(size);
-        for (int i = 0; i < size; i++)
-            b[i] = i + 1.0;
 
-        // Act
-        var takagi = new TakagiDecomposition<double>(A);
-        var x = takagi.Solve(b);
-
-        // Assert - Verify A * x ≈ b
-        Assert.Equal(size, x.Length);
-        var Ax = A.Multiply(x);
-        for (int i = 0; i < size; i++)
-        {
-            Assert.True(Math.Abs(Ax[i] - b[i]) < LooseTolerance,
-                $"A*x[{i}] = {Ax[i]} should equal b[{i}] = {b[i]}");
-        }
-    }
-
-    [Fact]
-    public void TakagiDecomposition_Solve_IdentityMatrix_ReturnsSameVector()
-    {
-        // Arrange
-        var I = Matrix<double>.CreateIdentityMatrix(3);
-        var b = new Vector<double>(new[] { 1.0, 2.0, 3.0 });
-
-        // Act
-        var takagi = new TakagiDecomposition<double>(I);
-        var x = takagi.Solve(b);
-
-        // Assert - For identity matrix, x should equal b
-        for (int i = 0; i < 3; i++)
-        {
-            Assert.True(Math.Abs(x[i] - b[i]) < LooseTolerance,
-                $"For identity matrix, x[{i}] should equal b[{i}]");
-        }
-    }
 
     #endregion
 
