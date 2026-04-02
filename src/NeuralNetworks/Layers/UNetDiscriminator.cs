@@ -466,6 +466,15 @@ public class UNetDiscriminator<T> : LayerBase<T>, IChainableComputationGraph<T>
     }
 
     #endregion
+
+    /// <inheritdoc />
+    public override IReadOnlyList<ILayer<T>> GetSubLayers()
+    {
+        var layers = new List<ILayer<T>> { _convFirst, _convLast };
+        layers.AddRange(_encoderBlocks);
+        layers.AddRange(_decoderBlocks);
+        return layers;
+    }
 }
 
 #region Helper Blocks
@@ -624,6 +633,9 @@ internal class UNetConvBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         return x;
     }
+
+    /// <inheritdoc />
+    public override IReadOnlyList<ILayer<T>> GetSubLayers() => new ILayer<T>[] { _conv1, _conv2 };
 }
 
 /// <summary>
@@ -914,6 +926,9 @@ internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         return x;
     }
+
+    /// <inheritdoc />
+    public override IReadOnlyList<ILayer<T>> GetSubLayers() => new ILayer<T>[] { _upsample, _conv1, _conv2 };
 }
 
 #endregion

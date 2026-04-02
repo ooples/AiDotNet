@@ -632,4 +632,6 @@ public class DecoderLayer<T> : LayerBase<T>
     /// </value>
     public override bool SupportsJitCompilation => true;
 
+    public override IReadOnlyList<ILayer<T>> GetSubLayers() =>
+        new ILayer<T>[] { _selfAttention, _crossAttention, _feedForward1, _feedForward2, _norm1, _norm2, _norm3 };
 }

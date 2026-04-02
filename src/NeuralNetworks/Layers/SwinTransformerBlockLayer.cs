@@ -765,4 +765,8 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
 
         return output;
     }
+
+    /// <inheritdoc />
+    public override IReadOnlyList<ILayer<T>> GetSubLayers() =>
+        new ILayer<T>[] { _norm1, _norm2, _qkvProj, _outProj, _mlpFc1, _mlpFc2 };
 }

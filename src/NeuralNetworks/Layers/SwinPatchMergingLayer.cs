@@ -274,4 +274,7 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
 
         return outputNode;
     }
+
+    /// <inheritdoc />
+    public override IReadOnlyList<ILayer<T>> GetSubLayers() => new ILayer<T>[] { _reduction, _norm };
 }

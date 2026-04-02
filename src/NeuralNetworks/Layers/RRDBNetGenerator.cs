@@ -608,4 +608,13 @@ public class RRDBNetGenerator<T> : LayerBase<T>, IChainableComputationGraph<T>
     }
 
     #endregion
+
+    public override IReadOnlyList<ILayer<T>> GetSubLayers()
+    {
+        var layers = new List<ILayer<T>> { _convFirst, _trunkConv, _hrConv, _convLast };
+        layers.AddRange(_rrdbBlocks);
+        layers.AddRange(_upsampleConvs);
+        layers.AddRange(_pixelShuffleLayers);
+        return layers;
+    }
 }

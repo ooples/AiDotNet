@@ -594,4 +594,6 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
     /// </value>
     public override bool SupportsJitCompilation => true;
 
+    /// <inheritdoc />
+    public override IReadOnlyList<ILayer<T>> GetSubLayers() => _mlpBlocks;
 }

@@ -1487,4 +1487,6 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     }
 
     #endregion
+
+    public override IReadOnlyList<ILayer<T>> GetSubLayers() => _basicModules;
 }

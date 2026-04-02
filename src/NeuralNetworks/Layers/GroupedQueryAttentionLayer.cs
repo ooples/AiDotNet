@@ -621,4 +621,12 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
     /// Gets the output projection weights for external use.
     /// </summary>
     public Tensor<T> GetOutputWeights() => _outputWeights;
+
+    public override IReadOnlyList<ILayer<T>> GetSubLayers()
+    {
+        var layers = new List<ILayer<T>>();
+        if (_ropeLayer is not null) layers.Add(_ropeLayer);
+        if (_alibiLayer is not null) layers.Add(_alibiLayer);
+        return layers;
+    }
 }

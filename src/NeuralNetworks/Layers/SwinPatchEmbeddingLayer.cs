@@ -242,4 +242,7 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
 
         return outputNode;
     }
+
+    /// <inheritdoc />
+    public override IReadOnlyList<ILayer<T>> GetSubLayers() => new ILayer<T>[] { _projection, _norm };
 }
