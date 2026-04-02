@@ -152,7 +152,7 @@ public class FocalLoss<T> : LossFunctionBase<T>
             return base.CalculateLossAndGradientGpu(predicted, actual);
         }
 
-        int size = predicted.ElementCount;
+        int size = predicted.Length;
         float alpha = Convert.ToSingle(NumOps.ToDouble(_alpha));
         float gamma = Convert.ToSingle(NumOps.ToDouble(_gamma));
 
@@ -164,7 +164,7 @@ public class FocalLoss<T> : LossFunctionBase<T>
         backend.FocalBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size, alpha, gamma);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
+        var gradientTensor = Tensor<T>.FromGpuBuffer(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

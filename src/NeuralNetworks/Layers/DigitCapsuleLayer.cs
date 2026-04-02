@@ -597,7 +597,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
         // Cache input on CPU for backward pass (training mode only)
         if (IsTrainingMode)
         {
-            _lastInput = input3D.ToTensor();
+            _lastInput = input3D;
         }
 
         // Compute predictions on GPU: [B, I, D_in] -> [B, I, C, D_out]
@@ -611,8 +611,8 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
         // Cache output and couplings on CPU for backward pass (training mode only)
         if (IsTrainingMode)
         {
-            _lastOutput = routedOutput.ToTensor();
-            _lastCouplings = couplings.ToTensor();
+            _lastOutput = routedOutput;
+            _lastCouplings = couplings;
         }
 
         // Dispose intermediate tensors

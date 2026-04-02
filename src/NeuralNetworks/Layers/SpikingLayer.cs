@@ -866,7 +866,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
         var outputBuffer = backend.AllocateBuffer(outputData);
         var outputShape = output.Shape.ToArray();
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        return Tensor<T>.FromGpuBuffer(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

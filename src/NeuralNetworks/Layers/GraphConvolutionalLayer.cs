@@ -863,7 +863,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // MatMul: [batch*nodes, inputFeatures] @ [inputFeatures, outputFeatures] -> [batch*nodes, outputFeatures]
         var xwBuffer = backend.AllocateBuffer(batchSize * numNodes * outputFeatures);
         backend.Gemm(inputFlat.Buffer, weightsGpu.Buffer, xwBuffer, batchSize * numNodes, outputFeatures, inputFeatures);
-        var xwFlat = new GpuTensor<T>(backend, xwBuffer, [batchSize * numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
+        var xwFlat = Tensor<T>.FromGpuBuffer(backend, xwBuffer, [batchSize * numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
 
         Tensor<T> output;
 
@@ -920,7 +920,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 tgtBuffer.Dispose();
             }
 
-            var aggregated = new GpuTensor<T>(backend, outputBuffer, [batchSize, numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
+            var aggregated = Tensor<T>.FromGpuBuffer(backend, outputBuffer, [batchSize, numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
             // Add bias: broadcast bias across batch and nodes
             var biasData = DirectGpuEngine.ToFloatArray<T>(_bias.Data.ToArray());
             using var biasBuffer = backend.AllocateBuffer(biasData);
@@ -967,7 +967,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             var outputBuffer = backend.AllocateBuffer(batchSize * numNodes * outputFeatures);
             backend.BatchedGemm(adjGpu.Buffer, xwBatched.Buffer, outputBuffer, numNodes, outputFeatures, numNodes, batchSize);
 
-            var matmulResult = new GpuTensor<T>(backend, outputBuffer, [batchSize, numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
+            var matmulResult = Tensor<T>.FromGpuBuffer(backend, outputBuffer, [batchSize, numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
             // Add bias: broadcast bias across batch and nodes
             var biasData2 = DirectGpuEngine.ToFloatArray<T>(_bias.Data.ToArray());
             using var biasBuffer2 = backend.AllocateBuffer(biasData2);
@@ -979,14 +979,14 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         var fusedActivation = GetFusedActivationType();
         if (fusedActivation != FusedActivationType.None)
         {
-            ApplyGpuActivation(backend, output.Buffer, output.Buffer, output.ElementCount, fusedActivation);
+            ApplyGpuActivation(backend, output.Buffer, output.Buffer, output.Length, fusedActivation);
         }
 
         // Cache for backward pass during training
         if (IsTrainingMode)
         {
-            _lastInput = processInput.ToTensor();
-            _lastOutput = output.ToTensor();
+            _lastInput = processInput;
+            _lastOutput = output;
             _lastNodeFeatures = _lastOutput;
         }
 

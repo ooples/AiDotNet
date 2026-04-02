@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -810,13 +810,13 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             _gpuNormalized1 = normalized1;
             _gpuNormalized2 = normalized2;
-            _lastInput = decoderInput.ToTensor();
-            _lastEncoderOutput = encoderOutput.ToTensor();
-            _lastSelfAttentionOutput = selfAttentionOutput.ToTensor();
-            _lastNormalized1 = normalized1.ToTensor();
-            _lastCrossAttentionOutput = crossAttentionOutput.ToTensor();
-            _lastNormalized2 = normalized2.ToTensor();
-            _lastFeedForwardOutput = ffProjected.ToTensor();
+            _lastInput = decoderInput;
+            _lastEncoderOutput = encoderOutput;
+            _lastSelfAttentionOutput = selfAttentionOutput;
+            _lastNormalized1 = normalized1;
+            _lastCrossAttentionOutput = crossAttentionOutput;
+            _lastNormalized2 = normalized2;
+            _lastFeedForwardOutput = ffProjected;
         }
 
         return output;

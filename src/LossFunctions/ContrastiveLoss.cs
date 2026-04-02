@@ -184,23 +184,23 @@ public class ContrastiveLoss<T> : LossFunctionBase<T>
         }
 
         int batchSize = output1.Shape[0];
-        int embeddingSize = output1.ElementCount / batchSize;
+        int embeddingSize = output1.Length / batchSize;
         float margin = Convert.ToSingle(NumOps.ToDouble(_margin));
 
         // Compute loss on GPU
         float lossValue = backend.ContrastiveLoss(output1.Buffer, output2.Buffer, labels.Buffer, batchSize, embeddingSize, margin);
 
         // Allocate gradient buffers
-        var grad1Buffer = backend.AllocateBuffer(output1.ElementCount);
-        var grad2Buffer = backend.AllocateBuffer(output2.ElementCount);
+        var grad1Buffer = backend.AllocateBuffer(output1.Length);
+        var grad2Buffer = backend.AllocateBuffer(output2.Length);
 
         // Compute gradients on GPU
         backend.ContrastiveBackward(output1.Buffer, output2.Buffer, labels.Buffer,
             grad1Buffer, grad2Buffer, batchSize, embeddingSize, margin);
 
         // Create gradient tensors
-        var grad1Tensor = new GpuTensor<T>(backend, grad1Buffer, output1._shape, GpuTensorRole.Gradient);
-        var grad2Tensor = new GpuTensor<T>(backend, grad2Buffer, output2._shape, GpuTensorRole.Gradient);
+        var grad1Tensor = Tensor<T>.FromGpuBuffer(backend, grad1Buffer, output1._shape, GpuTensorRole.Gradient);
+        var grad2Tensor = Tensor<T>.FromGpuBuffer(backend, grad2Buffer, output2._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), grad1Tensor, grad2Tensor);
     }

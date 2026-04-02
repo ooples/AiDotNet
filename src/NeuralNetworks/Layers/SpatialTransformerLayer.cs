@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -1253,7 +1253,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Step 1: Preprocess input to NHWC format (CPU for shape handling, then upload)
         // Input shape handling requires dynamic shape analysis - do on CPU, upload result
-        var inputTensor = inputGpu.ToTensor();
+        var inputTensor = inputGpu;
         _originalInputShape = inputTensor.Shape.ToArray();
         int rank = inputTensor.Shape.Length;
 
@@ -1353,7 +1353,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Step 7: Convert output back to original format
         // Download for shape handling (output format conversion)
-        var outputNHWC = outputNHWCGpu.ToTensor();
+        var outputNHWC = outputNHWCGpu;
 
         Tensor<T> outputTensor;
         if (_inputHadChannel)
@@ -1395,8 +1395,8 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             _lastInput = inputNHWC;
             _lastFlattenedInput = flattenedInput;
-            _lastLocalization1 = localization1Gpu.ToTensor();
-            _lastTransformationMatrix = thetaGpu.ToTensor();
+            _lastLocalization1 = localization1Gpu;
+            _lastTransformationMatrix = thetaGpu;
             _lastOutput = outputNHWC;
         }
 

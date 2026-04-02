@@ -588,7 +588,7 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
         var finalBuffer = backend.AllocateBuffer(totalOutput);
         ApplyGpuActivation(backend, combinedBuffer, finalBuffer, totalOutput, GetFusedActivationType());
 
-        return new GpuTensor<T>(backend, finalBuffer, [batchSize, numNodes, _outputFeatures], GpuTensorRole.Activation, ownsBuffer: true);
+        return Tensor<T>.FromGpuBuffer(backend, finalBuffer, [batchSize, numNodes, _outputFeatures], GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

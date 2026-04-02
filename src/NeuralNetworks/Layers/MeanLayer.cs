@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -276,7 +276,7 @@ public class MeanLayer<T> : LayerBase<T>
         }
 
         // Calculate outer size (product of all dims except reduction axis)
-        int outerSize = processedInput.ElementCount / axisSize;
+        int outerSize = processedInput.Length / axisSize;
 
         // Allocate output buffer and perform GPU sum reduction
         var sumBuffer = backend.AllocateBuffer(outerSize);
@@ -305,7 +305,7 @@ public class MeanLayer<T> : LayerBase<T>
             _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), outputShape);
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        return Tensor<T>.FromGpuBuffer(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

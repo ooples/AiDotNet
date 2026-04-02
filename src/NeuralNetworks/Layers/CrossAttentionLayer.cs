@@ -699,10 +699,10 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
             _gpuContextLen = contextLen;
 
             // Also cache CPU tensors for CPU backward compatibility
-            _lastQuery = query.ToTensor();
-            _lastContext = context.ToTensor();
-            _lastAttentionScores = attentionWeightsGpu?.ToTensor();
-            _lastOutput = output.ToTensor();
+            _lastQuery = query;
+            _lastContext = context;
+            _lastAttentionScores = attentionWeightsGpu;
+            _lastOutput = output;
             _originalQueryShape = originalQueryShape;
         }
 

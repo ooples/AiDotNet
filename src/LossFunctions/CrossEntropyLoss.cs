@@ -111,18 +111,18 @@ public class CrossEntropyLoss<T> : LossFunctionBase<T>
         else
         {
             batchSize = 1;
-            numClasses = predicted.ElementCount;
+            numClasses = predicted.Length;
         }
 
         // Compute loss on GPU
         float lossValue = backend.CrossEntropyLoss(predicted.Buffer, actual.Buffer, batchSize, numClasses);
 
         // Allocate gradient buffer and compute gradient on GPU
-        var gradientBuffer = backend.AllocateBuffer(predicted.ElementCount);
+        var gradientBuffer = backend.AllocateBuffer(predicted.Length);
         backend.CrossEntropyBackward(predicted.Buffer, actual.Buffer, gradientBuffer, batchSize, numClasses);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
+        var gradientTensor = Tensor<T>.FromGpuBuffer(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

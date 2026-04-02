@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -280,7 +280,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
             // If we run Forward on GPU, we should cache tensors if we want GPU backward.
             // But Backward logic is complex (Forward-Backward algo).
             // For now, cache CPU tensor to support existing Backward.
-            _lastInput = input.ToTensor();
+            _lastInput = input;
             _lastOutput = new Tensor<T>(new Vector<T>(outputData.Select(x => NumOps.FromFloat(x)).ToArray()), [batchSize, seqLen, numClasses]);
         }
 

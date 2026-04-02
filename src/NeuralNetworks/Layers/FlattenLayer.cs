@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -374,12 +374,12 @@ public class FlattenLayer<T> : LayerBase<T>
         if (input.Shape.Length <= 3)
         {
             // Unbatched input: flatten to 1D vector
-            return input.CreateView(0, [input.ElementCount]);
+            return input.CreateView(0, [input.Length]);
         }
 
         // Batched input: flatten spatial dimensions keeping batch dimension
         int batchSize = input.Shape[0];
-        int flattenedSize = input.ElementCount / batchSize;
+        int flattenedSize = input.Length / batchSize;
         return input.CreateView(0, [batchSize, flattenedSize]);
     }
 

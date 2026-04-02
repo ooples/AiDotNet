@@ -995,8 +995,8 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
 
             // Also download to CPU for hybrid CPU/GPU backward compatibility
-            _lastInput = input.ToTensor();
-            _lastOutput = _lastPreActivationGpu.ToTensor();
+            _lastInput = input;
+            _lastOutput = _lastPreActivationGpu;
         }
 
         // Reshape output back to original batch dimensions if needed

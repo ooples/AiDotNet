@@ -99,7 +99,7 @@ public class ExponentialLoss<T> : LossFunctionBase<T>
             return base.CalculateLossAndGradientGpu(predicted, actual);
         }
 
-        int size = predicted.ElementCount;
+        int size = predicted.Length;
 
         // Compute loss on GPU
         float lossValue = backend.ExponentialLoss(predicted.Buffer, actual.Buffer, size);
@@ -109,7 +109,7 @@ public class ExponentialLoss<T> : LossFunctionBase<T>
         backend.ExponentialBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
+        var gradientTensor = Tensor<T>.FromGpuBuffer(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

@@ -150,7 +150,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
             // TensorBroadcastMultiply needs two tensors.
             // Or use element-wise multiply if we can replicate mask.
             // Let's assume we can wrap buffer.
-            using var maskTensor = new GpuTensor<T>(backend, _spiralMaskGpu!, [numGather, 1], GpuTensorRole.Constant, ownsBuffer: false);
+            using var maskTensor = Tensor<T>.FromGpuBuffer(backend, _spiralMaskGpu!, [numGather, 1], GpuTensorRole.Constant, ownsBuffer: false);
 
             // Broadcast multiply: gatheredRaw * mask
             var gatheredMasked = gpuEngine.BroadcastMultiplyColumnGpu(gatheredRaw, maskTensor);
@@ -280,7 +280,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
             int numGather = totalVertices * SpiralLength;
             var gatheredRaw = gpuEngine.GatherGpu(flatInput, indicesBuffer, numGather, inputChannels);
 
-            using var maskTensor = new GpuTensor<T>(backend, maskBuffer, [numGather, 1], GpuTensorRole.Constant, ownsBuffer: false);
+            using var maskTensor = Tensor<T>.FromGpuBuffer(backend, maskBuffer, [numGather, 1], GpuTensorRole.Constant, ownsBuffer: false);
             var gatheredMasked = gpuEngine.BroadcastMultiplyColumnGpu(gatheredRaw, maskTensor);
             gatheredRaw.Dispose();
 
@@ -299,14 +299,14 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
 
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
+            _lastInput = input;
             // We might need gathered features for backward pass?
             // The CPU Backward uses _gatheredFeatures.
             // We should cache it if possible, or recompute.
             // Recomputing is safer for now to avoid complexity of downloading.
             // But optimal is caching.
             // For now, just cache output/input.
-            _lastOutput = result.ToTensor();
+            _lastOutput = result;
         }
 
         return result;

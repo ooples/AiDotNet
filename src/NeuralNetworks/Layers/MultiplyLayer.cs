@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -290,7 +290,7 @@ public class MultiplyLayer<T> : LayerBase<T>
         if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable");
 
-        int size = inputs[0].ElementCount;
+        int size = inputs[0].Length;
 
         // Perform GPU element-wise multiplication of all inputs
         // Start with first two inputs
@@ -320,11 +320,11 @@ public class MultiplyLayer<T> : LayerBase<T>
         {
             var cpuInputs = new Tensor<T>[inputs.Length];
             for (int i = 0; i < inputs.Length; i++)
-                cpuInputs[i] = inputs[i].ToTensor();
+                cpuInputs[i] = inputs[i];
             _lastInputs = cpuInputs;
         }
 
-        return new GpuTensor<T>(backend, resultBuffer, inputs[0].Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+        return Tensor<T>.FromGpuBuffer(backend, resultBuffer, inputs[0].Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <inheritdoc/>
@@ -348,7 +348,7 @@ public class MultiplyLayer<T> : LayerBase<T>
 
         var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
 
-        int size = outputGradient.ElementCount;
+        int size = outputGradient.Length;
         int numInputs = _lastInputs.Length;
 
         // Upload cached inputs to GPU
@@ -380,7 +380,7 @@ public class MultiplyLayer<T> : LayerBase<T>
                 }
             }
 
-            inputGradients[i] = new GpuTensor<T>(backend, gradBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
+            inputGradients[i] = Tensor<T>.FromGpuBuffer(backend, gradBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
         }
 
         // Dispose uploaded input buffers

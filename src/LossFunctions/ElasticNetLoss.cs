@@ -187,7 +187,7 @@ public class ElasticNetLoss<T> : LossFunctionBase<T>
             return base.CalculateLossAndGradientGpu(predicted, actual);
         }
 
-        int size = predicted.ElementCount;
+        int size = predicted.Length;
         float l1Ratio = Convert.ToSingle(NumOps.ToDouble(_l1Ratio));
         float alpha = Convert.ToSingle(NumOps.ToDouble(_alpha));
         // Calculate l1Weight and l2Weight from l1Ratio and alpha
@@ -202,7 +202,7 @@ public class ElasticNetLoss<T> : LossFunctionBase<T>
         backend.ElasticNetBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size, l1Weight, l2Weight);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
+        var gradientTensor = Tensor<T>.FromGpuBuffer(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

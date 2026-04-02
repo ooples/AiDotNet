@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -483,8 +483,8 @@ public class DropoutLayer<T> : LayerBase<T>
 
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
-            _dropoutMask = mask.ToTensor();
+            _lastInput = input;
+            _dropoutMask = mask;
         }
 
         return output;
