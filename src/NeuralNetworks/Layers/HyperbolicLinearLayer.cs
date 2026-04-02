@@ -38,7 +38,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 8", TestConstructorArgs = "8, 4")]
 public class HyperbolicLinearLayer<T> : LayerBase<T>
 {
-    private readonly IHyperbolicManifoldEngine _engine;
 
     /// <summary>
     /// Weight matrix stored in tangent space at the origin.
@@ -140,7 +139,6 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
         InputFeatures = inputFeatures;
         OutputFeatures = outputFeatures;
 
-        _engine = CpuHyperbolicManifoldEngine.Instance;
         _curvature = _numOps.FromDouble(curvature);
 
         _weights = new Tensor<T>([outputFeatures, inputFeatures]);
@@ -236,7 +234,7 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
             // Per Nickel & Kiela (2017), this preserves magnitude differences unlike
             // PoincareProject which clips to the boundary (losing scale information).
             var origin = CreateOriginVector(InputFeatures);
-            var projectedInput = _engine.PoincareExpMap(origin, inputVec, _curvature);
+            var projectedInput = Engine.PoincareExpMap(origin, inputVec, _curvature);
 
             // For each output feature
             for (int o = 0; o < OutputFeatures; o++)
@@ -258,19 +256,19 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
                 // Compute hyperbolic linear transformation:
                 // 1. Apply exponential map from origin with weight as tangent vector
                 var originForWeight = CreateOriginVector(InputFeatures);
-                var weightPoint = _engine.PoincareExpMap(originForWeight, weightVec, _curvature);
+                var weightPoint = Engine.PoincareExpMap(originForWeight, weightVec, _curvature);
 
                 // 2. Mobius addition of input with weight point
-                var transformed = _engine.MobiusAdd(projectedInput, weightPoint, _curvature);
+                var transformed = Engine.MobiusAdd(projectedInput, weightPoint, _curvature);
 
                 // 3. Mobius addition with bias (map bias to ball via exp map)
                 var originForBias = CreateOriginVector(InputFeatures);
-                var biasProjected = _engine.PoincareExpMap(originForBias, biasVec, _curvature);
-                var withBias = _engine.MobiusAdd(transformed, biasProjected, _curvature);
+                var biasProjected = Engine.PoincareExpMap(originForBias, biasVec, _curvature);
+                var withBias = Engine.MobiusAdd(transformed, biasProjected, _curvature);
 
                 // 4. Compute output as distance from origin (scalar output)
                 // This gives a scalar representing "how far down the hierarchy"
-                var distance = _engine.PoincareDistance(origin, withBias, _curvature);
+                var distance = Engine.PoincareDistance(origin, withBias, _curvature);
                 output[b, o] = distance;
             }
         }
@@ -504,22 +502,22 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
             inputVec[i] = _lastInput[b, i];
 
         var origin = CreateOriginVector(InputFeatures);
-        var projectedInput = _engine.PoincareExpMap(origin, inputVec, _curvature);
+        var projectedInput = Engine.PoincareExpMap(origin, inputVec, _curvature);
 
         var weightVec = new Vector<T>(InputFeatures);
         for (int i = 0; i < InputFeatures; i++)
             weightVec[i] = _weights[o, i];
-        var weightPoint = _engine.PoincareExpMap(CreateOriginVector(InputFeatures), weightVec, _curvature);
+        var weightPoint = Engine.PoincareExpMap(CreateOriginVector(InputFeatures), weightVec, _curvature);
 
-        var transformed = _engine.MobiusAdd(projectedInput, weightPoint, _curvature);
+        var transformed = Engine.MobiusAdd(projectedInput, weightPoint, _curvature);
 
         var biasVec = new Vector<T>(InputFeatures);
         for (int i = 0; i < InputFeatures; i++)
             biasVec[i] = _biases[o, i];
-        var biasProjected = _engine.PoincareExpMap(CreateOriginVector(InputFeatures), biasVec, _curvature);
-        var withBias = _engine.MobiusAdd(transformed, biasProjected, _curvature);
+        var biasProjected = Engine.PoincareExpMap(CreateOriginVector(InputFeatures), biasVec, _curvature);
+        var withBias = Engine.MobiusAdd(transformed, biasProjected, _curvature);
 
-        return _engine.PoincareDistance(origin, withBias, _curvature);
+        return Engine.PoincareDistance(origin, withBias, _curvature);
     }
 
     public override void UpdateParameters(T learningRate)
@@ -552,9 +550,9 @@ public class HyperbolicLinearLayer<T> : LayerBase<T>
             }
 
             // Project bias to valid region and apply exponential map update once per output
-            var projectedBias = _engine.PoincareProject(biasPoint, _curvature, epsilon);
-            var updatedBias = _engine.PoincareExpMap(projectedBias, tangentVec, _curvature);
-            updatedBias = _engine.PoincareProject(updatedBias, _curvature, epsilon);
+            var projectedBias = Engine.PoincareProject(biasPoint, _curvature, epsilon);
+            var updatedBias = Engine.PoincareExpMap(projectedBias, tangentVec, _curvature);
+            updatedBias = Engine.PoincareProject(updatedBias, _curvature, epsilon);
 
             for (int j = 0; j < InputFeatures; j++)
             {

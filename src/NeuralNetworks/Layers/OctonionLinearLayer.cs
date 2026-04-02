@@ -38,7 +38,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 128", TestConstructorArgs = "16, 8")]
 public class OctonionLinearLayer<T> : LayerBase<T>
 {
-    private readonly IAdvancedAlgebraEngine _engine;
 
     /// <summary>
     /// The octonion weight matrix connecting input to output neurons.
@@ -129,7 +128,6 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         InputFeatures = inputFeatures;
         OutputFeatures = outputFeatures;
 
-        _engine = CpuAdvancedAlgebraEngine.Instance;
 
         _weights = new Octonion<T>[outputFeatures, inputFeatures];
         _biases = new Octonion<T>[outputFeatures];
@@ -226,7 +224,7 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         _lastInput = inputOctonions;
 
         // Perform octonion matrix multiplication
-        var output = _engine.OctonionMatMul(inputOctonions, _weights);
+        var output = Engine.OctonionMatMul(inputOctonions, _weights);
 
         // Add biases
         for (int b = 0; b < batchSize; b++)
