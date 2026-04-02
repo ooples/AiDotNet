@@ -478,6 +478,13 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>, ITrainableLayer<T>
     public Tensor<T>[] GetTrainableParameters() => [_projectionWeights, _projectionBias];
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
+        _projectionWeights = parameters[0]; _projectionBias = parameters[1];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad()
     {
         _projectionWeightsGradient = null;

@@ -888,6 +888,13 @@ public class LocallyConnectedLayer<T> : LayerBase<T>, ITrainableLayer<T>
     public Tensor<T>[] GetTrainableParameters() => [_weights, _biases];
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
+        _weights = parameters[0]; _biases = parameters[1];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad() { _weightGradients = null; _biasGradients = null; }
 
     public override void SetParameters(Vector<T> parameters)

@@ -455,6 +455,13 @@ public class LayerNormalizationLayer<T> : LayerBase<T>, ITrainableLayer<T>
     public Tensor<T>[] GetTrainableParameters() => [_gamma, _beta];
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
+        _gamma = parameters[0]; _beta = parameters[1];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad()
     {
         _gammaGradient = null;

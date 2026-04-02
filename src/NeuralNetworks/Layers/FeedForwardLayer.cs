@@ -634,6 +634,13 @@ public class FeedForwardLayer<T> : LayerBase<T>, ITrainableLayer<T>
     public Tensor<T>[] GetTrainableParameters() => [Weights, Biases];
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
+        Weights = parameters[0]; Biases = parameters[1];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad()
     {
         WeightsGradient = Tensor<T>.Empty();

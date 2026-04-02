@@ -119,6 +119,13 @@ public class Conv3DLayer<T> : LayerBase<T>, ITrainableLayer<T>
     public Tensor<T>[] GetTrainableParameters() => [_kernels, _biases];
 
     /// <inheritdoc />
+    public void SetTrainableParameters(Tensor<T>[] parameters)
+    {
+        if (parameters.Length != 2) throw new ArgumentException($"Expected 2 parameters, got {parameters.Length}.");
+        _kernels = parameters[0]; _biases = parameters[1];
+    }
+
+    /// <inheritdoc />
     public void ZeroGrad() { _kernelsGradient = null; _biasesGradient = null; }
 
     internal override Dictionary<string, string> GetMetadata()
