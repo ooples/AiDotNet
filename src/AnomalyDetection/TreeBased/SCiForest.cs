@@ -119,27 +119,23 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
         _trainingSampleSize = nSamples;
         int maxDepth = (int)Math.Ceiling(Math.Log(nSamples, 2));
 
-        // Extract data into T arrays
-        var data = new T[X.Rows][];
-        for (int i = 0; i < X.Rows; i++)
-        {
-            data[i] = new T[X.Columns];
-            for (int j = 0; j < X.Columns; j++)
-            {
-                data[i][j] = X[i, j];
-            }
-        }
-
         _trees = new List<SCiTree>();
 
-        // Build trees
+        // Build trees using Matrix<T> directly
         for (int t = 0; t < _numTrees; t++)
         {
             var random = RandomHelper.CreateSeededRandom(_randomSeed + t);
 
             // Sample data
             var sampleIndices = SampleIndices(X.Rows, nSamples, random);
-            var sampleData = sampleIndices.Select(i => data[i]).ToArray();
+            var sampleData = new Matrix<T>(sampleIndices.Length, X.Columns);
+            for (int si = 0; si < sampleIndices.Length; si++)
+            {
+                for (int j = 0; j < X.Columns; j++)
+                {
+                    sampleData[si, j] = X[sampleIndices[si], j];
+                }
+            }
 
             // Build tree
             var tree = new SCiTree(_nFeatures, _sparsity, random, NumOps);
@@ -187,11 +183,7 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < X.Rows; i++)
         {
-            var point = new T[X.Columns];
-            for (int j = 0; j < X.Columns; j++)
-            {
-                point[j] = X[i, j];
-            }
+            var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
 
             // Average path length across all trees
             T totalPathLength = NumOps.Zero;
@@ -240,7 +232,7 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
         private readonly int _nFeatures;
         private readonly double _sparsity;
         private readonly Random _random;
-        private T[]? _sparseWeights;
+        private Vector<T>? _sparseWeights;
         private T _threshold;
         private SCiTree? _left;
         private SCiTree? _right;
@@ -258,19 +250,18 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
             _threshold = _ops.Zero;
         }
 
-        public void Build(T[][] data, int currentDepth, int maxDepth)
+        public void Build(Matrix<T> data, int currentDepth, int maxDepth)
         {
-            _size = data.Length;
+            _size = data.Rows;
 
-            if (currentDepth >= maxDepth || data.Length <= 1)
+            if (currentDepth >= maxDepth || data.Rows <= 1)
             {
                 _isLeaf = true;
                 return;
             }
 
             // Generate sparse random projection
-            _sparseWeights = new T[_nFeatures];
-            for (int j = 0; j < _nFeatures; j++) _sparseWeights[j] = _ops.Zero;
+            _sparseWeights = new Vector<T>(_nFeatures);
 
             int numActive = Math.Max(1, (int)(_nFeatures * _sparsity));
 
@@ -281,16 +272,25 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
 
             foreach (int f in activeFeatures)
             {
-                // Random weight: +1 or -1
                 _sparseWeights[f] = _random.NextDouble() < 0.5 ? _ops.One : _ops.Negate(_ops.One);
             }
 
             // Compute projections
-            var projections = data.Select(p => DotProduct(p, _sparseWeights)).ToArray();
+            var projections = new Vector<T>(data.Rows);
+            for (int i = 0; i < data.Rows; i++)
+            {
+                var row = new Vector<T>(data.GetRowReadOnlySpan(i).ToArray());
+                T proj = _ops.Zero;
+                for (int j = 0; j < _nFeatures; j++)
+                {
+                    proj = _ops.Add(proj, _ops.Multiply(row[j], _sparseWeights[j]));
+                }
+                projections[i] = proj;
+            }
 
             T minProj = projections[0];
             T maxProj = projections[0];
-            for (int i = 1; i < projections.Length; i++)
+            for (int i = 1; i < data.Rows; i++)
             {
                 if (_ops.LessThan(projections[i], minProj)) minProj = projections[i];
                 if (_ops.GreaterThan(projections[i], maxProj)) maxProj = projections[i];
@@ -306,18 +306,18 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
             _threshold = _ops.Add(minProj, _ops.Multiply(_ops.FromDouble(_random.NextDouble()), range));
 
             // Split data
-            var leftData = new List<T[]>();
-            var rightData = new List<T[]>();
+            var leftIndices = new List<int>();
+            var rightIndices = new List<int>();
 
-            for (int i = 0; i < data.Length; i++)
+            for (int i = 0; i < data.Rows; i++)
             {
                 if (_ops.LessThan(projections[i], _threshold))
-                    leftData.Add(data[i]);
+                    leftIndices.Add(i);
                 else
-                    rightData.Add(data[i]);
+                    rightIndices.Add(i);
             }
 
-            if (leftData.Count == 0 || rightData.Count == 0)
+            if (leftIndices.Count == 0 || rightIndices.Count == 0)
             {
                 _isLeaf = true;
                 return;
@@ -327,11 +327,11 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
             _left = new SCiTree(_nFeatures, _sparsity, _random, _ops);
             _right = new SCiTree(_nFeatures, _sparsity, _random, _ops);
 
-            _left.Build(leftData.ToArray(), currentDepth + 1, maxDepth);
-            _right.Build(rightData.ToArray(), currentDepth + 1, maxDepth);
+            _left.Build(ExtractRows(data, leftIndices), currentDepth + 1, maxDepth);
+            _right.Build(ExtractRows(data, rightIndices), currentDepth + 1, maxDepth);
         }
 
-        public T PathLength(T[] point, int currentDepth)
+        public T PathLength(Vector<T> point, int currentDepth)
         {
             if (_isLeaf)
             {
@@ -349,7 +349,11 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
                     "This indicates a corrupted tree structure.");
             }
 
-            T projection = DotProduct(point, sparseWeights);
+            T projection = _ops.Zero;
+            for (int i = 0; i < point.Length; i++)
+            {
+                projection = _ops.Add(projection, _ops.Multiply(point[i], sparseWeights[i]));
+            }
 
             if (_ops.LessThan(projection, _threshold))
                 return left.PathLength(point, currentDepth + 1);
@@ -357,14 +361,17 @@ public class SCiForest<T> : AnomalyDetectorBase<T>
                 return right.PathLength(point, currentDepth + 1);
         }
 
-        private T DotProduct(T[] a, T[] b)
+        private static Matrix<T> ExtractRows(Matrix<T> data, List<int> indices)
         {
-            T sum = _ops.Zero;
-            for (int i = 0; i < a.Length; i++)
+            var result = new Matrix<T>(indices.Count, data.Columns);
+            for (int i = 0; i < indices.Count; i++)
             {
-                sum = _ops.Add(sum, _ops.Multiply(a[i], b[i]));
+                for (int j = 0; j < data.Columns; j++)
+                {
+                    result[i, j] = data[indices[i], j];
+                }
             }
-            return sum;
+            return result;
         }
 
         private T EstimateC(int n)
