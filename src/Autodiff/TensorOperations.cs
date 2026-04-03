@@ -12081,30 +12081,67 @@ public static class TensorOperations<T>
                 double denominator = 1.0 + 2.0 * c * dotXY + c * c * sqNormX * sqNormY;
                 denominator = Math.Max(denominator, 1e-10);
 
-                // Simplified gradient computation
+                // Read vectors and output gradient for this batch element
+                var xVec = new double[dim];
+                var yVec = new double[dim];
+                var rVec = new double[dim];
+                var gVec = new double[dim];
                 for (int i = 0; i < dim; i++)
                 {
-                    double gradOut = shape.Length > 1
-                        ? numOps.ToDouble(outputGradient[b, i])
-                        : numOps.ToDouble(outputGradient[i]);
+                    xVec[i] = shape.Length > 1 ? numOps.ToDouble(xVal[b, i]) : numOps.ToDouble(xVal[i]);
+                    yVec[i] = shape.Length > 1 ? numOps.ToDouble(yVal[b, i]) : numOps.ToDouble(yVal[i]);
+                    rVec[i] = shape.Length > 1 ? numOps.ToDouble(result[b, i]) : numOps.ToDouble(result[i]);
+                    gVec[i] = shape.Length > 1 ? numOps.ToDouble(outputGradient[b, i]) : numOps.ToDouble(outputGradient[i]);
+                }
 
-                    double gradXi = gradOut * numeratorX / denominator;
-                    double gradYi = gradOut * numeratorY / denominator;
+                double invD = 1.0 / denominator;
 
-                    if (x.RequiresGradient)
+                // Exact Jacobian: dr_j/dx_i = (1/D)*[dA/dx_i * x_j + A*delta_ij + dB/dx_i * y_j] - (r_j/D)*(dD/dx_i)
+                // dA/dx_i = 2c*y_i,  dB/dx_i = -2c*x_i,  dD/dx_i = 2c*y_i + 2c^2*x_i*||y||^2
+                if (x.RequiresGradient)
+                {
+                    if (x.Gradient == null) x.Gradient = new Tensor<T>(shape);
+                    for (int i = 0; i < dim; i++)
                     {
-                        if (x.Gradient == null)
-                            x.Gradient = new Tensor<T>(shape);
+                        double dA_dxi = 2.0 * c * yVec[i];
+                        double dB_dxi = -2.0 * c * xVec[i];
+                        double dD_dxi = 2.0 * c * yVec[i] + 2.0 * c * c * xVec[i] * sqNormY;
+
+                        double gradXi = 0;
+                        for (int j = 0; j < dim; j++)
+                        {
+                            double dr_j_dx_i = invD * (dA_dxi * xVec[j] + (i == j ? numeratorX : 0) + dB_dxi * yVec[j])
+                                             - rVec[j] * invD * dD_dxi;
+                            gradXi += gVec[j] * dr_j_dx_i;
+                        }
+
                         if (shape.Length > 1)
                             x.Gradient[b, i] = numOps.Add(x.Gradient[b, i], numOps.FromDouble(gradXi));
                         else
                             x.Gradient[i] = numOps.Add(x.Gradient[i], numOps.FromDouble(gradXi));
                     }
+                }
 
-                    if (y.RequiresGradient)
+                // dr_j/dy_i = (1/D)*[dA/dy_i * x_j + dB/dy_i * y_j + B*delta_ij] - (r_j/D)*(dD/dy_i)
+                // dA/dy_i = 2c*x_i + 2c*y_i,  dB/dy_i = 0,  dD/dy_i = 2c*x_i + 2c^2*||x||^2*y_i
+                // Wait: dA/dy_i = d(1 + 2c<x,y> + c||y||^2)/dy_i = 2c*x_i + 2c*y_i
+                // dD/dy_i = d(1 + 2c<x,y> + c^2*||x||^2*||y||^2)/dy_i = 2c*x_i + 2c^2*sqNormX*y_i
+                if (y.RequiresGradient)
+                {
+                    if (y.Gradient == null) y.Gradient = new Tensor<T>(shape);
+                    for (int i = 0; i < dim; i++)
                     {
-                        if (y.Gradient == null)
-                            y.Gradient = new Tensor<T>(shape);
+                        double dA_dyi = 2.0 * c * xVec[i] + 2.0 * c * yVec[i];
+                        double dD_dyi = 2.0 * c * xVec[i] + 2.0 * c * c * sqNormX * yVec[i];
+
+                        double gradYi = 0;
+                        for (int j = 0; j < dim; j++)
+                        {
+                            double dr_j_dy_i = invD * (dA_dyi * xVec[j] + (i == j ? numeratorY : 0))
+                                             - rVec[j] * invD * dD_dyi;
+                            gradYi += gVec[j] * dr_j_dy_i;
+                        }
+
                         if (shape.Length > 1)
                             y.Gradient[b, i] = numOps.Add(y.Gradient[b, i], numOps.FromDouble(gradYi));
                         else

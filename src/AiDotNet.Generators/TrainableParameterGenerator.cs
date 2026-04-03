@@ -118,12 +118,21 @@ public class TrainableParameterGenerator : IIncrementalGenerator
 
             if (paramFields.Count == 0 && subLayerFields.Count == 0) continue;
 
-            // Sort by Order then declaration order
-            paramFields.Sort((a, b) => a.Order != b.Order ? a.Order.CompareTo(b.Order) : 0);
+            // Stable sort by Order, preserving declaration order for equal Order values.
+            // List.Sort is not stable, so we use a secondary key (original index).
+            for (int idx = 0; idx < paramFields.Count; idx++)
+                paramFields[idx] = paramFields[idx] with { DeclIndex = idx };
+            paramFields.Sort((a, b) =>
+            {
+                int cmp = a.Order.CompareTo(b.Order);
+                return cmp != 0 ? cmp : a.DeclIndex.CompareTo(b.DeclIndex);
+            });
 
             // Generate the partial class source
             var source = GenerateSource(classSymbol, paramFields, gradientFields, subLayerFields);
-            var hintName = $"{classSymbol.Name}.TrainableParameters.g.cs";
+            // Use fully qualified name to avoid collisions across namespaces
+            var qualifiedName = classSymbol.ToDisplayString().Replace('.', '_').Replace('<', '_').Replace('>', '_');
+            var hintName = $"{qualifiedName}.TrainableParameters.g.cs";
             context.AddSource(hintName, source);
         }
     }
@@ -260,7 +269,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         Other = 7
     }
 
-    private record struct ParameterFieldInfo(string Name, string Role, int Order);
+    private record struct ParameterFieldInfo(string Name, string Role, int Order, int DeclIndex = 0);
     private record struct GradientFieldInfo(string Name, bool IsNullable);
     private record struct SubLayerFieldInfo(string Name, bool IsNullable);
 }
