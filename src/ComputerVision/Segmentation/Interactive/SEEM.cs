@@ -191,6 +191,7 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
+        if (input.Shape.Length < 4) throw new ArgumentException($"Tape-based training requires rank >= 4, got rank {input.Shape.Length}. Reshape to [batch, channels, height, width].", nameof(input));
         SetTrainingMode(true);
         try
         {

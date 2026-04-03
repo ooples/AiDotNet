@@ -219,6 +219,7 @@ public class SAM21<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode.");
 
+        if (input.Shape.Length < 4) throw new ArgumentException($"Tape-based training requires rank >= 4, got rank {input.Shape.Length}. Reshape to [batch, channels, height, width].", nameof(input));
         SetTrainingMode(true);
         try
         {
