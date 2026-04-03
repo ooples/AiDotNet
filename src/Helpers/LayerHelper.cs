@@ -4615,11 +4615,20 @@ public static class LayerHelper<T>
         // Flatten
         yield return new FlattenLayer<T>([currentChannels, 1, 1]);
 
-        // Classification head per Huang et al. 2017: Dense + Softmax
+        // Classification head per Huang et al. 2017: Dense + activation
+        // Use Sigmoid for single-class (binary) since Softmax([1]) is always 1
         yield return new DenseLayer<T>(currentChannels, configuration.NumClasses,
             activationFunction: new IdentityActivation<T>());
-        yield return new ActivationLayer<T>([configuration.NumClasses],
-            activationFunction: new SoftmaxActivation<T>());
+        if (configuration.NumClasses > 1)
+        {
+            yield return new ActivationLayer<T>([configuration.NumClasses],
+                activationFunction: new SoftmaxActivation<T>());
+        }
+        else
+        {
+            yield return new ActivationLayer<T>([1],
+                activationFunction: new SigmoidActivation<T>());
+        }
     }
 
     /// <summary>
@@ -31251,8 +31260,7 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, tanhActivation);
 
         // Event classification output (paper: FC -> softmax over categories + binary event)
-        // Single output head to avoid bottleneck
-        yield return new DenseLayer<T>(embeddingDimension, 1, nullActivation);
+        yield return new DenseLayer<T>(embeddingDimension, numCategories, nullActivation);
     }
 
     /// <summary>
