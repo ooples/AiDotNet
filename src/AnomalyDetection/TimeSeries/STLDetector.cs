@@ -51,9 +51,9 @@ public class STLDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _seasonLength;
     private readonly int _trendSmoothness;
-    private double[]? _trend;
-    private double[]? _seasonal;
-    private double _residualStd;
+    private Vector<T>? _trend;
+    private Vector<T>? _seasonal;
+    private T _residualStd;
 
     /// <summary>
     /// Gets the season length.

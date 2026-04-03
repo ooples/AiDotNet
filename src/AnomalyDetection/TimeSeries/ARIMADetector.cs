@@ -56,11 +56,11 @@ public class ARIMADetector<T> : AnomalyDetectorBase<T>
     private readonly int _p;
     private readonly int _d;
     private readonly int _q;
-    private double[]? _arCoeffs;
-    private double[]? _maCoeffs;
-    private double _mean;
-    private double _residualStd;
-    private double[]? _lastValues;
+    private Vector<T>? _arCoeffs;
+    private Vector<T>? _maCoeffs;
+    private T _mean;
+    private T _residualStd;
+    private Vector<T>? _lastValues;
 
     /// <summary>
     /// Gets the AR order (p).

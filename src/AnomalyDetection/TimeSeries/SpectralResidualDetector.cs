@@ -51,8 +51,8 @@ namespace AiDotNet.AnomalyDetection.TimeSeries;
 public class SpectralResidualDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _windowSize;
-    private double[]? _meanAmplitudes;
-    private double[]? _stdAmplitudes;
+    private Vector<T>? _meanAmplitudes;
+    private Vector<T>? _stdAmplitudes;
 
     /// <summary>
     /// Gets the window size for spectrum smoothing.

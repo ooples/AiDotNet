@@ -224,9 +224,10 @@ public class AnomalyTransformerDetector<T> : AnomalyDetectorBase<T>
                 T diff = NumOps.Subtract(data[i, j], means[j]);
                 variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            double stdVal = Math.Sqrt(NumOps.ToDouble(variance) / n);
-            if (stdVal < 1e-10) stdVal = 1;
-            stds[j] = NumOps.FromDouble(stdVal);
+            T stdVal = NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(n)));
+            T eps = NumOps.FromDouble(1e-10);
+            if (NumOps.LessThan(stdVal, eps)) stdVal = NumOps.One;
+            stds[j] = stdVal;
         }
 
         var normalized = new Matrix<T>(n, d);

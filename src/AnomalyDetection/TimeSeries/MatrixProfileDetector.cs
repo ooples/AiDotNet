@@ -55,9 +55,9 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
 
     private readonly int _subsequenceLength;
     private readonly int _exclusionZone;
-    private double[]? _matrixProfile;
-    private double[]? _trainingValues;
-    private double _trainingChecksum;
+    private Vector<T>? _matrixProfile;
+    private Vector<T>? _trainingValues;
+    private T _trainingChecksum;
 
     /// <summary>
     /// Gets the subsequence length.
