@@ -842,12 +842,16 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
 
     private void InitializeWeights()
     {
-        // He initialization for conv weights
+        // He-uniform initialization: U(-bound, bound) where bound = sqrt(6 / fanIn)
+        // per He et al. 2015 "Delving Deep into Rectifiers".
+        // For uniform distribution: Var(W) = bound^2/3, so bound = sqrt(3 * 2/fanIn) = sqrt(6/fanIn)
         int fanIn = InputDepth * KernelSize * KernelSize;
-        double stdDev = Math.Sqrt(2.0 / fanIn);
-        var kernelShape = new[] { OutputDepth, InputDepth, KernelSize, KernelSize };
-        _kernels = Engine.TensorRandomUniformRange<T>(kernelShape, NumOps.FromDouble(-stdDev), NumOps.FromDouble(stdDev));
-        _biases = new Tensor<T>(new[] { OutputDepth });
+        double bound = Math.Sqrt(6.0 / fanIn);
+        var kernelShape = _kernels.Shape.ToArray();
+        var initData = Engine.TensorRandomUniformRange<T>(kernelShape, NumOps.FromDouble(-bound), NumOps.FromDouble(bound));
+        // Copy into existing tensor to avoid orphaning pre-allocated buffer
+        initData.Data.Span.CopyTo(_kernels.Data.Span);
+        _biases.Fill(NumOps.Zero);
     }
 
     /// <summary>

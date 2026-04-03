@@ -31173,12 +31173,12 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates layers for the UnifiedMultimodalNetwork.
+    /// Creates default layers for the UnifiedMultimodalNetwork.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateUnifiedMultimodalLayers(
+    public static IEnumerable<ILayer<T>> CreateDefaultUnifiedMultimodalLayers(
+        NeuralNetworkArchitecture<T> architecture,
         int embeddingDimension = 512,
-        int numTransformerLayers = 6,
-        int numClasses = 100)
+        int numTransformerLayers = 6)
     {
         IActivationFunction<T>? nullActivation = null;
         var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
@@ -31218,7 +31218,7 @@ public static class LayerHelper<T>
 
         // Fusion and output
         yield return new DenseLayer<T>(embeddingDimension * 4, embeddingDimension, geluActivation);
-        yield return new DenseLayer<T>(embeddingDimension, numClasses, nullActivation);
+        yield return new DenseLayer<T>(embeddingDimension, architecture.OutputSize, nullActivation);
         yield return new DenseLayer<T>(embeddingDimension, embeddingDimension, geluActivation);
     }
 

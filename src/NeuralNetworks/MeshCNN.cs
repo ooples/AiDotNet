@@ -485,22 +485,9 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
         foreach (var fc in _options.FullyConnectedSizes)
             writer.Write(fc);
 
-        // Serialize edge adjacency matrix
-        if (_currentEdgeAdjacency != null)
-        {
-            int rows = _currentEdgeAdjacency.GetLength(0);
-            int cols = _currentEdgeAdjacency.GetLength(1);
-            writer.Write(rows);
-            writer.Write(cols);
-            for (int r = 0; r < rows; r++)
-                for (int c = 0; c < cols; c++)
-                    writer.Write(_currentEdgeAdjacency[r, c]);
-        }
-        else
-        {
-            writer.Write(0);
-            writer.Write(0);
-        }
+        // Per-mesh adjacency is NOT model state — write empty marker for backward compat
+        writer.Write(0);
+        writer.Write(0);
     }
 
     /// <summary>
@@ -532,19 +519,19 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
         for (int i = 0; i < fcLen; i++)
             _options.FullyConnectedSizes[i] = reader.ReadInt32();
 
-        // Deserialize edge adjacency matrix (guard for older serialized models
-        // that don't include adjacency data)
+        // Skip adjacency data from older serialized models (per-mesh adjacency is NOT model state)
+        // Callers must call SetEdgeAdjacency() for each new mesh sample
+        _currentEdgeAdjacency = null;
         if (reader.BaseStream.Position < reader.BaseStream.Length)
         {
             int adjRows = reader.ReadInt32();
             int adjCols = reader.ReadInt32();
             if (adjRows > 0 && adjCols > 0)
             {
-                var adjacency = new int[adjRows, adjCols];
+                // Skip the adjacency data but don't restore it
                 for (int r = 0; r < adjRows; r++)
                     for (int c = 0; c < adjCols; c++)
-                        adjacency[r, c] = reader.ReadInt32();
-                SetEdgeAdjacency(adjacency);
+                        reader.ReadInt32();
             }
         }
     }

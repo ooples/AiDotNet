@@ -193,8 +193,8 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         }
         else
         {
-            Layers.AddRange(LayerHelper<T>.CreateUnifiedMultimodalLayers(
-                _embeddingDimension, _numTransformerLayers, Architecture.OutputSize));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultUnifiedMultimodalLayers(
+                Architecture, _embeddingDimension, _numTransformerLayers));
         }
 
         // Distribute layers to internal fields
