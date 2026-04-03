@@ -315,7 +315,15 @@ public class SegNeXt<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
                 "Training is not supported in ONNX mode. Use the native mode constructor for training.");
         }
 
-        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     #endregion

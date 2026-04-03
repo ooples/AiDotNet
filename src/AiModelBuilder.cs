@@ -2552,12 +2552,19 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         else
         {
             // REGULAR TRAINING PATH
+            if (_knowledgeDistillationOptions is not null)
+            {
+                throw new NotSupportedException(
+                    "Knowledge distillation is not yet integrated with the tape-based training flow. " +
+                    "Remove the ConfigureKnowledgeDistillation() call or provide a pre-distilled teacher " +
+                    "model via a custom loss function that combines hard and soft targets.");
+            }
+
             // Ensure the optimizer has the model configured before optimization
             // This is required for InitializeRandomSolution to access model.ParameterCount
             finalOptimizer.SetModel(model);
 
             // Optimize the final model on the full training set
-            // Knowledge distillation removed — tape-based training handles all gradient computation
             optimizationResult = finalOptimizer.Optimize(optimizationInputData);
         }
 

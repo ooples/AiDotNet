@@ -95,12 +95,40 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
         var currentParams = network.GetParameters();
         _optimalParameters.Add(currentParams.Clone());
 
-        // Compute the diagonal of the Fisher Information Matrix via tape-based gradients
-        var grads = network.ComputeGradients(taskData.inputs, taskData.targets);
-        // Fisher diagonal ≈ squared gradients (empirical Fisher)
-        var fisherDiag = new Vector<T>(grads.Length);
-        for (int i = 0; i < grads.Length; i++)
-            fisherDiag[i] = _numOps.Multiply(grads[i], grads[i]);
+        // Compute the diagonal of the Fisher Information Matrix via per-sample gradients.
+        // F_ii = (1/N) * sum_n (grad_n_i)^2  (empirical Fisher approximation)
+        int batchSize = taskData.inputs.Shape[0];
+        var paramCount = network.GetParameters().Length;
+        var fisherDiag = new Vector<T>(paramCount);
+
+        for (int n = 0; n < batchSize; n++)
+        {
+            // Extract single sample: slice along batch dimension
+            var sampleShape = new int[taskData.inputs.Shape.Length];
+            sampleShape[0] = 1;
+            for (int d = 1; d < sampleShape.Length; d++)
+                sampleShape[d] = taskData.inputs.Shape[d];
+
+            var sampleInput = new Tensor<T>(sampleShape);
+            var sampleTarget = new Tensor<T>(new[] { 1, taskData.targets.Shape.Length > 1 ? taskData.targets.Shape[1] : 1 });
+
+            int inputStride = taskData.inputs.Length / batchSize;
+            int targetStride = taskData.targets.Length / batchSize;
+            for (int j = 0; j < inputStride; j++)
+                sampleInput.Data.Span[j] = taskData.inputs.Data.Span[n * inputStride + j];
+            for (int j = 0; j < targetStride; j++)
+                sampleTarget.Data.Span[j] = taskData.targets.Data.Span[n * targetStride + j];
+
+            var grads = network.ComputeGradients(sampleInput, sampleTarget);
+            for (int i = 0; i < grads.Length; i++)
+                fisherDiag[i] = _numOps.Add(fisherDiag[i], _numOps.Multiply(grads[i], grads[i]));
+        }
+
+        // Average over samples
+        var invN = _numOps.FromDouble(1.0 / batchSize);
+        for (int i = 0; i < fisherDiag.Length; i++)
+            fisherDiag[i] = _numOps.Multiply(fisherDiag[i], invN);
+
         _fisherDiagonals.Add(fisherDiag);
     }
 

@@ -219,7 +219,15 @@ public class SAM21<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode.");
 
-        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

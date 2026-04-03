@@ -5045,6 +5045,22 @@ public static class TensorOperations<T>
             outputShape.Add(1);
         var result = new Tensor<T>(outputShape.ToArray());
         var divisor = numOps.FromDouble((double)reduceCount);
+        // Build a mapping from input dimension to output dimension index
+        // (skipping reduced axes, unless keepDims where they map to size-1 slots)
+        var inputToOutputDim = new int[inputShape.Length];
+        int outDimCounter = 0;
+        for (int i = 0; i < inputShape.Length; i++)
+        {
+            if (axes.Contains(i))
+            {
+                inputToOutputDim[i] = keepDims ? outDimCounter++ : -1;
+            }
+            else
+            {
+                inputToOutputDim[i] = outDimCounter++;
+            }
+        }
+
         // Compute forward pass: sum and then divide
         void ComputeSum(int[] currentIndices, int dim, int[] outputIndices)
         {
@@ -5054,7 +5070,7 @@ public static class TensorOperations<T>
                 result[outputIndices] = numOps.Add(result[outputIndices], value);
                 return;
             }
-            if (axes.Contains(dim))
+            if (axes.Contains(dim) && !keepDims)
             {
                 for (int i = 0; i < inputShape[dim]; i++)
                 {
@@ -5064,11 +5080,11 @@ public static class TensorOperations<T>
             }
             else
             {
-                int outIdx = Array.IndexOf(outputShape.ToArray(), inputShape[dim]);
+                int outIdx = inputToOutputDim[dim];
                 for (int i = 0; i < inputShape[dim]; i++)
                 {
                     currentIndices[dim] = i;
-                    outputIndices[outIdx] = i;
+                    outputIndices[outIdx] = keepDims && axes.Contains(dim) ? 0 : i;
                     ComputeSum(currentIndices, dim + 1, outputIndices);
                 }
             }
@@ -5093,7 +5109,7 @@ public static class TensorOperations<T>
                     gradInput[currentIndices] = numOps.Multiply(gradient[outputIndices], gradScale);
                     return;
                 }
-                if (axes.Contains(dim))
+                if (axes.Contains(dim) && !keepDims)
                 {
                     for (int i = 0; i < inputShape[dim]; i++)
                     {
@@ -5103,11 +5119,11 @@ public static class TensorOperations<T>
                 }
                 else
                 {
-                    int outIdx = Array.IndexOf(outputShape.ToArray(), inputShape[dim]);
+                    int outIdx = inputToOutputDim[dim];
                     for (int i = 0; i < inputShape[dim]; i++)
                     {
                         currentIndices[dim] = i;
-                        outputIndices[outIdx] = i;
+                        outputIndices[outIdx] = keepDims && axes.Contains(dim) ? 0 : i;
                         BroadcastGrad(currentIndices, dim + 1, outputIndices);
                     }
                 }
@@ -7677,16 +7693,43 @@ public static class TensorOperations<T>
                         T normSquared = numOps.Multiply(norm, norm);
                         T onePlusNormSquared = numOps.Add(numOps.One, normSquared);
 
-                        // Simplified gradient computation
-                        // Full derivation requires chain rule through normalization and scaling
+                        // Exact Jacobian: ds_j/dv_i = scaleFactor * (delta_ij/||v|| - v_i*v_j/||v||^3)
+                        //                            + (2*v_i*v_j) / (||v|| * (1+||v||^2)^2)
+                        // grad_input_i = sum_j (J_ji * grad_output_j)
+                        T invNorm = numOps.Divide(numOps.One, norm);
+                        T invNormCubed = numOps.Divide(numOps.One, numOps.Multiply(normSquared, norm));
+                        T scaleFactor = numOps.Divide(normSquared, onePlusNormSquared);
+                        T couplingFactor = numOps.Divide(
+                            numOps.FromDouble(2.0),
+                            numOps.Multiply(norm, numOps.Multiply(onePlusNormSquared, onePlusNormSquared)));
+
+                        // Read input vector and gradient vector for this capsule
+                        var v = new T[capsuleDim];
+                        var g = new T[capsuleDim];
                         for (int i = 0; i < capsuleDim; i++)
                         {
                             var idx = indices.Take(indices.Length - 1).Concat(new[] { i }).ToArray();
-                            // Approximate gradient (full computation is complex)
-                            T scale = numOps.Divide(
-                                numOps.FromDouble(2.0),
-                                numOps.Multiply(onePlusNormSquared, norm));
-                            gradA[idx] = numOps.Multiply(gradient[idx], scale);
+                            v[i] = a.Value[idx];
+                            g[i] = gradient[idx];
+                        }
+
+                        // Compute grad_input = J^T * grad_output
+                        for (int i = 0; i < capsuleDim; i++)
+                        {
+                            T sum = numOps.Zero;
+                            for (int j = 0; j < capsuleDim; j++)
+                            {
+                                // J_ji = scaleFactor * (delta_ji * invNorm - v_i * v_j * invNormCubed)
+                                //      + couplingFactor * v_i * v_j
+                                T diagTerm = i == j ? numOps.Multiply(scaleFactor, invNorm) : numOps.Zero;
+                                T outerTerm = numOps.Multiply(
+                                    numOps.Subtract(couplingFactor, numOps.Multiply(scaleFactor, invNormCubed)),
+                                    numOps.Multiply(v[i], v[j]));
+                                T jacobianEntry = numOps.Add(diagTerm, outerTerm);
+                                sum = numOps.Add(sum, numOps.Multiply(jacobianEntry, g[j]));
+                            }
+                            var outIdx = indices.Take(indices.Length - 1).Concat(new[] { i }).ToArray();
+                            gradA[outIdx] = sum;
                         }
                     }
                     else
@@ -7768,12 +7811,12 @@ public static class TensorOperations<T>
 
         var result = new Tensor<T>(outputShape);
 
-        // Compute norms
+        // Compute norms by iterating over all non-axis dimensions
         void ComputeNorm(int[] indices, int dim)
         {
-            if (dim == axis)
+            if (dim == inputShape.Length)
             {
-                // Compute norm along this axis
+                // All non-axis dims are set; compute norm along the axis
                 T sumSquares = numOps.Zero;
                 for (int i = 0; i < inputShape[axis]; i++)
                 {
@@ -7790,26 +7833,25 @@ public static class TensorOperations<T>
                     : indices.Where((_, i) => i != axis).ToArray();
 
                 result[outIndices] = norm;
+                return;
             }
-            else if (dim < inputShape.Length)
+
+            if (dim == axis)
+            {
+                // Skip the reduction axis during outer iteration
+                ComputeNorm(indices, dim + 1);
+            }
+            else
             {
                 for (int i = 0; i < inputShape[dim]; i++)
                 {
                     indices[dim] = i;
-                    ComputeNorm(indices, dim == axis - 1 ? axis : dim + 1);
+                    ComputeNorm(indices, dim + 1);
                 }
             }
         }
 
-        var startIndices = new int[inputShape.Length];
-        if (axis == 0)
-        {
-            ComputeNorm(startIndices, 0);
-        }
-        else
-        {
-            ComputeNorm(startIndices, 0);
-        }
+        ComputeNorm(new int[inputShape.Length], 0);
 
         void BackwardFunction(Tensor<T> gradient)
         {
@@ -7820,7 +7862,7 @@ public static class TensorOperations<T>
                 // Gradient: ∂||x||/∂x = x / ||x||
                 void ComputeGradient(int[] indices, int dim)
                 {
-                    if (dim == axis)
+                    if (dim == inputShape.Length)
                     {
                         var outIndices = keepDims
                             ? indices.Select((idx, i) => i == axis ? 0 : idx).ToArray()
@@ -7835,18 +7877,24 @@ public static class TensorOperations<T>
                             T val = a.Value[indices];
                             gradA[indices] = numOps.Multiply(gradNorm, numOps.Divide(val, norm));
                         }
+                        return;
                     }
-                    else if (dim < inputShape.Length)
+
+                    if (dim == axis)
+                    {
+                        ComputeGradient(indices, dim + 1);
+                    }
+                    else
                     {
                         for (int i = 0; i < inputShape[dim]; i++)
                         {
                             indices[dim] = i;
-                            ComputeGradient(indices, dim == axis - 1 ? axis : dim + 1);
+                            ComputeGradient(indices, dim + 1);
                         }
                     }
                 }
 
-                ComputeGradient(new int[inputShape.Length], axis == 0 ? 0 : 0);
+                ComputeGradient(new int[inputShape.Length], 0);
 
                 if (a.Gradient == null)
                 {
@@ -8738,7 +8786,7 @@ public static class TensorOperations<T>
             // Surrogate gradient: sigmoid derivative scaled by beta
             // d_surrogate = beta * sigmoid(beta * (v - threshold)) * (1 - sigmoid(beta * (v - threshold)))
             var surrogateGrad = new Tensor<T>(shape);
-            for (int i = 0; i < shape.Length; i++)
+            for (int i = 0; i < surrogateGrad.Length; i++)
             {
                 var x = numOps.Multiply(
                     numOps.FromDouble(surrogateBeta),

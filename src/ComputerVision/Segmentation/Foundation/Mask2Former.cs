@@ -263,7 +263,15 @@ public class Mask2Former<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode.");
 
-        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     #endregion

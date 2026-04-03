@@ -247,7 +247,15 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
             throw new InvalidOperationException(
                 "Training is not supported in ONNX mode. Use the native mode constructor for training.");
 
-        TrainWithTape(input, expectedOutput);
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     #endregion
