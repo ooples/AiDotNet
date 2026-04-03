@@ -138,5 +138,28 @@ namespace AiDotNet.PhysicsInformed.PDEs
         {
             return new PDEResidualGradient<T>(OutputDimension, InputDimension);
         }
+
+        /// <summary>
+        /// Computes the PDE residual using tape-differentiable engine operations.
+        /// Override this method to enable tape-based autodiff training for this PDE.
+        /// </summary>
+        /// <param name="prediction">Network output at collocation points [N, OutputDim].</param>
+        /// <param name="coordinates">Spatial/temporal coordinates [N, InputDim].</param>
+        /// <param name="engine">Engine providing tape-tracked tensor operations.</param>
+        /// <returns>Residual tensor that should be minimized toward zero.</returns>
+        /// <remarks>
+        /// Implementations should use engine ops (TensorAdd, TensorMultiply, etc.) so gradients
+        /// flow automatically via the gradient tape. For spatial derivatives (du/dx), use nested
+        /// GradientTape inside the implementation.
+        /// </remarks>
+        public virtual Tensor<T> ComputeTapeResidual(
+            Tensor<T> prediction,
+            Tensor<T> coordinates,
+            AiDotNet.Tensors.Engines.IEngine engine)
+        {
+            throw new NotImplementedException(
+                $"PDE '{Name}' does not implement tape-differentiable residual. " +
+                "Override ComputeTapeResidual using engine ops for autodiff support.");
+        }
     }
 }

@@ -587,11 +587,47 @@ namespace AiDotNet.PhysicsInformed
             return (Vector<T>)Engine.Multiply(Engine.Subtract(predicted, actual), scale);
         }
 
+        /// <summary>
+        /// Optional collocation coordinates for PDE residual evaluation.
+        /// Set before calling ComputeTapeLoss if PDE residual loss is needed.
+        /// </summary>
+        private Tensor<T>? _collocationCoordinates;
+
+        /// <summary>
+        /// Sets the collocation points where the PDE residual will be evaluated.
+        /// </summary>
+        public void SetCollocationCoordinates(Tensor<T> coordinates)
+        {
+            _collocationCoordinates = coordinates ?? throw new ArgumentNullException(nameof(coordinates));
+        }
+
         /// <inheritdoc />
+        /// <remarks>
+        /// Computes composite PINN loss:
+        /// L = data_weight * MSE(predicted, target)
+        ///   + pde_weight * mean(residual^2)  (if PDE spec and collocation points provided)
+        /// The PDE residual is computed via PDESpecificationBase.ComputeTapeResidual using engine ops.
+        /// </remarks>
         public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
         {
-            throw new NotImplementedException(
-                "PhysicsInformed ComputeTapeLoss requires tape-aware PDE evaluation. See task #75.");
+            // Data loss: MSE(predicted, target)
+            var diff = Engine.TensorSubtract(predicted, target);
+            var sq = Engine.TensorMultiply(diff, diff);
+            var allAxes = Enumerable.Range(0, sq.Shape.Length).ToArray();
+            var dataLoss = Engine.ReduceMean(sq, allAxes, keepDims: false);
+            var totalLoss = Engine.TensorMultiplyScalar(dataLoss, _dataWeight);
+
+            // PDE residual loss (if spec and coordinates provided)
+            if (_pdeSpecification is PDEs.PDESpecificationBase<T> tapeSpec && _collocationCoordinates is not null)
+            {
+                var residual = tapeSpec.ComputeTapeResidual(predicted, _collocationCoordinates, Engine);
+                var resSq = Engine.TensorMultiply(residual, residual);
+                var resAxes = Enumerable.Range(0, resSq.Shape.Length).ToArray();
+                var pdeLoss = Engine.ReduceMean(resSq, resAxes, keepDims: false);
+                totalLoss = Engine.TensorAdd(totalLoss, Engine.TensorMultiplyScalar(pdeLoss, _pdeWeight));
+            }
+
+            return totalLoss;
         }
     }
 
