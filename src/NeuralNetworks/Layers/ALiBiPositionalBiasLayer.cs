@@ -47,7 +47,7 @@ internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
     /// Pre-computed per-head slopes: slope_h = 2^(-8/numHeads * (h+1)).
     /// Shape: [numHeads].
     /// </summary>
-    private readonly T[] _slopes;
+    private readonly Tensor<T> _slopes;
 
     /// <summary>
     /// Pre-computed bias tensor [numHeads, maxSequenceLength, maxSequenceLength].
@@ -88,12 +88,14 @@ internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
         _maxSequenceLength = maxSequenceLength;
 
         // Compute per-head slopes: slope_h = 2^(-8/numHeads * (h+1))
-        _slopes = new T[numHeads];
+        var slopeData = new T[numHeads];
         for (int h = 0; h < numHeads; h++)
         {
             double exponent = -8.0 / numHeads * (h + 1);
-            _slopes[h] = NumOps.FromDouble(Math.Pow(2.0, exponent));
+            slopeData[h] = NumOps.FromDouble(Math.Pow(2.0, exponent));
         }
+        _slopes = new Tensor<T>(slopeData, new[] { numHeads });
+        RegisterBuffer(_slopes, nameof(_slopes));
     }
 
     /// <summary>
@@ -173,7 +175,7 @@ internal class ALiBiPositionalBiasLayer<T> : LayerBase<T>
     /// Gets the per-head slope values.
     /// </summary>
     /// <returns>Array of slopes, one per head.</returns>
-    public T[] GetSlopes() => (T[])_slopes.Clone();
+    public T[] GetSlopes() => _slopes.GetDataArray();
 
     /// <summary>
     /// Forward pass adds ALiBi bias to the input attention scores tensor.
