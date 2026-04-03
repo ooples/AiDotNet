@@ -48,7 +48,7 @@ public class INFLODetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;
     private Matrix<T>? _trainingData;
-    private T[]? _localDensities;
+    private Vector<T>? _localDensities;
     private List<int>[]? _knnLists;
     private List<int>[]? _rknnLists;
     private HashSet<int>[]? _influenceSpaces;
@@ -238,9 +238,9 @@ public class INFLODetector<T> : AnomalyDetectorBase<T>
         }
     }
 
-    private T[] ComputeLocalDensities(Matrix<T> X)
+    private Vector<T> ComputeLocalDensities(Matrix<T> X)
     {
-        var densities = new T[X.Rows];
+        var densities = new Vector<T>(X.Rows);
 
         for (int i = 0; i < X.Rows; i++)
         {

@@ -26,7 +26,7 @@ public class COFDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly int _k;
     private Matrix<T>? _trainingData;
-    private T[]? _chainingDistances;
+    private Vector<T>? _chainingDistances;
 
     /// <summary>
     /// Gets the number of neighbors used for detection.
@@ -113,9 +113,9 @@ public class COFDetector<T> : AnomalyDetectorBase<T>
         return scores;
     }
 
-    private T[] ComputeChainingDistances(Matrix<T> X)
+    private Vector<T> ComputeChainingDistances(Matrix<T> X)
     {
-        var chainDist = new T[X.Rows];
+        var chainDist = new Vector<T>(X.Rows);
         var distanceMatrix = ComputeDistanceMatrix(X, X);
 
         for (int i = 0; i < X.Rows; i++)
