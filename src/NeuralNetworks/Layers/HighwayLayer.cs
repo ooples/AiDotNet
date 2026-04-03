@@ -582,7 +582,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable.");
 
-        int size = input.Length;
+        int size = input.ElementCount;
 
         // Transform path: transformLinear = input @ transformWeights + transformBias
         var transformPreActivation = gpuEngine.FusedLinearGpu(input, _transformWeights, _transformBias, FusedActivationType.None);
@@ -596,7 +596,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
         else if (_vectorTransformActivation != null)
         {
-            var cpuTransform = transformPreActivation;
+            var cpuTransform = transformPreActivation.ToTensor();
             var cpuActivated = _vectorTransformActivation.Activate(cpuTransform);
             transformOutput = gpuEngine.UploadToGpu(cpuActivated, GpuTensorRole.Activation);
         }
@@ -605,7 +605,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Apply default tanh
             var tanhBuffer = backend.AllocateBuffer(size);
             backend.Tanh(transformPreActivation.Buffer, tanhBuffer, size);
-            transformOutput = Tensor<T>.FromGpuBuffer(backend, tanhBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+            transformOutput = new GpuTensor<T>(backend, tanhBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
         }
 
         // Gate path: gateLinear = input @ gateWeights + gateBias
@@ -619,7 +619,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
         else if (_vectorGateActivation != null)
         {
-            var cpuGate = gatePreActivation;
+            var cpuGate = gatePreActivation.ToTensor();
             var cpuGateActivated = _vectorGateActivation.Activate(cpuGate);
             gateOutput = gpuEngine.UploadToGpu(cpuGateActivated, GpuTensorRole.Activation);
         }
@@ -628,7 +628,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Apply default sigmoid
             var sigmoidBuffer = backend.AllocateBuffer(size);
             backend.Sigmoid(gatePreActivation.Buffer, sigmoidBuffer, size);
-            gateOutput = Tensor<T>.FromGpuBuffer(backend, sigmoidBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+            gateOutput = new GpuTensor<T>(backend, sigmoidBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
         }
 
         // Highway output: output = gate * (transform - input) + input
@@ -660,14 +660,14 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _gpuInputShape = input.Shape.ToArray();
 
             // Also cache CPU tensors for CPU backward compatibility
-            _lastInput = input;
-            _lastTransformOutput = transformOutput;
-            _lastGateOutput = gateOutput;
-            _lastTransformPreActivation = transformPreActivation;
-            _lastGatePreActivation = gatePreActivation;
+            _lastInput = input.ToTensor();
+            _lastTransformOutput = transformOutput.ToTensor();
+            _lastGateOutput = gateOutput.ToTensor();
+            _lastTransformPreActivation = transformPreActivation.ToTensor();
+            _lastGatePreActivation = gatePreActivation.ToTensor();
         }
 
-        return Tensor<T>.FromGpuBuffer(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -238,14 +238,14 @@ public class ExpertLayer<T> : LayerBase<T>
             else
             {
                 // Fall back to CPU for this layer
-                var cpuInput = output;
+                var cpuInput = output.ToTensor();
                 var cpuOutput = layer.Forward(cpuInput);
                 output = gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
             }
         }
 
         // Store pre-activation output for backpropagation
-        _lastPreActivationOutput = output;
+        _lastPreActivationOutput = output.ToTensor();
 
         // Apply the expert's activation function if specified
         if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
@@ -259,7 +259,7 @@ public class ExpertLayer<T> : LayerBase<T>
             else
             {
                 // CPU fallback for unsupported activations
-                var cpuOutput = output;
+                var cpuOutput = output.ToTensor();
                 var activated = ApplyActivation(cpuOutput);
                 output = gpuEngine.UploadToGpu(activated, GpuTensorRole.Activation);
             }

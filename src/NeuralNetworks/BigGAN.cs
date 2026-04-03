@@ -996,8 +996,8 @@ public class BigGAN<T> : NeuralNetworkBase<T>
         public (TLoss Loss, Tensor<TLoss> Gradient) CalculateLossAndGradientGpu(Tensor<TLoss> predicted, Tensor<TLoss> actual)
         {
             // Fall back to CPU for now
-            var predictedCpu = predicted;
-            var actualCpu = actual;
+            var predictedCpu = predicted.ToTensor();
+            var actualCpu = actual.ToTensor();
 
             var loss = CalculateLoss(predictedCpu.ToVector(), actualCpu.ToVector());
             var gradientCpu = CalculateDerivative(predictedCpu.ToVector(), actualCpu.ToVector());
@@ -1007,7 +1007,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
 
             var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
             var backend = engine?.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
-            var gradientGpu = Tensor<TLoss>.FromGpuBuffer(backend, gradientTensor, GpuTensorRole.Gradient);
+            var gradientGpu = new GpuTensor<TLoss>(backend, gradientTensor, GpuTensorRole.Gradient);
 
             return (loss, gradientGpu);
         }

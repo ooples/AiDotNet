@@ -235,53 +235,53 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
     /// <summary>
     /// GPU weight tensor.
     /// </summary>
-    private Tensor<T>? _gpuWeights;
+    private GpuTensor<T>? _gpuWeights;
 
     /// <summary>
     /// GPU bias tensor.
     /// </summary>
-    private Tensor<T>? _gpuBiases;
+    private GpuTensor<T>? _gpuBiases;
 
     /// <summary>
     /// GPU diffusion time tensor.
     /// </summary>
-    private Tensor<T>? _gpuDiffusionTimes;
+    private GpuTensor<T>? _gpuDiffusionTimes;
 
     /// <summary>
     /// GPU weight gradients.
     /// </summary>
-    private Tensor<T>? _gpuWeightsGradient;
+    private GpuTensor<T>? _gpuWeightsGradient;
 
     /// <summary>
     /// GPU bias gradients.
     /// </summary>
-    private Tensor<T>? _gpuBiasesGradient;
+    private GpuTensor<T>? _gpuBiasesGradient;
 
     /// <summary>
     /// GPU diffusion time gradients.
     /// </summary>
-    private Tensor<T>? _gpuDiffusionTimesGradient;
+    private GpuTensor<T>? _gpuDiffusionTimesGradient;
 
     /// <summary>
     /// GPU optimizer state for weights.
     /// </summary>
-    private Tensor<T>? _gpuWeightsVelocity;
-    private Tensor<T>? _gpuWeightsM;
-    private Tensor<T>? _gpuWeightsV;
+    private GpuTensor<T>? _gpuWeightsVelocity;
+    private GpuTensor<T>? _gpuWeightsM;
+    private GpuTensor<T>? _gpuWeightsV;
 
     /// <summary>
     /// GPU optimizer state for biases.
     /// </summary>
-    private Tensor<T>? _gpuBiasesVelocity;
-    private Tensor<T>? _gpuBiasesM;
-    private Tensor<T>? _gpuBiasesV;
+    private GpuTensor<T>? _gpuBiasesVelocity;
+    private GpuTensor<T>? _gpuBiasesM;
+    private GpuTensor<T>? _gpuBiasesV;
 
     /// <summary>
     /// GPU optimizer state for diffusion times.
     /// </summary>
-    private Tensor<T>? _gpuDiffusionTimesVelocity;
-    private Tensor<T>? _gpuDiffusionTimesM;
-    private Tensor<T>? _gpuDiffusionTimesV;
+    private GpuTensor<T>? _gpuDiffusionTimesVelocity;
+    private GpuTensor<T>? _gpuDiffusionTimesM;
+    private GpuTensor<T>? _gpuDiffusionTimesV;
 
     #endregion
 
@@ -1062,7 +1062,7 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
             if (IsTrainingMode)
             {
                 _gpuDiffusedFeatures?.Dispose();
-                _gpuDiffusedFeatures = Tensor<T>.FromGpuBuffer(backend, diffusedBuffer,
+                _gpuDiffusedFeatures = new GpuTensor<T>(backend, diffusedBuffer,
                     [batchSize * numVertices, diffusedSize], GpuTensorRole.Activation, ownsBuffer: true);
                 diffusedRetained = true;
             }
@@ -1111,12 +1111,12 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
             if (IsTrainingMode)
             {
                 _gpuPreActivation?.Dispose();
-                _gpuPreActivation = Tensor<T>.FromGpuBuffer(backend, preActivationBuffer,
+                _gpuPreActivation = new GpuTensor<T>(backend, preActivationBuffer,
                     [batchSize * numVertices, OutputChannels], GpuTensorRole.Activation, ownsBuffer: true);
                 preActivationRetained = true;
             }
 
-            var outputTensor = Tensor<T>.FromGpuBuffer(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+            var outputTensor = new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
             if (IsTrainingMode)
                 _gpuOutput = outputTensor;
 
@@ -1156,9 +1156,9 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
         if (_gpuWeightsGradient == null || _gpuBiasesGradient == null || _gpuDiffusionTimesGradient == null)
             throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
 
-        _gpuWeights ??= Tensor<T>.FromGpuBuffer(backend, _weights, GpuTensorRole.Weight);
-        _gpuBiases ??= Tensor<T>.FromGpuBuffer(backend, _biases, GpuTensorRole.Bias);
-        _gpuDiffusionTimes ??= Tensor<T>.FromGpuBuffer(backend, DiffusionTimes, [NumTimeScales], GpuTensorRole.Weight);
+        _gpuWeights ??= new GpuTensor<T>(backend, _weights, GpuTensorRole.Weight);
+        _gpuBiases ??= new GpuTensor<T>(backend, _biases, GpuTensorRole.Bias);
+        _gpuDiffusionTimes ??= new GpuTensor<T>(backend, DiffusionTimes, [NumTimeScales], GpuTensorRole.Weight);
 
         EnsureDiffusionConvOptimizerState(backend, config.OptimizerType);
 
@@ -1185,10 +1185,10 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
 
         backend.Clamp(_gpuDiffusionTimes.Buffer, _gpuDiffusionTimes.Buffer, 1e-6f, float.MaxValue, NumTimeScales);
 
-        _weights = _gpuWeights;
-        _biases = _gpuBiases;
+        _weights = _gpuWeights.ToTensor();
+        _biases = _gpuBiases.ToTensor();
 
-        var updatedTimes = _gpuDiffusionTimes.Data.Span;
+        var updatedTimes = _gpuDiffusionTimes.ToTensor().Data.Span;
         for (int t = 0; t < NumTimeScales; t++)
         {
             DiffusionTimes[t] = updatedTimes[t];
@@ -1206,27 +1206,27 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
             case GpuOptimizerType.Sgd:
             case GpuOptimizerType.Nag:
             case GpuOptimizerType.Lars:
-                _gpuWeightsVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasesVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuDiffusionTimesVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([timeSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasesVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuDiffusionTimesVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([timeSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
 
             case GpuOptimizerType.Adam:
             case GpuOptimizerType.AdamW:
             case GpuOptimizerType.Lamb:
-                _gpuWeightsM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasesM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasesV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuDiffusionTimesM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([timeSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuDiffusionTimesV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([timeSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasesM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasesV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuDiffusionTimesM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([timeSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuDiffusionTimesV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([timeSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
 
             case GpuOptimizerType.RmsProp:
             case GpuOptimizerType.Adagrad:
-                _gpuWeightsVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasesVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuDiffusionTimesVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([timeSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasesVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuDiffusionTimesVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([timeSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
         }
     }

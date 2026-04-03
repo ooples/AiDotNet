@@ -548,7 +548,7 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
         _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), [numEdges, OutputChannels]);
         _lastInput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(inputData), shape);
 
-        return Tensor<T>.FromGpuBuffer(backend, outputBuffer, [numEdges, OutputChannels], GpuTensorRole.Activation, ownsBuffer: true);
+        return new GpuTensor<T>(backend, outputBuffer, [numEdges, OutputChannels], GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     #endregion

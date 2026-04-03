@@ -94,40 +94,40 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableC
     #region GPU Weight Storage Fields
 
     // Main conv weights - GPU tensors for GPU-resident training
-    private Tensor<T>? _gpuWeights;
-    private Tensor<T>? _gpuBias;
-    private Tensor<T>? _gpuWeightGradient;
-    private Tensor<T>? _gpuBiasGradient;
-    private Tensor<T>? _gpuWeightVelocity;
-    private Tensor<T>? _gpuBiasVelocity;
-    private Tensor<T>? _gpuWeightM;
-    private Tensor<T>? _gpuWeightV;
-    private Tensor<T>? _gpuBiasM;
-    private Tensor<T>? _gpuBiasV;
+    private GpuTensor<T>? _gpuWeights;
+    private GpuTensor<T>? _gpuBias;
+    private GpuTensor<T>? _gpuWeightGradient;
+    private GpuTensor<T>? _gpuBiasGradient;
+    private GpuTensor<T>? _gpuWeightVelocity;
+    private GpuTensor<T>? _gpuBiasVelocity;
+    private GpuTensor<T>? _gpuWeightM;
+    private GpuTensor<T>? _gpuWeightV;
+    private GpuTensor<T>? _gpuBiasM;
+    private GpuTensor<T>? _gpuBiasV;
 
     // Offset weights - GPU tensors
-    private Tensor<T>? _gpuOffsetWeights;
-    private Tensor<T>? _gpuOffsetBias;
-    private Tensor<T>? _gpuOffsetWeightGradient;
-    private Tensor<T>? _gpuOffsetBiasGradient;
-    private Tensor<T>? _gpuOffsetWeightVelocity;
-    private Tensor<T>? _gpuOffsetBiasVelocity;
-    private Tensor<T>? _gpuOffsetWeightM;
-    private Tensor<T>? _gpuOffsetWeightV;
-    private Tensor<T>? _gpuOffsetBiasM;
-    private Tensor<T>? _gpuOffsetBiasV;
+    private GpuTensor<T>? _gpuOffsetWeights;
+    private GpuTensor<T>? _gpuOffsetBias;
+    private GpuTensor<T>? _gpuOffsetWeightGradient;
+    private GpuTensor<T>? _gpuOffsetBiasGradient;
+    private GpuTensor<T>? _gpuOffsetWeightVelocity;
+    private GpuTensor<T>? _gpuOffsetBiasVelocity;
+    private GpuTensor<T>? _gpuOffsetWeightM;
+    private GpuTensor<T>? _gpuOffsetWeightV;
+    private GpuTensor<T>? _gpuOffsetBiasM;
+    private GpuTensor<T>? _gpuOffsetBiasV;
 
     // Mask weights - GPU tensors (only used if _useModulation)
-    private Tensor<T>? _gpuMaskWeights;
-    private Tensor<T>? _gpuMaskBias;
-    private Tensor<T>? _gpuMaskWeightGradient;
-    private Tensor<T>? _gpuMaskBiasGradient;
-    private Tensor<T>? _gpuMaskWeightVelocity;
-    private Tensor<T>? _gpuMaskBiasVelocity;
-    private Tensor<T>? _gpuMaskWeightM;
-    private Tensor<T>? _gpuMaskWeightV;
-    private Tensor<T>? _gpuMaskBiasM;
-    private Tensor<T>? _gpuMaskBiasV;
+    private GpuTensor<T>? _gpuMaskWeights;
+    private GpuTensor<T>? _gpuMaskBias;
+    private GpuTensor<T>? _gpuMaskWeightGradient;
+    private GpuTensor<T>? _gpuMaskBiasGradient;
+    private GpuTensor<T>? _gpuMaskWeightVelocity;
+    private GpuTensor<T>? _gpuMaskBiasVelocity;
+    private GpuTensor<T>? _gpuMaskWeightM;
+    private GpuTensor<T>? _gpuMaskWeightV;
+    private GpuTensor<T>? _gpuMaskBiasM;
+    private GpuTensor<T>? _gpuMaskBiasV;
 
     #endregion
 
@@ -347,7 +347,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableC
             _padding, _padding,    // padH, padW
             1, 1,                  // dilationH, dilationW
             FusedActivationType.None);
-        var offsets = offsetsGpu;
+        var offsets = offsetsGpu.ToTensor();
 
         // Predict modulation mask if using DCNv2
         Tensor<T>? mask = null;
@@ -363,7 +363,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableC
                 _padding, _padding,    // padH, padW
                 1, 1,                  // dilationH, dilationW
                 FusedActivationType.Sigmoid);
-            mask = maskGpu;
+            mask = maskGpu.ToTensor();
         }
 
         // Store for potential backward pass
@@ -889,14 +889,14 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableC
             throw new InvalidOperationException("GPU backend unavailable.");
 
         // Ensure GPU weights are initialized
-        _gpuWeights ??= Tensor<T>.FromGpuBuffer(backend, _weights, GpuTensorRole.Weight);
-        _gpuBias ??= Tensor<T>.FromGpuBuffer(backend, _bias, GpuTensorRole.Bias);
-        _gpuOffsetWeights ??= Tensor<T>.FromGpuBuffer(backend, _offsetWeights, GpuTensorRole.Weight);
-        _gpuOffsetBias ??= Tensor<T>.FromGpuBuffer(backend, _offsetBias, GpuTensorRole.Bias);
+        _gpuWeights ??= new GpuTensor<T>(backend, _weights, GpuTensorRole.Weight);
+        _gpuBias ??= new GpuTensor<T>(backend, _bias, GpuTensorRole.Bias);
+        _gpuOffsetWeights ??= new GpuTensor<T>(backend, _offsetWeights, GpuTensorRole.Weight);
+        _gpuOffsetBias ??= new GpuTensor<T>(backend, _offsetBias, GpuTensorRole.Bias);
         if (_useModulation && _maskWeights != null && _maskBias != null)
         {
-            _gpuMaskWeights ??= Tensor<T>.FromGpuBuffer(backend, _maskWeights, GpuTensorRole.Weight);
-            _gpuMaskBias ??= Tensor<T>.FromGpuBuffer(backend, _maskBias, GpuTensorRole.Bias);
+            _gpuMaskWeights ??= new GpuTensor<T>(backend, _maskWeights, GpuTensorRole.Weight);
+            _gpuMaskBias ??= new GpuTensor<T>(backend, _maskBias, GpuTensorRole.Bias);
         }
 
         // Check for gradients
@@ -923,15 +923,15 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableC
         }
 
         // Sync back to CPU tensors for compatibility
-        _weights = _gpuWeights;
-        _bias = _gpuBias;
-        _offsetWeights = _gpuOffsetWeights;
-        _offsetBias = _gpuOffsetBias;
+        _weights = _gpuWeights.ToTensor();
+        _bias = _gpuBias.ToTensor();
+        _offsetWeights = _gpuOffsetWeights.ToTensor();
+        _offsetBias = _gpuOffsetBias.ToTensor();
         if (_useModulation && _gpuMaskWeights != null && _gpuMaskBias != null &&
             _maskWeights != null && _maskBias != null)
         {
-            _maskWeights = _gpuMaskWeights;
-            _maskBias = _gpuMaskBias;
+            _maskWeights = _gpuMaskWeights.ToTensor();
+            _maskBias = _gpuMaskBias.ToTensor();
         }
     }
 
@@ -953,14 +953,14 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableC
             case GpuOptimizerType.Nag:
             case GpuOptimizerType.Lars:
                 // Velocity buffers
-                _gpuWeightVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuOffsetWeightVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([offsetWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuOffsetBiasVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([offsetBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuOffsetWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([offsetWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuOffsetBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([offsetBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 if (_useModulation && maskWeightSize > 0 && maskBiasSize > 0)
                 {
-                    _gpuMaskWeightVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([maskWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                    _gpuMaskBiasVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([maskBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                    _gpuMaskWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([maskWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                    _gpuMaskBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([maskBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 }
                 break;
 
@@ -968,34 +968,34 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableC
             case GpuOptimizerType.AdamW:
             case GpuOptimizerType.Lamb:
                 // M and V buffers for Adam-family
-                _gpuWeightM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuOffsetWeightM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([offsetWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuOffsetWeightV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([offsetWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuOffsetBiasM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([offsetBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuOffsetBiasV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([offsetBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuOffsetWeightM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([offsetWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuOffsetWeightV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([offsetWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuOffsetBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([offsetBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuOffsetBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([offsetBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 if (_useModulation && maskWeightSize > 0 && maskBiasSize > 0)
                 {
-                    _gpuMaskWeightM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([maskWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                    _gpuMaskWeightV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([maskWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                    _gpuMaskBiasM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([maskBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                    _gpuMaskBiasV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([maskBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                    _gpuMaskWeightM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([maskWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                    _gpuMaskWeightV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([maskWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                    _gpuMaskBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([maskBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                    _gpuMaskBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([maskBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 }
                 break;
 
             case GpuOptimizerType.RmsProp:
             case GpuOptimizerType.Adagrad:
                 // SquaredAvg/AccumulatedGrad buffers (reusing Velocity for these)
-                _gpuWeightVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuOffsetWeightVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([offsetWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuOffsetBiasVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([offsetBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuOffsetWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([offsetWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuOffsetBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([offsetBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 if (_useModulation && maskWeightSize > 0 && maskBiasSize > 0)
                 {
-                    _gpuMaskWeightVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([maskWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                    _gpuMaskBiasVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([maskBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                    _gpuMaskWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([maskWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                    _gpuMaskBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([maskBiasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 }
                 break;
         }

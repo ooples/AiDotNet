@@ -188,9 +188,9 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
 
         if (IsTrainingMode)
         {
-            _lastInput = input;
-            _lastSinusoidalEmbed = embedding;
-            _lastHidden = hidden;
+            _lastInput = input.ToTensor();
+            _lastSinusoidalEmbed = embedding.ToTensor();
+            _lastHidden = hidden.ToTensor();
 
             // Cache GPU tensors for backward pass
             _gpuInputShape = input.Shape.ToArray();

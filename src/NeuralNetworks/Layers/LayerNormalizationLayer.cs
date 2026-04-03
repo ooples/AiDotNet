@@ -305,7 +305,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
             _gpuLastInput = input;
             _gpuSaveMean = saveMean;
             _gpuSaveInvVar = saveInvVar;
-            _lastInput = input;
+            _lastInput = input.ToTensor();
             _lastMean = saveMean;
             _lastVariance = saveInvVar;
         }

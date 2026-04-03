@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -178,8 +178,8 @@ public class TimeDistributedLayer<T> : LayerBase<T>
 
         if (IsTrainingMode)
         {
-            _lastInput = input;
-            _lastOutput = output;
+            _lastInput = input.ToTensor();
+            _lastOutput = output.ToTensor();
             _originalInputShape = input.Shape.ToArray();
         }
 

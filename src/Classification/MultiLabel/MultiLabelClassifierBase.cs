@@ -490,8 +490,8 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
 
         public (TLoss Loss, Tensor<TLoss> Gradient) CalculateLossAndGradientGpu(Tensor<TLoss> predicted, Tensor<TLoss> actual)
         {
-            var predictedCpu = predicted;
-            var actualCpu = actual;
+            var predictedCpu = predicted.ToTensor();
+            var actualCpu = actual.ToTensor();
             var predictedVector = new Vector<TLoss>(predictedCpu.Data.ToArray());
             var actualVector = new Vector<TLoss>(actualCpu.Data.ToArray());
 
@@ -501,7 +501,7 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
 
             var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
             var backend = engine?.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
-            var gradientGpu = Tensor<TLoss>.FromGpuBuffer(backend, gradientTensor, GpuTensorRole.Gradient);
+            var gradientGpu = new GpuTensor<TLoss>(backend, gradientTensor, GpuTensorRole.Gradient);
 
             return (loss, gradientGpu);
         }

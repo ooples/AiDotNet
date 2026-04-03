@@ -438,8 +438,8 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
             _gpuInputShape = input.Shape.ToArray();
 
             // Also cache CPU tensors for fallback backward pass
-            Input = input;
-            Output = output;
+            Input = input.ToTensor();
+            Output = output.ToTensor();
         }
 
         return output;

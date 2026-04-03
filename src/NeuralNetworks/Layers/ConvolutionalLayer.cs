@@ -1096,8 +1096,8 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             _gpuInputShape4D = input4D.Shape.ToArray();
 
             // Also download to CPU for hybrid CPU/GPU backward compatibility
-            _lastInput = input4D;
-            _lastOutput = result;
+            _lastInput = input4D.ToTensor();
+            _lastOutput = result.ToTensor();
         }
 
         // Restore original shape if needed
@@ -1131,7 +1131,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     {
         // For convolutional layers, we need to reshape to 2D for activation backward, then reshape back
         // Most activations are element-wise, so we can flatten the tensor
-        int totalElements = gradOutput.Length;
+        int totalElements = gradOutput.ElementCount;
         var flat2DShape = new[] { totalElements, 1 };
         var flatGrad = gradOutput.CreateView(0, flat2DShape);
         var lastOutputGpu = _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu has not been initialized.");

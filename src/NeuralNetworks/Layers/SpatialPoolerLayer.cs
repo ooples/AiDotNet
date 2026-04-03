@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -429,9 +429,9 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         var output = maskedActivations.CreateView(0, [ColumnCount]);
 
         // Store CPU copies for Learn() which needs binary mask and last output
-        LastOutput = output;
-        _lastBinaryOutput = outputMask.Reshape([ColumnCount]);
-        var cpuInput = input;
+        LastOutput = output.ToTensor();
+        _lastBinaryOutput = outputMask.ToTensor().Reshape([ColumnCount]);
+        var cpuInput = input.ToTensor();
         LastInput = cpuInput.Shape.Length == 1
             ? cpuInput
             : cpuInput.Reshape([cpuInput.Length]);

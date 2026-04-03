@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -306,7 +306,7 @@ public class SplitLayer<T> : LayerBase<T>
         // Cache for backward pass during training
         if (IsTrainingMode)
         {
-            _lastInput = processInput;
+            _lastInput = processInput.ToTensor();
             _originalInputShape = shape;
         }
 

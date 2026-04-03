@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -280,7 +280,7 @@ public class MeasurementLayer<T> : LayerBase<T>
             outputShape[input.Shape.Length - 1] = stateSize;
         }
 
-        return Tensor<T>.FromGpuBuffer(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
     /// <summary>
     /// Updates the parameters of the measurement layer using the calculated gradients.

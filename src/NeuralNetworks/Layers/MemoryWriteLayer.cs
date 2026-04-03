@@ -640,7 +640,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             finalOutputBuffer = outputBuffer;
         }
 
-        return Tensor<T>.FromGpuBuffer(backend, finalOutputBuffer, [batchSize, memoryDim], GpuTensorRole.Activation, ownsBuffer: true);
+        return new GpuTensor<T>(backend, finalOutputBuffer, [batchSize, memoryDim], GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -269,7 +269,7 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         scaledBuffer.Dispose();
 
-        return Tensor<T>.FromGpuBuffer(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     #endregion

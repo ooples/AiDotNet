@@ -675,8 +675,8 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     private Tensor<T> ComputeActivationGradientGpuFallback(DirectGpuTensorEngine gpuEngine, Tensor<T> output, Tensor<T> gradOutput)
     {
         // Fallback: download, compute on CPU, upload
-        var outputData = output;
-        var gradOutputData = gradOutput;
+        var outputData = output.ToTensor();
+        var gradOutputData = gradOutput.ToTensor();
         var activationGradient = ApplyActivationDerivative(outputData, gradOutputData);
 
         return gpuEngine.UploadToGpu(activationGradient, GpuTensorRole.Intermediate);

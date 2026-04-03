@@ -294,59 +294,59 @@ public partial class GRULayer<T> : LayerBase<T>
     #region GPU Training Fields
 
     // GPU-resident weight tensors
-    private Tensor<T>? _gpuWz;
-    private Tensor<T>? _gpuWr;
-    private Tensor<T>? _gpuWh;
-    private Tensor<T>? _gpuUz;
-    private Tensor<T>? _gpuUr;
-    private Tensor<T>? _gpuUh;
-    private Tensor<T>? _gpuBz;
-    private Tensor<T>? _gpuBr;
-    private Tensor<T>? _gpuBh;
+    private GpuTensor<T>? _gpuWz;
+    private GpuTensor<T>? _gpuWr;
+    private GpuTensor<T>? _gpuWh;
+    private GpuTensor<T>? _gpuUz;
+    private GpuTensor<T>? _gpuUr;
+    private GpuTensor<T>? _gpuUh;
+    private GpuTensor<T>? _gpuBz;
+    private GpuTensor<T>? _gpuBr;
+    private GpuTensor<T>? _gpuBh;
 
     // GPU-resident gradient tensors
-    private Tensor<T>? _gpuWzGradient;
-    private Tensor<T>? _gpuWrGradient;
-    private Tensor<T>? _gpuWhGradient;
-    private Tensor<T>? _gpuUzGradient;
-    private Tensor<T>? _gpuUrGradient;
-    private Tensor<T>? _gpuUhGradient;
-    private Tensor<T>? _gpuBzGradient;
-    private Tensor<T>? _gpuBrGradient;
-    private Tensor<T>? _gpuBhGradient;
+    private GpuTensor<T>? _gpuWzGradient;
+    private GpuTensor<T>? _gpuWrGradient;
+    private GpuTensor<T>? _gpuWhGradient;
+    private GpuTensor<T>? _gpuUzGradient;
+    private GpuTensor<T>? _gpuUrGradient;
+    private GpuTensor<T>? _gpuUhGradient;
+    private GpuTensor<T>? _gpuBzGradient;
+    private GpuTensor<T>? _gpuBrGradient;
+    private GpuTensor<T>? _gpuBhGradient;
 
     // GPU-resident optimizer state tensors (SGD/NAG/LARS velocity)
-    private Tensor<T>? _gpuWzVelocity;
-    private Tensor<T>? _gpuWrVelocity;
-    private Tensor<T>? _gpuWhVelocity;
-    private Tensor<T>? _gpuUzVelocity;
-    private Tensor<T>? _gpuUrVelocity;
-    private Tensor<T>? _gpuUhVelocity;
-    private Tensor<T>? _gpuBzVelocity;
-    private Tensor<T>? _gpuBrVelocity;
-    private Tensor<T>? _gpuBhVelocity;
+    private GpuTensor<T>? _gpuWzVelocity;
+    private GpuTensor<T>? _gpuWrVelocity;
+    private GpuTensor<T>? _gpuWhVelocity;
+    private GpuTensor<T>? _gpuUzVelocity;
+    private GpuTensor<T>? _gpuUrVelocity;
+    private GpuTensor<T>? _gpuUhVelocity;
+    private GpuTensor<T>? _gpuBzVelocity;
+    private GpuTensor<T>? _gpuBrVelocity;
+    private GpuTensor<T>? _gpuBhVelocity;
 
     // Adam/AdamW M (first moment) tensors
-    private Tensor<T>? _gpuWzM;
-    private Tensor<T>? _gpuWrM;
-    private Tensor<T>? _gpuWhM;
-    private Tensor<T>? _gpuUzM;
-    private Tensor<T>? _gpuUrM;
-    private Tensor<T>? _gpuUhM;
-    private Tensor<T>? _gpuBzM;
-    private Tensor<T>? _gpuBrM;
-    private Tensor<T>? _gpuBhM;
+    private GpuTensor<T>? _gpuWzM;
+    private GpuTensor<T>? _gpuWrM;
+    private GpuTensor<T>? _gpuWhM;
+    private GpuTensor<T>? _gpuUzM;
+    private GpuTensor<T>? _gpuUrM;
+    private GpuTensor<T>? _gpuUhM;
+    private GpuTensor<T>? _gpuBzM;
+    private GpuTensor<T>? _gpuBrM;
+    private GpuTensor<T>? _gpuBhM;
 
     // Adam/AdamW V (second moment) tensors
-    private Tensor<T>? _gpuWzV;
-    private Tensor<T>? _gpuWrV;
-    private Tensor<T>? _gpuWhV;
-    private Tensor<T>? _gpuUzV;
-    private Tensor<T>? _gpuUrV;
-    private Tensor<T>? _gpuUhV;
-    private Tensor<T>? _gpuBzV;
-    private Tensor<T>? _gpuBrV;
-    private Tensor<T>? _gpuBhV;
+    private GpuTensor<T>? _gpuWzV;
+    private GpuTensor<T>? _gpuWrV;
+    private GpuTensor<T>? _gpuWhV;
+    private GpuTensor<T>? _gpuUzV;
+    private GpuTensor<T>? _gpuUrV;
+    private GpuTensor<T>? _gpuUhV;
+    private GpuTensor<T>? _gpuBzV;
+    private GpuTensor<T>? _gpuBrV;
+    private GpuTensor<T>? _gpuBhV;
 
     // Cached forward pass state for backpropagation (BPTT)
     private Tensor<T>? _gpuLastInput;
@@ -1008,7 +1008,7 @@ public partial class GRULayer<T> : LayerBase<T>
         // Cache input for backward pass if training
         if (IsTrainingMode)
         {
-            _lastInput = input.Reshape([batchSize, sequenceLength, _inputSize]);
+            _lastInput = input.ToTensor().Reshape([batchSize, sequenceLength, _inputSize]);
             _originalInputShape = shape;
         }
 
@@ -1043,7 +1043,7 @@ public partial class GRULayer<T> : LayerBase<T>
             // Cache initial hidden state
             var initHBufferCopy = backend.AllocateBuffer(hiddenBufferSize);
             backend.Copy(hInitBuffer, initHBufferCopy, hiddenBufferSize);
-            _gpuInitialHiddenState = Tensor<T>.FromGpuBuffer(backend, initHBufferCopy, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
+            _gpuInitialHiddenState = new GpuTensor<T>(backend, initHBufferCopy, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
         }
         else
         {
@@ -1086,7 +1086,7 @@ public partial class GRULayer<T> : LayerBase<T>
                 cacheGatesBuffer.Dispose();
             }
 
-            return Tensor<T>.FromGpuBuffer(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+            return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
         }
         catch
         {
@@ -1906,15 +1906,15 @@ public partial class GRULayer<T> : LayerBase<T>
             throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
 
         // Ensure GPU weight tensors exist
-        _gpuWz ??= Tensor<T>.FromGpuBuffer(backend, _Wz, GpuTensorRole.Weight);
-        _gpuWr ??= Tensor<T>.FromGpuBuffer(backend, _Wr, GpuTensorRole.Weight);
-        _gpuWh ??= Tensor<T>.FromGpuBuffer(backend, _Wh, GpuTensorRole.Weight);
-        _gpuUz ??= Tensor<T>.FromGpuBuffer(backend, _Uz, GpuTensorRole.Weight);
-        _gpuUr ??= Tensor<T>.FromGpuBuffer(backend, _Ur, GpuTensorRole.Weight);
-        _gpuUh ??= Tensor<T>.FromGpuBuffer(backend, _Uh, GpuTensorRole.Weight);
-        _gpuBz ??= Tensor<T>.FromGpuBuffer(backend, _bz, GpuTensorRole.Bias);
-        _gpuBr ??= Tensor<T>.FromGpuBuffer(backend, _br, GpuTensorRole.Bias);
-        _gpuBh ??= Tensor<T>.FromGpuBuffer(backend, _bh, GpuTensorRole.Bias);
+        _gpuWz ??= new GpuTensor<T>(backend, _Wz, GpuTensorRole.Weight);
+        _gpuWr ??= new GpuTensor<T>(backend, _Wr, GpuTensorRole.Weight);
+        _gpuWh ??= new GpuTensor<T>(backend, _Wh, GpuTensorRole.Weight);
+        _gpuUz ??= new GpuTensor<T>(backend, _Uz, GpuTensorRole.Weight);
+        _gpuUr ??= new GpuTensor<T>(backend, _Ur, GpuTensorRole.Weight);
+        _gpuUh ??= new GpuTensor<T>(backend, _Uh, GpuTensorRole.Weight);
+        _gpuBz ??= new GpuTensor<T>(backend, _bz, GpuTensorRole.Bias);
+        _gpuBr ??= new GpuTensor<T>(backend, _br, GpuTensorRole.Bias);
+        _gpuBh ??= new GpuTensor<T>(backend, _bh, GpuTensorRole.Bias);
 
         // Ensure optimizer state exists
         EnsureGruOptimizerState(config, backend);
@@ -1957,15 +1957,15 @@ public partial class GRULayer<T> : LayerBase<T>
             var inputWeightSize = _hiddenSize * _inputSize;
             var hiddenWeightSize = _hiddenSize * _hiddenSize;
             var biasSize = _hiddenSize;
-            _gpuWzVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuWrVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuWhVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuUzVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuUrVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuUhVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBzVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBrVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBhVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWzVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWrVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUzVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUrVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBzVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBrVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
         }
         else if (optimizerType == GpuOptimizerType.Adam || optimizerType == GpuOptimizerType.AdamW)
         {
@@ -1974,26 +1974,26 @@ public partial class GRULayer<T> : LayerBase<T>
             var biasSize = _hiddenSize;
 
             // First moment (M) tensors
-            _gpuWzM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuWrM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuWhM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuUzM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuUrM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuUhM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBzM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBrM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBhM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWzM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWrM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWhM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUzM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUrM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUhM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBzM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBrM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBhM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
 
             // Second moment (V) tensors
-            _gpuWzV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuWrV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuWhV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuUzV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuUrV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuUhV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBzV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBrV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBhV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWzV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWrV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWhV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUzV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUrV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUhV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBzV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBrV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBhV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
         }
     }
 

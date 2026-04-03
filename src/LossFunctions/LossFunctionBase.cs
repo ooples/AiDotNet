@@ -61,8 +61,8 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
     public virtual (T Loss, Tensor<T> Gradient) CalculateLossAndGradientGpu(Tensor<T> predicted, Tensor<T> actual)
     {
         // Default: fall back to CPU
-        var predictedCpu = predicted;
-        var actualCpu = actual;
+        var predictedCpu = predicted.ToTensor();
+        var actualCpu = actual.ToTensor();
 
         var loss = CalculateLoss(predictedCpu.ToVector(), actualCpu.ToVector());
         var gradientCpu = CalculateDerivative(predictedCpu.ToVector(), actualCpu.ToVector());
@@ -72,7 +72,7 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
 
         var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
         var backend = engine?.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
-        var gradientGpu = Tensor<T>.FromGpuBuffer(backend, gradientTensor, GpuTensorRole.Gradient);
+        var gradientGpu = new GpuTensor<T>(backend, gradientTensor, GpuTensorRole.Gradient);
 
         return (loss, gradientGpu);
     }

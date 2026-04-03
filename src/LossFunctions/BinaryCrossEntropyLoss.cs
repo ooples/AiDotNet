@@ -113,7 +113,7 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
             return base.CalculateLossAndGradientGpu(predicted, actual);
         }
 
-        int size = predicted.Length;
+        int size = predicted.ElementCount;
 
         // Compute loss on GPU
         float lossValue = backend.BinaryCrossEntropyLoss(predicted.Buffer, actual.Buffer, size);
@@ -123,7 +123,7 @@ public class BinaryCrossEntropyLoss<T> : LossFunctionBase<T>
         backend.BinaryCrossEntropyBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size);
 
         // Create gradient tensor
-        var gradientTensor = Tensor<T>.FromGpuBuffer(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
+        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

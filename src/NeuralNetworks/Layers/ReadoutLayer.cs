@@ -382,7 +382,7 @@ public partial class ReadoutLayer<T> : LayerBase<T>
             else
             {
                 // For other vector activations, fall back to CPU
-                var cpuPreActivation = preActivation;
+                var cpuPreActivation = preActivation.ToTensor();
                 var vecAct = VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.");
                 var cpuActivated = vecAct.Activate(cpuPreActivation);
                 result = gpuEngine.UploadToGpu(cpuActivated, GpuTensorRole.Activation);
@@ -410,9 +410,9 @@ public partial class ReadoutLayer<T> : LayerBase<T>
                 : (UsingVectorActivation ? FusedActivationType.None : GetFusedActivationType());
 
             // Also cache CPU tensors for CPU backward compatibility
-            _lastInput = input;
-            _lastPreActivation = preActResult;
-            _lastOutput = result;
+            _lastInput = input.ToTensor();
+            _lastPreActivation = preActResult.ToTensor();
+            _lastOutput = result.ToTensor();
         }
 
         // Reshape output to match expected shape

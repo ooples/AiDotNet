@@ -371,7 +371,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>
             _lastOutputGpu = input; // Pass-through
 
             // Also update CPU cache for compatibility if needed, or skip if fully GPU
-            // _lastInput = input; 
+            // _lastInput = input.ToTensor(); 
         }
 
         return input;

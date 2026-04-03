@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -175,7 +175,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
             permutedOutputShape[axis] = totalAxisDim;
         }
 
-        Tensor<T> result = Tensor<T>.FromGpuBuffer(backend, outputBuffer, permutedOutputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        Tensor<T> result = new GpuTensor<T>(backend, outputBuffer, permutedOutputShape, GpuTensorRole.Activation, ownsBuffer: true);
 
         // 6. Inverse Permute if needed
         if (needsPermute)
@@ -202,10 +202,10 @@ public class ConcatenateLayer<T> : LayerBase<T>
             _lastInputSizesGpu = new int[inputs.Length];
             for (int i = 0; i < inputs.Length; i++)
             {
-                _lastInputs[i] = inputs[i];
+                _lastInputs[i] = inputs[i].ToTensor();
                 _lastInputSizesGpu[i] = inputs[i].Shape[axis];
             }
-            _lastOutput = result;
+            _lastOutput = result.ToTensor();
             _lastOutputGpu = result;
         }
 

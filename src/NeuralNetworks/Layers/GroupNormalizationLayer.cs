@@ -60,24 +60,24 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
     private Tensor<T>? _gpuLastInput;
 
     // GPU weight buffers
-    private Tensor<T>? _gpuGamma;
-    private Tensor<T>? _gpuBeta;
+    private GpuTensor<T>? _gpuGamma;
+    private GpuTensor<T>? _gpuBeta;
 
     // GPU gradient buffers
     private Tensor<T>? _gpuGammaGradient;
     private Tensor<T>? _gpuBetaGradient;
 
     // GPU optimizer state buffers (velocity/momentum)
-    private Tensor<T>? _gpuGammaVelocity;
-    private Tensor<T>? _gpuBetaVelocity;
+    private GpuTensor<T>? _gpuGammaVelocity;
+    private GpuTensor<T>? _gpuBetaVelocity;
 
     // GPU optimizer state buffers (first moment for Adam)
-    private Tensor<T>? _gpuGammaM;
-    private Tensor<T>? _gpuBetaM;
+    private GpuTensor<T>? _gpuGammaM;
+    private GpuTensor<T>? _gpuBetaM;
 
     // GPU optimizer state buffers (second moment for Adam)
-    private Tensor<T>? _gpuGammaV;
-    private Tensor<T>? _gpuBetaV;
+    private GpuTensor<T>? _gpuGammaV;
+    private GpuTensor<T>? _gpuBetaV;
 
     #endregion
 
@@ -325,7 +325,7 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
             _gpuLastInput = input;
 
             // Also download to CPU for backward compatibility with CPU backward pass
-            _lastInput = input;
+            _lastInput = input.ToTensor();
             _lastMean = new Tensor<T>(new[] { batch, _numGroups },
                 new Vector<T>(DirectGpuEngine.FromFloatArray<T>(backend.DownloadBuffer(meanBuffer))));
             _lastVariance = new Tensor<T>(new[] { batch, _numGroups },
@@ -338,7 +338,7 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
         invVarBuffer.Dispose();
 
         // Create output tensor with correct shape
-        var result = Tensor<T>.FromGpuBuffer(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        var result = new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
 
         // Restore original tensor rank
         if (_originalInputShape != null && _originalInputShape.Length > 4)
@@ -473,8 +473,8 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
             throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
 
         // Ensure GPU weight tensors exist
-        _gpuGamma ??= Tensor<T>.FromGpuBuffer(backend, _gamma, GpuTensorRole.Weight);
-        _gpuBeta ??= Tensor<T>.FromGpuBuffer(backend, _beta, GpuTensorRole.Weight);
+        _gpuGamma ??= new GpuTensor<T>(backend, _gamma, GpuTensorRole.Weight);
+        _gpuBeta ??= new GpuTensor<T>(backend, _beta, GpuTensorRole.Weight);
 
         // Ensure optimizer state exists
         EnsureGroupNormOptimizerState(config, backend);
@@ -488,8 +488,8 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
         config.ApplyUpdate(backend, _gpuBeta.Buffer, _gpuBetaGradient.Buffer, betaState, _beta.Length);
 
         // Download updated weights to CPU for backward compatibility
-        _gamma = _gpuGamma;
-        _beta = _gpuBeta;
+        _gamma = _gpuGamma.ToTensor();
+        _beta = _gpuBeta.ToTensor();
 
         // Notify engine that tensor data has changed
         Engine.InvalidatePersistentTensor(_gamma);
@@ -508,16 +508,16 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
             optimizerType == GpuOptimizerType.Nag ||
             optimizerType == GpuOptimizerType.Lars)
         {
-            _gpuGammaVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([_gamma.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBetaVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([_beta.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuGammaVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_gamma.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBetaVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_beta.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
         }
         else if (optimizerType == GpuOptimizerType.Adam || optimizerType == GpuOptimizerType.AdamW)
         {
             // Adam, AdamW need both M (first moment) and V (second moment)
-            _gpuGammaM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([_gamma.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBetaM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([_beta.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuGammaV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([_gamma.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBetaV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([_beta.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuGammaM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_gamma.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBetaM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_beta.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuGammaV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_gamma.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBetaV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_beta.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
         }
     }
 

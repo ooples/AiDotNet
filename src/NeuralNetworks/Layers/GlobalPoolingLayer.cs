@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -451,8 +451,8 @@ public class GlobalPoolingLayer<T> : LayerBase<T>
         // Skip this expensive download during inference (50% overhead reduction)
         if (IsTrainingMode)
         {
-            _lastInput = input;
-            _lastOutput = output;
+            _lastInput = input.ToTensor();
+            _lastOutput = output.ToTensor();
             _lastOutputGpu = output;
             _lastInputGpuShape = input.Shape.ToArray().ToArray();
         }

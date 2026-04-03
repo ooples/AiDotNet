@@ -1,4 +1,4 @@
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -399,8 +399,8 @@ public class DecoderLayer<T> : LayerBase<T>
             _gpuNormalized2 = normalized2;
             _gpuResidual1 = residual1;
             _gpuResidual2 = residual2;
-            _lastInput = decoderInput;
-            _lastEncoderOutput = encoderOutput;
+            _lastInput = decoderInput.ToTensor();
+            _lastEncoderOutput = encoderOutput.ToTensor();
         }
 
         return output;

@@ -286,29 +286,29 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _gpuLastOutput;
 
     // GPU weight buffers
-    private Tensor<T>? _gpuDepthwiseKernels;
-    private Tensor<T>? _gpuPointwiseKernels;
-    private Tensor<T>? _gpuBiases;
+    private GpuTensor<T>? _gpuDepthwiseKernels;
+    private GpuTensor<T>? _gpuPointwiseKernels;
+    private GpuTensor<T>? _gpuBiases;
 
     // GPU gradient buffers
-    private Tensor<T>? _gpuDepthwiseKernelsGradient;
-    private Tensor<T>? _gpuPointwiseKernelsGradient;
-    private Tensor<T>? _gpuBiasesGradient;
+    private GpuTensor<T>? _gpuDepthwiseKernelsGradient;
+    private GpuTensor<T>? _gpuPointwiseKernelsGradient;
+    private GpuTensor<T>? _gpuBiasesGradient;
 
     // GPU velocity buffers (SGD momentum)
-    private Tensor<T>? _gpuDepthwiseKernelsVelocity;
-    private Tensor<T>? _gpuPointwiseKernelsVelocity;
-    private Tensor<T>? _gpuBiasesVelocityGpu;
+    private GpuTensor<T>? _gpuDepthwiseKernelsVelocity;
+    private GpuTensor<T>? _gpuPointwiseKernelsVelocity;
+    private GpuTensor<T>? _gpuBiasesVelocityGpu;
 
     // GPU Adam first moment buffers
-    private Tensor<T>? _gpuDepthwiseKernelsM;
-    private Tensor<T>? _gpuPointwiseKernelsM;
-    private Tensor<T>? _gpuBiasesM;
+    private GpuTensor<T>? _gpuDepthwiseKernelsM;
+    private GpuTensor<T>? _gpuPointwiseKernelsM;
+    private GpuTensor<T>? _gpuBiasesM;
 
     // GPU Adam second moment buffers
-    private Tensor<T>? _gpuDepthwiseKernelsV;
-    private Tensor<T>? _gpuPointwiseKernelsV;
-    private Tensor<T>? _gpuBiasesV;
+    private GpuTensor<T>? _gpuDepthwiseKernelsV;
+    private GpuTensor<T>? _gpuPointwiseKernelsV;
+    private GpuTensor<T>? _gpuBiasesV;
     #endregion
 
     /// <summary>
@@ -1136,9 +1136,9 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         // Ensure GPU weight buffers exist
-        _gpuDepthwiseKernels ??= Tensor<T>.FromGpuBuffer(backend, _depthwiseKernels, GpuTensorRole.Weight);
-        _gpuPointwiseKernels ??= Tensor<T>.FromGpuBuffer(backend, _pointwiseKernels, GpuTensorRole.Weight);
-        _gpuBiases ??= Tensor<T>.FromGpuBuffer(backend, _biases, GpuTensorRole.Weight);
+        _gpuDepthwiseKernels ??= new GpuTensor<T>(backend, _depthwiseKernels, GpuTensorRole.Weight);
+        _gpuPointwiseKernels ??= new GpuTensor<T>(backend, _pointwiseKernels, GpuTensorRole.Weight);
+        _gpuBiases ??= new GpuTensor<T>(backend, _biases, GpuTensorRole.Weight);
 
         // Ensure optimizer state exists
         EnsureSeparableConvOptimizerState(config, backend);
@@ -1165,9 +1165,9 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
         }
 
         // Download updated weights back to CPU tensors
-        _depthwiseKernels = _gpuDepthwiseKernels;
-        _pointwiseKernels = _gpuPointwiseKernels;
-        _biases = _gpuBiases;
+        _depthwiseKernels = _gpuDepthwiseKernels.ToTensor();
+        _pointwiseKernels = _gpuPointwiseKernels.ToTensor();
+        _biases = _gpuBiases.ToTensor();
 
         // Notify engine that tensor data has changed
         Engine.InvalidatePersistentTensor(_depthwiseKernels);
@@ -1182,20 +1182,20 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
         // Ensure velocity buffers for SGD momentum, NAG, LARS
         if (optimizerType == GpuOptimizerType.Sgd || optimizerType == GpuOptimizerType.Nag || optimizerType == GpuOptimizerType.Lars)
         {
-            _gpuDepthwiseKernelsVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([_depthwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuPointwiseKernelsVelocity ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([_pointwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBiasesVelocityGpu ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuDepthwiseKernelsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_depthwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuPointwiseKernelsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_pointwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBiasesVelocityGpu ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
         }
 
         // Ensure Adam moment buffers
         if (optimizerType == GpuOptimizerType.Adam || optimizerType == GpuOptimizerType.AdamW)
         {
-            _gpuDepthwiseKernelsM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([_depthwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuDepthwiseKernelsV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([_depthwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuPointwiseKernelsM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([_pointwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuPointwiseKernelsV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([_pointwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBiasesM ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBiasesV ??= Tensor<T>.FromGpuBuffer(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuDepthwiseKernelsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_depthwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuDepthwiseKernelsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_depthwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuPointwiseKernelsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_pointwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuPointwiseKernelsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_pointwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBiasesM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBiasesV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
         }
     }
 

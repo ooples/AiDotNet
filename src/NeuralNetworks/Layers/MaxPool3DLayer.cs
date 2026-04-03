@@ -323,7 +323,7 @@ public class MaxPool3DLayer<T> : LayerBase<T>
         var output = gpuEngine.MaxPool3DGpu<T>(input5D, poolSizeArr, strideArr, out _gpuIndicesBuffer);
 
         // Store _lastInput for backward pass
-        _lastInput = input;
+        _lastInput = input.ToTensor();
 
         // Restore original tensor rank
         if (_originalInputShape.Length > 5)

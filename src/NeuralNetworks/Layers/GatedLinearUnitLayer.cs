@@ -566,7 +566,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
         if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable.");
 
-        int size = linearOutput.Length;
+        int size = linearOutput.ElementCount;
         var outputBuffer = backend.AllocateBuffer(size);
 
         // Element-wise multiply on GPU
@@ -581,12 +581,12 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
             _gpuGateOutput = gateOutput;
 
             // Also cache CPU tensors for fallback backward pass
-            _lastInput = input;
-            _lastLinearOutput = linearOutput;
-            _lastGateOutput = gateOutput;
+            _lastInput = input.ToTensor();
+            _lastLinearOutput = linearOutput.ToTensor();
+            _lastGateOutput = gateOutput.ToTensor();
         }
 
-        return Tensor<T>.FromGpuBuffer(backend, outputBuffer, linearOutput.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+        return new GpuTensor<T>(backend, outputBuffer, linearOutput.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

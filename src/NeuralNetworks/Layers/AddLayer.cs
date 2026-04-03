@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -123,9 +123,9 @@ public class AddLayer<T> : LayerBase<T>
             _lastInputs = new Tensor<T>[inputs.Length];
             for (int i = 0; i < inputs.Length; i++)
             {
-                _lastInputs[i] = inputs[i];
+                _lastInputs[i] = inputs[i].ToTensor();
             }
-            _lastOutput = result;
+            _lastOutput = result.ToTensor();
 
             // Cache GPU output for GPU backward pass
             _lastOutputGpu = result;

@@ -693,12 +693,12 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _gpuAttnWeights = gpuEngine.ReshapeGpu(attnWeights4D, [batchSize, seqLen, seqLen]);
 
             // Also cache CPU versions for CPU backward compatibility
-            _lastInput = input;
-            _lastQueryInput = input3D;
-            _lastKeyInput = input3D;
-            _lastValueInput = input3D;
-            _lastAttentionOutput = _gpuAttnOutput;
-            _lastAttentionWeights = _gpuAttnWeights;
+            _lastInput = input.ToTensor();
+            _lastQueryInput = input3D.ToTensor();
+            _lastKeyInput = input3D.ToTensor();
+            _lastValueInput = input3D.ToTensor();
+            _lastAttentionOutput = _gpuAttnOutput.ToTensor();
+            _lastAttentionWeights = _gpuAttnWeights.ToTensor();
 
             // Dispose tensors we don't need (but keep ones cached for backward)
             ((IDisposable)inputFlat).Dispose();

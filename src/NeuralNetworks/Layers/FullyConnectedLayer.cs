@@ -790,16 +790,16 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
             {
                 var preActivation = gpuEngine.FusedLinearGpu(input2D, weightsT, _biases, FusedActivationType.None);
                 _gpuPreActivation = preActivation;
-                _lastOutput = preActivation;
+                _lastOutput = preActivation.ToTensor();
             }
             else
             {
                 _gpuPreActivation = result;
-                _lastOutput = result;
+                _lastOutput = result.ToTensor();
             }
 
             // Also cache CPU tensors for fallback backward pass
-            _lastInput = input;
+            _lastInput = input.ToTensor();
         }
 
         // Reshape output back to original batch dimensions if needed

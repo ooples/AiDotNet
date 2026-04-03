@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Optimizers;
@@ -218,7 +218,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         // Store CPU tensor for potential backward pass
         if (IsTrainingMode)
         {
-            LastInput = currentGpu;
+            LastInput = currentGpu.ToTensor();
         }
 
         // Sequential chain through all MLP blocks on GPU
@@ -231,7 +231,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
             // Store input for Modified GD optimizer during training
             if (IsTrainingMode)
             {
-                _storedInputs[level] = currentGpu;
+                _storedInputs[level] = currentGpu.ToTensor();
             }
 
             // Each DenseLayer handles its own GPU operations (GEMM + bias + activation)
@@ -241,7 +241,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         // Store output for potential backward pass
         if (IsTrainingMode)
         {
-            LastOutput = currentGpu;
+            LastOutput = currentGpu.ToTensor();
         }
 
         _globalStep++;

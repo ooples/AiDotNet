@@ -409,7 +409,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
 
         // Convert adjacency matrix to CSR for sparse operations
         var (adjValues, adjColIndices, adjRowPointers) = ConvertToCSR(_adjacencyMatrix, numNodes);
-        using var adjCsr = new CsrTensor<T>(backend, adjValues, adjColIndices, adjRowPointers, numNodes, numNodes);
+        using var adjCsr = new CsrGpuTensor<T>(backend, adjValues, adjColIndices, adjRowPointers, numNodes, numNodes);
 
         // Compute node degrees from adjacency matrix row sums
         float[] degrees = ComputeDegrees(_adjacencyMatrix, numNodes);
@@ -602,7 +602,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
 
         // Create output tensor
         int[] outputShape = batchSize == 1 ? [numNodes, _outputFeatures] : [batchSize, numNodes, _outputFeatures];
-        return Tensor<T>.FromGpuBuffer(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
+        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
     }
 
     /// <summary>

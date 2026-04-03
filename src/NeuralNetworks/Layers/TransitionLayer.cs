@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -266,7 +266,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         // Cache for backward pass
         if (IsTrainingMode)
         {
-            _lastInput = processInput;
+            _lastInput = processInput.ToTensor();
             _originalInputShape = shape;
         }
 
@@ -282,9 +282,9 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             _gpuBnOut = bnOutput;
             _gpuConvOut = convOutput;
             _gpuAdded3DBatch = added3DBatch;
-            _bnOut = bnOutput;
-            _reluOut = reluOutput;
-            _convOut = convOutput;
+            _bnOut = bnOutput.ToTensor();
+            _reluOut = reluOutput.ToTensor();
+            _convOut = convOutput.ToTensor();
         }
 
         // Restore original tensor rank

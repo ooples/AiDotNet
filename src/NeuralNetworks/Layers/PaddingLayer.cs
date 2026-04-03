@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -158,7 +158,7 @@ public class PaddingLayer<T> : LayerBase<T>
             // Create padded tensor
             int[] newShape = permutedInput.Shape.ToArray().ToArray();
             newShape[rank - 1] = newDimSize;
-            var paddedPermuted = Tensor<T>.FromGpuBuffer(backend, outputBuffer, newShape, GpuTensorRole.Activation, ownsBuffer: true);
+            var paddedPermuted = new GpuTensor<T>(backend, outputBuffer, newShape, GpuTensorRole.Activation, ownsBuffer: true);
 
             // Clean up permuted input if it was a temporary
             if (needsPermute)
@@ -196,7 +196,7 @@ public class PaddingLayer<T> : LayerBase<T>
 
         if (IsTrainingMode)
         {
-            _lastInput = input;
+            _lastInput = input.ToTensor();
             _gpuCachedInputShape = (int[])input.Shape.ToArray().Clone();
         }
 

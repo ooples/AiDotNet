@@ -551,7 +551,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
 
         // Download input to CPU to convert to integer indices
         // (Indices are typically small, so this is acceptable)
-        var inputTensor = input;
+        var inputTensor = input.ToTensor();
 
         // Store for potential backward pass (only in training mode)
         if (IsTrainingMode)

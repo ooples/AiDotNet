@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -341,7 +341,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
         _addedBatchDimension = addedBatch;
 
         // Store _lastInput for backward pass
-        _lastInput = input;
+        _lastInput = input.ToTensor();
 
         var output = gpuEngine.NearestNeighborUpsample3DGpu<T>(input5D, ScaleDepth, ScaleHeight, ScaleWidth);
 

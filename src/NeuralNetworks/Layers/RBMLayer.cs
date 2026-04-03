@@ -471,10 +471,10 @@ public partial class RBMLayer<T> : LayerBase<T>
         // Cache state for backward pass only during training
         if (IsTrainingMode)
         {
-            _lastVisibleInput = input;
+            _lastVisibleInput = input.ToTensor();
             if (_lastVisibleInput.Shape.Length != 2)
                 _lastVisibleInput = _lastVisibleInput.Reshape([flatBatch, _visibleUnits]);
-            _lastHiddenOutput = result;
+            _lastHiddenOutput = result.ToTensor();
         }
 
         // Reshape output to match expected shape
