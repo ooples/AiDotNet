@@ -405,6 +405,12 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastAuxiliaryLoss = NumOps.Zero;
+
+        RegisterSubLayer(_selfAttention);
+        RegisterSubLayer(_norm1);
+        RegisterSubLayer(_feedForward1);
+        RegisterSubLayer(_feedForward2);
+        RegisterSubLayer(_norm2);
     }
 
     /// <summary>
@@ -964,6 +970,4 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         return withBias;
     }
 
-    public override IReadOnlyList<ILayer<T>> GetSubLayers() =>
-        new ILayer<T>[] { _selfAttention, _norm1, _feedForward1, _feedForward2, _norm2 };
 }
