@@ -148,6 +148,8 @@ public class SparseLinearLayer<T> : LayerBase<T>
         _biases = new Vector<T>(outputFeatures);
         // Biases initialized to zero by default (standard practice for ReLU layers)
         _weights = InitializeSparseWeights();
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
     }
 
     /// <summary>
