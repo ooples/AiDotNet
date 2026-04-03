@@ -61,10 +61,10 @@ public class MetaContinualALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
     private readonly int _paramDim;
 
     /// <summary>Running mean of per-parameter gradient magnitudes.</summary>
-    private double[] _uncertaintyMean;
+    private Vector<T> _uncertaintyMean;
 
     /// <summary>Running variance of per-parameter gradient magnitudes.</summary>
-    private double[] _uncertaintyVar;
+    private Vector<T> _uncertaintyVar;
 
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.MetaContinualAL;

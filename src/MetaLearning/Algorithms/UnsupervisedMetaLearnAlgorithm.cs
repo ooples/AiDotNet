@@ -61,7 +61,7 @@ public class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     private Vector<T>[] _centroids;
 
     /// <summary>Per-cluster count for EMA weighting.</summary>
-    private double[] _clusterCounts;
+    private Vector<T> _clusterCounts;
 
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.UnsupervisedMetaLearn;

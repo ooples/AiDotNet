@@ -119,7 +119,7 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// use smaller rates for fine-tuning. These rates are learned automatically.
     /// </para>
     /// </remarks>
-    private double[] _perStepLearningRates;
+    private Vector<T> _perStepLearningRates;
 
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.MAMLPlusPlus;

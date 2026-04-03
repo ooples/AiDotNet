@@ -58,7 +58,7 @@ public class ACLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     private readonly int _paramDim;
 
     /// <summary>Per-parameter importance scores (accumulated via EMA).</summary>
-    private double[] _importance;
+    private Vector<T> _importance;
 
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.ACL;
