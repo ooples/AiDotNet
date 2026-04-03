@@ -795,6 +795,21 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// <summary>
     /// Trains the model on input data.
     /// </summary>
+    // Stored target for teacher forcing during ForwardForTraining
+    private Tensor<T>? _teacherForcingTarget;
+
+    /// <summary>
+    /// Overrides ForwardForTraining to use teacher forcing when target is available.
+    /// Teacher forcing feeds ground-truth previous outputs to the decoder instead of
+    /// the model's own predictions — industry standard for autoregressive training.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (_teacherForcingTarget is not null)
+            return ForwardNativeWithTeacherForcing(input, _teacherForcingTarget);
+        return base.ForwardForTraining(input);
+    }
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
@@ -802,14 +817,16 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             throw new NotSupportedException("Cannot train in ONNX inference mode.");
         }
 
-        SetTrainingMode(true);
+        _teacherForcingTarget = expectedOutput;
         try
         {
+            SetTrainingMode(true);
             TrainWithTape(input, expectedOutput);
         }
         finally
         {
             SetTrainingMode(false);
+            _teacherForcingTarget = null;
         }
     }
 

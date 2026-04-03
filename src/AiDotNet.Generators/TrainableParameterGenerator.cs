@@ -197,6 +197,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    /// </summary>");
             sb.AppendLine("    public override void ZeroGrad()");
             sb.AppendLine("    {");
+            sb.AppendLine("        base.ZeroGrad();");
             foreach (var param in paramFields)
             {
                 var gradName = param.Name + "Gradient";

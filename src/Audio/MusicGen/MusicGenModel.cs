@@ -1009,9 +1009,9 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             throw new NotSupportedException("Cannot train in ONNX mode.");
         }
 
-        SetTrainingMode(true);
         try
         {
+            SetTrainingMode(true);
             TrainWithTape(input, expectedOutput);
         }
         finally
