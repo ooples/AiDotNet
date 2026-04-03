@@ -1,9 +1,8 @@
 ﻿using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
-using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.NeuralNetworks.Tabular;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Oblivious Decision Tree (ODT) for NODE architecture.
@@ -25,7 +24,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class ObliviousDecisionTree<T> : LayerBase<T>
+public class ObliviousDecisionTreeLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
     private readonly int _depth;
@@ -70,7 +69,7 @@ public class ObliviousDecisionTree<T> : LayerBase<T>
     /// <param name="depth">Tree depth (number of split levels).</param>
     /// <param name="outputDim">Output dimension per leaf.</param>
     /// <param name="initScale">Initialization scale.</param>
-    public ObliviousDecisionTree(int inputDim, int depth = 6, int outputDim = 1, double initScale = 0.01)
+    public ObliviousDecisionTreeLayer(int inputDim, int depth = 6, int outputDim = 1, double initScale = 0.01)
         : base([inputDim], [outputDim])
     {
         if (inputDim <= 0)

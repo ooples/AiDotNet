@@ -1,9 +1,8 @@
 ﻿using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
-using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.NeuralNetworks.Tabular;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Piecewise Linear Encoding for numerical features in tabular models like TabM.
@@ -24,7 +23,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class PiecewiseLinearEncoding<T> : LayerBase<T>
+public class PiecewiseLinearEncodingLayer<T> : LayerBase<T>
 {
     private readonly int _numFeatures;
     private readonly int _numBins;
@@ -53,7 +52,7 @@ public class PiecewiseLinearEncoding<T> : LayerBase<T>
     /// </summary>
     /// <param name="numFeatures">Number of input features.</param>
     /// <param name="numBins">Number of bins per feature.</param>
-    public PiecewiseLinearEncoding(int numFeatures, int numBins = 16)
+    public PiecewiseLinearEncodingLayer(int numFeatures, int numBins = 16)
         : base([numFeatures], [numFeatures * numBins])
     {
         if (numFeatures < 1)

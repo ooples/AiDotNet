@@ -1,9 +1,8 @@
 ﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
-using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.NeuralNetworks.Tabular;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Gated Feature Learning Unit (GFLU) for GANDALF architecture.
@@ -24,7 +23,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class GatedFeatureLearningUnit<T> : LayerBase<T>
+public class GatedFeatureLearningUnitLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
     private readonly int _outputDim;
@@ -51,7 +50,7 @@ public class GatedFeatureLearningUnit<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputDim">Input dimension.</param>
     /// <param name="outputDim">Output dimension.</param>
-    public GatedFeatureLearningUnit(int inputDim, int outputDim)
+    public GatedFeatureLearningUnitLayer(int inputDim, int outputDim)
         : base([inputDim], [outputDim])
     {
         _inputDim = inputDim;

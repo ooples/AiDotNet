@@ -1,7 +1,7 @@
 ﻿using AiDotNet.Autodiff;
-using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Tabular;
 
-namespace AiDotNet.NeuralNetworks.Tabular;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Implements the Feature Transformer block used in TabNet architecture.
@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class FeatureTransformer<T> : LayerBase<T>
+public class FeatureTransformerLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
     private readonly int _outputDim;
@@ -84,7 +84,7 @@ public class FeatureTransformer<T> : LayerBase<T>
     /// while step-specific layers allow each step to specialize.
     /// </para>
     /// </remarks>
-    public FeatureTransformer(
+    public FeatureTransformerLayer(
         int inputDim,
         int outputDim,
         List<FullyConnectedLayer<T>>? sharedLayers = null,

@@ -1,9 +1,9 @@
 ﻿
 using AiDotNet.Enums;
-using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.Tensors.Engines;
 
-namespace AiDotNet.NeuralNetworks.Attention;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// A multi-head attention layer using the Flash Attention algorithm for memory-efficient computation.

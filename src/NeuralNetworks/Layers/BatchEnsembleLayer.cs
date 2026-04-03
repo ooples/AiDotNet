@@ -1,7 +1,6 @@
 ﻿using AiDotNet.Autodiff;
-using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.NeuralNetworks.Tabular;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Implements a BatchEnsemble layer that provides parameter-efficient ensembling.

@@ -1,7 +1,7 @@
 ﻿using AiDotNet.Autodiff;
-using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Tabular;
 
-namespace AiDotNet.NeuralNetworks.Tabular;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Implements the Attentive Transformer block used in TabNet architecture for feature selection.
@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class AttentiveTransformer<T> : LayerBase<T>
+public class AttentiveTransformerLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
     private readonly int _outputDim;
@@ -83,7 +83,7 @@ public class AttentiveTransformer<T> : LayerBase<T>
     /// to be used multiple times.
     /// </para>
     /// </remarks>
-    public AttentiveTransformer(
+    public AttentiveTransformerLayer(
         int inputDim,
         int outputDim,
         double relaxationFactor = 1.5,

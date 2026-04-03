@@ -76,10 +76,10 @@ public abstract class TabNetBase<T>
     private readonly List<GhostBatchNormalization<T>> _sharedBNLayers;
 
     // Feature Transformers for each decision step
-    private readonly List<FeatureTransformer<T>> _featureTransformers;
+    private readonly List<FeatureTransformerLayer<T>> _featureTransformers;
 
     // Attentive Transformers for each decision step
-    private readonly List<AttentiveTransformer<T>> _attentiveTransformers;
+    private readonly List<AttentiveTransformerLayer<T>> _attentiveTransformers;
 
     // Final output layer
     private readonly FullyConnectedLayer<T> _outputLayer;
@@ -177,7 +177,7 @@ public abstract class TabNetBase<T>
         {
             // Feature Transformer: processes masked features
             // Uses shared layers for efficiency
-            var featureTransformer = new FeatureTransformer<T>(
+            var featureTransformer = new FeatureTransformerLayer<T>(
                 InputDim,
                 Options.FeatureDimension + Options.OutputDimension, // Split between attention and output
                 _sharedFCLayers.Count > 0 ? _sharedFCLayers : null,
@@ -193,7 +193,7 @@ public abstract class TabNetBase<T>
             // (not needed for the last step)
             if (step < Options.NumDecisionSteps - 1)
             {
-                var attentiveTransformer = new AttentiveTransformer<T>(
+                var attentiveTransformer = new AttentiveTransformerLayer<T>(
                     Options.FeatureDimension,
                     InputDim,
                     Options.RelaxationFactor,
@@ -626,7 +626,7 @@ public abstract class TabNetBase<T>
         return offset + count;
     }
 
-    private int SetComponentParameters(FeatureTransformer<T> ft, Vector<T> parameters, int offset)
+    private int SetComponentParameters(FeatureTransformerLayer<T> ft, Vector<T> parameters, int offset)
     {
         int count = ft.ParameterCount;
         var componentParams = new Vector<T>(count);
@@ -638,7 +638,7 @@ public abstract class TabNetBase<T>
         return offset + count;
     }
 
-    private int SetComponentParameters(AttentiveTransformer<T> at, Vector<T> parameters, int offset)
+    private int SetComponentParameters(AttentiveTransformerLayer<T> at, Vector<T> parameters, int offset)
     {
         int count = at.ParameterCount;
         var componentParams = new Vector<T>(count);

@@ -396,7 +396,7 @@ public static class DeserializationHelper
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, mlpHiddenDim, learnEpsilon, initialEpsilon, activation });
         }
-        else if (genericDef == typeof(AiDotNet.NeuralNetworks.Attention.FlashAttentionLayer<>))
+        else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.FlashAttentionLayer<>))
         {
             instance = CreateFlashAttentionLayer<T>(type, inputShape, additionalParams);
         }

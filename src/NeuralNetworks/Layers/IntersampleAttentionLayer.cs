@@ -1,7 +1,6 @@
 ﻿using AiDotNet.Autodiff;
-using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.NeuralNetworks.Tabular;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Intersample (Row) Attention for SAINT architecture.
@@ -23,7 +22,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class IntersampleAttention<T> : LayerBase<T>
+public class IntersampleAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _embeddingDim;
     private readonly int _numHeads;
@@ -61,7 +60,7 @@ public class IntersampleAttention<T> : LayerBase<T>
     /// <param name="embeddingDim">Embedding dimension.</param>
     /// <param name="numHeads">Number of attention heads.</param>
     /// <param name="dropoutRate">Dropout rate for attention.</param>
-    public IntersampleAttention(int embeddingDim, int numHeads = 8, double dropoutRate = 0.1)
+    public IntersampleAttentionLayer(int embeddingDim, int numHeads = 8, double dropoutRate = 0.1)
         : base([embeddingDim], [embeddingDim])
     {
         _embeddingDim = embeddingDim;
