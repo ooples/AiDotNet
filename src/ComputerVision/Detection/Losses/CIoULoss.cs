@@ -175,7 +175,8 @@ public class CIoULoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        throw new NotImplementedException(
-            "CIoU ComputeTapeLoss requires differentiable IoU engine ops. See task #73.");
+        var perBoxLoss = Engine.TensorCIoULoss(predicted, target);
+        var allAxes = Enumerable.Range(0, perBoxLoss.Shape.Length).ToArray();
+        return Engine.ReduceMean(perBoxLoss, allAxes, keepDims: false);
     }
 }
