@@ -2502,6 +2502,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         }
         else if (!model.SupportsParameterInitialization)
         {
+            if (_knowledgeDistillationOptions is not null)
+            {
+                throw new NotSupportedException(
+                    "Knowledge distillation is not supported for non-parametric models. " +
+                    "Remove the ConfigureKnowledgeDistillation() call.");
+            }
+
             // DIRECT TRAINING PATH for non-parametric models (TS, density-based clustering, etc.)
             // These models use their own internal optimizers and don't benefit from the outer
             // optimizer's clone-evaluate-select loop. Train directly on the full training data.

@@ -10,7 +10,7 @@ namespace AiDotNet.Generators;
 /// <summary>
 /// Source generator that discovers [TrainableParameter] fields on LayerBase subclasses
 /// and emits GetTrainableParameters, SetTrainableParameters, and ZeroGrad overrides.
-/// Also discovers ILayer fields and emits RegisterSubLayer calls.
+/// Also discovers ILayer fields for sub-layer tracking.
 /// </summary>
 /// <remarks>
 /// <para>This is the production equivalent of PyTorch's nn.Parameter auto-registration.
@@ -22,7 +22,7 @@ namespace AiDotNet.Generators;
 /// null it. For non-nullable gradient fields, it calls Fill(NumOps.Zero).</para>
 ///
 /// <para><b>Sub-layer discovery:</b> Fields typed as ILayer&lt;T&gt; or LayerBase&lt;T&gt;
-/// subclasses are emitted as RegisterSubLayer calls in a generated InitializeTraining method.</para>
+/// subclasses are discovered for future sub-layer registration support.</para>
 /// </remarks>
 [Generator]
 public class TrainableParameterGenerator : IIncrementalGenerator

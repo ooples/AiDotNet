@@ -70,6 +70,9 @@ public class MockLossFunction<T> : ILossFunction<T>
     /// </summary>
     public (T Loss, Tensor<T> Gradient) CalculateLossAndGradientGpu(Tensor<T> predicted, Tensor<T> actual)
     {
-        throw new NotSupportedException("GPU operations are not supported in MockLossFunction.");
+        // CPU fallback for mock: compute MSE loss and gradient
+        var loss = CalculateLoss(predicted.ToVector(), actual.ToVector());
+        var gradient = CalculateDerivative(predicted.ToVector(), actual.ToVector());
+        return (loss, Tensor<T>.FromVector(gradient));
     }
 }
