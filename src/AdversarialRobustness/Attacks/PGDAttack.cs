@@ -107,8 +107,17 @@ public class PGDAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TO
                 var targetTensor = Tensor<T>.FromVector(vectorLabel);
                 using var tape = new GradientTape<T>();
                 var modelIn = ConversionsHelper.ConvertVectorToInput<T, TInput>(adversarial, input);
-                var output = targetModel.Predict(modelIn);
-                var outputTensor = Tensor<T>.FromVector(ConversionsHelper.ConvertToVector<T, TOutput>(output));
+                // Use ForwardForTraining so ops are tape-recorded for gradient computation
+                Tensor<T> outputTensor;
+                if (targetModel is NeuralNetworks.NeuralNetworkBase<T> nnModel)
+                {
+                    outputTensor = nnModel.ForwardForTraining(inputTensor);
+                }
+                else
+                {
+                    var output = targetModel.Predict(modelIn);
+                    outputTensor = Tensor<T>.FromVector(ConversionsHelper.ConvertToVector<T, TOutput>(output));
+                }
                 var diff = eng.TensorSubtract(outputTensor, targetTensor);
                 var squared = eng.TensorMultiply(diff, diff);
                 var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
