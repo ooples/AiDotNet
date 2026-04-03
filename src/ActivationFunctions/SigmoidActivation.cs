@@ -152,7 +152,7 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>, IOutputDerivative
     public override Tensor<T> Derivative(Tensor<T> input)
     {
         var sigmoid = Activate(input);
-        var oneMinusSigmoid = Engine.TensorSubtract(Tensor<T>.CreateDefault(input._shape, NumOps.One), sigmoid);
+        var oneMinusSigmoid = Engine.ScalarMinusTensor(NumOps.One, sigmoid);
         return Engine.TensorMultiply(sigmoid, oneMinusSigmoid);
     }
 
@@ -206,8 +206,7 @@ public class SigmoidActivation<T> : ActivationFunctionBase<T>, IOutputDerivative
     /// </summary>
     public Tensor<T> DerivativeFromOutput(Tensor<T> output)
     {
-        var ones = new Tensor<T>(output._shape);
-        ones.Fill(NumOps.One);
-        return output.ElementwiseMultiply(ones.Subtract(output));
+        var oneMinusOutput = Engine.ScalarMinusTensor(NumOps.One, output);
+        return Engine.TensorMultiply(output, oneMinusOutput);
     }
 }
