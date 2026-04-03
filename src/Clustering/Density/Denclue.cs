@@ -66,8 +66,8 @@ public class Denclue<T> : ClusteringBase<T>
     public override ModelOptions GetOptions() => _options;
     private T[][]? _attractors;
     private T[]? _attractorDensities;
-    private double[]? _featureMeans;
-    private double[]? _featureStds;
+    private Vector<T>? _featureMeans;
+    private Vector<T>? _featureStds;
 
     /// <summary>
     /// Initializes a new DENCLUE instance.

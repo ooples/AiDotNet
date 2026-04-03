@@ -63,15 +63,15 @@ namespace AiDotNet.Clustering.Density;
 public class DBSCAN<T> : ClusteringBase<T>
 {
     private readonly DBSCANOptions<T> _options;
-    private double _fittedEpsilon;
+    private T _fittedEpsilon;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
     private bool[]? _corePointMask;
 
     // Feature normalization state for scale-invariant distance computation
-    private double[]? _featureMeans;
-    private double[]? _featureStds;
+    private Vector<T>? _featureMeans;
+    private Vector<T>? _featureStds;
 
     // Cluster centers in normalized space for Predict comparison
     private Matrix<T>? _normalizedClusterCenters;

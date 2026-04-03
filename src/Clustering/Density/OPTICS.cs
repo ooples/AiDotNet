@@ -56,8 +56,8 @@ namespace AiDotNet.Clustering.Density;
 public class OPTICS<T> : ClusteringBase<T>
 {
     private readonly OPTICSOptions<T> _options;
-    private double[]? _featureMeans;
-    private double[]? _featureStds;
+    private Vector<T>? _featureMeans;
+    private Vector<T>? _featureStds;
     private Matrix<T>? _normalizedClusterCenters;
 
     /// <inheritdoc/>
