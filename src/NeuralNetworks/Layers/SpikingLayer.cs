@@ -641,6 +641,15 @@ public partial class SpikingLayer<T> : LayerBase<T>
         double tau = 10.0, double refractoryPeriod = 2.0)
         : base([inputSize], [outputSize])
     {
+        if (inputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputSize), inputSize, "Input size must be positive.");
+        if (outputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSize), outputSize, "Output size must be positive.");
+        if (tau <= 0)
+            throw new ArgumentOutOfRangeException(nameof(tau), tau, "Time constant tau must be positive.");
+        if (refractoryPeriod < 0)
+            throw new ArgumentOutOfRangeException(nameof(refractoryPeriod), refractoryPeriod, "Refractory period must be non-negative.");
+
         _neuronType = neuronType;
         _tau = tau;
         _refractoryPeriod = refractoryPeriod;
