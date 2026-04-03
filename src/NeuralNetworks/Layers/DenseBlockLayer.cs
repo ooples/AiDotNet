@@ -85,6 +85,11 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             stride: 1,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
+
+        RegisterSubLayer(_bn1);
+        RegisterSubLayer(_conv1x1);
+        RegisterSubLayer(_bn2);
+        RegisterSubLayer(_conv3x3);
     }
 
     public override Tensor<T> Forward(Tensor<T> input)
@@ -320,5 +325,4 @@ internal class DenseBlockLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         return outputNode;
     }
 
-    public override IReadOnlyList<ILayer<T>> GetSubLayers() => new ILayer<T>[] { _bn1, _conv1x1, _bn2, _conv3x3 };
 }

@@ -189,6 +189,10 @@ public class ReconstructionLayer<T> : LayerBase<T>
         _fc1 = new FullyConnectedLayer<T>(inputDimension, hidden1Dimension, hiddenActivation);
         _fc2 = new FullyConnectedLayer<T>(hidden1Dimension, hidden2Dimension, hiddenActivation);
         _fc3 = new FullyConnectedLayer<T>(hidden2Dimension, outputDimension, outputActivation);
+
+        RegisterSubLayer(_fc1);
+        RegisterSubLayer(_fc2);
+        RegisterSubLayer(_fc3);
     }
 
     /// <summary>
@@ -241,6 +245,10 @@ public class ReconstructionLayer<T> : LayerBase<T>
         _fc1 = new FullyConnectedLayer<T>(inputDimension, hidden1Dimension, hiddenVectorActivation);
         _fc2 = new FullyConnectedLayer<T>(hidden1Dimension, hidden2Dimension, hiddenVectorActivation);
         _fc3 = new FullyConnectedLayer<T>(hidden2Dimension, outputDimension, outputVectorActivation);
+
+        RegisterSubLayer(_fc1);
+        RegisterSubLayer(_fc2);
+        RegisterSubLayer(_fc3);
     }
 
     /// <summary>
@@ -577,5 +585,4 @@ public class ReconstructionLayer<T> : LayerBase<T>
     public override bool SupportsJitCompilation =>
         _fc1.SupportsJitCompilation && _fc2.SupportsJitCompilation && _fc3.SupportsJitCompilation;
 
-    public override IReadOnlyList<ILayer<T>> GetSubLayers() => new ILayer<T>[] { _fc1, _fc2, _fc3 };
 }
