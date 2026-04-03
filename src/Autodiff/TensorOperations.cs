@@ -12268,48 +12268,162 @@ public static class TensorOperations<T>
             }
         }
 
-        // Backward function
+        // Exact backward for Poincare exponential map.
+        // Forward: r = MobiusAdd(p, alpha * v) where alpha = tanh(sqrtC * lambda_p * ||v|| / 2) / (sqrtC * ||v||)
+        // The backward computes exact Jacobians via chain rule through MobiusAdd and the scaling.
         void BackwardFunction(Tensor<T> outputGradient)
         {
             for (int b = 0; b < batchSize; b++)
             {
-                double sqNormP = 0;
+                var pVec = new double[dim];
+                var vVec = new double[dim];
+                var gVec = new double[dim];
+                double sqNormP = 0, sqNormV = 0;
+
                 for (int i = 0; i < dim; i++)
                 {
-                    double pi = shape.Length > 1 ? numOps.ToDouble(pVal[b, i]) : numOps.ToDouble(pVal[i]);
-                    sqNormP += pi * pi;
+                    pVec[i] = shape.Length > 1 ? numOps.ToDouble(pVal[b, i]) : numOps.ToDouble(pVal[i]);
+                    vVec[i] = shape.Length > 1 ? numOps.ToDouble(vVal[b, i]) : numOps.ToDouble(vVal[i]);
+                    gVec[i] = shape.Length > 1 ? numOps.ToDouble(outputGradient[b, i]) : numOps.ToDouble(outputGradient[i]);
+                    sqNormP += pVec[i] * pVec[i];
+                    sqNormV += vVec[i] * vVec[i];
                 }
 
+                double normV = Math.Sqrt(sqNormV);
                 double lambda_p = 2.0 / Math.Max(1.0 - c * sqNormP, 1e-10);
-                double conformalFactor = lambda_p * lambda_p / 4.0;
+
+                if (normV < 1e-10)
+                {
+                    // Near zero tangent: gradient passes through scaled by conformal factor
+                    double cf = lambda_p * lambda_p / 4.0;
+                    for (int i = 0; i < dim; i++)
+                    {
+                        if (point.RequiresGradient)
+                        {
+                            if (point.Gradient is null) point.Gradient = new Tensor<T>(shape);
+                            double pg = gVec[i] * cf;
+                            if (shape.Length > 1) point.Gradient[b, i] = numOps.Add(point.Gradient[b, i], numOps.FromDouble(pg));
+                            else point.Gradient[i] = numOps.Add(point.Gradient[i], numOps.FromDouble(pg));
+                        }
+                        if (tangent.RequiresGradient)
+                        {
+                            if (tangent.Gradient is null) tangent.Gradient = new Tensor<T>(shape);
+                            double vg = gVec[i] * cf;
+                            if (shape.Length > 1) tangent.Gradient[b, i] = numOps.Add(tangent.Gradient[b, i], numOps.FromDouble(vg));
+                            else tangent.Gradient[i] = numOps.Add(tangent.Gradient[i], numOps.FromDouble(vg));
+                        }
+                    }
+                    continue;
+                }
+
+                // alpha = tanh(sqrtC * lambda_p * normV / 2) / (sqrtC * normV)
+                double arg = sqrtC * lambda_p * normV / 2.0;
+                double tanhArg = Math.Tanh(arg);
+                double alpha = tanhArg / (sqrtC * normV);
+
+                // scaledV[i] = alpha * v[i]
+                var scaledV = new double[dim];
+                for (int i = 0; i < dim; i++)
+                    scaledV[i] = alpha * vVec[i];
+
+                // Step 1: Backward through MobiusAdd(p, scaledV) → gradP_mob, gradSV_mob
+                // MobiusAdd: r = (A*p + B*scaledV) / D
+                double dotPSV = 0, sqNormSV = 0;
+                for (int i = 0; i < dim; i++)
+                {
+                    dotPSV += pVec[i] * scaledV[i];
+                    sqNormSV += scaledV[i] * scaledV[i];
+                }
+                double A = 1.0 + 2.0 * c * dotPSV + c * sqNormSV;
+                double B = 1.0 - c * sqNormP;
+                double D = Math.Max(1.0 + 2.0 * c * dotPSV + c * c * sqNormP * sqNormSV, 1e-10);
+                double invD = 1.0 / D;
+
+                var rVec = new double[dim];
+                for (int i = 0; i < dim; i++)
+                    rVec[i] = (A * pVec[i] + B * scaledV[i]) * invD;
+
+                // Compute dL/dp_mob and dL/dsv_mob via MobiusAdd Jacobian
+                var gradP_mob = new double[dim];
+                var gradSV_mob = new double[dim];
 
                 for (int i = 0; i < dim; i++)
                 {
-                    double gradOut = shape.Length > 1
-                        ? numOps.ToDouble(outputGradient[b, i])
-                        : numOps.ToDouble(outputGradient[i]);
-
-                    double pGrad = gradOut * conformalFactor;
-                    double vGrad = gradOut * conformalFactor;
-
-                    if (point.RequiresGradient)
+                    // dr_j/dp_i
+                    double dA_dpi = 2.0 * c * scaledV[i];
+                    double dB_dpi = -2.0 * c * pVec[i];
+                    double dD_dpi = 2.0 * c * scaledV[i] + 2.0 * c * c * pVec[i] * sqNormSV;
+                    double gpMob = 0;
+                    for (int j = 0; j < dim; j++)
                     {
-                        if (point.Gradient == null)
-                            point.Gradient = new Tensor<T>(shape);
-                        if (shape.Length > 1)
-                            point.Gradient[b, i] = numOps.Add(point.Gradient[b, i], numOps.FromDouble(pGrad));
-                        else
-                            point.Gradient[i] = numOps.Add(point.Gradient[i], numOps.FromDouble(pGrad));
+                        double dr = invD * (dA_dpi * pVec[j] + (i == j ? A : 0) + dB_dpi * scaledV[j]) - rVec[j] * invD * dD_dpi;
+                        gpMob += gVec[j] * dr;
                     }
+                    gradP_mob[i] = gpMob;
 
-                    if (tangent.RequiresGradient)
+                    // dr_j/dsv_i
+                    double dA_dsvi = 2.0 * c * pVec[i] + 2.0 * c * scaledV[i];
+                    double dD_dsvi = 2.0 * c * pVec[i] + 2.0 * c * c * sqNormP * scaledV[i];
+                    double gsvMob = 0;
+                    for (int j = 0; j < dim; j++)
                     {
-                        if (tangent.Gradient == null)
-                            tangent.Gradient = new Tensor<T>(shape);
+                        double dr = invD * (dA_dsvi * pVec[j] + (i == j ? B : 0)) - rVec[j] * invD * dD_dsvi;
+                        gsvMob += gVec[j] * dr;
+                    }
+                    gradSV_mob[i] = gsvMob;
+                }
+
+                // Step 2: Backward through scaledV = alpha * v
+                // d(alpha*v_j)/dv_i = alpha * delta_ij + v_j * d(alpha)/dv_i
+                // d(alpha)/dv_i = d/dv_i [tanh(arg) / (sqrtC * normV)]
+                //   = [sech²(arg) * sqrtC*lambda_p/(2*normV) * v_i - tanhArg/(sqrtC*normV²) * v_i/normV] / (sqrtC)
+                //   = v_i * [sech²(arg)*lambda_p/(2*normV) - tanhArg/(sqrtC*normV*normV)] / sqrtC ... simplified:
+                double sech2 = 1.0 - tanhArg * tanhArg;
+                double dAlpha_dNormV = (sech2 * sqrtC * lambda_p / 2.0 * normV - tanhArg) / (sqrtC * normV * normV);
+
+                if (tangent.RequiresGradient)
+                {
+                    if (tangent.Gradient is null) tangent.Gradient = new Tensor<T>(shape);
+                    for (int i = 0; i < dim; i++)
+                    {
+                        // dL/dv_i = sum_j gradSV_mob[j] * d(scaledV_j)/dv_i
+                        double gradVi = 0;
+                        double dAlpha_dvi = dAlpha_dNormV * vVec[i] / normV; // chain through normV
+                        for (int j = 0; j < dim; j++)
+                        {
+                            double dSVj_dvi = alpha * (i == j ? 1.0 : 0.0) + vVec[j] * dAlpha_dvi;
+                            gradVi += gradSV_mob[j] * dSVj_dvi;
+                        }
                         if (shape.Length > 1)
-                            tangent.Gradient[b, i] = numOps.Add(tangent.Gradient[b, i], numOps.FromDouble(vGrad));
+                            tangent.Gradient[b, i] = numOps.Add(tangent.Gradient[b, i], numOps.FromDouble(gradVi));
                         else
-                            tangent.Gradient[i] = numOps.Add(tangent.Gradient[i], numOps.FromDouble(vGrad));
+                            tangent.Gradient[i] = numOps.Add(tangent.Gradient[i], numOps.FromDouble(gradVi));
+                    }
+                }
+
+                // Step 3: Point gradient includes both MobiusAdd contribution and
+                // the chain through alpha (which depends on lambda_p which depends on p)
+                // d(lambda_p)/dp_i = 4c*p_i / (1 - c*||p||²)² = lambda_p² * c * p_i
+                if (point.RequiresGradient)
+                {
+                    if (point.Gradient is null) point.Gradient = new Tensor<T>(shape);
+                    for (int i = 0; i < dim; i++)
+                    {
+                        // Direct MobiusAdd gradient w.r.t. p
+                        double gradPi = gradP_mob[i];
+
+                        // Chain through alpha's dependence on lambda_p (which depends on p)
+                        double dLambda_dpi = lambda_p * lambda_p * c * pVec[i];
+                        double dArg_dpi = sqrtC * dLambda_dpi * normV / 2.0;
+                        double dAlpha_dpi = sech2 * dArg_dpi / (sqrtC * normV);
+
+                        for (int j = 0; j < dim; j++)
+                            gradPi += gradSV_mob[j] * vVec[j] * dAlpha_dpi;
+
+                        if (shape.Length > 1)
+                            point.Gradient[b, i] = numOps.Add(point.Gradient[b, i], numOps.FromDouble(gradPi));
+                        else
+                            point.Gradient[i] = numOps.Add(point.Gradient[i], numOps.FromDouble(gradPi));
                     }
                 }
             }
