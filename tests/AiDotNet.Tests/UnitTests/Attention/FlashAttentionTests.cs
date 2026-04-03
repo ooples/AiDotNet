@@ -1,4 +1,5 @@
 using AiDotNet.NeuralNetworks.Attention;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 

@@ -185,7 +185,7 @@ public class AdvancedLossFunctionsIntegrationTests
     {
         // Arrange
         int numClasses = 4;
-        var adapter = new CTCLossAdapter<double>(numClasses, blankIndex: 0);
+        var adapter = new CTCLoss<double>(numClasses, blankIndex: 0);
 
         // Create flattened log probabilities [batch=1, time=3, classes=4] = 12 elements
         int batchSize = 1;

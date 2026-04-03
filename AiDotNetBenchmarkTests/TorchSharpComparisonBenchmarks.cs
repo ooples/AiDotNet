@@ -1,7 +1,8 @@
 #if NET8_0_OR_GREATER
+using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
-using AiDotNet.Tensors.Engines.Gpu;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Engines;
 using BenchmarkDotNet.Jobs;
@@ -21,10 +22,10 @@ public class TorchSharpComparisonBenchmarks
     private readonly Dictionary<int, Tensor<float>> _aiMatricesB = new();
     private readonly Dictionary<int, Tensor<float>> _aiVectorsA = new();
     private readonly Dictionary<int, Tensor<float>> _aiVectorsB = new();
-    private readonly Dictionary<int, IGpuTensor<float>> _aiGpuMatricesA = new();
-    private readonly Dictionary<int, IGpuTensor<float>> _aiGpuMatricesB = new();
-    private readonly Dictionary<int, IGpuTensor<float>> _aiGpuVectorsA = new();
-    private readonly Dictionary<int, IGpuTensor<float>> _aiGpuVectorsB = new();
+    private readonly Dictionary<int, Tensor<float>> _aiGpuMatricesA = new();
+    private readonly Dictionary<int, Tensor<float>> _aiGpuMatricesB = new();
+    private readonly Dictionary<int, Tensor<float>> _aiGpuVectorsA = new();
+    private readonly Dictionary<int, Tensor<float>> _aiGpuVectorsB = new();
     private readonly Dictionary<int, IGpuBuffer> _aiGpuAddOutputs = new();
     private readonly Dictionary<int, IGpuBuffer> _aiGpuMultiplyOutputs = new();
 
@@ -35,7 +36,7 @@ public class TorchSharpComparisonBenchmarks
 
     private Tensor<float>? _aiConvInput;
     private Tensor<float>? _aiConvKernel;
-    private IGpuTensor<float>? _aiGpuConvInput;
+    private Tensor<float>? _aiGpuConvInput;
     private TorchTensor? _torchConvInput;
     private TorchTensor? _torchConvKernel;
 
@@ -86,8 +87,8 @@ public class TorchSharpComparisonBenchmarks
 
             _aiMatricesA[size] = new Tensor<float>(dataA, new[] { size, size });
             _aiMatricesB[size] = new Tensor<float>(dataB, new[] { size, size });
-            _aiGpuMatricesA[size] = _gpuEngine.UploadToGpu(_aiMatricesA[size], GpuTensorRole.Activation);
-            _aiGpuMatricesB[size] = _gpuEngine.UploadToGpu(_aiMatricesB[size], GpuTensorRole.Activation);
+            _aiGpuMatricesA[size] = GpuTensorHelper.UploadToGpu(_gpuBackend, _aiMatricesA[size], GpuTensorRole.Activation);
+            _aiGpuMatricesB[size] = GpuTensorHelper.UploadToGpu(_gpuBackend, _aiMatricesB[size], GpuTensorRole.Activation);
 
             _torchMatricesA[size] = torch.tensor(dataA, new long[] { size, size }, device: _torchDevice);
             _torchMatricesB[size] = torch.tensor(dataB, new long[] { size, size }, device: _torchDevice);
@@ -100,8 +101,8 @@ public class TorchSharpComparisonBenchmarks
 
             _aiVectorsA[size] = new Tensor<float>(dataA, new[] { size });
             _aiVectorsB[size] = new Tensor<float>(dataB, new[] { size });
-            _aiGpuVectorsA[size] = _gpuEngine.UploadToGpu(_aiVectorsA[size], GpuTensorRole.Activation);
-            _aiGpuVectorsB[size] = _gpuEngine.UploadToGpu(_aiVectorsB[size], GpuTensorRole.Activation);
+            _aiGpuVectorsA[size] = GpuTensorHelper.UploadToGpu(_gpuBackend, _aiVectorsA[size], GpuTensorRole.Activation);
+            _aiGpuVectorsB[size] = GpuTensorHelper.UploadToGpu(_gpuBackend, _aiVectorsB[size], GpuTensorRole.Activation);
 
             _torchVectorsA[size] = torch.tensor(dataA, new long[] { size }, device: _torchDevice);
             _torchVectorsB[size] = torch.tensor(dataB, new long[] { size }, device: _torchDevice);
@@ -113,7 +114,7 @@ public class TorchSharpComparisonBenchmarks
             throw new InvalidOperationException("Conv2D tensors were not initialized.");
         }
 
-        _aiGpuConvInput = _gpuEngine.UploadToGpu(_aiConvInput, GpuTensorRole.Activation);
+        _aiGpuConvInput = GpuTensorHelper.UploadToGpu(_gpuBackend, _aiConvInput, GpuTensorRole.Activation);
         if (_torchConvInput is null || _torchConvKernel is null)
         {
             throw new InvalidOperationException("TorchSharp Conv2D tensors were not initialized.");

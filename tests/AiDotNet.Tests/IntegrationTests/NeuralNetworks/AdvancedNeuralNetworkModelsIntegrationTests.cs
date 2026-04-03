@@ -945,7 +945,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 64,
             outputSize: 64);  // Output same as input for autoencoder
 
-        var network = new Autoencoder<float>(architecture, learningRate: 0.01f, epochs: 1, batchSize: 32);
+        var network = new Autoencoder<float>(architecture);
         var input = CreateRandomTensor([64]);
 
         // Act
@@ -967,7 +967,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 32,
             outputSize: 32);
 
-        var network = new Autoencoder<float>(architecture, learningRate: 0.01f);
+        var network = new Autoencoder<float>(architecture);
         var input = CreateRandomTensor([32]);
 
         // Act
@@ -988,7 +988,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 64,
             outputSize: 64);
 
-        var network = new Autoencoder<float>(architecture, learningRate: 0.01f);
+        var network = new Autoencoder<float>(architecture);
 
         // Act
         var parameterCount = network.ParameterCount;
@@ -1008,7 +1008,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 64,
             outputSize: 64);
 
-        var network = new Autoencoder<float>(architecture, learningRate: 0.01f);
+        var network = new Autoencoder<float>(architecture);
 
         // Act
         var metadata = network.GetModelMetadata();
@@ -1029,7 +1029,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 128,
             outputSize: 128);
 
-        var network = new Autoencoder<float>(architecture, learningRate: 0.01f);
+        var network = new Autoencoder<float>(architecture);
 
         // Act
         var encodedSize = network.EncodedSize;
@@ -1123,7 +1123,6 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var network = new DeepBeliefNetwork<float>(
             architecture,
-            learningRate: 0.01f,
             epochs: 1,
             batchSize: 32);
         var input = CreateRandomTensor([64]);
@@ -1148,7 +1147,6 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
 
         var network = new DeepBeliefNetwork<float>(
             architecture,
-            learningRate: 0.01f,
             epochs: 1,
             batchSize: 32);
 
@@ -1178,7 +1176,6 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             architecture,
             visibleSize: 64,
             hiddenSize: 32,
-            learningRate: 0.01,
             cdSteps: 1,
             scalarActivation: new SigmoidActivation<float>());
         var input = CreateRandomTensor([64]);
@@ -1205,7 +1202,6 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             architecture,
             visibleSize: 64,
             hiddenSize: 32,
-            learningRate: 0.01,
             cdSteps: 1,
             scalarActivation: new SigmoidActivation<float>());
 
@@ -1884,7 +1880,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 16,
             outputSize: 4);
 
-        var gnn = new GraphNeuralNetwork<float>(architecture, new CrossEntropyLoss<float>(),
+        var gnn = new GraphNeuralNetwork<float>(architecture, lossFunction: new CrossEntropyLoss<float>(),
             graphConvolutionalActivation: null, activationLayerActivation: null);
         var input = CreateRandomTensor([8, 16]); // 8 nodes, 16 features each
 
@@ -1907,7 +1903,7 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             inputSize: 16,
             outputSize: 4);
 
-        var gnn = new GraphNeuralNetwork<float>(architecture, new CrossEntropyLoss<float>(),
+        var gnn = new GraphNeuralNetwork<float>(architecture, lossFunction: new CrossEntropyLoss<float>(),
             graphConvolutionalActivation: null, activationLayerActivation: null);
 
         // Act
@@ -3454,7 +3450,6 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         var dbm = new DeepBoltzmannMachine<float>(
             architecture,
             epochs: 10,
-            learningRate: 0.01f,
             lossFunction: null,
             activationFunction: (IActivationFunction<float>?)null);
 
@@ -3482,7 +3477,6 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         var dbm = new DeepBoltzmannMachine<float>(
             architecture,
             epochs: 10,
-            learningRate: 0.01f,
             lossFunction: null,
             activationFunction: (IActivationFunction<float>?)null);
 

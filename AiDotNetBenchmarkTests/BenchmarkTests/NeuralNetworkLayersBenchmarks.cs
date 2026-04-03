@@ -72,10 +72,10 @@ public class NeuralNetworkLayersBenchmarks
     }
 
     [Benchmark]
-    public Tensor<double> DenseLayer_ForwardBackward()
+    public Tensor<double> DenseLayer_ForwardTwice()
     {
         _denseLayer.Forward(_input);
-        return _denseLayer.Backward(_gradOutput);
+        return _denseLayer.Forward(_input);
     }
 
     #endregion
@@ -98,7 +98,7 @@ public class NeuralNetworkLayersBenchmarks
         {
             activationGrad[i] = 0.1;
         }
-        return _activationLayer.Backward(activationGrad);
+        return _activationLayer.Forward(activationGrad);
     }
 
     #endregion
@@ -121,7 +121,7 @@ public class NeuralNetworkLayersBenchmarks
         {
             dropoutGrad[i] = 0.1;
         }
-        return _dropoutLayer.Backward(dropoutGrad);
+        return _dropoutLayer.Forward(dropoutGrad);
     }
 
     #endregion
@@ -144,7 +144,7 @@ public class NeuralNetworkLayersBenchmarks
         {
             bnGrad[i] = 0.1;
         }
-        return _batchNormLayer.Backward(bnGrad);
+        return _batchNormLayer.Forward(bnGrad);
     }
 
     #endregion
@@ -167,7 +167,7 @@ public class NeuralNetworkLayersBenchmarks
         {
             lnGrad[i] = 0.1;
         }
-        return _layerNormLayer.Backward(lnGrad);
+        return _layerNormLayer.Forward(lnGrad);
     }
 
     #endregion

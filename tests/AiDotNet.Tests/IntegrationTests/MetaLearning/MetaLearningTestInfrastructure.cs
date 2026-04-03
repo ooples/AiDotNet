@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Data.Structures;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -271,6 +272,10 @@ internal sealed class ResetTrackingOptimizer : IGradientBasedOptimizer<double, M
     {
         return new OptimizationAlgorithmOptions<double, Matrix<double>, Vector<double>>();
     }
+
+    public double GetCurrentLearningRate() => 0.01;
+
+    public void Step(TapeStepContext<double> context) { }
 
     public void Reset()
     {

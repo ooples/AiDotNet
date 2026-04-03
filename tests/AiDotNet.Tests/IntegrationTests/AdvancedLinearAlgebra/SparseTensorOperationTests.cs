@@ -26,9 +26,9 @@ public class SparseTensorOperationTests
         var transposed = sparse.Transpose();
 
         // Assert - Should be 4x3
-        Assert.Equal(4, transposed.Rows);
-        Assert.Equal(3, transposed.Columns);
-        Assert.Equal(6, transposed.NonZeroCount);
+        Assert.Equal(4, ((SparseTensor<double>)transposed).Rows);
+        Assert.Equal(3, ((SparseTensor<double>)transposed).Columns);
+        Assert.Equal(6, ((SparseTensor<double>)transposed).NonZeroCount);
     }
 
     [Fact]
@@ -44,7 +44,7 @@ public class SparseTensorOperationTests
 
         // Act
         var transposed = sparse.Transpose();
-        var denseTrans = transposed.ToDense();
+        var denseTrans = ((SparseTensor<double>)transposed).ToDense();
 
         // Assert - Transposed matrix should be 3x2:
         // [1 4]
@@ -71,9 +71,9 @@ public class SparseTensorOperationTests
         var transposed = csr.Transpose();
 
         // Assert
-        Assert.Equal(3, transposed.Rows);
-        Assert.Equal(3, transposed.Columns);
-        Assert.Equal(5, transposed.NonZeroCount);
+        Assert.Equal(3, ((SparseTensor<double>)transposed).Rows);
+        Assert.Equal(3, ((SparseTensor<double>)transposed).Columns);
+        Assert.Equal(5, ((SparseTensor<double>)transposed).NonZeroCount);
     }
 
     [Fact]
@@ -89,9 +89,9 @@ public class SparseTensorOperationTests
         var transposed = csc.Transpose();
 
         // Assert
-        Assert.Equal(3, transposed.Rows);
-        Assert.Equal(3, transposed.Columns);
-        Assert.Equal(5, transposed.NonZeroCount);
+        Assert.Equal(3, ((SparseTensor<double>)transposed).Rows);
+        Assert.Equal(3, ((SparseTensor<double>)transposed).Columns);
+        Assert.Equal(5, ((SparseTensor<double>)transposed).NonZeroCount);
     }
 
     [Fact]
@@ -106,7 +106,7 @@ public class SparseTensorOperationTests
 
         // Act
         var doubleTransposed = original.Transpose().Transpose();
-        var doubleDense = doubleTransposed.ToDense();
+        var doubleDense = ((SparseTensor<double>)doubleTransposed).ToDense();
 
         // Assert
         for (int i = 0; i < 3; i++)
@@ -134,7 +134,7 @@ public class SparseTensorOperationTests
         // Act
         var transposed = sparse.Transpose();
         var originalDense = sparse.ToDense();
-        var transposedDense = transposed.ToDense();
+        var transposedDense = ((SparseTensor<double>)transposed).ToDense();
 
         // Assert - transposed[j,i] should equal original[i,j]
         for (int i = 0; i < 3; i++)
@@ -547,7 +547,7 @@ public class SparseTensorOperationTests
 
         // Assert - Transpose of diagonal is same matrix
         Assert.Equal(size, sparse.NonZeroCount);
-        Assert.Equal(size, transposed.NonZeroCount);
+        Assert.Equal(size, ((SparseTensor<double>)transposed).NonZeroCount);
     }
 
     #endregion
@@ -650,7 +650,7 @@ public class SparseTensorOperationTests
         // Act
         var transposed = sparse.Transpose();
         var originalDense = sparse.ToDense();
-        var transposedDense = transposed.ToDense();
+        var transposedDense = ((SparseTensor<double>)transposed).ToDense();
 
         // Assert - Should be equal to transpose
         for (int i = 0; i < 3; i++)
@@ -782,9 +782,9 @@ public class SparseTensorOperationTests
         var cscTransposed = sparse.ToCsc().Transpose();
 
         // Assert - All transposes should produce same dense matrix
-        var cooDense = cooTransposed.ToDense();
-        var csrDense = csrTransposed.ToDense();
-        var cscDense = cscTransposed.ToDense();
+        var cooDense = ((SparseTensor<double>)cooTransposed).ToDense();
+        var csrDense = ((SparseTensor<double>)csrTransposed).ToDense();
+        var cscDense = ((SparseTensor<double>)cscTransposed).ToDense();
 
         for (int i = 0; i < 3; i++)
         {
@@ -809,11 +809,11 @@ public class SparseTensorOperationTests
         var coalescedThenTransposed = sparse.Coalesce().Transpose();
 
         // Also transpose first, then coalesce
-        var transposedThenCoalesced = sparse.Transpose().Coalesce();
+        var transposedThenCoalesced = ((SparseTensor<double>)sparse.Transpose()).Coalesce();
 
         // Get dense representations
-        var method1Dense = coalescedThenTransposed.ToDense();
-        var method2Dense = transposedThenCoalesced.ToDense();
+        var method1Dense = ((SparseTensor<double>)coalescedThenTransposed).ToDense();
+        var method2Dense = ((SparseTensor<double>)transposedThenCoalesced).ToDense();
 
         // Assert - Both methods should give same result
         for (int i = 0; i < 3; i++)
@@ -859,7 +859,7 @@ public class SparseTensorOperationTests
 
         // Act
         var transposed = sparse.Transpose();
-        var dense = transposed.ToDense();
+        var dense = ((SparseTensor<int>)transposed).ToDense();
 
         // Assert
         Assert.Equal(10, dense[1, 0]);
