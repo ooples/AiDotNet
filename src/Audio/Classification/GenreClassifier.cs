@@ -553,8 +553,14 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
         }
 
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     #endregion

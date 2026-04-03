@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
@@ -414,8 +414,14 @@ public class RadialBasisFunctionNetwork<T> : NeuralNetworkBase<T>
         }
 
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput, _optimizer);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     #pragma warning disable CS0169

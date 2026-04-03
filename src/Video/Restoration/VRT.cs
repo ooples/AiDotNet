@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -409,8 +409,14 @@ public class VRT<T> : VideoSuperResolutionBase<T>
             throw new InvalidOperationException("Training is not supported in ONNX mode. Use native mode for training.");
 
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     #endregion

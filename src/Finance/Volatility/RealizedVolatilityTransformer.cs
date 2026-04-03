@@ -252,8 +252,14 @@ public class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, IVolatili
     protected override void TrainCore(Tensor<T> input, Tensor<T> target, Tensor<T> output)
     {
         SetTrainingMode(true);
-        TrainWithTape(input, target);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, target);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

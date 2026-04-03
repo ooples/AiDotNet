@@ -494,8 +494,14 @@ public class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         }
 
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>

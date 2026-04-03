@@ -1,4 +1,4 @@
-﻿global using AiDotNet.NeuralNetworks.Layers;
+global using AiDotNet.NeuralNetworks.Layers;
 
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -507,8 +507,14 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput, _optimizer);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

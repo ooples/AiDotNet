@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -836,8 +836,14 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             }
 
             SetTrainingMode(true);
-            TrainWithTape(input, expectedOutput);
-            SetTrainingMode(false);
+            try
+            {
+                TrainWithTape(input, expectedOutput);
+            }
+            finally
+            {
+                SetTrainingMode(false);
+            }
         }
 
         /// <summary>

@@ -691,10 +691,14 @@ public class ResidualNeuralNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLaye
         SetTrainingMode(true);
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
-
-        TrainWithTape(input, expectedOutput, _optimizer);
-
-        SetTrainingMode(false);
+try
+{
+    TrainWithTape(input, expectedOutput, _optimizer);
+}
+finally
+{
+    SetTrainingMode(false);
+}
     }
 
 

@@ -216,8 +216,14 @@ public class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
         if (!UseNativeMode) throw new InvalidOperationException("Training not supported in ONNX mode.");
         
         SetTrainingMode(true);
-        TrainWithTape(input, target);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, target);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

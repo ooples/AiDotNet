@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
@@ -772,8 +772,14 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         if (Layers.Count > 0)
         {
             SetTrainingMode(true);
-            TrainWithTape(input, expectedOutput, _optimizer);
-            SetTrainingMode(false);
+            try
+            {
+                TrainWithTape(input, expectedOutput, _optimizer);
+            }
+            finally
+            {
+                SetTrainingMode(false);
+            }
         }
         else
         {

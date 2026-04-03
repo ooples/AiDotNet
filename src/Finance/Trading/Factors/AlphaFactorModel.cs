@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -334,8 +334,14 @@ public class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T>
             throw new InvalidOperationException("Training is only supported in native mode.");
 
         SetTrainingMode(true);
-        TrainWithTape(input, target);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, target);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

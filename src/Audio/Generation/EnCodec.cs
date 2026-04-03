@@ -234,8 +234,14 @@ public class EnCodec<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
     {
         if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)

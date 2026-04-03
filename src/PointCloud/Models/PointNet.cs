@@ -370,8 +370,14 @@ public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointClou
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override Tensor<T> Predict(Tensor<T> input)

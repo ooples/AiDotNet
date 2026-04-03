@@ -559,8 +559,14 @@ public class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEventDetector
         }
 
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

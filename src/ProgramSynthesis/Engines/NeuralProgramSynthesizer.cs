@@ -667,8 +667,14 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override ModelMetadata<T> GetModelMetadata()

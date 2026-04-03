@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -223,8 +223,14 @@ public class NeuralVaR<T> : RiskModelBase<T>
         if (!UseNativeMode) throw new InvalidOperationException("Training not supported in ONNX mode.");
         
         SetTrainingMode(true);
-        TrainWithTape(input, target);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, target);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>
