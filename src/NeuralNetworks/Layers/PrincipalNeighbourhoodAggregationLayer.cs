@@ -409,7 +409,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
 
         // Convert adjacency matrix to CSR for sparse operations
         var (adjValues, adjColIndices, adjRowPointers) = ConvertToCSR(_adjacencyMatrix, numNodes);
-        using var adjCsr = new CsrGpuTensor<T>(backend, adjValues, adjColIndices, adjRowPointers, numNodes, numNodes);
+        using var adjCsr = new SparseTensor<T>(backend, adjValues, adjColIndices, adjRowPointers, numNodes, numNodes);
 
         // Compute node degrees from adjacency matrix row sums
         float[] degrees = ComputeDegrees(_adjacencyMatrix, numNodes);
@@ -467,7 +467,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
                         backend.CsrSpMM(
                             adjCsr.Values, adjCsr.ColumnIndices, adjCsr.RowPointers,
                             transformedBuffer, aggregatedBuffer,
-                            numNodes, preTransformFeatures, numNodes, adjCsr.Nnz);
+                            numNodes, preTransformFeatures, numNodes, adjCsr.NonZeroCount);
 
                         if (aggregator == PNAAggregator.Mean)
                         {
@@ -505,7 +505,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
                         backend.CsrSpMM(
                             adjCsr.Values, adjCsr.ColumnIndices, adjCsr.RowPointers,
                             transformedBuffer, aggregatedBuffer,
-                            numNodes, preTransformFeatures, numNodes, adjCsr.Nnz);
+                            numNodes, preTransformFeatures, numNodes, adjCsr.NonZeroCount);
                         break;
                 }
 
@@ -602,7 +602,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
 
         // Create output tensor
         int[] outputShape = batchSize == 1 ? [numNodes, _outputFeatures] : [batchSize, numNodes, _outputFeatures];
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
     }
 
     /// <summary>

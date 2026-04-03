@@ -585,7 +585,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]
             addedBatchDimension = true;
-            input4D = input.CreateView(0, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+            input4D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
         }
         else if (rank == 4)
         {
@@ -600,7 +600,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
             {
                 flatBatch *= input.Shape[d];
             }
-            input4D = input.CreateView(0, [flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
+            input4D = input.Reshape([flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
         // Validate input channels
@@ -647,13 +647,13 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
             outputShape[originalInputShape.Length - 3] = OutputDepth;
             outputShape[originalInputShape.Length - 2] = result.Shape[2];
             outputShape[originalInputShape.Length - 1] = result.Shape[3];
-            return result.CreateView(0, outputShape);
+            return result.Reshape(outputShape);
         }
 
         if (addedBatchDimension)
         {
             // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
-            return result.CreateView(0, [OutputDepth, result.Shape[2], result.Shape[3]]);
+            return result.Reshape([OutputDepth, result.Shape[2], result.Shape[3]]);
         }
 
         return result;
@@ -675,8 +675,8 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     private Tensor<T> ComputeActivationGradientGpuFallback(DirectGpuTensorEngine gpuEngine, Tensor<T> output, Tensor<T> gradOutput)
     {
         // Fallback: download, compute on CPU, upload
-        var outputData = output.ToTensor();
-        var gradOutputData = gradOutput.ToTensor();
+        var outputData = output;
+        var gradOutputData = gradOutput;
         var activationGradient = ApplyActivationDerivative(outputData, gradOutputData);
 
         return gpuEngine.UploadToGpu(activationGradient, GpuTensorRole.Intermediate);

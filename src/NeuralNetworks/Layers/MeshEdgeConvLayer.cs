@@ -5,6 +5,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -548,7 +549,7 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
         _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), [numEdges, OutputChannels]);
         _lastInput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(inputData), shape);
 
-        return new GpuTensor<T>(backend, outputBuffer, [numEdges, OutputChannels], GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, [numEdges, OutputChannels], GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     #endregion

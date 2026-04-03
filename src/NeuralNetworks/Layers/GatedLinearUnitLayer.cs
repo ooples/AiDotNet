@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -566,7 +567,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
         if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable.");
 
-        int size = linearOutput.ElementCount;
+        int size = linearOutput.Length;
         var outputBuffer = backend.AllocateBuffer(size);
 
         // Element-wise multiply on GPU
@@ -581,12 +582,12 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
             _gpuGateOutput = gateOutput;
 
             // Also cache CPU tensors for fallback backward pass
-            _lastInput = input.ToTensor();
-            _lastLinearOutput = linearOutput.ToTensor();
-            _lastGateOutput = gateOutput.ToTensor();
+            _lastInput = input;
+            _lastLinearOutput = linearOutput;
+            _lastGateOutput = gateOutput;
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, linearOutput.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, linearOutput.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

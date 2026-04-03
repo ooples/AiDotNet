@@ -453,12 +453,12 @@ public partial class RBMLayer<T> : LayerBase<T>
         Tensor<T> input2D = input;
         if (rank == 1)
         {
-            input2D = input.CreateView(0, [1, _visibleUnits]);
+            input2D = input.Reshape([1, _visibleUnits]);
             flatBatch = 1;
         }
         else if (rank > 2)
         {
-            input2D = input.CreateView(0, [flatBatch, _visibleUnits]);
+            input2D = input.Reshape([flatBatch, _visibleUnits]);
         }
 
         // Transpose weights for FusedLinearGpu (expects [inputFeatures, outputFeatures])
@@ -471,16 +471,16 @@ public partial class RBMLayer<T> : LayerBase<T>
         // Cache state for backward pass only during training
         if (IsTrainingMode)
         {
-            _lastVisibleInput = input.ToTensor();
+            _lastVisibleInput = input;
             if (_lastVisibleInput.Shape.Length != 2)
                 _lastVisibleInput = _lastVisibleInput.Reshape([flatBatch, _visibleUnits]);
-            _lastHiddenOutput = result.ToTensor();
+            _lastHiddenOutput = result;
         }
 
         // Reshape output to match expected shape
         if (rank == 1)
         {
-            return result.CreateView(0, [_hiddenUnits]);
+            return result.Reshape([_hiddenUnits]);
         }
         else if (rank > 2)
         {
@@ -488,7 +488,7 @@ public partial class RBMLayer<T> : LayerBase<T>
             for (int d = 0; d < rank - 1; d++)
                 outputShape[d] = _originalInputShape[d];
             outputShape[rank - 1] = _hiddenUnits;
-            return result.CreateView(0, outputShape);
+            return result.Reshape(outputShape);
         }
 
         return result;

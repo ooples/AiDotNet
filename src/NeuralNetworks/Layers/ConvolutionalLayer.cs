@@ -1046,7 +1046,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]
             _addedBatchDimension = true;
-            input4D = input.CreateView(0, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+            input4D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
         }
         else if (rank == 4)
         {
@@ -1063,7 +1063,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             {
                 flatBatch *= input.Shape[d];
             }
-            input4D = input.CreateView(0, [flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
+            input4D = input.Reshape([flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
         // Validate input channels
@@ -1096,8 +1096,8 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             _gpuInputShape4D = input4D.Shape.ToArray();
 
             // Also download to CPU for hybrid CPU/GPU backward compatibility
-            _lastInput = input4D.ToTensor();
-            _lastOutput = result.ToTensor();
+            _lastInput = input4D;
+            _lastOutput = result;
         }
 
         // Restore original shape if needed
@@ -1112,13 +1112,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 3] = OutputDepth;
             outputShape[_originalInputShape.Length - 2] = result.Shape[2];
             outputShape[_originalInputShape.Length - 1] = result.Shape[3];
-            return result.CreateView(0, outputShape);
+            return result.Reshape(outputShape);
         }
 
         if (_addedBatchDimension)
         {
             // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
-            return result.CreateView(0, [OutputDepth, result.Shape[2], result.Shape[3]]);
+            return result.Reshape([OutputDepth, result.Shape[2], result.Shape[3]]);
         }
 
         return result;
@@ -1131,11 +1131,11 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     {
         // For convolutional layers, we need to reshape to 2D for activation backward, then reshape back
         // Most activations are element-wise, so we can flatten the tensor
-        int totalElements = gradOutput.ElementCount;
+        int totalElements = gradOutput.Length;
         var flat2DShape = new[] { totalElements, 1 };
-        var flatGrad = gradOutput.CreateView(0, flat2DShape);
+        var flatGrad = gradOutput.Reshape(flat2DShape);
         var lastOutputGpu = _lastOutputGpu ?? throw new InvalidOperationException("_lastOutputGpu has not been initialized.");
-        var flatOutput = lastOutputGpu.CreateView(0, flat2DShape);
+        var flatOutput = lastOutputGpu.Reshape(flat2DShape);
 
         Tensor<T> flatResult = activation switch
         {
@@ -1149,7 +1149,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         };
 
         // Reshape back to 4D
-        return flatResult.CreateView(0, gradOutput.Shape.ToArray());
+        return flatResult.Reshape(gradOutput.Shape.ToArray());
     }
 
     /// <summary>

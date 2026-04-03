@@ -1064,7 +1064,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         try
         {
             using var gpuResult = ForwardGpu(input);
-            result = gpuResult.ToTensor();
+            result = gpuResult;
             return true;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
@@ -1098,7 +1098,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <code>
     /// // Example: GPU-resident inference
     /// using var gpuResult = network.ForwardGpu(input);
-    /// var output = gpuResult.ToTensor(); // Only downloads here
+    /// var output = gpuResult; // Only downloads here
     /// </code>
     /// </remarks>
     public virtual Tensor<T> ForwardGpu(Tensor<T> input)
@@ -1148,7 +1148,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     if (current is not null)
                     {
                         // Download current GPU tensor to CPU
-                        cpuInput = current.ToTensor();
+                        cpuInput = current;
                         if (ownsCurrentTensor)
                         {
                             current.Dispose();
@@ -1282,7 +1282,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                             else
                             {
                                 // CPU fallback for layers without GPU support
-                                var cpuInput = current.ToTensor();
+                                var cpuInput = current;
                                 if (ownsCurrentTensor)
                                 {
                                     current.Dispose();
@@ -1298,7 +1298,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                         deferredScope.Execute();
 
                         // Download final result
-                        var result = current.ToTensor();
+                        var result = current;
                         if (ownsCurrentTensor)
                         {
                             current.Dispose();
@@ -1327,7 +1327,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         try
         {
             using var result = ForwardGpu(input);
-            return result.ToTensor();
+            return result;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
         {
@@ -1394,7 +1394,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                             }
                             else
                             {
-                                var cpuInput = current.ToTensor();
+                                var cpuInput = current;
                                 if (ownsCurrentTensor)
                                 {
                                     current.Dispose();
@@ -1410,7 +1410,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                         await deferredScope.ExecuteAsync(cancellationToken);
 
                         // Download final result
-                        var result = current.ToTensor();
+                        var result = current;
                         if (ownsCurrentTensor)
                         {
                             current.Dispose();
@@ -1446,7 +1446,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             try
             {
                 using var result = ForwardGpu(input);
-                return result.ToTensor();
+                return result;
             }
             catch (Exception ex) when (ex is not OutOfMemoryException and not System.Threading.ThreadAbortException)
             {
@@ -1477,7 +1477,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     ///     {
     ///         var result = network.ForwardWithGpuContext(batch);
     ///         // Results are GPU-resident until ToTensor() is called
-    ///         predictions.Add(result.ToTensor());
+    ///         predictions.Add(result);
     ///     }
     /// } // All GPU tensors are cleaned up here
     /// </code>
@@ -1553,9 +1553,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     var next = layer.ForwardGpu(current);
 
                     // Register output with context (if not already registered by layer)
-                    if (next is GpuTensor<T> gpuNext)
+                    if (next is Tensor<float> gpuNextFloat)
                     {
-                        ctx.Registry.TryRegister(gpuNext);
+                        ctx.Registry.TryRegister(gpuNextFloat);
                     }
 
                     current = next;
@@ -1563,7 +1563,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 else
                 {
                     // Layer doesn't support GPU - fall back to CPU
-                    var cpuInput = current.ToTensor();
+                    var cpuInput = current;
                     var cpuOutput = layer.Forward(cpuInput);
 
                     // Upload result back using context
@@ -2557,7 +2557,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => ForwardForTraining(inp);
             Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) => computeLoss(pred);
 
-            var context = new Training.TapeStepContext<T>(
+            var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
                 trainableParams, grads, lossValue,
                 input, input, ComputeForward, RecomputeLoss);
 

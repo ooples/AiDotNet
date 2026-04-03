@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -163,8 +163,8 @@ public class GaussianNoiseLayer<T> : LayerBase<T>
 
             var result = gpuEngine.AddGpu(input, noise);
 
-            _lastInput = input.ToTensor();
-            _lastNoise = noise.ToTensor();
+            _lastInput = input;
+            _lastNoise = noise;
 
             noise.Dispose();
 

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -318,7 +318,7 @@ public class ReshapeLayer<T> : LayerBase<T>
         targetShape[0] = batchSize;
         Array.Copy(_outputShape, 0, targetShape, 1, _outputShape.Length);
 
-        return input.CreateView(0, targetShape);
+        return input.Reshape(targetShape);
     }
 
     /// <summary>

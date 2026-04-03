@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -168,8 +168,8 @@ public class RBFLayer<T> : LayerBase<T>
 
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
-            _lastOutput = output.ToTensor();
+            _lastInput = input;
+            _lastOutput = output;
         }
 
         return output;

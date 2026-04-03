@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -123,16 +124,16 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     #region GPU Weight Storage Fields
 
     // GPU tensors for GPU-resident training
-    private GpuTensor<T>? _gpuWeights;
-    private GpuTensor<T>? _gpuBias;
-    private GpuTensor<T>? _gpuWeightGradient;
-    private GpuTensor<T>? _gpuBiasGradient;
-    private GpuTensor<T>? _gpuWeightVelocity;
-    private GpuTensor<T>? _gpuBiasVelocity;
-    private GpuTensor<T>? _gpuWeightM;
-    private GpuTensor<T>? _gpuWeightV;
-    private GpuTensor<T>? _gpuBiasM;
-    private GpuTensor<T>? _gpuBiasV;
+    private Tensor<T>? _gpuWeights;
+    private Tensor<T>? _gpuBias;
+    private Tensor<T>? _gpuWeightGradient;
+    private Tensor<T>? _gpuBiasGradient;
+    private Tensor<T>? _gpuWeightVelocity;
+    private Tensor<T>? _gpuBiasVelocity;
+    private Tensor<T>? _gpuWeightM;
+    private Tensor<T>? _gpuWeightV;
+    private Tensor<T>? _gpuBiasM;
+    private Tensor<T>? _gpuBiasV;
 
     #endregion
 
@@ -616,8 +617,8 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         // Ensure GPU weights are initialized
-        _gpuWeights ??= new GpuTensor<T>(backend, _projectionWeights, GpuTensorRole.Weight);
-        _gpuBias ??= new GpuTensor<T>(backend, _projectionBias, GpuTensorRole.Bias);
+        _gpuWeights ??= GpuTensorHelper.UploadToGpu<T>(backend, _projectionWeights, GpuTensorRole.Weight);
+        _gpuBias ??= GpuTensorHelper.UploadToGpu<T>(backend, _projectionBias, GpuTensorRole.Bias);
 
         // Verify gradients exist
         if (_gpuWeightGradient == null || _gpuBiasGradient == null)
@@ -634,8 +635,8 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
         config.ApplyUpdate(backend, _gpuBias.Buffer, _gpuBiasGradient.Buffer, BuildPatchEmbeddingOptimizerState("bias"), biasCount);
 
         // Sync back to CPU tensors for compatibility
-        _projectionWeights = _gpuWeights.ToTensor();
-        _projectionBias = _gpuBias.ToTensor();
+        _projectionWeights = _gpuWeights;
+        _projectionBias = _gpuBias;
 
         // Invalidate GPU cache after parameter updates
         Engine.InvalidatePersistentTensor(_projectionWeights);
@@ -656,25 +657,25 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
             case GpuOptimizerType.Nag:
             case GpuOptimizerType.Lars:
                 // Momentum-based optimizers need velocity buffers
-                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
 
             case GpuOptimizerType.Adam:
             case GpuOptimizerType.AdamW:
             case GpuOptimizerType.Lamb:
                 // Adam-family optimizers need M (first moment) and V (second moment) buffers
-                _gpuWeightM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
 
             case GpuOptimizerType.RmsProp:
             case GpuOptimizerType.Adagrad:
                 // RmsProp/Adagrad need squared average/accumulated gradient - reuse velocity buffers
-                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
         }
     }

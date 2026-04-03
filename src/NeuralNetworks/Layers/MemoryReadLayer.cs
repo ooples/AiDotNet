@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -748,7 +749,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             memoryBuffer.Dispose();
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, [batchSize, outputDim], GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, [batchSize, outputDim], GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

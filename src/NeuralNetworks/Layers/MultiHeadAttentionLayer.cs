@@ -968,20 +968,20 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             _gpuEmbeddingDim = embeddingDimension;
 
             // Also cache CPU tensors for fallback backward pass
-            _lastInput = input3D.ToTensor();
+            _lastInput = input3D;
 
             // Cache projected Q, K, V for backward pass
-            _lastProjectedQueries = qPermuted.ToTensor();
-            _lastProjectedKeys = kPermuted.ToTensor();
-            _lastProjectedValues = vPermuted.ToTensor();
+            _lastProjectedQueries = qPermuted;
+            _lastProjectedKeys = kPermuted;
+            _lastProjectedValues = vPermuted;
 
             // Cache attention context for output weights gradient
-            _lastAttentionContext = contextFlat.ToTensor();
+            _lastAttentionContext = contextFlat;
 
             // Cache attention weights for backward pass
-            _lastAttentionScores = attentionWeightsGpu?.ToTensor();
+            _lastAttentionScores = attentionWeightsGpu;
 
-            _lastOutput = outputWithBias.ToTensor();
+            _lastOutput = outputWithBias;
         }
 
         // 10. Reshape back to original batch dimensions if needed

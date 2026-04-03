@@ -1,6 +1,7 @@
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.LossFunctions;
 
@@ -105,7 +106,7 @@ public class PoissonLoss<T> : LossFunctionBase<T>
             return base.CalculateLossAndGradientGpu(predicted, actual);
         }
 
-        int size = predicted.ElementCount;
+        int size = predicted.Length;
 
         // Compute loss on GPU
         float lossValue = backend.PoissonLoss(predicted.Buffer, actual.Buffer, size);
@@ -115,7 +116,7 @@ public class PoissonLoss<T> : LossFunctionBase<T>
         backend.PoissonBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
+        var gradientTensor = GpuTensorHelper.UploadToGpu<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

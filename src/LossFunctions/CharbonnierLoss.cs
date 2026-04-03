@@ -1,6 +1,7 @@
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.LossFunctions;
 
@@ -150,7 +151,7 @@ public class CharbonnierLoss<T> : LossFunctionBase<T>
             return base.CalculateLossAndGradientGpu(predicted, actual);
         }
 
-        int size = predicted.ElementCount;
+        int size = predicted.Length;
         float epsilon = Convert.ToSingle(NumOps.ToDouble(_epsilon));
 
         // Compute loss on GPU
@@ -161,7 +162,7 @@ public class CharbonnierLoss<T> : LossFunctionBase<T>
         backend.CharbonnierBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size, epsilon);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
+        var gradientTensor = GpuTensorHelper.UploadToGpu<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
     }

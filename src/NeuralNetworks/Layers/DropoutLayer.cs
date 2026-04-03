@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -459,7 +459,7 @@ public class DropoutLayer<T> : LayerBase<T>
         {
             _gpuDropoutMask?.Dispose();
             _gpuDropoutMask = null;
-            return input.CreateView(0, input.Shape.ToArray());
+            return input.Reshape(input.Shape.ToArray());
         }
 
         float rate = (float)NumOps.ToDouble(_dropoutRate);
@@ -483,8 +483,8 @@ public class DropoutLayer<T> : LayerBase<T>
 
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
-            _dropoutMask = mask.ToTensor();
+            _lastInput = input;
+            _dropoutMask = mask;
         }
 
         return output;

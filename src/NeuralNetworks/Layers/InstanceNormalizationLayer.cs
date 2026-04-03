@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -331,7 +332,7 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>
             _gpuSpatialSize = spatialSize;
 
             // Also cache for CPU backward compatibility
-            _lastInput = input.ToTensor();
+            _lastInput = input;
             var meanData = new float[statsSize];
             var varData = new float[statsSize];
             backend.DownloadBuffer(saveMeanBuffer, meanData);
@@ -346,7 +347,7 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>
             saveInvVarBuffer.Dispose();
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

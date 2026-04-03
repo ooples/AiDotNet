@@ -1,4 +1,5 @@
-using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -168,14 +169,14 @@ public class ResidualLayer<T> : LayerBase<T>
             // Skip this expensive download during inference (50% overhead reduction)
             if (IsTrainingMode)
             {
-                _lastInput = input.ToTensor();
-                _lastInnerOutput = innerOutput.ToTensor();
+                _lastInput = input;
+                _lastInnerOutput = innerOutput;
             }
         }
         else if (_innerLayer != null)
         {
             // Inner layer doesn't support GPU - must use CPU for inner layer
-            var inputCpu = input.ToTensor();
+            var inputCpu = input;
             var innerOutputCpu = _innerLayer.Forward(inputCpu);
 
             // Cache state for backward pass only during training
@@ -190,10 +191,7 @@ public class ResidualLayer<T> : LayerBase<T>
             if (backend == null)
                 throw new InvalidOperationException("GPU backend is not available");
 
-            var innerOutputGpu = new GpuTensor<T>(
-                backend,
-                innerOutputCpu,
-                GpuTensorRole.Intermediate);
+            var innerOutputGpu = GpuTensorHelper.UploadToGpu(backend, innerOutputCpu, GpuTensorRole.Intermediate);
 
             result = gpuEngine.AddGpu(input, innerOutputGpu);
         }
@@ -205,7 +203,7 @@ public class ResidualLayer<T> : LayerBase<T>
             // Cache state for backward pass only during training
             if (IsTrainingMode)
             {
-                _lastInput = input.ToTensor();
+                _lastInput = input;
                 _lastInnerOutput = null;
             }
         }

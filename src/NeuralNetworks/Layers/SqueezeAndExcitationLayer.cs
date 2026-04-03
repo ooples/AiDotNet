@@ -3,6 +3,7 @@ using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -877,11 +878,11 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         // Cache for backward pass if training
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
-            _lastExcitationWeights = excitation.ToTensor();
+            _lastInput = input;
+            _lastExcitationWeights = excitation;
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -907,7 +908,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         int squeezedSize = batchSize * channels;
         var squeezedBuffer = backend.AllocateBuffer(squeezedSize);
         backend.GlobalAvgPool2D(permutedBuffer, squeezedBuffer, batchSize, channels, height, width);
-        var squeezedGpu = new GpuTensor<T>(backend, squeezedBuffer, [batchSize, channels], GpuTensorRole.Activation, ownsBuffer: true);
+        var squeezedGpu = GpuTensorHelper.UploadToGpu<T>(backend, squeezedBuffer, [batchSize, channels], GpuTensorRole.Activation, ownsBuffer: true);
 
         // Step 3: Excitation - FC1 + activation + FC2 + sigmoid
         var fc1Type = GetFirstActivationType();
@@ -934,11 +935,11 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         // Cache for backward pass if training
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
-            _lastExcitationWeights = excitation.ToTensor();
+            _lastInput = input;
+            _lastExcitationWeights = excitation;
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -965,7 +966,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         int squeezedSize = batchSize * channels;
         var squeezedBuffer = backend.AllocateBuffer(squeezedSize);
         backend.MeanAxis(permutedBuffer, squeezedBuffer, squeezedSize, seqLen);
-        var squeezedGpu = new GpuTensor<T>(backend, squeezedBuffer, [batchSize, channels], GpuTensorRole.Activation, ownsBuffer: true);
+        var squeezedGpu = GpuTensorHelper.UploadToGpu<T>(backend, squeezedBuffer, [batchSize, channels], GpuTensorRole.Activation, ownsBuffer: true);
 
         // Step 2: Excitation
         var fc1Type = GetFirstActivationType();
@@ -990,11 +991,11 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         // Cache for backward pass
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
-            _lastExcitationWeights = excitation.ToTensor();
+            _lastInput = input;
+            _lastExcitationWeights = excitation;
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -1007,11 +1008,11 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         int channels = shape[0];
 
         // Treat as [1, C] batch
-        var input2D = new GpuTensor<T>(backend, input.Buffer, [1, channels], GpuTensorRole.Activation, ownsBuffer: false);
+        var input2D = GpuTensorHelper.UploadToGpu<T>(backend, input.Buffer, [1, channels], GpuTensorRole.Activation, ownsBuffer: false);
         var result2D = ForwardGpu2D(input2D, weights1T, weights2T, backend, gpuEngine);
 
         // Return with original 1D shape (the buffer is the same but we view it as 1D)
-        return new GpuTensor<T>(backend, result2D.Buffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, result2D.Buffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -1039,7 +1040,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         int squeezedSize = batchSize * channels;
         var squeezedBuffer = backend.AllocateBuffer(squeezedSize);
         backend.MeanAxis(permutedBuffer, squeezedBuffer, squeezedSize, spatialSize);
-        var squeezedGpu = new GpuTensor<T>(backend, squeezedBuffer, [batchSize, channels], GpuTensorRole.Activation, ownsBuffer: true);
+        var squeezedGpu = GpuTensorHelper.UploadToGpu<T>(backend, squeezedBuffer, [batchSize, channels], GpuTensorRole.Activation, ownsBuffer: true);
 
         // Excitation
         var fc1Type = GetFirstActivationType();
@@ -1063,11 +1064,11 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
         // Cache
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
-            _lastExcitationWeights = excitation.ToTensor();
+            _lastInput = input;
+            _lastExcitationWeights = excitation;
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

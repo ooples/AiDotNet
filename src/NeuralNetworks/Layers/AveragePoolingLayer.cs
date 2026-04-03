@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -132,7 +132,7 @@ public class AveragePoolingLayer<T> : LayerBase<T>
         if (rank == 3)
         {
             addedBatch = true;
-            input4D = input.CreateView(0, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
+            input4D = input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
         }
         else if (rank == 4)
         {
@@ -144,7 +144,7 @@ public class AveragePoolingLayer<T> : LayerBase<T>
             int flatBatch = 1;
             for (int d = 0; d < rank - 3; d++)
                 flatBatch *= input.Shape[d];
-            input4D = input.CreateView(0, new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
+            input4D = input.Reshape(new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
         _gpuInputShape = input4D.Shape.ToArray();
@@ -164,11 +164,11 @@ public class AveragePoolingLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 3] = output.Shape[1];
             outputShape[_originalInputShape.Length - 2] = output.Shape[2];
             outputShape[_originalInputShape.Length - 1] = output.Shape[3];
-            return output.CreateView(0, outputShape);
+            return output.Reshape(outputShape);
         }
         if (addedBatch)
         {
-            return output.CreateView(0, new[] { output.Shape[1], output.Shape[2], output.Shape[3] });
+            return output.Reshape(new[] { output.Shape[1], output.Shape[2], output.Shape[3] });
         }
         return output;
     }

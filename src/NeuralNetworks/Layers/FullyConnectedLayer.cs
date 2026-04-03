@@ -766,12 +766,12 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
         if (inputShape.Length == 1)
         {
             // 1D input [features] -> [1, features]
-            input2D = input.CreateView(0, [1, inputFeatures]);
+            input2D = input.Reshape([1, inputFeatures]);
         }
         else if (inputShape.Length > 2)
         {
             // ND input -> flatten to [batchDim, features]
-            input2D = input.CreateView(0, [batchSize, inputFeatures]);
+            input2D = input.Reshape([batchSize, inputFeatures]);
         }
 
         // Use GPU-resident FusedLinear - NO CPU round-trip
@@ -790,23 +790,23 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
             {
                 var preActivation = gpuEngine.FusedLinearGpu(input2D, weightsT, _biases, FusedActivationType.None);
                 _gpuPreActivation = preActivation;
-                _lastOutput = preActivation.ToTensor();
+                _lastOutput = preActivation;
             }
             else
             {
                 _gpuPreActivation = result;
-                _lastOutput = result.ToTensor();
+                _lastOutput = result;
             }
 
             // Also cache CPU tensors for fallback backward pass
-            _lastInput = input.ToTensor();
+            _lastInput = input;
         }
 
         // Reshape output back to original batch dimensions if needed
         if (inputShape.Length == 1)
         {
             // 1D input -> 1D output [outputSize]
-            result = result.CreateView(0, [outputSize]);
+            result = result.Reshape([outputSize]);
         }
         else if (inputShape.Length > 2)
         {
@@ -817,7 +817,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
                 outputShape[i] = inputShape[i];
             }
             outputShape[^1] = outputSize;
-            result = result.CreateView(0, outputShape);
+            result = result.Reshape(outputShape);
         }
         // 2D input: result is already [batch, outputSize]
 

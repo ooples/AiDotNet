@@ -228,16 +228,16 @@ public class TripletLoss<T> : LossFunctionBase<T>
         }
 
         int batchSize = anchor.Shape[0];
-        int embeddingSize = anchor.ElementCount / batchSize;
+        int embeddingSize = anchor.Length / batchSize;
         float margin = Convert.ToSingle(NumOps.ToDouble(_margin));
 
         // Compute loss on GPU
         float lossValue = backend.TripletLoss(anchor.Buffer, positive.Buffer, negative.Buffer, batchSize, embeddingSize, margin);
 
         // Allocate gradient buffers
-        var anchorGradBuffer = backend.AllocateBuffer(anchor.ElementCount);
-        var positiveGradBuffer = backend.AllocateBuffer(positive.ElementCount);
-        var negativeGradBuffer = backend.AllocateBuffer(negative.ElementCount);
+        var anchorGradBuffer = backend.AllocateBuffer(anchor.Length);
+        var positiveGradBuffer = backend.AllocateBuffer(positive.Length);
+        var negativeGradBuffer = backend.AllocateBuffer(negative.Length);
 
         // Compute gradients on GPU
         backend.TripletLossBackward(anchor.Buffer, positive.Buffer, negative.Buffer,
@@ -245,9 +245,9 @@ public class TripletLoss<T> : LossFunctionBase<T>
             batchSize, embeddingSize, margin);
 
         // Create gradient tensors
-        var anchorGradTensor = new GpuTensor<T>(backend, anchorGradBuffer, anchor._shape, GpuTensorRole.Gradient);
-        var positiveGradTensor = new GpuTensor<T>(backend, positiveGradBuffer, positive._shape, GpuTensorRole.Gradient);
-        var negativeGradTensor = new GpuTensor<T>(backend, negativeGradBuffer, negative._shape, GpuTensorRole.Gradient);
+        var anchorGradTensor = GpuTensorHelper.UploadToGpu<T>(backend, anchorGradBuffer, anchor._shape, GpuTensorRole.Gradient);
+        var positiveGradTensor = GpuTensorHelper.UploadToGpu<T>(backend, positiveGradBuffer, positive._shape, GpuTensorRole.Gradient);
+        var negativeGradTensor = GpuTensorHelper.UploadToGpu<T>(backend, negativeGradBuffer, negative._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), anchorGradTensor, positiveGradTensor, negativeGradTensor);
     }

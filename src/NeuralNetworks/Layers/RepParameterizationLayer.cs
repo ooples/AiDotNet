@@ -1,9 +1,10 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -371,10 +372,10 @@ public class RepParameterizationLayer<T> : LayerBase<T>
         if (IsTrainingMode)
         {
             int[] latentShape = [batchSize, latentSize];
-            _gpuMean = new GpuTensor<T>(backend, meanBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
-            _gpuLogVar = new GpuTensor<T>(backend, logvarBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
-            _gpuEpsilon = new GpuTensor<T>(backend, epsilonBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
-            _gpuStdDev = new GpuTensor<T>(backend, stdDevBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuMean = GpuTensorHelper.UploadToGpu<T>(backend, meanBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuLogVar = GpuTensorHelper.UploadToGpu<T>(backend, logvarBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuEpsilon = GpuTensorHelper.UploadToGpu<T>(backend, epsilonBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuStdDev = GpuTensorHelper.UploadToGpu<T>(backend, stdDevBuffer, latentShape, GpuTensorRole.Intermediate, ownsBuffer: true);
             _gpuBatchSize = batchSize;
             _gpuLatentSize = latentSize;
 
@@ -413,7 +414,7 @@ public class RepParameterizationLayer<T> : LayerBase<T>
             outputShape[rank - 1] = latentSize;
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

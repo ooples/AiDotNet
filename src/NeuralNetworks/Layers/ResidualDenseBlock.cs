@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Engines;
@@ -416,7 +416,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         var concat1Buffer = backend.AllocateBuffer(concat1Size);
         ConcatenateChannelsGpu(backend, x0Buffer, x1ActivatedBuffer, concat1Buffer,
             batch, _numFeatures, _growthChannels, spatialSize);
-        var concat1Tensor = new GpuTensor<T>(backend, concat1Buffer,
+        var concat1Tensor = GpuTensorHelper.UploadToGpu<T>(backend, concat1Buffer,
             shape.Length == 3 ? [concat1Channels, height, width] : [batch, concat1Channels, height, width],
             GpuTensorRole.Activation, ownsBuffer: !IsTrainingMode);
 
@@ -432,7 +432,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         var concat2Buffer = backend.AllocateBuffer(concat2Size);
         ConcatenateChannelsGpu(backend, concat1Buffer, x2ActivatedBuffer, concat2Buffer,
             batch, concat1Channels, _growthChannels, spatialSize);
-        var concat2Tensor = new GpuTensor<T>(backend, concat2Buffer,
+        var concat2Tensor = GpuTensorHelper.UploadToGpu<T>(backend, concat2Buffer,
             shape.Length == 3 ? [concat2Channels, height, width] : [batch, concat2Channels, height, width],
             GpuTensorRole.Activation, ownsBuffer: !IsTrainingMode);
 
@@ -448,7 +448,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         var concat3Buffer = backend.AllocateBuffer(concat3Size);
         ConcatenateChannelsGpu(backend, concat2Buffer, x3ActivatedBuffer, concat3Buffer,
             batch, concat2Channels, _growthChannels, spatialSize);
-        var concat3Tensor = new GpuTensor<T>(backend, concat3Buffer,
+        var concat3Tensor = GpuTensorHelper.UploadToGpu<T>(backend, concat3Buffer,
             shape.Length == 3 ? [concat3Channels, height, width] : [batch, concat3Channels, height, width],
             GpuTensorRole.Activation, ownsBuffer: !IsTrainingMode);
 
@@ -464,7 +464,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         var concat4Buffer = backend.AllocateBuffer(concat4Size);
         ConcatenateChannelsGpu(backend, concat3Buffer, x4ActivatedBuffer, concat4Buffer,
             batch, concat3Channels, _growthChannels, spatialSize);
-        var concat4Tensor = new GpuTensor<T>(backend, concat4Buffer,
+        var concat4Tensor = GpuTensorHelper.UploadToGpu<T>(backend, concat4Buffer,
             shape.Length == 3 ? [concat4Channels, height, width] : [batch, concat4Channels, height, width],
             GpuTensorRole.Activation, ownsBuffer: !IsTrainingMode);
 
@@ -488,16 +488,16 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
                 : [batch, _growthChannels, height, width];
 
             _gpuConv1Out = conv1Out;
-            _gpuX1Activated = new GpuTensor<T>(backend, x1ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuX1Activated = GpuTensorHelper.UploadToGpu<T>(backend, x1ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
             _gpuConcat1 = concat1Tensor;
             _gpuConv2Out = conv2Out;
-            _gpuX2Activated = new GpuTensor<T>(backend, x2ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuX2Activated = GpuTensorHelper.UploadToGpu<T>(backend, x2ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
             _gpuConcat2 = concat2Tensor;
             _gpuConv3Out = conv3Out;
-            _gpuX3Activated = new GpuTensor<T>(backend, x3ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuX3Activated = GpuTensorHelper.UploadToGpu<T>(backend, x3ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
             _gpuConcat3 = concat3Tensor;
             _gpuConv4Out = conv4Out;
-            _gpuX4Activated = new GpuTensor<T>(backend, x4ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuX4Activated = GpuTensorHelper.UploadToGpu<T>(backend, x4ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
             _gpuConcat4 = concat4Tensor;
             _gpuConv5Out = x5;
         }
@@ -510,7 +510,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
             x4ActivatedBuffer.Dispose();
         }
 
-        var result = new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+        var result = GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
 
         // Restore original tensor rank for higher-rank input
         if (originalShape.Length > 4)

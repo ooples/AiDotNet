@@ -1,9 +1,10 @@
-using System;
+﻿using System;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -306,7 +307,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
                 processedInput = permutedInput;
             }
 
-            int outerSize = processedInput.ElementCount / axisSize;
+            int outerSize = processedInput.Length / axisSize;
 
             // Step 1: Compute mean = sum(x) / n
             sumBuffer = backend.AllocateBuffer(outerSize);
@@ -316,7 +317,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
             backend.Scale(sumBuffer, meanBuffer, scale, outerSize);
 
             // Step 2: Compute x^2 element-wise
-            int totalSize = processedInput.ElementCount;
+            int totalSize = processedInput.Length;
             xSquaredBuffer = backend.AllocateBuffer(totalSize);
             backend.Multiply(processedInput.Buffer, processedInput.Buffer, xSquaredBuffer, totalSize);
 
@@ -363,7 +364,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
             }
 
             // Create result before cleanup (outputBuffer ownership transfers)
-            var result = new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+            var result = GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
             outputBuffer = null; // Prevent disposal in finally block since ownership transferred
 
             return result;

@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -588,7 +589,7 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
         var finalBuffer = backend.AllocateBuffer(totalOutput);
         ApplyGpuActivation(backend, combinedBuffer, finalBuffer, totalOutput, GetFusedActivationType());
 
-        return new GpuTensor<T>(backend, finalBuffer, [batchSize, numNodes, _outputFeatures], GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, finalBuffer, [batchSize, numNodes, _outputFeatures], GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

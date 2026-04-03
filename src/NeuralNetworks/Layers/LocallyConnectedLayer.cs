@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -133,22 +134,22 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     #region GPU Weight Storage Fields
 
     // GPU weight tensors for GPU-resident training
-    private GpuTensor<T>? _gpuWeights;
-    private GpuTensor<T>? _gpuBiases;
+    private Tensor<T>? _gpuWeights;
+    private Tensor<T>? _gpuBiases;
 
     // GPU gradient tensors from BackwardGpu
-    private GpuTensor<T>? _gpuWeightGradient;
-    private GpuTensor<T>? _gpuBiasGradient;
+    private Tensor<T>? _gpuWeightGradient;
+    private Tensor<T>? _gpuBiasGradient;
 
     // Optimizer state tensors for SGD/NAG/LARS (velocity)
-    private GpuTensor<T>? _gpuWeightVelocity;
-    private GpuTensor<T>? _gpuBiasVelocity;
+    private Tensor<T>? _gpuWeightVelocity;
+    private Tensor<T>? _gpuBiasVelocity;
 
     // Optimizer state tensors for Adam/AdamW/LAMB (M and V)
-    private GpuTensor<T>? _gpuWeightM;
-    private GpuTensor<T>? _gpuWeightV;
-    private GpuTensor<T>? _gpuBiasM;
-    private GpuTensor<T>? _gpuBiasV;
+    private Tensor<T>? _gpuWeightM;
+    private Tensor<T>? _gpuWeightV;
+    private Tensor<T>? _gpuBiasM;
+    private Tensor<T>? _gpuBiasV;
 
     #endregion
 
@@ -669,7 +670,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
         if (rank == 3)
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]
-            input4D = input.CreateView(0, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+            input4D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
         }
         else if (rank == 4)
         {
@@ -684,7 +685,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
             {
                 flatBatch *= input.Shape[d];
             }
-            input4D = input.CreateView(0, [flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
+            input4D = input.Reshape([flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
         // Validate input channels
@@ -730,13 +731,13 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 3] = _outputChannels;
             outputShape[_originalInputShape.Length - 2] = result.Shape[2];
             outputShape[_originalInputShape.Length - 1] = result.Shape[3];
-            return result.CreateView(0, outputShape);
+            return result.Reshape(outputShape);
         }
 
         if (rank == 3)
         {
             // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
-            return result.CreateView(0, [_outputChannels, result.Shape[2], result.Shape[3]]);
+            return result.Reshape([_outputChannels, result.Shape[2], result.Shape[3]]);
         }
 
         return result;
@@ -748,10 +749,10 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     private Tensor<T> ComputeActivationGradientGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> gradOutput, Tensor<T> output, FusedActivationType activation)
     {
         // Flatten tensors for element-wise activation backward
-        int totalElements = gradOutput.ElementCount;
+        int totalElements = gradOutput.Length;
         var flat2DShape = new[] { totalElements, 1 };
-        var flatGrad = gradOutput.CreateView(0, flat2DShape);
-        var flatOutput = output.CreateView(0, flat2DShape);
+        var flatGrad = gradOutput.Reshape(flat2DShape);
+        var flatOutput = output.Reshape(flat2DShape);
 
         Tensor<T> flatResult = activation switch
         {
@@ -765,7 +766,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
         };
 
         // Reshape back to 4D
-        return flatResult.CreateView(0, gradOutput.Shape.ToArray());
+        return flatResult.Reshape(gradOutput.Shape.ToArray());
     }
 
     /// <summary>
@@ -1040,8 +1041,8 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
             throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
 
         // Ensure GPU weight tensors exist
-        _gpuWeights ??= new GpuTensor<T>(backend, _weights, GpuTensorRole.Weight);
-        _gpuBiases ??= new GpuTensor<T>(backend, _biases, GpuTensorRole.Bias);
+        _gpuWeights ??= GpuTensorHelper.UploadToGpu<T>(backend, _weights, GpuTensorRole.Weight);
+        _gpuBiases ??= GpuTensorHelper.UploadToGpu<T>(backend, _biases, GpuTensorRole.Bias);
 
         // Ensure optimizer state buffers exist
         EnsureLocallyConnectedOptimizerState(backend, config.OptimizerType);
@@ -1051,8 +1052,8 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
         config.ApplyUpdate(backend, _gpuBiases.Buffer, _gpuBiasGradient.Buffer, BuildLocallyConnectedOptimizerState("biases"), _biases.Length);
 
         // Sync back to CPU tensors for compatibility
-        _weights = _gpuWeights.ToTensor();
-        _biases = _gpuBiases.ToTensor();
+        _weights = _gpuWeights;
+        _biases = _gpuBiases;
     }
 
     /// <summary>
@@ -1069,25 +1070,25 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
             case GpuOptimizerType.Nag:
             case GpuOptimizerType.Lars:
                 // Velocity buffers
-                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
 
             case GpuOptimizerType.Adam:
             case GpuOptimizerType.AdamW:
             case GpuOptimizerType.Lamb:
                 // M and V buffers for Adam-family
-                _gpuWeightM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
 
             case GpuOptimizerType.RmsProp:
             case GpuOptimizerType.Adagrad:
                 // Squared average buffers (reuse velocity fields)
-                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
         }
     }

@@ -1,9 +1,10 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -482,7 +483,7 @@ public class MeshPoolLayer<T> : LayerBase<T>
         // Cache output
         _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), [numToKeep, InputChannels]);
 
-        return new GpuTensor<T>(backend, outputBuffer, [numToKeep, InputChannels], GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, [numToKeep, InputChannels], GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     #endregion

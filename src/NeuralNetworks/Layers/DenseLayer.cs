@@ -961,11 +961,11 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         Tensor<T> input2D = input;
         if (needsReshape && input.Shape.Length > 2)
         {
-            input2D = input.CreateView(0, [batchDim, actualInputSize]);
+            input2D = input.Reshape([batchDim, actualInputSize]);
         }
         else if (needsReshape && input.Shape.Length == 1)
         {
-            input2D = input.CreateView(0, [1, actualInputSize]);
+            input2D = input.Reshape([1, actualInputSize]);
         }
 
         // Get the fused activation type
@@ -995,15 +995,15 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
 
             // Also download to CPU for hybrid CPU/GPU backward compatibility
-            _lastInput = input.ToTensor();
-            _lastOutput = _lastPreActivationGpu.ToTensor();
+            _lastInput = input;
+            _lastOutput = _lastPreActivationGpu;
         }
 
         // Reshape output back to original batch dimensions if needed
         if (input.Shape.Length == 1)
         {
             // 1D input -> 1D output [outputSize]
-            result = result.CreateView(0, [outputSize]);
+            result = result.Reshape([outputSize]);
         }
         else if (input.Shape.Length > 2)
         {
@@ -1014,7 +1014,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 outputShape[i] = originalBatchDims[i];
             }
             outputShape[^1] = outputSize;
-            result = result.CreateView(0, outputShape);
+            result = result.Reshape(outputShape);
         }
         // 2D input: result is already [batch, outputSize]
 

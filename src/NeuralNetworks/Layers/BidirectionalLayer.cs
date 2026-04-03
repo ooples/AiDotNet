@@ -1,8 +1,9 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -408,7 +409,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
             backend.Copy2DStrided(srcView.Buffer, outputBuffer, 1, sliceSize, totalSize, dstOffset);
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -440,7 +441,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
             forward.Dispose();
             backward.Dispose();
 
-            return new GpuTensor<T>(backend, outputBuffer, forward.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+            return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, forward.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
         }
         else
         {
@@ -468,7 +469,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
             forward.Dispose();
             backward.Dispose();
 
-            return new GpuTensor<T>(backend, outputBuffer, stackedShape, GpuTensorRole.Activation, ownsBuffer: true);
+            return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, stackedShape, GpuTensorRole.Activation, ownsBuffer: true);
         }
     }
 

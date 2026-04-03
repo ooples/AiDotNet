@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -6,6 +6,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Validation;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -798,7 +799,7 @@ public class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T
         var finalBuffer = backend.AllocateBuffer(outputSize);
         backend.Copy(outputBuffer, finalBuffer, outputSize);
         outputBuffer.Dispose();
-        return new GpuTensor<T>(backend, finalBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, finalBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

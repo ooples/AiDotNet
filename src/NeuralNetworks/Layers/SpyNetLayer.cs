@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -991,8 +991,8 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
             if (IsTrainingMode)
             {
-                _lastInput1 = frame1.ToTensor();
-                _lastInput2 = frame2.ToTensor();
+                _lastInput1 = frame1;
+                _lastInput2 = frame2;
             }
 
             // Estimate Flow
@@ -1000,7 +1000,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
             if (IsTrainingMode)
             {
-                _lastFlow = flow.ToTensor();
+                _lastFlow = flow;
             }
 
             return flow;
@@ -1158,7 +1158,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                 }
             }
             using var buffer = backend.AllocateBuffer(gridData);
-            identityGrid = new GpuTensor<T>(backend, buffer, [batch, height, width, 2], GpuTensorRole.Constant, ownsBuffer: true);
+            identityGrid = GpuTensorHelper.UploadToGpu<T>(backend, buffer, [batch, height, width, 2], GpuTensorRole.Constant, ownsBuffer: true);
             _identityGridCache[gridKey] = identityGrid;
         }
 
@@ -1169,7 +1169,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         var scaleData = new float[] { scaleX, scaleY };
         using var scaleBuffer = backend.AllocateBuffer(scaleData);
-        var scaleTensor = new GpuTensor<T>(backend, scaleBuffer, [1, 1, 1, 2], GpuTensorRole.Constant, ownsBuffer: false);
+        var scaleTensor = GpuTensorHelper.UploadToGpu<T>(backend, scaleBuffer, [1, 1, 1, 2], GpuTensorRole.Constant, ownsBuffer: false);
 
         var scaledFlow = engine.BroadcastMultiplyRowGpu(flowPermuted, scaleTensor);
 

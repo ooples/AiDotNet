@@ -1,8 +1,9 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -409,7 +410,7 @@ public class QuantumLayer<T> : LayerBase<T>
             }
 
             // Create result (ownership of probabilities buffer transfers)
-            var result = new GpuTensor<T>(backend, probabilities, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+            var result = GpuTensorHelper.UploadToGpu<T>(backend, probabilities, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
             probabilitiesBuffer = null; // Prevent disposal in finally block since ownership transferred
 
             return result;

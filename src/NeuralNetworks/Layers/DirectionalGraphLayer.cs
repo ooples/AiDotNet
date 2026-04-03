@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -6,6 +6,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -572,11 +573,11 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Convert adjacency matrix to CSR format for sparse operations
         var (adjValues, adjColIndices, adjRowPointers) = ConvertToCSR(_adjacencyMatrix);
-        using var adjCsr = new CsrGpuTensor<T>(backend, adjValues, adjColIndices, adjRowPointers, numNodes, numNodes);
+        using var adjCsr = new SparseTensor<T>(backend, adjValues, adjColIndices, adjRowPointers, numNodes, numNodes);
 
         // Create transposed adjacency for outgoing aggregation
         var (adjTValues, adjTColIndices, adjTRowPointers) = ConvertToCSRTranspose(_adjacencyMatrix);
-        using var adjTCsr = new CsrGpuTensor<T>(backend, adjTValues, adjTColIndices, adjTRowPointers, numNodes, numNodes);
+        using var adjTCsr = new SparseTensor<T>(backend, adjTValues, adjTColIndices, adjTRowPointers, numNodes, numNodes);
 
         // Allocate output buffer [batch, nodes, outputFeatures]
         int outputSize = batchSize * numNodes * _outputFeatures;
@@ -588,7 +589,7 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Reshape input to 3D for batch processing if needed
         var input3D = inputShape.Length == 2
-            ? input.CreateView(0, new[] { 1, numNodes, inputFeatures })
+            ? input.Reshape(new[] { 1, numNodes, inputFeatures })
             : input;
 
         for (int b = 0; b < batchSize; b++)
@@ -611,7 +612,7 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             backend.CsrSpMM(
                 adjCsr.Values, adjCsr.ColumnIndices, adjCsr.RowPointers,
                 xwInBuffer, incomingBuffer,
-                numNodes, inputFeatures, _outputFeatures, adjCsr.Nnz);
+                numNodes, inputFeatures, _outputFeatures, adjCsr.NonZeroCount);
 
             // Add bias: incoming + b_in
             backend.BiasAdd(incomingBuffer, inBiasBuffer, incomingBuffer, numNodes, _outputFeatures);
@@ -630,7 +631,7 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             backend.CsrSpMM(
                 adjTCsr.Values, adjTCsr.ColumnIndices, adjTCsr.RowPointers,
                 xwOutBuffer, outgoingBuffer,
-                numNodes, inputFeatures, _outputFeatures, adjTCsr.Nnz);
+                numNodes, inputFeatures, _outputFeatures, adjTCsr.NonZeroCount);
 
             // Add bias: outgoing + b_out
             backend.BiasAdd(outgoingBuffer, outBiasBuffer, outgoingBuffer, numNodes, _outputFeatures);
@@ -752,7 +753,7 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             outputShape = new[] { batchSize, numNodes, _outputFeatures };
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

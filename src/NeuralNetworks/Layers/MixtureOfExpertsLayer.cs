@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -1722,7 +1722,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         else
         {
             // CPU fallback for router (uncommon path)
-            var cpuInput = input.ToTensor();
+            var cpuInput = input;
             var cpuLogits = _router.Forward(cpuInput);
             routingLogitsGpu = gpuEngine.UploadToGpu(cpuLogits, GpuTensorRole.Activation);
         }
@@ -1731,7 +1731,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var routingWeightsGpu = gpuEngine.SoftmaxGpu(routingLogitsGpu);
 
         // Step 3: Apply Top-K selection on GPU if enabled
-        IGpuTensor<int>? topKIndicesGpu = null;
+        Tensor<int>? topKIndicesGpu = null;
         Tensor<T>? topKValuesGpu = null;
         int[]? topKIndicesFlat = null;
 
@@ -1746,7 +1746,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
             // Download indices ONCE - tiny data (~256 bytes for batch=32, topK=2)
             // This is essential for MoE efficiency: run only selected experts, not all N
-            topKIndicesFlat = topKIndicesGpu.ToTensor().Data.ToArray();
+            topKIndicesFlat = topKIndicesGpu.Data.ToArray();
 
             // Cache 2D array for backward pass in training mode
             if (IsTrainingMode)
@@ -1800,7 +1800,7 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 else
                 {
                     // CPU fallback for this expert
-                    var cpuInput = input.ToTensor();
+                    var cpuInput = input;
                     var cpuOutput = _experts[i].Forward(cpuInput);
                     expertOutput = gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
                 }
@@ -1848,11 +1848,11 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Cache for backward pass (only in training mode - download to CPU)
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
-            _lastRoutingLogits = routingLogitsGpu.ToTensor();
-            _lastRoutingWeights = routingWeightsGpu.ToTensor();
-            _lastPreActivation = combinedGpu.ToTensor();
-            _lastExpertOutputs = expertOutputsGpu.Select(e => e.ToTensor()).ToList();
+            _lastInput = input;
+            _lastRoutingLogits = routingLogitsGpu;
+            _lastRoutingWeights = routingWeightsGpu;
+            _lastPreActivation = combinedGpu;
+            _lastExpertOutputs = expertOutputsGpu.Select(e => e).ToList();
         }
 
         return resultGpu;
@@ -1960,8 +1960,8 @@ public class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // We can compute 1/b then multiply
         // But we need an inverse operation. For now, download, compute, upload
         // TODO: Add InverseGpu or DivideGpu to DirectGpuTensorEngine
-        var aData = a.ToTensor();
-        var bData = b.ToTensor();
+        var aData = a;
+        var bData = b;
 
         int batchSize = aData.Shape[0];
         int features = aData.Shape[1];

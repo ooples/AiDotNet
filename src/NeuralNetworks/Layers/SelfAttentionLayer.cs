@@ -732,9 +732,9 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
             _gpuEmbeddingDimension = embeddingDimension;
 
             // Also cache CPU tensors for fallback backward pass
-            _lastInput = input3D.ToTensor();
-            _lastAttentionScores = attentionWeightsGpu?.ToTensor();
-            _lastOutput = output.ToTensor();
+            _lastInput = input3D;
+            _lastAttentionScores = attentionWeightsGpu;
+            _lastOutput = output;
             _originalInputShape = inputShape;
         }
 

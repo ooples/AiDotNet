@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -377,11 +377,11 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         var input = inputs[0];
 
         // Reshape input to [1, InputSize] for batched matmul
-        var inputReshaped = input.CreateView(0, [1, InputSize]);
+        var inputReshaped = input.Reshape([1, InputSize]);
 
         // Compute activations: [1, InputSize] @ [InputSize, ColumnCount] = [1, ColumnCount]
         var activations = gpuEngine.BatchedMatMulGpu(inputReshaped, Connections);
-        var activationsFlat = activations.CreateView(0, [ColumnCount]);
+        var activationsFlat = activations.Reshape([ColumnCount]);
 
         // Normalize activations to [0,1] — download to CPU for min/max reduction
         var cpuData = backend.DownloadBuffer(activationsFlat.Buffer);
@@ -426,12 +426,12 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
 
         // Magnitude-preserving output: mask * raw activations (matches CPU Forward)
         var maskedActivations = gpuEngine.MultiplyGpu(outputMask, activationsFlat);
-        var output = maskedActivations.CreateView(0, [ColumnCount]);
+        var output = maskedActivations.Reshape([ColumnCount]);
 
         // Store CPU copies for Learn() which needs binary mask and last output
-        LastOutput = output.ToTensor();
-        _lastBinaryOutput = outputMask.ToTensor().Reshape([ColumnCount]);
-        var cpuInput = input.ToTensor();
+        LastOutput = output;
+        _lastBinaryOutput = outputMask.Reshape([ColumnCount]);
+        var cpuInput = input;
         LastInput = cpuInput.Shape.Length == 1
             ? cpuInput
             : cpuInput.Reshape([cpuInput.Length]);

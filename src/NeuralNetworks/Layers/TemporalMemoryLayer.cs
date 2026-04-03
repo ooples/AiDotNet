@@ -1,9 +1,10 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -283,7 +284,7 @@ public class TemporalMemoryLayer<T> : LayerBase<T>
         // This broadcasts input[ColumnCount] across the CellsPerColumn dimension without CPU download
         backend.BroadcastMultiplyFirstAxis(cellStatesBuffer, input.Buffer, outputBuffer, ColumnCount, CellsPerColumn);
 
-        return new GpuTensor<T>(backend, outputBuffer, new[] { outputSize }, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, new[] { outputSize }, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

@@ -354,12 +354,12 @@ public partial class ReadoutLayer<T> : LayerBase<T>
         Tensor<T> input2D = input;
         if (input.Shape.Length == 1)
         {
-            input2D = input.CreateView(0, [1, inputSize]);
+            input2D = input.Reshape([1, inputSize]);
             batchDim = 1;
         }
         else if (input.Shape.Length > 2)
         {
-            input2D = input.CreateView(0, [batchDim, inputSize]);
+            input2D = input.Reshape([batchDim, inputSize]);
         }
 
         // Transpose weights for FusedLinearGpu
@@ -382,7 +382,7 @@ public partial class ReadoutLayer<T> : LayerBase<T>
             else
             {
                 // For other vector activations, fall back to CPU
-                var cpuPreActivation = preActivation.ToTensor();
+                var cpuPreActivation = preActivation;
                 var vecAct = VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.");
                 var cpuActivated = vecAct.Activate(cpuPreActivation);
                 result = gpuEngine.UploadToGpu(cpuActivated, GpuTensorRole.Activation);
@@ -410,15 +410,15 @@ public partial class ReadoutLayer<T> : LayerBase<T>
                 : (UsingVectorActivation ? FusedActivationType.None : GetFusedActivationType());
 
             // Also cache CPU tensors for CPU backward compatibility
-            _lastInput = input.ToTensor();
-            _lastPreActivation = preActResult.ToTensor();
-            _lastOutput = result.ToTensor();
+            _lastInput = input;
+            _lastPreActivation = preActResult;
+            _lastOutput = result;
         }
 
         // Reshape output to match expected shape
         if (input.Shape.Length == 1)
         {
-            return result.CreateView(0, [outputSize]);
+            return result.Reshape([outputSize]);
         }
         else if (input.Shape.Length > 2)
         {
@@ -426,7 +426,7 @@ public partial class ReadoutLayer<T> : LayerBase<T>
             for (int d = 0; d < input.Shape.Length - 1; d++)
                 outputShape[d] = _originalInputShape[d];
             outputShape[^1] = outputSize;
-            return result.CreateView(0, outputShape);
+            return result.Reshape(outputShape);
         }
 
         return result;

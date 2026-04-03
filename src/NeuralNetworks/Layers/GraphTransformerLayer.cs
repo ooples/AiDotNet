@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -6,6 +6,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -829,7 +830,7 @@ public class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         // Create a new buffer (non-using) and copy using GPU-native operation
         var finalBuffer = backend.AllocateBuffer(outputSize);
         backend.Copy(outputBuffer, finalBuffer, outputSize);
-        return new GpuTensor<T>(backend, finalBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, finalBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>

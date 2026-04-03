@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -322,7 +322,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
         if (rank == 4)
         {
             addedBatch = true;
-            input5D = input.CreateView(0, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3] });
+            input5D = input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3] });
         }
         else if (rank == 5)
         {
@@ -334,14 +334,14 @@ public class Upsample3DLayer<T> : LayerBase<T>
             int flatBatch = 1;
             for (int d = 0; d < rank - 4; d++)
                 flatBatch *= input.Shape[d];
-            input5D = input.CreateView(0, new[] { flatBatch, input.Shape[rank - 4], input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
+            input5D = input.Reshape(new[] { flatBatch, input.Shape[rank - 4], input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
         _gpuInputShape = input5D.Shape.ToArray();
         _addedBatchDimension = addedBatch;
 
         // Store _lastInput for backward pass
-        _lastInput = input.ToTensor();
+        _lastInput = input;
 
         var output = gpuEngine.NearestNeighborUpsample3DGpu<T>(input5D, ScaleDepth, ScaleHeight, ScaleWidth);
 
@@ -355,11 +355,11 @@ public class Upsample3DLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 3] = output.Shape[2];
             outputShape[_originalInputShape.Length - 2] = output.Shape[3];
             outputShape[_originalInputShape.Length - 1] = output.Shape[4];
-            return output.CreateView(0, outputShape);
+            return output.Reshape(outputShape);
         }
         if (addedBatch)
         {
-            return output.CreateView(0, new[] { output.Shape[1], output.Shape[2], output.Shape[3], output.Shape[4] });
+            return output.Reshape(new[] { output.Shape[1], output.Shape[2], output.Shape[3], output.Shape[4] });
         }
         return output;
     }

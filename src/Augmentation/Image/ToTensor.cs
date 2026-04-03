@@ -1,4 +1,4 @@
-namespace AiDotNet.Augmentation.Image;
+﻿namespace AiDotNet.Augmentation.Image;
 
 /// <summary>
 /// Converts an image to a normalized tensor with values in [0, 1].
@@ -7,7 +7,7 @@ namespace AiDotNet.Augmentation.Image;
 /// <para>
 /// ToTensor converts pixel values from [0, 255] integer range to [0, 1] floating point range
 /// by dividing by 255. This is the standard first step in most image preprocessing pipelines,
-/// equivalent to <c>torchvision.transforms.ToTensor()</c>.
+/// equivalent to <c>torchvision.transforms</c>.
 /// </para>
 /// <para><b>For Beginners:</b> Digital images store colors as numbers from 0 to 255.
 /// Neural networks prefer small numbers close to zero, so we divide by 255 to get

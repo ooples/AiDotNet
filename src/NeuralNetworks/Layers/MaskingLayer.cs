@@ -1,8 +1,9 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -220,7 +221,7 @@ public class MaskingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
-        int size = input.ElementCount;
+        int size = input.Length;
 
         // Create mask buffer: 1 where input != maskValue, 0 where input == maskValue
         var maskBuffer = backend.AllocateBuffer(size);
@@ -234,7 +235,7 @@ public class MaskingLayer<T> : LayerBase<T>
         // Store mask GPU tensor for backward pass (if training)
         if (IsTrainingMode)
         {
-            _lastMaskGpu = new GpuTensor<T>(backend, maskBuffer, input.Shape.ToArray(), GpuTensorRole.Intermediate, ownsBuffer: true);
+            _lastMaskGpu = GpuTensorHelper.UploadToGpu<T>(backend, maskBuffer, input.Shape.ToArray(), GpuTensorRole.Intermediate, ownsBuffer: true);
         }
         else
         {
@@ -242,7 +243,7 @@ public class MaskingLayer<T> : LayerBase<T>
             maskBuffer.Dispose();
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
