@@ -821,6 +821,11 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             throw new ArgumentException("expectedOutput cannot be null for teacher-forced training.", nameof(expectedOutput));
         if (expectedOutput.Shape.Length < 2)
             throw new ArgumentException($"expectedOutput must have at least rank 2 [batch, time*mels], got rank {expectedOutput.Shape.Length}.", nameof(expectedOutput));
+        if (expectedOutput.Shape[^1] % NumMels != 0)
+            throw new ArgumentException($"expectedOutput last dimension ({expectedOutput.Shape[^1]}) must be divisible by NumMels ({NumMels}).", nameof(expectedOutput));
+        int melFrameCount = expectedOutput.Shape[1] / _numMelsPerFrame;
+        if (melFrameCount == 0)
+            throw new ArgumentException($"expectedOutput has {expectedOutput.Shape[1]} mel values but _numMelsPerFrame is {_numMelsPerFrame}, resulting in zero frames.", nameof(expectedOutput));
 
         _teacherForcingTarget = expectedOutput;
         try

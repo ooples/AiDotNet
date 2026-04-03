@@ -216,7 +216,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         }
 
         // GetParameterRoles — maps parameter names to their roles for per-role learning rates / weight decay
-        if (paramFields.Any(f => !string.IsNullOrEmpty(f.Role)))
+        // Role always has a value (defaults to PersistentTensorRole.Weights), so emit for all param fields
+        if (paramFields.Count > 0)
         {
             sb.AppendLine();
             sb.AppendLine("    /// <summary>");
@@ -227,7 +228,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("    {");
             sb.AppendLine($"        return new System.Collections.Generic.Dictionary<string, string>");
             sb.AppendLine("        {");
-            foreach (var param in paramFields.Where(f => !string.IsNullOrEmpty(f.Role)))
+            foreach (var param in paramFields)
             {
                 sb.AppendLine($"            {{ \"{param.Name}\", \"{param.Role}\" }},");
             }
