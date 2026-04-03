@@ -1218,9 +1218,11 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         }
         else
         {
-            // CPU SGD using Engine tensor ops for SIMD acceleration
-            _kernels = Engine.TensorSubtract(_kernels, Engine.TensorMultiplyScalar(_kernelsGradient, learningRate));
-            _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
+            // CPU SGD using in-place ops to preserve tensor identity (cached references like _biasReshaped4D)
+            var scaledKernelGrad = Engine.TensorMultiplyScalar(_kernelsGradient, learningRate);
+            Engine.TensorSubtractInPlace(_kernels, scaledKernelGrad);
+            var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
+            Engine.TensorSubtractInPlace(_biases, scaledBiasGrad);
         }
 
         // Notify engine that parameters have changed (for GPU cache invalidation if needed)
