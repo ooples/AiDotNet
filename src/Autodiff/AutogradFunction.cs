@@ -68,11 +68,11 @@ public abstract class AutogradFunction<T>
         var tape = GradientTape<T>.Current;
         if (tape is not null)
         {
-            tape.Record(new TapeEntry<T>(
-                GetType().Name,
-                inputs,
-                output,
-                (gradOutput, inputTensors, _, _, eng, grads) =>
+            var entry = new TapeEntry<T>
+            {
+                OperationName = GetType().Name,
+                Output = output,
+                Backward = (gradOutput, inputTensors, _, _, eng, grads) =>
                 {
                     var inputGrads = Backward(ctx, gradOutput);
                     for (int i = 0; i < inputTensors.Length && i < inputGrads.Length; i++)
@@ -85,7 +85,14 @@ public abstract class AutogradFunction<T>
                                 grads[inputTensors[i]] = inputGrads[i];
                         }
                     }
-                }));
+                },
+                InputCount = 0xFF,
+                InputsOverflow = inputs,
+            };
+            if (inputs.Length > 0) entry.Input0 = inputs[0];
+            if (inputs.Length > 1) entry.Input1 = inputs[1];
+            if (inputs.Length > 2) entry.Input2 = inputs[2];
+            tape.Record(entry);
         }
 
         return output;
