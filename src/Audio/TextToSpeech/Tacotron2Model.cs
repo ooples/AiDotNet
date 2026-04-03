@@ -817,6 +817,11 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             throw new NotSupportedException("Cannot train in ONNX inference mode.");
         }
 
+        if (expectedOutput is null)
+            throw new ArgumentException("expectedOutput cannot be null for teacher-forced training.", nameof(expectedOutput));
+        if (expectedOutput.Shape.Length < 2)
+            throw new ArgumentException($"expectedOutput must have at least rank 2 [batch, time*mels], got rank {expectedOutput.Shape.Length}.", nameof(expectedOutput));
+
         _teacherForcingTarget = expectedOutput;
         try
         {
@@ -1042,14 +1047,8 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             residual = postConv.Forward(residual);
         }
 
-        // Add residual
-        var refined = new Tensor<T>(melSpectrogram.Shape.ToArray());
-        for (int i = 0; i < melSpectrogram.Length; i++)
-        {
-            refined[i] = NumOps.Add(melSpectrogram[i], residual[i]);
-        }
-
-        return refined;
+        // Add residual via engine op (tape-tracked)
+        return Engine.TensorAdd(melSpectrogram, residual);
     }
 
     private Tensor<T> ForwardNativeWithTeacherForcing(Tensor<T> phonemes, Tensor<T> targetMel)
@@ -1072,8 +1071,16 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
         for (int step = 0; step < numFrames / _numMelsPerFrame; step++)
         {
-            // Use target mel frame (teacher forcing)
-            var prevMel = ExtractMelFrame(targetMel, step * _numMelsPerFrame);
+            // Teacher forcing: step 0 gets GO frame (zeros), step>0 gets previous ground-truth
+            Tensor<T> prevMel;
+            if (step == 0)
+            {
+                prevMel = new Tensor<T>(new[] { 1, _numMelsPerFrame });
+            }
+            else
+            {
+                prevMel = ExtractMelFrame(targetMel, (step - 1) * _numMelsPerFrame);
+            }
 
             var prenetOut = prevMel;
             for (int i = 0; i < 2 && i < _decoderLstmLayers.Count; i++)
@@ -1125,56 +1132,27 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         if (_attentionLayers.Count < 4)
             return keys;
 
-        // Project query and keys through attention layers
-        var projQuery = _attentionLayers[0].Forward(query);
-        var projKeys = _attentionLayers[1].Forward(keys);
+        // Project query and keys through attention layers (tape-tracked via layer.Forward)
+        var projQuery = _attentionLayers[0].Forward(query); // [1, attDim]
+        var projKeys = _attentionLayers[1].Forward(keys);   // [1, seqLen, attDim]
 
-        // Additive attention: score = tanh(projQuery + projKeys)
-        int seqLen = keys.Shape[1];
-        int hiddenDim = keys.Shape[^1];
-        int attDim = projQuery.Shape[^1];
+        // Additive attention using engine ops for tape tracking:
+        // score[t] = sum_d(tanh(projQuery[d] + projKeys[t,d]))
+        // Broadcast projQuery across sequence dimension and add
+        var queryBroadcast = Engine.TensorBroadcastAdd(projKeys, projQuery); // [1, seqLen, attDim]
+        var tanhScores = Engine.Tanh(queryBroadcast); // [1, seqLen, attDim]
 
-        // Compute attention scores for each encoder position
-        var scores = new double[seqLen];
-        for (int t = 0; t < seqLen; t++)
-        {
-            double score = 0;
-            for (int d = 0; d < attDim; d++)
-            {
-                // Get projected key at position t
-                double keyVal = NumOps.ToDouble(projKeys[0, t, d]);
-                double queryVal = NumOps.ToDouble(projQuery[0, d]);
-                // Additive score with tanh activation
-                double combined = Math.Tanh(queryVal + keyVal);
-                score += combined;
-            }
-            scores[t] = score;
-        }
+        // Sum over attention dimension to get per-position scores
+        var scores = Engine.ReduceSum(tanhScores, new[] { 2 }, keepDims: false); // [1, seqLen]
 
-        // Softmax over scores to get attention weights
-        double maxScore = scores.Max();
-        double sumExp = 0;
-        for (int t = 0; t < seqLen; t++)
-        {
-            scores[t] = Math.Exp(scores[t] - maxScore);
-            sumExp += scores[t];
-        }
-        for (int t = 0; t < seqLen; t++)
-        {
-            scores[t] /= sumExp;
-        }
+        // Softmax over sequence dimension for attention weights
+        var attWeights = Engine.TensorSoftmax(scores, axis: 1); // [1, seqLen]
 
-        // Weighted sum of encoder outputs using attention weights
-        var context = new Tensor<T>([1, hiddenDim]);
-        for (int d = 0; d < hiddenDim; d++)
-        {
-            double sum = 0;
-            for (int t = 0; t < seqLen; t++)
-            {
-                sum += scores[t] * NumOps.ToDouble(keys[0, t, d]);
-            }
-            context[0, d] = NumOps.FromDouble(sum);
-        }
+        // Weighted sum: context = sum_t(attWeights[t] * keys[0, t, :])
+        // Expand attWeights to [1, seqLen, 1] for broadcasting with keys [1, seqLen, hiddenDim]
+        var weightsExpanded = Engine.TensorExpandDims(attWeights, 2); // [1, seqLen, 1]
+        var weighted = Engine.TensorMultiply(keys, weightsExpanded); // [1, seqLen, hiddenDim]
+        var context = Engine.ReduceSum(weighted, new[] { 1 }, keepDims: false); // [1, hiddenDim]
 
         return context;
     }
