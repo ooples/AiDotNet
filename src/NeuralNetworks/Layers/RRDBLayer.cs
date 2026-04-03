@@ -182,6 +182,7 @@ public class RRDBLayer<T> : LayerBase<T>
                 inputHeight: inputHeight,
                 inputWidth: inputWidth,
                 residualScale: residualScale); // Each RDB also uses the same residual scale
+            RegisterSubLayer(_rdbBlocks[i]);
         }
     }
 
@@ -390,6 +391,4 @@ public class RRDBLayer<T> : LayerBase<T>
 
     #endregion
 
-    /// <inheritdoc />
-    public override IReadOnlyList<ILayer<T>> GetSubLayers() => _rdbBlocks;
 }

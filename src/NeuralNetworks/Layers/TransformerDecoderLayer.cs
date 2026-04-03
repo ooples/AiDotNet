@@ -598,6 +598,14 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastAuxiliaryLoss = NumOps.Zero;
+
+        RegisterSubLayer(_selfAttention);
+        RegisterSubLayer(_norm1);
+        RegisterSubLayer(_crossAttention);
+        RegisterSubLayer(_norm2);
+        RegisterSubLayer(_feedForward);
+        RegisterSubLayer(_feedForwardProjection);
+        RegisterSubLayer(_norm3);
     }
 
     /// <summary>
@@ -656,6 +664,14 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastAuxiliaryLoss = NumOps.Zero;
+
+        RegisterSubLayer(_selfAttention);
+        RegisterSubLayer(_norm1);
+        RegisterSubLayer(_crossAttention);
+        RegisterSubLayer(_norm2);
+        RegisterSubLayer(_feedForward);
+        RegisterSubLayer(_feedForwardProjection);
+        RegisterSubLayer(_norm3);
     }
 
     /// <summary>
@@ -1231,6 +1247,4 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         return output;
     }
 
-    public override IReadOnlyList<ILayer<T>> GetSubLayers() =>
-        new ILayer<T>[] { _selfAttention, _norm1, _crossAttention, _norm2, _feedForward, _feedForwardProjection, _norm3 };
 }

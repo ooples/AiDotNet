@@ -225,6 +225,11 @@ public class UNetDiscriminator<T> : LayerBase<T>
             stride: 1,
             padding: 1,
             activationFunction: null);
+
+        RegisterSubLayer(_convFirst);
+        RegisterSubLayer(_convLast);
+        foreach (var block in _encoderBlocks) RegisterSubLayer(block);
+        foreach (var block in _decoderBlocks) RegisterSubLayer(block);
     }
 
     #endregion
@@ -429,14 +434,6 @@ public class UNetDiscriminator<T> : LayerBase<T>
 
     #endregion
 
-    /// <inheritdoc />
-    public override IReadOnlyList<ILayer<T>> GetSubLayers()
-    {
-        var layers = new List<ILayer<T>> { _convFirst, _convLast };
-        layers.AddRange(_encoderBlocks);
-        layers.AddRange(_decoderBlocks);
-        return layers;
-    }
 }
 
 #region Helper Blocks
@@ -488,6 +485,9 @@ internal class UNetConvBlock<T> : LayerBase<T>
             stride: 1,
             padding: 1,
             activationFunction: null);
+
+        RegisterSubLayer(_conv1);
+        RegisterSubLayer(_conv2);
     }
 
     public override bool SupportsTraining => true;
@@ -585,8 +585,6 @@ internal class UNetConvBlock<T> : LayerBase<T>
         return x;
     }
 
-    /// <inheritdoc />
-    public override IReadOnlyList<ILayer<T>> GetSubLayers() => new ILayer<T>[] { _conv1, _conv2 };
 }
 
 /// <summary>
@@ -642,6 +640,10 @@ internal class UNetUpBlock<T> : LayerBase<T>
             stride: 1,
             padding: 1,
             activationFunction: null);
+
+        RegisterSubLayer(_upsample);
+        RegisterSubLayer(_conv1);
+        RegisterSubLayer(_conv2);
     }
 
     public override bool SupportsTraining => true;
@@ -867,8 +869,6 @@ internal class UNetUpBlock<T> : LayerBase<T>
         return x;
     }
 
-    /// <inheritdoc />
-    public override IReadOnlyList<ILayer<T>> GetSubLayers() => new ILayer<T>[] { _upsample, _conv1, _conv2 };
 }
 
 #endregion

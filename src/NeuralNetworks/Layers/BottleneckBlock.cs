@@ -193,6 +193,15 @@ public class BottleneckBlock<T> : LayerBase<T>
 
             _downsampleBn = new BatchNormalizationLayer<T>(outChannels);
         }
+
+        RegisterSubLayer(_conv1);
+        RegisterSubLayer(_bn1);
+        RegisterSubLayer(_conv2);
+        RegisterSubLayer(_bn2);
+        RegisterSubLayer(_conv3);
+        RegisterSubLayer(_bn3);
+        if (_downsampleConv is not null) RegisterSubLayer(_downsampleConv);
+        if (_downsampleBn is not null) RegisterSubLayer(_downsampleBn);
     }
 
     /// <summary>
@@ -407,11 +416,4 @@ public class BottleneckBlock<T> : LayerBase<T>
         return Engine.TensorMultiply(gradient, derivative);
     }
 
-    public override IReadOnlyList<ILayer<T>> GetSubLayers()
-    {
-        var layers = new List<ILayer<T>> { _conv1, _bn1, _conv2, _bn2, _conv3, _bn3 };
-        if (_downsampleConv is not null) layers.Add(_downsampleConv);
-        if (_downsampleBn is not null) layers.Add(_downsampleBn);
-        return layers;
-    }
 }

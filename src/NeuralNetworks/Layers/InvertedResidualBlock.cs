@@ -235,6 +235,14 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
         _expandBn?.SetTrainingMode(false);
         _dwBn.SetTrainingMode(false);
         _projectBn.SetTrainingMode(false);
+
+        RegisterSubLayer(_dwConv);
+        RegisterSubLayer(_dwBn);
+        RegisterSubLayer(_projectConv);
+        RegisterSubLayer(_projectBn);
+        if (_expandConv is not null) RegisterSubLayer(_expandConv);
+        if (_expandBn is not null) RegisterSubLayer(_expandBn);
+        if (_se is not null) RegisterSubLayer(_se);
     }
 
     /// <inheritdoc />
@@ -775,12 +783,4 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
         return metadata;
     }
 
-    public override IReadOnlyList<ILayer<T>> GetSubLayers()
-    {
-        var layers = new List<ILayer<T>> { _dwConv, _dwBn, _projectConv, _projectBn };
-        if (_expandConv is not null) layers.Add(_expandConv);
-        if (_expandBn is not null) layers.Add(_expandBn);
-        if (_se is not null) layers.Add(_se);
-        return layers;
-    }
 }

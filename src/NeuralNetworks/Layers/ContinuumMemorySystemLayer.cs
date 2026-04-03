@@ -121,6 +121,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         for (int i = 0; i < numFrequencyLevels; i++)
         {
             _mlpBlocks[i] = new DenseLayer<T>(currentDim, hiddenDim, (IActivationFunction<T>)new ReLUActivation<T>());
+            RegisterSubLayer(_mlpBlocks[i]);
             currentDim = hiddenDim;
         }
 
@@ -552,6 +553,4 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         }
     }
 
-    /// <inheritdoc />
-    public override IReadOnlyList<ILayer<T>> GetSubLayers() => _mlpBlocks;
 }

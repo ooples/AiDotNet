@@ -297,6 +297,14 @@ public class RRDBNetGenerator<T> : LayerBase<T>
             stride: 1,
             padding: 1,
             activationFunction: null);
+
+        RegisterSubLayer(_convFirst);
+        RegisterSubLayer(_trunkConv);
+        RegisterSubLayer(_hrConv);
+        RegisterSubLayer(_convLast);
+        foreach (var rrdb in _rrdbBlocks) RegisterSubLayer(rrdb);
+        foreach (var conv in _upsampleConvs) RegisterSubLayer(conv);
+        foreach (var ps in _pixelShuffleLayers) RegisterSubLayer(ps);
     }
 
     #endregion
@@ -562,12 +570,4 @@ public class RRDBNetGenerator<T> : LayerBase<T>
 
     #endregion
 
-    public override IReadOnlyList<ILayer<T>> GetSubLayers()
-    {
-        var layers = new List<ILayer<T>> { _convFirst, _trunkConv, _hrConv, _convLast };
-        layers.AddRange(_rrdbBlocks);
-        layers.AddRange(_upsampleConvs);
-        layers.AddRange(_pixelShuffleLayers);
-        return layers;
-    }
 }

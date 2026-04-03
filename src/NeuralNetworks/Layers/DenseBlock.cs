@@ -129,8 +129,10 @@ public class DenseBlock<T> : LayerBase<T>
         int currentChannels = inputChannels;
         for (int i = 0; i < numLayers; i++)
         {
-            _layers.Add(new DenseBlockLayer<T>(
-                currentChannels, growthRate, inputHeight, inputWidth, bnMomentum));
+            var layer = new DenseBlockLayer<T>(
+                currentChannels, growthRate, inputHeight, inputWidth, bnMomentum);
+            _layers.Add(layer);
+            RegisterSubLayer(layer);
             currentChannels += growthRate; // Each layer adds growthRate channels
         }
     }
@@ -355,5 +357,4 @@ public class DenseBlock<T> : LayerBase<T>
 
     #endregion
 
-    public override IReadOnlyList<ILayer<T>> GetSubLayers() => _layers;
 }

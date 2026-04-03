@@ -137,6 +137,13 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int mlpHiddenDim = dim * mlpRatio;
         _mlpFc1 = new DenseLayer<T>(dim, mlpHiddenDim, (IActivationFunction<T>)new GELUActivation<T>());
         _mlpFc2 = new DenseLayer<T>(mlpHiddenDim, dim);
+
+        RegisterSubLayer(_norm1);
+        RegisterSubLayer(_norm2);
+        RegisterSubLayer(_qkvProj);
+        RegisterSubLayer(_outProj);
+        RegisterSubLayer(_mlpFc1);
+        RegisterSubLayer(_mlpFc2);
     }
 
     private void InitializeRelativePositionBias()
@@ -713,7 +720,4 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         // In a full implementation, this would use stored gradients
     }
 
-    /// <inheritdoc />
-    public override IReadOnlyList<ILayer<T>> GetSubLayers() =>
-        new ILayer<T>[] { _norm1, _norm2, _qkvProj, _outProj, _mlpFc1, _mlpFc2 };
 }

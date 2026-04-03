@@ -105,6 +105,7 @@ public class SpyNetLayer<T> : LayerBase<T>
                 1,  // stride
                 3); // padding
             _basicModules.Add(conv);
+            RegisterSubLayer(conv);
         }
     }
 
@@ -1464,5 +1465,4 @@ public class SpyNetLayer<T> : LayerBase<T>
 
     #endregion
 
-    public override IReadOnlyList<ILayer<T>> GetSubLayers() => _basicModules;
 }

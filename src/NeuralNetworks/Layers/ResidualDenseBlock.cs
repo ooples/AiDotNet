@@ -267,6 +267,9 @@ public class ResidualDenseBlock<T> : LayerBase<T>
             stride: 1,
             padding: 1,
             activationFunction: null);
+
+        foreach (var conv in _convLayers)
+            RegisterSubLayer(conv);
     }
 
     #endregion
@@ -835,5 +838,4 @@ public class ResidualDenseBlock<T> : LayerBase<T>
 
     #endregion
 
-    public override IReadOnlyList<ILayer<T>> GetSubLayers() => _convLayers;
 }

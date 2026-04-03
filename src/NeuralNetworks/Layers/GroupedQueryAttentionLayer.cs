@@ -193,6 +193,11 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
         int maxSequenceLength = 2048)
     {
         PositionalEncoding = encodingType;
+
+        // Unregister previous sub-layers before replacing
+        if (_ropeLayer is not null) UnregisterSubLayer(_ropeLayer);
+        if (_alibiLayer is not null) UnregisterSubLayer(_alibiLayer);
+
         _ropeLayer = null;
         _alibiLayer = null;
 
@@ -201,9 +206,11 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
             case PositionalEncodingType.Rotary:
                 _ropeLayer = new RotaryPositionalEncodingLayer<T>(
                     maxSequenceLength, _headDimension, ropeTheta);
+                RegisterSubLayer(_ropeLayer);
                 break;
             case PositionalEncodingType.ALiBi:
                 _alibiLayer = new ALiBiPositionalBiasLayer<T>(_numHeads, maxSequenceLength);
+                RegisterSubLayer(_alibiLayer);
                 break;
             case PositionalEncodingType.None:
                 break;
@@ -606,11 +613,4 @@ internal class GroupedQueryAttentionLayer<T> : LayerBase<T>
     /// </summary>
     public Tensor<T> GetOutputWeights() => _outputWeights;
 
-    public override IReadOnlyList<ILayer<T>> GetSubLayers()
-    {
-        var layers = new List<ILayer<T>>();
-        if (_ropeLayer is not null) layers.Add(_ropeLayer);
-        if (_alibiLayer is not null) layers.Add(_alibiLayer);
-        return layers;
-    }
 }

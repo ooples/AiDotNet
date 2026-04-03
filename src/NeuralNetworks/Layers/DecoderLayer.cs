@@ -164,6 +164,14 @@ public class DecoderLayer<T> : LayerBase<T>
         _norm1 = new LayerNormalizationLayer<T>(inputSize);
         _norm2 = new LayerNormalizationLayer<T>(inputSize);
         _norm3 = new LayerNormalizationLayer<T>(inputSize);
+
+        RegisterSubLayer(_selfAttention);
+        RegisterSubLayer(_crossAttention);
+        RegisterSubLayer(_feedForward1);
+        RegisterSubLayer(_feedForward2);
+        RegisterSubLayer(_norm1);
+        RegisterSubLayer(_norm2);
+        RegisterSubLayer(_norm3);
     }
 
     /// <summary>
@@ -189,6 +197,14 @@ public class DecoderLayer<T> : LayerBase<T>
         _norm1 = new LayerNormalizationLayer<T>(inputSize);
         _norm2 = new LayerNormalizationLayer<T>(inputSize);
         _norm3 = new LayerNormalizationLayer<T>(inputSize);
+
+        RegisterSubLayer(_selfAttention);
+        RegisterSubLayer(_crossAttention);
+        RegisterSubLayer(_feedForward1);
+        RegisterSubLayer(_feedForward2);
+        RegisterSubLayer(_norm1);
+        RegisterSubLayer(_norm2);
+        RegisterSubLayer(_norm3);
     }
 
     /// <summary>
@@ -587,6 +603,4 @@ public class DecoderLayer<T> : LayerBase<T>
         _norm2.ParameterCount +
         _norm3.ParameterCount;
 
-    public override IReadOnlyList<ILayer<T>> GetSubLayers() =>
-        new ILayer<T>[] { _selfAttention, _crossAttention, _feedForward1, _feedForward2, _norm1, _norm2, _norm3 };
 }

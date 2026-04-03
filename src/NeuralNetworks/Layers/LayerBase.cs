@@ -2765,6 +2765,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     }
 
     /// <summary>
+    /// Removes a previously registered sub-layer. Used when a sub-layer is dynamically
+    /// replaced after construction (e.g., positional encoding reconfiguration).
+    /// </summary>
+    protected bool UnregisterSubLayer(ILayer<T> subLayer)
+    {
+        return _registeredSubLayers.Remove(subLayer);
+    }
+
+    /// <summary>
     /// Registers a non-trainable persistent tensor (buffer) with this layer.
     /// Buffers are included in model serialization and GPU persistence but are NOT
     /// returned by <see cref="GetTrainableParameters"/> — they are not passed to the
