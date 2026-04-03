@@ -165,10 +165,6 @@ public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
                 // If closer to max: Q = (max - x) / range compared to (max - x(n-1)) / range
 
                 T value = X[i, j];
-                double rangeD = NumOps.ToDouble(ranges[j]);
-                double valueD = NumOps.ToDouble(value);
-                double secondMinD = NumOps.ToDouble(secondMin[j]);
-                double secondMaxD = NumOps.ToDouble(secondMax[j]);
 
                 T qStatistic;
 
@@ -178,17 +174,15 @@ public class DixonQTestDetector<T> : AnomalyDetectorBase<T>
                 // For the min: Q = (secondMin - min) / range
                 // General: points near/beyond extremes get high Q scores.
 
-                if (valueD >= secondMaxD)
+                if (!NumOps.LessThan(value, secondMax[j]))
                 {
                     // Point is at or beyond the high end of the distribution
-                    // Dixon Q: gap from second-highest value, normalized by range
-                    qStatistic = NumOps.FromDouble((valueD - secondMaxD) / rangeD);
+                    qStatistic = NumOps.Divide(NumOps.Subtract(value, secondMax[j]), ranges[j]);
                 }
-                else if (valueD <= secondMinD)
+                else if (!NumOps.GreaterThan(value, secondMin[j]))
                 {
                     // Point is at or beyond the low end of the distribution
-                    // Dixon Q: gap from second-lowest value, normalized by range
-                    qStatistic = NumOps.FromDouble((secondMinD - valueD) / rangeD);
+                    qStatistic = NumOps.Divide(NumOps.Subtract(secondMin[j], value), ranges[j]);
                 }
                 else
                 {

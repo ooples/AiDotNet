@@ -118,9 +118,13 @@ public class HampelDetector<T> : AnomalyDetectorBase<T>
 
         var scores = new Vector<T>(n);
 
+        T eps = NumOps.FromDouble(1e-10);
+        T scaleT = NumOps.FromDouble(_scaleFactor);
+        T half = NumOps.FromDouble(0.5);
+
         for (int i = 0; i < n; i++)
         {
-            double maxScore = 0;
+            T maxScore = NumOps.Zero;
 
             for (int j = 0; j < d; j++)
             {
@@ -129,45 +133,44 @@ public class HampelDetector<T> : AnomalyDetectorBase<T>
                 int end = Math.Min(n, i + halfWindow + 1);
                 int windowLen = end - start;
 
-                var windowValues = new double[windowLen];
+                var windowValues = new T[windowLen];
                 for (int k = start; k < end; k++)
                 {
-                    windowValues[k - start] = NumOps.ToDouble(X[k, j]);
+                    windowValues[k - start] = X[k, j];
                 }
 
                 // Compute local median
-                Array.Sort(windowValues);
-                double localMedian = windowLen % 2 == 0
-                    ? (windowValues[windowLen / 2 - 1] + windowValues[windowLen / 2]) / 2
+                Array.Sort(windowValues, (a, b) => NumOps.Compare(a, b));
+                T localMedian = windowLen % 2 == 0
+                    ? NumOps.Multiply(NumOps.Add(windowValues[windowLen / 2 - 1], windowValues[windowLen / 2]), half)
                     : windowValues[windowLen / 2];
 
                 // Compute local MAD
-                var absDeviations = new double[windowLen];
+                var absDeviations = new T[windowLen];
                 for (int k = 0; k < windowLen; k++)
                 {
-                    absDeviations[k] = Math.Abs(windowValues[k] - localMedian);
+                    absDeviations[k] = NumOps.Abs(NumOps.Subtract(windowValues[k], localMedian));
                 }
 
-                Array.Sort(absDeviations);
-                double localMad = windowLen % 2 == 0
-                    ? (absDeviations[windowLen / 2 - 1] + absDeviations[windowLen / 2]) / 2
+                Array.Sort(absDeviations, (a, b) => NumOps.Compare(a, b));
+                T localMad = windowLen % 2 == 0
+                    ? NumOps.Multiply(NumOps.Add(absDeviations[windowLen / 2 - 1], absDeviations[windowLen / 2]), half)
                     : absDeviations[windowLen / 2];
 
-                localMad *= _scaleFactor;
-                if (localMad < 1e-10) localMad = 1e-10;
+                localMad = NumOps.Multiply(localMad, scaleT);
+                if (NumOps.LessThan(localMad, eps)) localMad = eps;
 
                 // Compute score for this feature
-                double value = NumOps.ToDouble(X[i, j]);
-                double deviation = Math.Abs(value - localMedian);
-                double featureScore = deviation / localMad;
+                T deviation = NumOps.Abs(NumOps.Subtract(X[i, j], localMedian));
+                T featureScore = NumOps.Divide(deviation, localMad);
 
-                if (featureScore > maxScore)
+                if (NumOps.GreaterThan(featureScore, maxScore))
                 {
                     maxScore = featureScore;
                 }
             }
 
-            scores[i] = NumOps.FromDouble(maxScore);
+            scores[i] = maxScore;
         }
 
         return scores;

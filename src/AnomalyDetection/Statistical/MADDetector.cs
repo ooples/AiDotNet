@@ -49,8 +49,8 @@ public class MADDetector<T> : AnomalyDetectorBase<T>
 {
     private readonly double _madThreshold;
     private readonly double _scaleFactor;
-    private double[]? _medians;
-    private double[]? _mads;
+    private Vector<T>? _medians;
+    private Vector<T>? _mads;
 
     /// <summary>
     /// Gets the MAD threshold for anomaly detection.
@@ -96,38 +96,42 @@ public class MADDetector<T> : AnomalyDetectorBase<T>
         int n = X.Rows;
         int d = X.Columns;
 
-        _medians = new double[d];
-        _mads = new double[d];
+        _medians = new Vector<T>(d);
+        _mads = new Vector<T>(d);
+        T eps = NumOps.FromDouble(1e-10);
+        T scaleT = NumOps.FromDouble(_scaleFactor);
+        T two = NumOps.FromDouble(2);
+        T half = NumOps.FromDouble(0.5);
 
         for (int j = 0; j < d; j++)
         {
             // Extract column values
-            var values = new double[n];
+            var values = new T[n];
             for (int i = 0; i < n; i++)
             {
-                values[i] = NumOps.ToDouble(X[i, j]);
+                values[i] = X[i, j];
             }
 
             // Compute median
-            Array.Sort(values);
+            Array.Sort(values, (a, b) => NumOps.Compare(a, b));
             _medians[j] = n % 2 == 0
-                ? (values[n / 2 - 1] + values[n / 2]) / 2
+                ? NumOps.Multiply(NumOps.Add(values[n / 2 - 1], values[n / 2]), half)
                 : values[n / 2];
 
             // Compute MAD
-            var absDeviations = new double[n];
+            var absDeviations = new T[n];
             for (int i = 0; i < n; i++)
             {
-                absDeviations[i] = Math.Abs(NumOps.ToDouble(X[i, j]) - _medians[j]);
+                absDeviations[i] = NumOps.Abs(NumOps.Subtract(X[i, j], _medians[j]));
             }
 
-            Array.Sort(absDeviations);
-            double medianAbsDev = n % 2 == 0
-                ? (absDeviations[n / 2 - 1] + absDeviations[n / 2]) / 2
+            Array.Sort(absDeviations, (a, b) => NumOps.Compare(a, b));
+            T medianAbsDev = n % 2 == 0
+                ? NumOps.Multiply(NumOps.Add(absDeviations[n / 2 - 1], absDeviations[n / 2]), half)
                 : absDeviations[n / 2];
 
-            _mads[j] = _scaleFactor * medianAbsDev;
-            if (_mads[j] < 1e-10) _mads[j] = 1e-10; // Prevent division by zero
+            _mads[j] = NumOps.Multiply(scaleT, medianAbsDev);
+            if (NumOps.LessThan(_mads[j], eps)) _mads[j] = eps;
         }
 
         // Calculate scores for training data to set threshold
@@ -160,21 +164,20 @@ public class MADDetector<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < X.Rows; i++)
         {
-            double maxScore = 0;
+            T maxScore = NumOps.Zero;
 
             for (int j = 0; j < X.Columns; j++)
             {
-                double value = NumOps.ToDouble(X[i, j]);
-                double deviation = Math.Abs(value - medians[j]);
-                double madScore = deviation / mads[j];
+                T deviation = NumOps.Abs(NumOps.Subtract(X[i, j], medians[j]));
+                T madScore = NumOps.Divide(deviation, mads[j]);
 
-                if (madScore > maxScore)
+                if (NumOps.GreaterThan(madScore, maxScore))
                 {
                     maxScore = madScore;
                 }
             }
 
-            scores[i] = NumOps.FromDouble(maxScore);
+            scores[i] = maxScore;
         }
 
         return scores;

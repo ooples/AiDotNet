@@ -48,7 +48,7 @@ public class GESDDetector<T> : AnomalyDetectorBase<T>
     private readonly int _maxOutliers;
     private Vector<T>? _means;
     private Vector<T>? _stds;
-    private double[]? _criticalValues;
+    private Vector<T>? _criticalValues;
     private int _fittedN;
     private int _nFeatures;
 
@@ -125,11 +125,11 @@ public class GESDDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Precompute critical values for each iteration
-        _criticalValues = new double[_maxOutliers];
+        _criticalValues = new Vector<T>(_maxOutliers);
         for (int i = 0; i < _maxOutliers; i++)
         {
             int currentN = n - i;
-            _criticalValues[i] = ComputeLambda(currentN, _alpha);
+            _criticalValues[i] = NumOps.FromDouble(ComputeLambda(currentN, _alpha));
         }
 
         // Calculate scores for training data to set threshold
