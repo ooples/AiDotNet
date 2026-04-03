@@ -52,9 +52,9 @@ public class XGBODDetector<T> : AnomalyDetectorBase<T>
     private readonly int _nEstimators;
     private readonly int _boostingRounds;
     private List<IAnomalyDetector<T>>? _baseDetectors;
-    private double[]? _weights; // Simplified boosting weights
-    private double[]? _featureMean;
-    private double[]? _featureStd;
+    private Vector<T>? _weights; // Simplified boosting weights
+    private Vector<T>? _featureMean;
+    private Vector<T>? _featureStd;
     private int _nOriginalFeatures;
 
     /// <summary>
@@ -112,7 +112,7 @@ public class XGBODDetector<T> : AnomalyDetectorBase<T>
 
         // Create diverse base detectors
         _baseDetectors = new List<IAnomalyDetector<T>>();
-        var tosScores = new List<double[]>(); // Transformed Outlier Scores
+        var tosScores = new List<Vector<T>>(); // Transformed Outlier Scores
 
         // Base k for neighbor-based detectors, capped at n - 1
         int baseK = Math.Min(10, n - 1);
@@ -164,57 +164,62 @@ public class XGBODDetector<T> : AnomalyDetectorBase<T>
             _baseDetectors.Add(detector);
 
             // Get TOS (transformed outlier scores)
-            var scores = detector.ScoreAnomalies(X);
-            var doubleScores = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                doubleScores[i] = NumOps.ToDouble(scores[i]);
-            }
-            tosScores.Add(doubleScores);
+            tosScores.Add(detector.ScoreAnomalies(X));
         }
 
         // Create enhanced feature matrix [original features | TOS]
         int nEnhancedFeatures = _nOriginalFeatures + _nEstimators;
-        var enhancedData = new double[n][];
+        var enhancedData = new Matrix<T>(n, nEnhancedFeatures);
 
         for (int i = 0; i < n; i++)
         {
-            enhancedData[i] = new double[nEnhancedFeatures];
-
             // Original features
             for (int j = 0; j < _nOriginalFeatures; j++)
             {
-                enhancedData[i][j] = NumOps.ToDouble(X[i, j]);
+                enhancedData[i, j] = X[i, j];
             }
 
             // TOS features
             for (int e = 0; e < _nEstimators; e++)
             {
-                enhancedData[i][_nOriginalFeatures + e] = tosScores[e][i];
+                enhancedData[i, _nOriginalFeatures + e] = tosScores[e][i];
             }
         }
 
         // Normalize enhanced features
-        _featureMean = new double[nEnhancedFeatures];
-        _featureStd = new double[nEnhancedFeatures];
+        _featureMean = new Vector<T>(nEnhancedFeatures);
+        _featureStd = new Vector<T>(nEnhancedFeatures);
+        T nT = NumOps.FromDouble(n);
+        T eps = NumOps.FromDouble(1e-10);
 
         for (int j = 0; j < nEnhancedFeatures; j++)
         {
-            _featureMean[j] = enhancedData.Average(row => row[j]);
-            _featureStd[j] = Math.Sqrt(enhancedData.Average(row => Math.Pow(row[j] - _featureMean[j], 2)));
-            if (_featureStd[j] < 1e-10) _featureStd[j] = 1;
+            T sum = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+            {
+                sum = NumOps.Add(sum, enhancedData[i, j]);
+            }
+            _featureMean[j] = NumOps.Divide(sum, nT);
+
+            T varSum = NumOps.Zero;
+            for (int i = 0; i < n; i++)
+            {
+                T diff = NumOps.Subtract(enhancedData[i, j], _featureMean[j]);
+                varSum = NumOps.Add(varSum, NumOps.Multiply(diff, diff));
+            }
+            _featureStd[j] = NumOps.Sqrt(NumOps.Divide(varSum, nT));
+            if (NumOps.LessThan(_featureStd[j], eps)) _featureStd[j] = NumOps.One;
         }
 
         for (int i = 0; i < n; i++)
         {
             for (int j = 0; j < nEnhancedFeatures; j++)
             {
-                enhancedData[i][j] = (enhancedData[i][j] - _featureMean[j]) / _featureStd[j];
+                enhancedData[i, j] = NumOps.Divide(NumOps.Subtract(enhancedData[i, j], _featureMean[j]), _featureStd[j]);
             }
         }
 
         // Train simple gradient boosting on enhanced features
-        // Using a simplified version with weighted feature importance
         _weights = TrainSimplifiedBoosting(enhancedData);
 
         // Calculate scores for training data to set threshold
@@ -224,43 +229,45 @@ public class XGBODDetector<T> : AnomalyDetectorBase<T>
         _isFitted = true;
     }
 
-    private double[] TrainSimplifiedBoosting(double[][] data)
+    private Vector<T> TrainSimplifiedBoosting(Matrix<T> data)
     {
-        int n = data.Length;
-        int d = data[0].Length;
+        int n = data.Rows;
+        int d = data.Columns;
 
         // Initialize weights (uniform)
-        var weights = new double[d];
+        var weights = new Vector<T>(d);
+        T initW = NumOps.Divide(NumOps.One, NumOps.FromDouble(d));
         for (int j = 0; j < d; j++)
         {
-            weights[j] = 1.0 / d;
+            weights[j] = initW;
         }
 
         // Sample weights (start uniform)
-        var sampleWeights = new double[n];
+        var sampleWeights = new Vector<T>(n);
+        T initSW = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
         for (int i = 0; i < n; i++)
         {
-            sampleWeights[i] = 1.0 / n;
+            sampleWeights[i] = initSW;
         }
 
         // Create pseudo-labels based on TOS majority vote
         var pseudoLabels = new int[n];
         int nAnomaly = (int)(n * _contamination);
+        T nEstT = NumOps.FromDouble(_nEstimators);
 
-        var avgTos = new double[n];
+        var avgTos = new Vector<T>(n);
         for (int i = 0; i < n; i++)
         {
-            avgTos[i] = 0;
+            avgTos[i] = NumOps.Zero;
             for (int e = 0; e < _nEstimators; e++)
             {
-                avgTos[i] += data[i][_nOriginalFeatures + e];
+                avgTos[i] = NumOps.Add(avgTos[i], data[i, _nOriginalFeatures + e]);
             }
-            avgTos[i] /= _nEstimators;
+            avgTos[i] = NumOps.Divide(avgTos[i], nEstT);
         }
 
-        var sortedIndices = avgTos.Select((v, i) => (v, i))
-            .OrderByDescending(x => x.v)
-            .Select(x => x.i)
+        var sortedIndices = Enumerable.Range(0, n)
+            .OrderByDescending(i => NumOps.ToDouble(avgTos[i]))
             .ToArray();
 
         for (int i = 0; i < nAnomaly; i++)
@@ -268,34 +275,39 @@ public class XGBODDetector<T> : AnomalyDetectorBase<T>
             pseudoLabels[sortedIndices[i]] = 1; // Anomaly
         }
 
+        T half = NumOps.FromDouble(0.5);
+        T eps = NumOps.FromDouble(1e-10);
+
         // Boosting iterations
         for (int round = 0; round < _boostingRounds; round++)
         {
             // Find best feature to split on
-            double bestGain = double.MinValue;
+            T bestGain = NumOps.MinValue;
             int bestFeature = 0;
-            double bestThreshold = 0;
+            T bestThreshold = NumOps.Zero;
 
             for (int j = 0; j < d; j++)
             {
                 // Try median as threshold
-                var values = data.Select((row, i) => (row[j], pseudoLabels[i], sampleWeights[i])).ToArray();
-                double threshold = values.OrderBy(v => v.Item1).Skip(n / 2).First().Item1;
+                var colValues = new T[n];
+                for (int i = 0; i < n; i++) colValues[i] = data[i, j];
+                var sorted = colValues.OrderBy(v => NumOps.ToDouble(v)).ToArray();
+                T threshold = sorted[n / 2];
 
                 // Compute weighted error
-                double error = 0;
+                T error = NumOps.Zero;
                 for (int i = 0; i < n; i++)
                 {
-                    int predicted = data[i][j] > threshold ? 1 : 0;
+                    int predicted = NumOps.GreaterThan(data[i, j], threshold) ? 1 : 0;
                     if (predicted != pseudoLabels[i])
                     {
-                        error += sampleWeights[i];
+                        error = NumOps.Add(error, sampleWeights[i]);
                     }
                 }
 
                 // Information gain proxy
-                double gain = 0.5 - error;
-                if (gain > bestGain)
+                T gain = NumOps.Subtract(half, error);
+                if (NumOps.GreaterThan(gain, bestGain))
                 {
                     bestGain = gain;
                     bestFeature = j;
@@ -304,33 +316,33 @@ public class XGBODDetector<T> : AnomalyDetectorBase<T>
             }
 
             // Update weights
-            double alpha = 0.5 * Math.Log((1 - bestGain + 0.5) / (bestGain + 0.5 + 1e-10));
-            weights[bestFeature] += alpha;
+            T numerator = NumOps.Add(NumOps.Subtract(NumOps.One, bestGain), half);
+            T denominator = NumOps.Add(NumOps.Add(bestGain, half), eps);
+            T alpha = NumOps.Multiply(half, NumOps.Log(NumOps.Divide(numerator, denominator)));
+            weights[bestFeature] = NumOps.Add(weights[bestFeature], alpha);
 
             // Update sample weights
+            T absAlpha = NumOps.Abs(alpha);
+            T expAlpha = NumOps.Exp(absAlpha);
             for (int i = 0; i < n; i++)
             {
-                int predicted = data[i][bestFeature] > bestThreshold ? 1 : 0;
+                int predicted = NumOps.GreaterThan(data[i, bestFeature], bestThreshold) ? 1 : 0;
                 if (predicted != pseudoLabels[i])
                 {
-                    sampleWeights[i] *= Math.Exp(Math.Abs(alpha));
+                    sampleWeights[i] = NumOps.Multiply(sampleWeights[i], expAlpha);
                 }
             }
 
             // Normalize sample weights
-            double sumWeights = sampleWeights.Sum();
-            for (int i = 0; i < n; i++)
-            {
-                sampleWeights[i] /= sumWeights;
-            }
+            T sumWeights = NumOps.Zero;
+            for (int i = 0; i < n; i++) sumWeights = NumOps.Add(sumWeights, sampleWeights[i]);
+            for (int i = 0; i < n; i++) sampleWeights[i] = NumOps.Divide(sampleWeights[i], sumWeights);
         }
 
         // Normalize feature weights
-        double sumW = weights.Sum();
-        for (int j = 0; j < d; j++)
-        {
-            weights[j] /= sumW;
-        }
+        T sumW = NumOps.Zero;
+        for (int j = 0; j < d; j++) sumW = NumOps.Add(sumW, weights[j]);
+        for (int j = 0; j < d; j++) weights[j] = NumOps.Divide(weights[j], sumW);
 
         return weights;
     }
@@ -356,17 +368,15 @@ public class XGBODDetector<T> : AnomalyDetectorBase<T>
         int n = X.Rows;
         int nEnhancedFeatures = _nOriginalFeatures + _nEstimators;
 
+        var featureMean = _featureMean ?? throw new InvalidOperationException("Feature mean not computed.");
+        var featureStd = _featureStd ?? throw new InvalidOperationException("Feature std not computed.");
+        var weights = _weights ?? throw new InvalidOperationException("Weights not computed.");
+
         // Get TOS for test data
-        var tosScores = new List<double[]>();
-        foreach (var detector in _baseDetectors!)
+        var tosScores = new List<Vector<T>>();
+        foreach (var detector in _baseDetectors ?? throw new InvalidOperationException("Model not properly fitted."))
         {
-            var scores = detector.ScoreAnomalies(X);
-            var doubleScores = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                doubleScores[i] = NumOps.ToDouble(scores[i]);
-            }
-            tosScores.Add(doubleScores);
+            tosScores.Add(detector.ScoreAnomalies(X));
         }
 
         var resultScores = new Vector<T>(n);
@@ -374,29 +384,25 @@ public class XGBODDetector<T> : AnomalyDetectorBase<T>
         for (int i = 0; i < n; i++)
         {
             // Build enhanced feature vector
-            var enhanced = new double[nEnhancedFeatures];
+            var enhanced = new Vector<T>(nEnhancedFeatures);
 
             // Original features (normalized)
             for (int j = 0; j < _nOriginalFeatures; j++)
             {
-                enhanced[j] = (NumOps.ToDouble(X[i, j]) - (_featureMean ?? throw new InvalidOperationException("Feature mean not computed."))[j]) / (_featureStd ?? throw new InvalidOperationException("Feature std not computed."))[j];
+                enhanced[j] = NumOps.Divide(NumOps.Subtract(X[i, j], featureMean[j]), featureStd[j]);
             }
 
             // TOS features (normalized)
             for (int e = 0; e < _nEstimators; e++)
             {
                 int j = _nOriginalFeatures + e;
-                enhanced[j] = (tosScores[e][i] - (_featureMean ?? throw new InvalidOperationException("Feature mean not computed."))[j]) / (_featureStd ?? throw new InvalidOperationException("Feature std not computed."))[j];
+                enhanced[j] = NumOps.Divide(NumOps.Subtract(tosScores[e][i], featureMean[j]), featureStd[j]);
             }
 
-            // Weighted sum as final score
-            double score = 0;
-            for (int j = 0; j < nEnhancedFeatures; j++)
-            {
-                score += (_weights ?? throw new InvalidOperationException("Weights not computed."))[j] * enhanced[j];
-            }
+            // Weighted sum as final score using Engine.DotProduct
+            T score = Engine.DotProduct(weights, enhanced);
 
-            resultScores[i] = NumOps.FromDouble(score);
+            resultScores[i] = score;
         }
 
         return resultScores;

@@ -183,30 +183,34 @@ public class FeatureBaggingDetector<T> : AnomalyDetectorBase<T>
 
         // Combine scores
         var combinedScores = new Vector<T>(X.Rows);
+        T nEst = NumOps.FromDouble(_nEstimators);
 
         for (int i = 0; i < X.Rows; i++)
         {
-            double combined = 0;
+            T combined;
 
             if (_combination == CombinationMethod.Average)
             {
+                combined = NumOps.Zero;
                 for (int e = 0; e < _nEstimators; e++)
                 {
-                    combined += NumOps.ToDouble(allScores[e][i]);
+                    combined = NumOps.Add(combined, allScores[e][i]);
                 }
-                combined /= _nEstimators;
+                combined = NumOps.Divide(combined, nEst);
             }
             else // Maximum
             {
-                combined = double.MinValue;
+                combined = NumOps.MinValue;
                 for (int e = 0; e < _nEstimators; e++)
                 {
-                    double score = NumOps.ToDouble(allScores[e][i]);
-                    if (score > combined) combined = score;
+                    if (NumOps.GreaterThan(allScores[e][i], combined))
+                    {
+                        combined = allScores[e][i];
+                    }
                 }
             }
 
-            combinedScores[i] = NumOps.FromDouble(combined);
+            combinedScores[i] = combined;
         }
 
         return combinedScores;

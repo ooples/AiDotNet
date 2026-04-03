@@ -153,9 +153,9 @@ public class SUODDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Collect scores from all detectors
-        var allScores = new List<double[]>();
+        var allScores = new List<Vector<T>>();
 
-        foreach (var detector in _baseDetectors!)
+        foreach (var detector in _baseDetectors ?? throw new InvalidOperationException("Model not properly fitted."))
         {
             var scores = detector.ScoreAnomalies(processedData);
             var normalizedScores = NormalizeScores(scores);
@@ -167,49 +167,61 @@ public class SUODDetector<T> : AnomalyDetectorBase<T>
 
         for (int i = 0; i < X.Rows; i++)
         {
-            var pointScores = allScores.Select(s => s[i]).OrderBy(x => x).ToArray();
+            var pointScores = allScores.Select(s => s[i]).OrderBy(v => NumOps.ToDouble(v)).ToArray();
 
             // Trimmed mean (exclude highest and lowest if we have enough detectors)
-            double combined;
+            T combined;
             if (pointScores.Length > 2)
             {
-                combined = pointScores.Skip(1).Take(pointScores.Length - 2).Average();
+                combined = NumOps.Zero;
+                int count = pointScores.Length - 2;
+                for (int j = 1; j <= count; j++)
+                {
+                    combined = NumOps.Add(combined, pointScores[j]);
+                }
+                combined = NumOps.Divide(combined, NumOps.FromDouble(count));
             }
             else
             {
-                combined = pointScores.Average();
+                combined = NumOps.Zero;
+                for (int j = 0; j < pointScores.Length; j++)
+                {
+                    combined = NumOps.Add(combined, pointScores[j]);
+                }
+                combined = NumOps.Divide(combined, NumOps.FromDouble(pointScores.Length));
             }
 
-            combinedScores[i] = NumOps.FromDouble(combined);
+            combinedScores[i] = combined;
         }
 
         return combinedScores;
     }
 
-    private double[] NormalizeScores(Vector<T> scores)
+    private Vector<T> NormalizeScores(Vector<T> scores)
     {
-        var doubleScores = new double[scores.Length];
-        double min = double.MaxValue;
-        double max = double.MinValue;
+        var result = new Vector<T>(scores.Length);
+        T min = NumOps.MaxValue;
+        T max = NumOps.MinValue;
 
         for (int i = 0; i < scores.Length; i++)
         {
-            doubleScores[i] = NumOps.ToDouble(scores[i]);
-            if (doubleScores[i] < min) min = doubleScores[i];
-            if (doubleScores[i] > max) max = doubleScores[i];
+            if (NumOps.LessThan(scores[i], min)) min = scores[i];
+            if (NumOps.GreaterThan(scores[i], max)) max = scores[i];
         }
 
         // Min-max normalization
-        double range = max - min;
-        if (range > 1e-10)
+        T range = NumOps.Subtract(max, min);
+        T eps = NumOps.FromDouble(1e-10);
+
+        if (NumOps.GreaterThan(range, eps))
         {
-            for (int i = 0; i < doubleScores.Length; i++)
+            for (int i = 0; i < scores.Length; i++)
             {
-                doubleScores[i] = (doubleScores[i] - min) / range;
+                result[i] = NumOps.Divide(NumOps.Subtract(scores[i], min), range);
             }
         }
 
-        return doubleScores;
+        return result;
     }
 
     private Matrix<T> CreateRandomProjectionMatrix(int originalDimensions)
