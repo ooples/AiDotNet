@@ -102,8 +102,8 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private readonly BetaRegressionOptions _options;
 
     /// <summary>Y min-max scaling for mapping to (0,1).</summary>
-    private double _yMin;
-    private double _yMax = 1.0;
+    private T _yMin;
+    private T _yMax;
     private bool _needsTransform;
     private bool _useOLS;
 

@@ -116,7 +116,7 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
     /// The model will adjust the dispersion parameter during training based on the actual variation in your data.
     /// </para>
     /// </remarks>
-    private double _yShift;
+    private T _yShift;
 
     public NegativeBinomialRegression(NegativeBinomialRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)

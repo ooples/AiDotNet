@@ -102,8 +102,8 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private int _numFeatures;
     private bool _useOLS;
-    private double _yMean;
-    private double _yStd = 1.0;
+    private T _yMean;
+    private T _yStd;
     private Vector<T>? _olsCoefficients;
 #pragma warning disable CS8601
     private T _olsIntercept = default;

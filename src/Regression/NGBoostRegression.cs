@@ -98,8 +98,8 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Y standardization parameters for scale-invariant training.
     /// </summary>
-    private double _yMean;
-    private double _yStd = 1.0;
+    private T _yMean;
+    private T _yStd;
 
     /// <inheritdoc/>
     public override int NumberOfTrees => _trees.Count * _numParams;

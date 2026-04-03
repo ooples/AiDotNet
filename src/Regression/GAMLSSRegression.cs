@@ -137,8 +137,8 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
     /// <inheritdoc/>
     /// <summary>Y standardization for scale-invariant training.</summary>
-    private double _yMean;
-    private double _yStd = 1.0;
+    private T _yMean;
+    private T _yStd;
 
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {
