@@ -178,9 +178,10 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
                 T diff = NumOps.Subtract(data[i, j], means[j]);
                 variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            double stdVal = Math.Sqrt(NumOps.ToDouble(variance) / n);
-            if (stdVal < 1e-10) stdVal = 1;
-            stds[j] = NumOps.FromDouble(stdVal);
+            T stdVal = NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(n)));
+            T eps = NumOps.FromDouble(1e-10);
+            if (NumOps.LessThan(stdVal, eps)) stdVal = NumOps.One;
+            stds[j] = stdVal;
         }
 
         var normalized = new Matrix<T>(n, d);
@@ -407,8 +408,7 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
             var wCol = new Vector<T>(_inputDim);
             for (int ii = 0; ii < _inputDim; ii++) wCol[ii] = w1[ii, j];
             sum = NumOps.Add(sum, Engine.DotProduct(x, wCol));
-            double val = NumOps.ToDouble(sum);
-            h1[j] = NumOps.FromDouble(ReLU(val));
+            h1[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
         }
 
         // Layer 2 — reuse wCol for hidden dim
@@ -419,8 +419,7 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
             T sum = b2[j];
             for (int ii = 0; ii < _hiddenDim; ii++) wColH[ii] = w2[ii, j];
             sum = NumOps.Add(sum, Engine.DotProduct(h1, wColH));
-            double val = NumOps.ToDouble(sum);
-            h2[j] = NumOps.FromDouble(ReLU(val));
+            h2[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
         }
 
         // Output layer (linear)
@@ -452,8 +451,7 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = b1[j];
             { var wCol_2 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_2[ii] = w1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_2)); }
-            double val = NumOps.ToDouble(sum);
-            h1[j] = NumOps.FromDouble(ReLU(val));
+            h1[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
         }
 
         // Layer 2
@@ -462,8 +460,7 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = b2[j];
             { var wCol_3 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_3[ii] = w2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_3)); }
-            double val = NumOps.ToDouble(sum);
-            h2[j] = NumOps.FromDouble(ReLU(val));
+            h2[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
         }
 
         // Output layer
@@ -473,7 +470,7 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
         return (h1, h2, score);
     }
 
-    private static double ReLU(double x) => Math.Max(0, x);
+    // ReLU is now inline: NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Zero
 
     private void UpdateWeights(Matrix<T> weights, Matrix<T> gradients, T lr)
     {
@@ -534,8 +531,7 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
             // Convert to positive anomaly score (higher = more anomalous)
             // DevNet outputs deviation from reference
             T deviation = NumOps.Subtract(score, _refMean);
-            double absDeviation = Math.Abs(NumOps.ToDouble(deviation));
-            scores[i] = NumOps.FromDouble(absDeviation);
+            scores[i] = NumOps.Abs(deviation);
         }
 
         return scores;

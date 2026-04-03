@@ -190,9 +190,10 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
                 T diff = NumOps.Subtract(data[i, j], means[j]);
                 variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            double stdVal = Math.Sqrt(NumOps.ToDouble(variance) / n);
-            if (stdVal < 1e-10) stdVal = 1;
-            stds[j] = NumOps.FromDouble(stdVal);
+            T stdVal = NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(n)));
+            T eps = NumOps.FromDouble(1e-10);
+            if (NumOps.LessThan(stdVal, eps)) stdVal = NumOps.One;
+            stds[j] = stdVal;
         }
 
         var normalized = new Matrix<T>(n, d);
@@ -332,8 +333,8 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = genB1[j];
             { var wCol_0 = new Vector<T>(_latentDim); for (int ii = 0; ii < _latentDim; ii++) wCol_0[ii] = genW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(z, wCol_0)); }
-            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
-            h1[j] = NumOps.FromDouble(leakyVal);
+            T alpha = NumOps.FromDouble(0.2);
+            h1[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
         }
 
         // Layer 2
@@ -342,8 +343,8 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = genB2[j];
             { var wCol_1 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_1[ii] = genW2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_1)); }
-            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
-            h2[j] = NumOps.FromDouble(leakyVal);
+            T alpha = NumOps.FromDouble(0.2);
+            h2[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
         }
 
         // Output layer (tanh for bounded output)
@@ -352,8 +353,9 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = genB3[j];
             { var wCol_2 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_2[ii] = genW3[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h2, wCol_2)); }
-            double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
-            output[j] = NumOps.FromDouble(tanhVal);
+            // Tanh via exp: (exp(2x)-1)/(exp(2x)+1)
+            T exp2x = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(2), sum));
+            output[j] = NumOps.Divide(NumOps.Subtract(exp2x, NumOps.One), NumOps.Add(exp2x, NumOps.One));
         }
 
         return output;
@@ -380,8 +382,8 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = discB1[j];
             { var wCol_3 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_3[ii] = discW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_3)); }
-            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
-            h1[j] = NumOps.FromDouble(leakyVal);
+            T alpha = NumOps.FromDouble(0.2);
+            h1[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
         }
 
         // Layer 2 (feature layer)
@@ -390,15 +392,15 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = discB2[j];
             { var wCol_4 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_4[ii] = discW2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_4)); }
-            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
-            h2[j] = NumOps.FromDouble(leakyVal);
+            T alpha = NumOps.FromDouble(0.2);
+            h2[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
         }
 
         // Output layer (sigmoid for probability)
         T outputSum = discB3[0];
         { var _e0 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _e0[_i] = discW3[_i, 0]; outputSum = NumOps.Add(outputSum, Engine.DotProduct(h2, _e0)); }
-        double sigVal = Sigmoid(NumOps.ToDouble(outputSum));
-        T output = NumOps.FromDouble(sigVal);
+        // Sigmoid: 1/(1+exp(-x))
+        T output = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(outputSum))));
 
         return (output, h2);
     }
@@ -413,8 +415,8 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         var (fakeH1, fakeH2, fakeOut) = DiscriminateWithCache(fakeData);
 
         // Binary cross-entropy gradients
-        double dRealOut = NumOps.ToDouble(realOut) - 1.0;
-        double dFakeOut = NumOps.ToDouble(fakeOut);
+        T dRealOut = NumOps.Subtract(realOut, NumOps.One);
+        T dFakeOut = fakeOut;
 
         // Backprop through discriminator for real data
         BackpropDiscriminator(realData, realH1, realH2, dRealOut, lr);
@@ -443,8 +445,8 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = discB1[j];
             { var wCol_5 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_5[ii] = discW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_5)); }
-            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
-            h1[j] = NumOps.FromDouble(leakyVal);
+            T alpha = NumOps.FromDouble(0.2);
+            h1[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
         }
 
         // Layer 2
@@ -453,20 +455,19 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = discB2[j];
             { var wCol_6 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_6[ii] = discW2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_6)); }
-            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
-            h2[j] = NumOps.FromDouble(leakyVal);
+            T alpha = NumOps.FromDouble(0.2);
+            h2[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
         }
 
         // Output layer
         T outSum = discB3[0];
         { var _e1 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _e1[_i] = discW3[_i, 0]; outSum = NumOps.Add(outSum, Engine.DotProduct(h2, _e1)); }
-        double sigVal = Sigmoid(NumOps.ToDouble(outSum));
-        T output = NumOps.FromDouble(sigVal);
+        T output = NumOps.Sigmoid(outSum);
 
         return (h1, h2, output);
     }
 
-    private void BackpropDiscriminator(Vector<T> x, Vector<T> h1, Vector<T> h2, double dOut, double lr)
+    private void BackpropDiscriminator(Vector<T> x, Vector<T> h1, Vector<T> h2, T dOut, double lr)
     {
         var discW1 = _discW1;
         var discB1 = _discB1;
@@ -487,12 +488,12 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         {
             // Capture original weight for gradient computation
             T origW3 = discW3[i, 0];
-            dH2[i] = NumOps.Multiply(origW3, NumOps.FromDouble(dOut));
+            dH2[i] = NumOps.Multiply(origW3, dOut);
             // Now update the weight
-            T grad = NumOps.Multiply(h2[i], NumOps.FromDouble(dOut));
-            discW3[i, 0] = NumOps.Subtract(discW3[i, 0], NumOps.FromDouble(lr * NumOps.ToDouble(grad)));
+            T grad = NumOps.Multiply(h2[i], dOut);
+            discW3[i, 0] = NumOps.Subtract(discW3[i, 0], NumOps.Multiply(NumOps.FromDouble(lr), grad));
         }
-        discB3[0] = NumOps.Subtract(discB3[0], NumOps.FromDouble(lr * dOut));
+        discB3[0] = NumOps.Subtract(discB3[0], NumOps.Multiply(NumOps.FromDouble(lr), dOut));
 
         // LeakyReLU derivative for h2
         for (int i = 0; i < _hiddenDim; i++)
@@ -554,7 +555,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         var (_, discH2, fakeOut) = DiscriminateWithCache(fakeData);
 
         // Generator wants discriminator to output 1 for fake
-        double dOut = NumOps.ToDouble(fakeOut) - 1.0;
+        T dOut = NumOps.Subtract(fakeOut, NumOps.One);
 
         // Backprop through discriminator to get gradient w.r.t. fakeData
         var dFakeData = BackpropDiscriminatorToInput(fakeData, discH2, dOut);
@@ -584,8 +585,8 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = genB1[j];
             { var wCol_7 = new Vector<T>(_latentDim); for (int ii = 0; ii < _latentDim; ii++) wCol_7[ii] = genW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(z, wCol_7)); }
-            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
-            h1[j] = NumOps.FromDouble(leakyVal);
+            T alpha = NumOps.FromDouble(0.2);
+            h1[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
         }
 
         // Layer 2
@@ -594,8 +595,8 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = genB2[j];
             { var wCol_8 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_8[ii] = genW2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_8)); }
-            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
-            h2[j] = NumOps.FromDouble(leakyVal);
+            T alpha = NumOps.FromDouble(0.2);
+            h2[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
         }
 
         // Output layer (tanh for bounded output)
@@ -604,14 +605,15 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = genB3[j];
             { var wCol_9 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_9[ii] = genW3[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h2, wCol_9)); }
-            double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
-            output[j] = NumOps.FromDouble(tanhVal);
+            // Tanh via exp: (exp(2x)-1)/(exp(2x)+1)
+            T exp2x = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(2), sum));
+            output[j] = NumOps.Divide(NumOps.Subtract(exp2x, NumOps.One), NumOps.Add(exp2x, NumOps.One));
         }
 
         return (h1, h2, output);
     }
 
-    private Vector<T> BackpropDiscriminatorToInput(Vector<T> x, Vector<T> h2, double dOut)
+    private Vector<T> BackpropDiscriminatorToInput(Vector<T> x, Vector<T> h2, T dOut)
     {
         var discW1 = _discW1;
         var discB1 = _discB1;
@@ -627,7 +629,7 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         var dH2 = new Vector<T>(_hiddenDim);
         for (int i = 0; i < _hiddenDim; i++)
         {
-            dH2[i] = NumOps.Multiply(discW3[i, 0], NumOps.FromDouble(dOut));
+            dH2[i] = NumOps.Multiply(discW3[i, 0], dOut);
         }
 
         // LeakyReLU derivative for h2
@@ -643,8 +645,8 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = discB1[j];
             { var wCol_10 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_10[ii] = discW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_10)); }
-            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
-            h1[j] = NumOps.FromDouble(leakyVal);
+            T alpha = NumOps.FromDouble(0.2);
+            h1[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
         }
 
         // Gradient through layer 2 using Engine.DotProduct
@@ -696,17 +698,18 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = genB3[j];
             { var wCol_11 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_11[ii] = genW3[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h2, wCol_11)); }
-            double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
-            output[j] = NumOps.FromDouble(tanhVal);
+            // Tanh via exp: (exp(2x)-1)/(exp(2x)+1)
+            T exp2x = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(2), sum));
+            output[j] = NumOps.Divide(NumOps.Subtract(exp2x, NumOps.One), NumOps.Add(exp2x, NumOps.One));
         }
 
         // Apply tanh derivative
         var dOutputPre = new Vector<T>(_inputDim);
         for (int j = 0; j < _inputDim; j++)
         {
-            double outVal = NumOps.ToDouble(output[j]);
-            double tanhDeriv = 1 - outVal * outVal;
-            dOutputPre[j] = NumOps.Multiply(dOutput[j], NumOps.FromDouble(tanhDeriv));
+            // tanh derivative: 1 - tanh(x)^2
+            T tanhDeriv = NumOps.Subtract(NumOps.One, NumOps.Multiply(output[j], output[j]));
+            dOutputPre[j] = NumOps.Multiply(dOutput[j], tanhDeriv);
         }
 
         // Gradient through output layer - compute gradient using ORIGINAL weights before updating
@@ -778,15 +781,8 @@ public class AnoGANDetector<T> : AnomalyDetectorBase<T>
         }
     }
 
-    private static double LeakyReLU(double x, double alpha = 0.2)
-    {
-        return x >= 0 ? x : alpha * x;
-    }
-
-    private static double Sigmoid(double x)
-    {
-        return 1.0 / (1.0 + Math.Exp(-Math.Max(-500, Math.Min(500, x))));
-    }
+    // LeakyReLU is now inline: NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Multiply(alpha, x)
+    // Sigmoid is now inline: NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(x))))
 
     /// <inheritdoc/>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)

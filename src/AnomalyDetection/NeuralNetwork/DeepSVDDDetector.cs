@@ -179,9 +179,10 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
                 T diff = NumOps.Subtract(data[i, j], means[j]);
                 variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            double stdVal = Math.Sqrt(NumOps.ToDouble(variance) / n);
-            if (stdVal < 1e-10) stdVal = 1;
-            stds[j] = NumOps.FromDouble(stdVal);
+            T stdVal = NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(n)));
+            T eps = NumOps.FromDouble(1e-10);
+            if (NumOps.LessThan(stdVal, eps)) stdVal = NumOps.One;
+            stds[j] = stdVal;
         }
 
         var normalized = new Matrix<T>(n, d);
@@ -289,9 +290,7 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = b1[j];
             { var wCol_0 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_0[ii] = w1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_0)); }
-            // ReLU: convert to double at activation boundary
-            double val = NumOps.ToDouble(sum);
-            h1[j] = NumOps.FromDouble(ReLU(val));
+            h1[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
         }
 
         // Layer 2
@@ -301,8 +300,7 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
             T sum = b2[j];
             { var wCol_1 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_1[ii] = w2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_1)); }
             // ReLU: convert to double at activation boundary
-            double val = NumOps.ToDouble(sum);
-            h2[j] = NumOps.FromDouble(ReLU(val));
+            h2[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
         }
 
         // Output layer (no activation - linear)
@@ -337,8 +335,7 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = b1[j];
             { var wCol_3 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_3[ii] = w1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_3)); }
-            double val = NumOps.ToDouble(sum);
-            h1[j] = NumOps.FromDouble(ReLU(val));
+            h1[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
         }
 
         var h2 = new Vector<T>(_hiddenDim);
@@ -346,8 +343,7 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = b2[j];
             { var wCol_4 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_4[ii] = w2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h1, wCol_4)); }
-            double val = NumOps.ToDouble(sum);
-            h2[j] = NumOps.FromDouble(ReLU(val));
+            h2[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
         }
 
         var output = new Vector<T>(_outputDim);
@@ -530,7 +526,7 @@ public class DeepSVDDDetector<T> : AnomalyDetectorBase<T>
         }
     }
 
-    private static double ReLU(double x) => Math.Max(0, x);
+    // ReLU is now inline: NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Zero
 
     /// <inheritdoc/>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)
