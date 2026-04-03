@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.DownSampling)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 2, 8, 8")]
-public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
+public class TransitionLayer<T> : LayerBase<T>
 {
     private readonly BatchNormalizationLayer<T> _bn;
     private readonly ConvolutionalLayer<T> _conv;
@@ -434,40 +434,6 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         _bn.ResetState();
         _conv.ResetState();
         _pool.ResetState();
-    }
-
-    /// <summary>
-    /// Gets whether this layer supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            return _bn.SupportsJitCompilation &&
-                   _conv.SupportsJitCompilation &&
-                   _pool.SupportsJitCompilation;
-        }
-    }
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes));
-        }
-
-        if (InputShape is null || InputShape.Length == 0)
-        {
-            throw new InvalidOperationException("Layer input shape not configured.");
-        }
-
-        // Create symbolic input node with batch dimension
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return BuildComputationGraph(inputNode, "");
     }
 
     /// <inheritdoc />

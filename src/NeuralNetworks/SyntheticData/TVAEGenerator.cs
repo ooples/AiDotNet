@@ -976,11 +976,6 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
 
     #region IJitCompilable Override
 
-    /// <summary>
-    /// TVAE uses separate encoder/decoder networks with reparameterization trick which cannot be represented as a single computation graph.
-    /// </summary>
-    public override bool SupportsJitCompilation => false;
-
     #endregion
 
     #region Tensor Shape Helpers

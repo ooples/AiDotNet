@@ -69,12 +69,6 @@ public class MaxPool3DLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value><c>true</c> if the input shape is configured.</value>
-    public override bool SupportsJitCompilation => InputShape != null && InputShape.Length > 0;
-
-    /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     /// <remarks>
@@ -443,33 +437,6 @@ public class MaxPool3DLayer<T> : LayerBase<T>
     #endregion
 
     #region JIT Compilation
-
-    /// <summary>
-    /// Exports the layer as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input nodes.</param>
-    /// <returns>The output computation node.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when layer is not properly initialized.</exception>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "maxpool3d_input");
-        inputNodes.Add(inputNode);
-
-        var poolNode = TensorOperations<T>.MaxPool3D(
-            inputNode,
-            new int[] { PoolSize, PoolSize, PoolSize },
-            new int[] { Stride, Stride, Stride });
-
-        return poolNode;
-    }
 
     #endregion
 }

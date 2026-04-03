@@ -959,44 +959,8 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
         _layerNorm1Gamma.Length * 2 + _layerNorm2Gamma.Length * 2;
 
     public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
     public override void ResetState() { }
     public override void UpdateParameters(T learningRate) { }
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
-    {
-        // Input node
-        var input = TensorOperations<T>.Variable(
-            new Tensor<T>(new[] { _embeddingDim }), "enc_input", requiresGradient: false);
-        nodes.Add(input);
-
-        // Q/K/V/Output projection weights
-        var wQ = TensorOperations<T>.Constant(_queryProj.Clone(), "enc_wQ");
-        var wK = TensorOperations<T>.Constant(_keyProj.Clone(), "enc_wK");
-        var wV = TensorOperations<T>.Constant(_valueProj.Clone(), "enc_wV");
-        var wO = TensorOperations<T>.Constant(_outputProj.Clone(), "enc_wO");
-
-        // Self-attention: Q = W_q @ input, K = W_k @ input, V = W_v @ input
-        var q = TensorOperations<T>.MatrixVectorMultiply(wQ, input);
-        var k = TensorOperations<T>.MatrixVectorMultiply(wK, input);
-        var v = TensorOperations<T>.MatrixVectorMultiply(wV, input);
-
-        // Single-step self-attention: softmax([score]) = [1.0], output = W_out @ V
-        var attnOut = TensorOperations<T>.MatrixVectorMultiply(wO, v);
-
-        // Residual + LayerNorm 1
-        var residual1 = TensorOperations<T>.Add(input, attnOut);
-        var norm1 = TransformerGraphHelper<T>.LayerNormGraph(
-            residual1, _layerNorm1Gamma, _layerNorm1Beta, "enc_ln1");
-
-        // Feed-forward network: GELU(W1 @ x + b1) then W2 @ h + b2
-        var ffnOut = TransformerGraphHelper<T>.FeedForwardGraph(
-            norm1, _ffn1, _ffn1Bias, _ffn2, _ffn2Bias, "enc_ffn");
-
-        // Residual + LayerNorm 2
-        var residual2 = TensorOperations<T>.Add(norm1, ffnOut);
-        return TransformerGraphHelper<T>.LayerNormGraph(
-            residual2, _layerNorm2Gamma, _layerNorm2Beta, "enc_ln2");
-    }
 
     public override Vector<T> GetParameters()
     {
@@ -1341,34 +1305,8 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     public override int ParameterCount => _convWeights.Length + _convBias.Length;
 
     public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
     public override void ResetState() { }
     public override void UpdateParameters(T learningRate) { }
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
-    {
-        // Input node
-        var input = TensorOperations<T>.Variable(
-            new Tensor<T>(new[] { _embeddingDim }), "distill_input", requiresGradient: false);
-        nodes.Add(input);
-
-        // For single-step: 1D conv with kernel size 3 uses only center weight (no neighbors)
-        // Extract center kernel weights as a diagonal-like projection
-        var centerWeights = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
-        for (int d = 0; d < _embeddingDim; d++)
-            centerWeights[d, d] = _convWeights[d * 3 + 1]; // center kernel (k=0 → index 1)
-        var wConv = TensorOperations<T>.Constant(centerWeights, "distill_conv_w");
-        var bConv = TensorOperations<T>.Constant(_convBias.Clone(), "distill_conv_b");
-
-        // Conv: W @ input + bias
-        var conv = TensorOperations<T>.Add(
-            TensorOperations<T>.MatrixVectorMultiply(wConv, input), bConv);
-
-        // ELU activation
-        var activated = TensorOperations<T>.ELU(conv);
-
-        // Max pooling over single element is identity
-        return activated;
-    }
     public override Vector<T> GetParameters()
     {
         var p = new List<T>();
@@ -1619,37 +1557,8 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     private List<Tensor<T>>? _lastEncoderOutput;
 
     public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
     public override void ResetState() { _lastEncoderOutput = null; }
     public override void UpdateParameters(T learningRate) { }
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
-    {
-        // Input node (decoder input)
-        var input = TensorOperations<T>.Variable(
-            new Tensor<T>(new[] { _embeddingDim }), "dec_input", requiresGradient: false);
-        nodes.Add(input);
-
-        // Self-attention block
-        var selfAttnOut = TransformerGraphHelper<T>.SelfAttentionGraph(
-            input, _selfQueryProj, _selfKeyProj, _selfValueProj, _selfOutputProj, "dec_self");
-        var residual1 = TensorOperations<T>.Add(input, selfAttnOut);
-        var norm1 = TransformerGraphHelper<T>.LayerNormGraph(
-            residual1, _layerNorm1Gamma, _layerNorm1Beta, "dec_ln1");
-
-        // Cross-attention block (for single-step JIT, encoder output approximated as self)
-        var crossAttnOut = TransformerGraphHelper<T>.SelfAttentionGraph(
-            norm1, _crossQueryProj, _crossKeyProj, _crossValueProj, _crossOutputProj, "dec_cross");
-        var residual2 = TensorOperations<T>.Add(norm1, crossAttnOut);
-        var norm2 = TransformerGraphHelper<T>.LayerNormGraph(
-            residual2, _layerNorm2Gamma, _layerNorm2Beta, "dec_ln2");
-
-        // FFN block
-        var ffnOut = TransformerGraphHelper<T>.FeedForwardGraph(
-            norm2, _ffn1, _ffn1Bias, _ffn2, _ffn2Bias, "dec_ffn");
-        var residual3 = TensorOperations<T>.Add(norm2, ffnOut);
-        return TransformerGraphHelper<T>.LayerNormGraph(
-            residual3, _layerNorm3Gamma, _layerNorm3Beta, "dec_ln3");
-    }
     public override Vector<T> GetParameters()
     {
         var p = new List<T>();

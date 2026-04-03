@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -239,14 +239,6 @@ public class PointConvolutionLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastPreActivation = null;
         ClearGradients();
-    }
-
-    public override bool SupportsJitCompilation => false;
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "PointConvolutionLayer does not support computation graph export due to point cloud-specific operations.");
     }
 
     public override int ParameterCount => _inputChannels * _outputChannels + _outputChannels;

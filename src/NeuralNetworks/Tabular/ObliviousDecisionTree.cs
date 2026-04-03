@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
@@ -56,9 +56,6 @@ public class ObliviousDecisionTree<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc/>
     public override int ParameterCount =>
@@ -342,26 +339,5 @@ public class ObliviousDecisionTree<T> : LayerBase<T>
         for (int i = 0; i < _leafValues.Length; i++)
             result[offset++] = _leafValues[i];
         return result;
-    }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Export feature selection weights and thresholds as constants
-        var featureWeightsNode = TensorOperations<T>.Constant(_featureSelectionWeights, "featureSelectionWeights");
-        var thresholdsNode = TensorOperations<T>.Constant(_thresholds, "thresholds");
-        var leafValuesNode = TensorOperations<T>.Constant(_leafValues, "leafValues");
-
-        // Feature selection: softmax over weights determines which feature each split uses
-        var featureSelection = TensorOperations<T>.MatrixMultiply(inputNode, TensorOperations<T>.Transpose(featureWeightsNode));
-
-        return featureSelection;
     }
 }

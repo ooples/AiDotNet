@@ -1,4 +1,4 @@
-using AiDotNet.Extensions;
+﻿using AiDotNet.Extensions;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
@@ -454,11 +454,6 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
         _biasMeanGradient.Fill(NumOps.Zero);
         _biasLogVarGradient.Fill(NumOps.Zero);
     }
-
-    /// <inheritdoc/>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
         => throw new NotSupportedException($"{GetType().Name} does not currently support JIT compilation.");
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
 }

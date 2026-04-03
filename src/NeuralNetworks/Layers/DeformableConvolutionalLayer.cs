@@ -38,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "8, 8, 1, 2, 3")]
-public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
+public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
 {
     #region Fields
 
@@ -619,10 +619,6 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableC
     public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation =>
-        _weights != null && _bias != null && _offsetWeights != null && _offsetBias != null;
-
     #endregion
 
     #region IChainableComputationGraph Implementation
@@ -638,15 +634,6 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IChainableC
         int outH = (_inputHeight + 2 * _padding - _kernelSize) / _stride + 1;
         int outW = (_inputWidth + 2 * _padding - _kernelSize) / _stride + 1;
         return [_outputChannels, outH, outW];
-    }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null || inputNodes.Count == 0)
-            throw new ArgumentException("Input nodes cannot be null or empty.", nameof(inputNodes));
-
-        return BuildComputationGraph(inputNodes[0], "");
     }
 
     /// <inheritdoc/>

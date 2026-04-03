@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -89,17 +89,6 @@ public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
     /// <summary>
     /// Gets the model type.
     /// </summary>
-
-    /// <summary>
-    /// Gets whether JIT compilation is supported.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This classifier supports JIT compilation since the prediction
-    /// is just a matrix-vector product followed by sigmoid: sigmoid(w·x + b).
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Initializes a new instance of the OnlineSGDClassifier class.
@@ -410,71 +399,6 @@ public class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
     #endregion
 
     #region JIT Compilation Support
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the probability prediction.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Online SGD Classifier's prediction is sigmoid(w·x + b), which
-    /// can be JIT compiled for faster inference. The computation graph is:
-    /// 1. Input X (features)
-    /// 2. Weights W (constants after training)
-    /// 3. Bias b (constant)
-    /// 4. Matrix multiplication: X @ W
-    /// 5. Add bias: result + b
-    /// 6. Sigmoid: sigmoid(result)
-    ///
-    /// This enables batch prediction with optimized SIMD operations.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (!IsInitialized || _weights is null)
-        {
-            throw new InvalidOperationException(
-                "Model must be fitted before exporting computation graph.");
-        }
-
-        if (inputNodes is null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes));
-        }
-
-        // Create input placeholder for features: [batchSize, numFeatures]
-        var inputTensor = new Tensor<T>(new int[] { 1, NumFeatures });
-        var inputNode = TensorOperations<T>.Variable(inputTensor, "features");
-        inputNodes.Add(inputNode);
-
-        // Create constant node for weights: [numFeatures, 1]
-        var weightsTensor = new Tensor<T>(new int[] { NumFeatures, 1 });
-        for (int i = 0; i < NumFeatures; i++)
-        {
-            weightsTensor[i, 0] = _weights[i];
-        }
-        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "weights");
-        inputNodes.Add(weightsNode);
-
-        // Create constant node for bias: [1, 1]
-        var biasTensor = new Tensor<T>(new int[] { 1, 1 });
-        biasTensor[0, 0] = _bias;
-        var biasNode = TensorOperations<T>.Constant(biasTensor, "bias");
-        inputNodes.Add(biasNode);
-
-        // Matrix multiplication: linearPred = X @ W, shape [batchSize, 1]
-        var linearPredNode = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
-
-        // Add bias: linearPred + bias
-        var withBiasNode = TensorOperations<T>.Add(linearPredNode, biasNode);
-
-        // Sigmoid: probability = sigmoid(linearPred + bias)
-        var outputNode = TensorOperations<T>.Sigmoid(withBiasNode);
-        outputNode.Name = "probability";
-
-        return outputNode;
-    }
 
     #endregion
 

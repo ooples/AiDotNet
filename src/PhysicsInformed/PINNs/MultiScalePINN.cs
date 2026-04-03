@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -792,8 +792,5 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
         /// <inheritdoc/>
         public override bool SupportsTraining => true;
-
-        /// <inheritdoc/>
-        public override bool SupportsJitCompilation => false;
     }
 }

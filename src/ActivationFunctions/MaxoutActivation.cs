@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -167,22 +167,6 @@ public class MaxoutActivation<T> : ActivationFunctionBase<T>
 
         return jacobian;
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.Maxout provides full forward and backward pass support.</value>
-    /// <remarks>
-    /// <para>
-    /// Maxout supports JIT compilation with sparse gradient routing.
-    /// The backward pass routes gradients only to the maximum element in each group.
-    /// </para>
-    /// <para>
-    /// Note: Currently implemented for 2D tensors (batch, features) where features is divisible by numPieces.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

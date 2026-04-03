@@ -593,15 +593,6 @@ public class VAEEncoder<T> : LayerBase<T>
         _quantConv.ResetState();
     }
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("VAEEncoder JIT compilation is not yet implemented.");
-    }
-
     /// <summary>
     /// Saves the encoder's state to a binary writer.
     /// </summary>

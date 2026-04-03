@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -135,19 +135,6 @@ public class ThresholdedReLUActivation<T> : ActivationFunctionBase<T>
     {
         _theta = newTheta;
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.ThresholdedReLU provides full forward and backward pass support.</value>
-    /// <remarks>
-    /// <para>
-    /// ThresholdedReLU supports JIT compilation with full gradient computation.
-    /// The backward pass correctly computes gradients: 1 for inputs above threshold, 0 otherwise.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

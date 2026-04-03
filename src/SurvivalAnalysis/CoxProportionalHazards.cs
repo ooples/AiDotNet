@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
@@ -95,18 +95,6 @@ public class CoxProportionalHazards<T> : SurvivalModelBase<T>
     /// <summary>
     /// Gets the model type.
     /// </summary>
-
-    /// <summary>
-    /// Gets whether JIT compilation is supported.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Cox Proportional Hazards supports JIT compilation because
-    /// the hazard ratio prediction is a simple mathematical formula: exp(β·X).
-    /// This can be compiled to optimized machine code for faster inference.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Initializes a new instance of the CoxProportionalHazards class.
@@ -507,58 +495,6 @@ public class CoxProportionalHazards<T> : SurvivalModelBase<T>
     }
 
     #region JIT Compilation Support
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the hazard ratio prediction.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The Cox model's prediction is exp(β·X), which can be
-    /// JIT compiled for faster inference. The computation graph is:
-    /// 1. Input X (features)
-    /// 2. Coefficients β (constants)
-    /// 3. Matrix multiplication: X @ β
-    /// 4. Exponential: exp(result)
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (!IsFitted || _coefficients is null)
-        {
-            throw new InvalidOperationException(
-                "Model must be fitted before exporting computation graph.");
-        }
-
-        if (inputNodes is null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes));
-        }
-
-        // Create input placeholder for features: [batchSize, numFeatures]
-        var inputTensor = new Tensor<T>(new int[] { 1, NumFeatures });
-        var inputNode = TensorOperations<T>.Variable(inputTensor, "features");
-        inputNodes.Add(inputNode);
-
-        // Create constant node for coefficients: [numFeatures, 1]
-        var coeffTensor = new Tensor<T>(new int[] { NumFeatures, 1 });
-        for (int i = 0; i < NumFeatures; i++)
-        {
-            coeffTensor[i, 0] = _coefficients[i];
-        }
-        var coeffNode = TensorOperations<T>.Constant(coeffTensor, "coefficients");
-        inputNodes.Add(coeffNode);
-
-        // Matrix multiplication: linearPred = X @ β, shape [batchSize, 1]
-        var linearPredNode = TensorOperations<T>.MatrixMultiply(inputNode, coeffNode);
-
-        // Exponential: hazardRatio = exp(linearPred)
-        var outputNode = TensorOperations<T>.Exp(linearPredNode);
-        outputNode.Name = "hazard_ratio";
-
-        return outputNode;
-    }
 
     #endregion
 

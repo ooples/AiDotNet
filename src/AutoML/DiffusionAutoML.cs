@@ -787,8 +787,6 @@ namespace AiDotNet.AutoML
 
         public string[] FeatureNames { get; set; } = Array.Empty<string>();
 
-        public override bool SupportsJitCompilation => false;
-
         public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
 
         public DiffusionAutoMLModel(
@@ -1148,11 +1146,6 @@ namespace AiDotNet.AutoML
             }
 
             SetParameters(Engine.Subtract(parameters, Engine.Multiply(gradients, learningRate)));
-        }
-
-        public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-        {
-            throw new NotSupportedException("JIT compilation not supported for diffusion models");
         }
 
         private Tensor<T> SampleNoise(int[] shape)

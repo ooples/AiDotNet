@@ -531,62 +531,6 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         _outputBiasGradient = null;
     }
 
-    /// <summary>
-    /// Gets whether this layer supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            return _queryWeights != null && _keyWeights != null &&
-                   _valueWeights != null && _outputWeights != null &&
-                   _queryWeights.Rows > 0;
-        }
-    }
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input
-        var seqLen = InputShape[0];
-        var embDim = InputShape[1];
-        var symbolicInput = new Tensor<T>(new[] { 1, seqLen, embDim });
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Convert weights to tensors
-        var wqTensor = MatrixToTensor(_queryWeights);
-        var wkTensor = MatrixToTensor(_keyWeights);
-        var wvTensor = MatrixToTensor(_valueWeights);
-        var woTensor = MatrixToTensor(_outputWeights);
-
-        var wqNode = Autodiff.TensorOperations<T>.Constant(wqTensor, "Wq");
-        var wkNode = Autodiff.TensorOperations<T>.Constant(wkTensor, "Wk");
-        var wvNode = Autodiff.TensorOperations<T>.Constant(wvTensor, "Wv");
-        var woNode = Autodiff.TensorOperations<T>.Constant(woTensor, "Wo");
-
-        // Multi-head attention using TensorOperations
-        var output = Autodiff.TensorOperations<T>.MultiHeadAttention(
-            query: inputNode,
-            key: inputNode,
-            value: inputNode,
-            numHeads: _headCount,
-            wQ: wqNode,
-            wK: wkNode,
-            wV: wvNode,
-            wO: woNode);
-
-        return output;
-    }
-
     private Tensor<T> MatrixToTensor(Matrix<T> matrix)
     {
         var tensor = new Tensor<T>(new[] { matrix.Rows, matrix.Columns });

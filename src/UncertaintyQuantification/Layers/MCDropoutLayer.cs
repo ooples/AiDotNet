@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
@@ -167,11 +167,6 @@ public class MCDropoutLayer<T> : LayerBase<T>
         copy.SetTrainingMode(IsTrainingMode);
         return copy;
     }
-
-    /// <inheritdoc/>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
         => throw new NotSupportedException($"{GetType().Name} does not currently support JIT compilation.");
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
 }

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -1371,25 +1371,6 @@ public class RWKV7Block<T> : LayerBase<T>
         _channelKeyWeightsGrad, _channelValueWeightsGrad, _channelReceptanceWeightsGrad,
         _normGamma1Grad, _normBeta1Grad, _normGamma2Grad, _normBeta2Grad
     ];
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "rwkv7_input");
-        var outWeightsNode = TensorOperations<T>.Variable(_outputWeights, "rwkv7_W_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(outWeightsNode);
-
-        return TensorOperations<T>.MatrixMultiply(xNode, outWeightsNode);
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
@@ -1280,14 +1280,6 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
             branch.NeighborIndices = null;
             branch.MaxIndices = null;
         }
-    }
-
-    public override bool SupportsJitCompilation => false;
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "SetAbstractionLayer does not support computation graph export due to point cloud-specific operations.");
     }
 
     public override int ParameterCount

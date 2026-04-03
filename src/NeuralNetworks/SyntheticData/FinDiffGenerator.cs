@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -737,11 +737,6 @@ public class FinDiffGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     #endregion
 
     #region IJitCompilable Override
-
-    /// <summary>
-    /// FinDiff uses temporal correlation-aware diffusion with financial constraints which cannot be represented as a single computation graph.
-    /// </summary>
-    public override bool SupportsJitCompilation => false;
 
     #endregion
 }

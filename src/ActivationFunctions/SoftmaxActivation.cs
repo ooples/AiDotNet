@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -146,22 +146,6 @@ public class SoftmaxActivation<T> : ActivationFunctionBase<T>
     /// </para>
     /// </remarks>
     protected override bool SupportsScalarOperations() => false;
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.Softmax provides full forward and backward pass support.</value>
-    /// <remarks>
-    /// <para>
-    /// Softmax supports JIT compilation with full gradient computation. The backward pass implements
-    /// the Jacobian-vector product: ∂softmax/∂x_i = softmax_i * (∂L/∂y_i - Σ_j(∂L/∂y_j * softmax_j)).
-    /// </para>
-    /// <para>
-    /// Note: Currently implemented for 2D tensors (batch, features) along axis=-1.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

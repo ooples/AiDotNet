@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4, 8, 8")]
-public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
+public class RRDBLayer<T> : LayerBase<T>
 {
     #region Fields
 
@@ -122,21 +122,6 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     protected override bool SupportsGpuExecution => true;
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // Check all RDB blocks support JIT
-            foreach (var rdb in _rdbBlocks)
-            {
-                if (!rdb.SupportsJitCompilation)
-                    return false;
-            }
-            return true;
-        }
-    }
 
     #endregion
 
@@ -369,23 +354,6 @@ public class RRDBLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         {
             rdb.ResetState();
         }
-    }
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape is null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input node with batch dimension [batch, channels, height, width]
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return BuildComputationGraph(inputNode, "");
     }
 
     /// <inheritdoc />

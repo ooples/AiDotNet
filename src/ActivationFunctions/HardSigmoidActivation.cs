@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -109,22 +109,6 @@ public class HardSigmoidActivation<T> : ActivationFunctionBase<T>
 
         return NumOps.Zero;
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because gradient computation is fully implemented in TensorOperations.HardSigmoid.</value>
-    /// <remarks>
-    /// <para>
-    /// HardSigmoid supports JIT compilation because:
-    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - The gradient is 0.5 when -1 &lt; x &lt; 1, and 0 otherwise
-    /// - It's computationally efficient and commonly used in mobile/embedded applications
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

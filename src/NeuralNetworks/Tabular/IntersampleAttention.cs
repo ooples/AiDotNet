@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -46,9 +46,6 @@ public class IntersampleAttention<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc/>
     public override int ParameterCount =>
@@ -262,23 +259,5 @@ public class IntersampleAttention<T> : LayerBase<T>
         _keyProjection.ResetState();
         _valueProjection.ResetState();
         _outputProjection.ResetState();
-    }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Delegate to Q/K/V projection layers and compose attention
-        var queryNode = _queryProjection.ExportComputationGraph(inputNodes);
-        var keyNode = _keyProjection.ExportComputationGraph(inputNodes);
-        var valueNode = _valueProjection.ExportComputationGraph(inputNodes);
-
-        var attentionScores = TensorOperations<T>.MatrixMultiply(queryNode, TensorOperations<T>.Transpose(keyNode));
-        var attentionWeights = TensorOperations<T>.Softmax(attentionScores);
-        var attended = TensorOperations<T>.MatrixMultiply(attentionWeights, valueNode);
-
-        return _outputProjection.ExportComputationGraph(inputNodes);
     }
 }

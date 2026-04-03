@@ -1205,11 +1205,6 @@ public class TabSynGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     #region IJitCompilable Override
 
-    /// <summary>
-    /// TabSyn uses latent diffusion with a separate VAE encoder/decoder which cannot be represented as a single computation graph.
-    /// </summary>
-    public override bool SupportsJitCompilation => false;
-
     #endregion
 
     #region Tensor Shape Helpers

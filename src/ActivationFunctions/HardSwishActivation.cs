@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -146,12 +146,6 @@ public class HardSwishActivation<T> : ActivationFunctionBase<T>
     {
         return input.Transform((x, _) => Derivative(x));
     }
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>False because TensorOperations.Minimum is not yet implemented.</value>
-    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

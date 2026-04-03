@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -168,22 +168,6 @@ public class SphericalSoftmaxActivation<T> : ActivationFunctionBase<T>
 
         return jacobian;
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.SphericalSoftmax provides full forward and backward pass support.</value>
-    /// <remarks>
-    /// <para>
-    /// SphericalSoftmax supports JIT compilation by composing L2 normalization with softmax.
-    /// The backward pass correctly applies the chain rule through both operations.
-    /// </para>
-    /// <para>
-    /// Note: Currently implemented for 2D tensors (batch, features) along axis=-1.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

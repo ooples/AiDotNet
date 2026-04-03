@@ -1017,14 +1017,4 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
         _selfWeightsGradient = null;
         _biasGradient = null;
     }
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "EdgeConditionalConvolutionalLayer does not support computation graph export due to dynamic edge-based weight generation.");
-    }
 }

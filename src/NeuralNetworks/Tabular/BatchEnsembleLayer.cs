@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -82,9 +82,6 @@ public class BatchEnsembleLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc/>
     public override int ParameterCount
@@ -456,28 +453,5 @@ public class BatchEnsembleLayer<T> : LayerBase<T>
         _biasGrad = null;
         _rVectorsGrad = null;
         _sVectorsGrad = null;
-    }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Export weights and compute matmul
-        var weightsNode = TensorOperations<T>.Constant(_weights, "weights");
-        var matmulNode = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
-
-        if (_bias is not null)
-        {
-            var biasNode = TensorOperations<T>.Constant(_bias, "bias");
-            return TensorOperations<T>.Add(matmulNode, biasNode);
-        }
-
-        return matmulNode;
     }
 }

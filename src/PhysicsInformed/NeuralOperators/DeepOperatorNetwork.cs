@@ -928,7 +928,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         public override int ParameterCount => _branchNet.GetParameterCount() + _trunkNet.GetParameterCount();
 
         public override bool SupportsTraining => true;
-        public override bool SupportsJitCompilation => false;
     }
 }
 

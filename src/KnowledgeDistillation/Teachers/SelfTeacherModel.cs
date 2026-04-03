@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -142,39 +142,5 @@ public class SelfTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
         if (_cachedPredictions == null || index >= _cachedPredictions.Length)
             throw new InvalidOperationException("Predictions not cached or index out of range");
         return _cachedPredictions[index];
-    }
-
-    /// <summary>
-    /// Gets whether this teacher supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> if constructed with an IJitCompilable model that supports JIT;
-    /// <c>false</c> if using cached predictions mode.
-    /// </value>
-    public override bool SupportsJitCompilation => _underlyingModel?.SupportsJitCompilation ?? false;
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input nodes.</param>
-    /// <returns>The output computation node.</returns>
-    /// <exception cref="NotSupportedException">Thrown when using cached predictions mode.</exception>
-    /// <remarks>
-    /// <para>
-    /// When constructed with an IJitCompilable model, this method delegates to the underlying model's
-    /// computation graph export. When using cached predictions mode, JIT compilation is not supported
-    /// because there is no computation to represent as a graph.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (_underlyingModel != null && _underlyingModel.SupportsJitCompilation)
-        {
-            return _underlyingModel.ExportComputationGraph(inputNodes);
-        }
-
-        return ThrowJitNotSupported(
-            nameof(SelfTeacherModel<T>),
-            "it uses cached predictions rather than a computation graph. Use the constructor with an IJitCompilable model for JIT support");
     }
 }

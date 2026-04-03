@@ -463,7 +463,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// Indicates whether this model supports training.
         /// </summary>
         public override bool SupportsTraining => true;
-        public override bool SupportsJitCompilation => false;
 
         private void ValidateState(T[] state, string paramName)
         {

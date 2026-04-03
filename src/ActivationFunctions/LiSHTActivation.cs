@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -105,22 +105,6 @@ public class LiSHTActivation<T> : ActivationFunctionBase<T>
 
         return NumOps.Add(tanhInput, secondTerm);
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because gradient computation is fully implemented in TensorOperations.LiSHT.</value>
-    /// <remarks>
-    /// <para>
-    /// LiSHT supports JIT compilation because:
-    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - The gradient is tanh(x) + x * (1 - tanh²(x))
-    /// - It helps prevent vanishing gradients
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

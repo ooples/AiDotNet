@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -145,20 +145,6 @@ public class SoftPlusActivation<T> : ActivationFunctionBase<T>
         // SoftPlus derivative is sigmoid: 1 / (1 + e^(-x))
         return Engine.Sigmoid(input);
     }
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because gradient computation is fully implemented in TensorOperations.SoftPlus.</value>
-    /// <remarks>
-    /// <para>
-    /// SoftPlus supports JIT compilation because:
-    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - The gradient is sigmoid(x) = 1 / (1 + e^(-x)), which is numerically stable
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

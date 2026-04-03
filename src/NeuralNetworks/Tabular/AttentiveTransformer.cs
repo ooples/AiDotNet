@@ -59,9 +59,6 @@ public class AttentiveTransformer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
-
     /// <summary>
     /// Initializes a new instance of the AttentiveTransformer class.
     /// </summary>
@@ -393,15 +390,5 @@ public class AttentiveTransformer<T> : LayerBase<T>
     {
         _fcLayer.SetTrainingMode(isTraining);
         // GhostBatchNormalization uses Forward (training) vs ForwardInference (eval) internally
-    }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Delegate to the inner fully connected layer's computation graph
-        return _fcLayer.ExportComputationGraph(inputNodes);
     }
 }

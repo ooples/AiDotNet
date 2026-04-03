@@ -555,7 +555,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         }
 
         public override bool SupportsTraining => true;
-        public override bool SupportsJitCompilation => false;
 
         private void ValidateGraphInput(T[,] nodeFeatures, T[,] adjacencyMatrix)
         {

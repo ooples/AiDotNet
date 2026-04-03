@@ -789,46 +789,4 @@ public class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     }
 
     #endregion
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => true;
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Export MLP parameters as constants
-        var weights1Node = Autodiff.TensorOperations<T>.Constant(_mlpWeights1, "weights1");
-        var weights2Node = Autodiff.TensorOperations<T>.Constant(_mlpWeights2, "weights2");
-        var bias1Node = Autodiff.TensorOperations<T>.Constant(_mlpBias1, "bias1");
-        var bias2Node = Autodiff.TensorOperations<T>.Constant(_mlpBias2, "bias2");
-
-        // Build MLP computation graph (self-path only for JIT)
-        // Layer 1: input @ weights1 + bias1
-        var hidden1 = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, weights1Node);
-        var hidden1WithBias = Autodiff.TensorOperations<T>.Add(hidden1, bias1Node);
-        var hidden1Activated = Autodiff.TensorOperations<T>.ReLU(hidden1WithBias);
-
-        // Layer 2: hidden @ weights2 + bias2
-        var hidden2 = Autodiff.TensorOperations<T>.MatrixMultiply(hidden1Activated, weights2Node);
-        var output = Autodiff.TensorOperations<T>.Add(hidden2, bias2Node);
-
-        // Apply activation if supported
-        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
-        {
-            return ScalarActivation.ApplyToGraph(output);
-        }
-
-        return output;
-    }
 }

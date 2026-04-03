@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -80,8 +80,6 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
 
     public override bool SupportsTraining => false;
 
-    public override bool SupportsJitCompilation => false;
-
     public override int ParameterCount => 0;
 
     public override Tensor<float>? GetWeights() => null;
@@ -154,11 +152,5 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
     public override void ResetState()
     {
         // Inference-only; no recurrent state to clear.
-    }
-
-    public override ComputationNode<float> ExportComputationGraph(List<ComputationNode<float>> inputNodes)
-    {
-        // WOQ is a runtime inference rewrite; we intentionally don't support JIT graph export here.
-        throw new NotSupportedException("QuantizedDenseLayer does not support JIT compilation.");
     }
 }

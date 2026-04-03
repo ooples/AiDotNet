@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 128, 128", TestConstructorArgs = "128, 128, 2")]
-public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
+public class SpyNetLayer<T> : LayerBase<T>
 {
     #region Fields
 
@@ -1217,21 +1217,6 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         base.Dispose(disposing);
     }
 
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // SpyNet supports JIT if all basic modules support JIT
-            foreach (var module in _basicModules)
-            {
-                if (!module.SupportsJitCompilation)
-                    return false;
-            }
-            return _basicModules.Count > 0;
-        }
-    }
-
     #endregion
 
     #region IChainableComputationGraph Implementation
@@ -1243,15 +1228,6 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// Gets the output shape for this layer (2 channels for optical flow: dx, dy).
     /// </summary>
     public new int[] GetOutputShape() => [2, _inputHeight, _inputWidth];
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null || inputNodes.Count == 0)
-            throw new ArgumentException("Input nodes cannot be null or empty.", nameof(inputNodes));
-
-        return BuildComputationGraph(inputNodes[0], "");
-    }
 
     /// <inheritdoc/>
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)

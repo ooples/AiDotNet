@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -261,7 +261,6 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
     private List<Vector<T>>? _biasGradients;
 
     public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
 
     public override void ResetState() { /* stateless layer — no recurrent state to reset */ }
 
@@ -294,16 +293,6 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
 
         _weightGradients = null;
         _biasGradients = null;
-    }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
-    {
-        if (nodes.Count > 0)
-        {
-            var (_, forecast) = ExportComputationGraph(nodes[0]);
-            return forecast;
-        }
-        return TensorOperations<T>.Variable(new Tensor<T>(new[] { _forecastHorizon }), "nbeats_output");
     }
 
     public (Vector<T> backcast, Vector<T> forecast) ForwardInternal(Vector<T> input)

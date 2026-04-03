@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
@@ -42,9 +42,6 @@ public class GatedFeatureLearningUnit<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc/>
     public override int ParameterCount => _featureTransform.ParameterCount + _gateTransform.ParameterCount;
@@ -152,18 +149,5 @@ public class GatedFeatureLearningUnit<T> : LayerBase<T>
         for (int i = 0; i < gateParams.Length; i++)
             result[offset++] = gateParams[i];
         return result;
-    }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode;
     }
 }

@@ -46,7 +46,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8, 8", TestConstructorArgs = "4, 8, 8, 8")]
-public class InvertedResidualBlock<T> : LayerBase<T>, IChainableComputationGraph<T>, ILayerSerializationExtras<T>
+public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly ConvolutionalLayer<T>? _expandConv;
     private readonly BatchNormalizationLayer<T>? _expandBn;

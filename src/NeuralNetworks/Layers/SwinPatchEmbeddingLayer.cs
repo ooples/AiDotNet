@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -211,36 +211,6 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
     {
         _projection.UpdateParameters(learningRate);
         _norm.UpdateParameters(learningRate);
-    }
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation =>
-        _projection != null && _projection.SupportsJitCompilation &&
-        _norm != null && _norm.SupportsJitCompilation;
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Create symbolic input node for image: [batch, channels, height, width]
-        var symbolicInput = new Tensor<T>([1, _inputChannels, _inputHeight, _inputWidth]);
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "swin_patch_embed_input");
-        inputNodes.Add(inputNode);
-
-        // Export projection convolution graph
-        var projectedNode = _projection.ExportComputationGraph(inputNodes);
-
-        // The reshape from [batch, embedDim, H/patchSize, W/patchSize] to [batch, numPatches, embedDim]
-        // is a structural operation that would be represented as a reshape node
-        var reshapeNode = TensorOperations<T>.Reshape(projectedNode, [1, NumPatches, _embedDim]);
-
-        // Export norm graph - create a subgraph for layer normalization
-        var normInputNodes = new List<ComputationNode<T>> { reshapeNode };
-        var outputNode = _norm.ExportComputationGraph(normInputNodes);
-
-        return outputNode;
     }
 
     /// <inheritdoc />

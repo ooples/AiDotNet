@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -89,16 +89,6 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     /// </summary>
     public override int ParameterCount => _innerLayer.ParameterCount;
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <remarks>
-    /// JIT compilation is supported if the inner layer supports it. At JIT export time,
-    /// the spectral normalization is applied to create normalized weights, which are then
-    /// used in the exported computation graph for inference.
-    /// </remarks>
-    public override bool SupportsJitCompilation => _innerLayer.SupportsJitCompilation;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
@@ -547,93 +537,6 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
             _v = new Tensor<T>([vLen]);
             for (int i = 0; i < vLen; i++)
                 _v[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
-    }
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the spectrally normalized layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// For JIT compilation, spectral normalization is applied at export time to produce
-    /// normalized weights. These normalized weights are then used in the inner layer's
-    /// computation graph. This approach is suitable for inference, where the weights
-    /// are fixed after training.
-    /// </para>
-    /// <para>
-    /// Note: The exported computation graph uses a snapshot of the normalized weights
-    /// at the time of export. If the underlying weights change, the graph must be
-    /// re-exported to reflect those changes.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (!_innerLayer.SupportsJitCompilation)
-            throw new NotSupportedException(
-                $"SpectralNormalizationLayer cannot export computation graph because " +
-                $"the inner layer ({_innerLayer.GetType().Name}) does not support JIT compilation.");
-
-        // Get current parameters from inner layer
-        var originalParams = _innerLayer.GetParameters();
-
-        try
-        {
-            if (originalParams.Length == 0)
-            {
-                return _innerLayer.ExportComputationGraph(inputNodes);
-            }
-
-            int paramCount = originalParams.Length;
-            int biasCount = GetBiasCount(paramCount);
-            int weightCount = paramCount - biasCount;
-
-            // Create weight tensor [rows, cols] with zero-padding if needed
-            int rows = (int)Math.Ceiling(Math.Sqrt(weightCount));
-            int cols = (weightCount + rows - 1) / rows;
-            var weights = new Tensor<T>([rows, cols]);
-            for (int i = 0; i < rows; i++)
-            {
-                for (int j = 0; j < cols; j++)
-                {
-                    int idx = i * cols + j;
-                    weights[new int[] { i, j }] = idx < weightCount ? originalParams[idx] : NumOps.Zero;
-                }
-            }
-
-            EnsurePowerIterationVectors(rows, cols);
-
-            // Compute spectral norm
-            T spectralNorm = ComputeSpectralNorm(weights);
-            T normPlusEps = NumOps.Add(spectralNorm, _epsilon);
-
-            // Normalize weight parameters
-            var normalizedParams = new Vector<T>(paramCount);
-            for (int i = 0; i < weightCount; i++)
-            {
-                normalizedParams[i] = NumOps.Divide(originalParams[i], normPlusEps);
-            }
-
-            // Copy bias parameters unchanged
-            for (int i = weightCount; i < paramCount; i++)
-            {
-                normalizedParams[i] = originalParams[i];
-            }
-
-            // Apply normalized weights to inner layer for graph export
-            _innerLayer.SetParameters(normalizedParams);
-
-            // Export the inner layer's computation graph with normalized weights
-            return _innerLayer.ExportComputationGraph(inputNodes);
-        }
-        finally
-        {
-            // Always restore original weights after export
-            _innerLayer.SetParameters(originalParams);
         }
     }
 

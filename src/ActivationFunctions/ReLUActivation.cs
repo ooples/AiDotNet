@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -127,20 +127,6 @@ public class ReLUActivation<T> : ActivationFunctionBase<T>
     {
         return Engine.TensorGreaterThan(input, NumOps.Zero);
     }
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because ReLU gradient computation is fully implemented and tested.</value>
-    /// <remarks>
-    /// <para>
-    /// ReLU supports JIT compilation because:
-    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - The operation is simple and efficient (max(0, x))
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

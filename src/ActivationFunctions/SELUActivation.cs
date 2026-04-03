@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -123,22 +123,6 @@ public class SELUActivation<T> : ActivationFunctionBase<T>
             return NumOps.Multiply(_lambda, NumOps.Multiply(_alpha, NumOps.Exp(input)));
         }
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because gradient computation is fully implemented in TensorOperations.SELU.</value>
-    /// <remarks>
-    /// <para>
-    /// SELU supports JIT compilation because:
-    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - Uses fixed λ ≈ 1.0507 and α ≈ 1.6733 constants for self-normalization
-    /// - The gradient is λ for x >= 0, otherwise λ * α * e^x
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

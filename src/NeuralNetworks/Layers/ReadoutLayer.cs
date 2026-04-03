@@ -633,44 +633,4 @@ public partial class ReadoutLayer<T> : LayerBase<T>
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (_weights == null || _bias == null)
-            throw new InvalidOperationException("Layer weights not initialized. Initialize the layer before compiling.");
-
-        // Create symbolic input
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Use weights and bias tensors directly
-        var weightsNode = TensorOperations<T>.Constant(_weights, "readout_weights");
-        var biasNode = TensorOperations<T>.Constant(_bias, "readout_bias");
-
-        // Compute output = weights * input + bias
-        var matmulNode = TensorOperations<T>.MatrixMultiply(weightsNode, inputNode);
-        var outputNode = TensorOperations<T>.Add(matmulNode, biasNode);
-
-        // Apply activation if specified
-        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
-        {
-            outputNode = ScalarActivation.ApplyToGraph(outputNode);
-        }
-        else if (VectorActivation != null && VectorActivation.SupportsJitCompilation)
-        {
-            outputNode = VectorActivation.ApplyToGraph(outputNode);
-        }
-
-        return outputNode;
-    }
-
-    public override bool SupportsJitCompilation =>
-        _weights != null && _bias != null;
 }

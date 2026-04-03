@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
@@ -44,9 +44,6 @@ public class PiecewiseLinearEncoding<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc/>
     public override int ParameterCount => _numFeatures * (_numBins - 1);
@@ -181,21 +178,5 @@ public class PiecewiseLinearEncoding<T> : LayerBase<T>
         for (int i = 0; i < _binBoundaries.Length; i++)
             result[i] = _binBoundaries[i];
         return result;
-    }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Export bin boundaries as a constant for the computation graph
-        var boundariesNode = TensorOperations<T>.Constant(_binBoundaries, "binBoundaries");
-
-        return inputNode;
     }
 }

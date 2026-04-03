@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -86,14 +86,6 @@ public class MaxPoolingLayer<T> : LayerBase<T>
     {
         _maxIndices = null;
         _numPoints = 0;
-    }
-
-    public override bool SupportsJitCompilation => false;
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "MaxPoolingLayer does not support computation graph export due to point cloud-specific pooling.");
     }
 
     public override int ParameterCount => 0;

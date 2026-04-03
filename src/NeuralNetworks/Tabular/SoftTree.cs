@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
@@ -55,9 +55,6 @@ public class SoftTree<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
 
     /// <inheritdoc/>
     public override int ParameterCount =>
@@ -271,28 +268,5 @@ public class SoftTree<T> : LayerBase<T>
         for (int i = 0; i < _leafValues.Length; i++)
             result[offset++] = _leafValues[i];
         return result;
-    }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Export tree parameters as constants
-        var splitWeightsNode = TensorOperations<T>.Constant(_splitWeights, "splitWeights");
-        var splitBiasesNode = TensorOperations<T>.Constant(_splitBiases, "splitBiases");
-        var leafValuesNode = TensorOperations<T>.Constant(_leafValues, "leafValues");
-
-        // Split decisions: sigmoid(input * weights + biases)
-        var splitLogits = TensorOperations<T>.Add(
-            TensorOperations<T>.MatrixMultiply(inputNode, TensorOperations<T>.Transpose(splitWeightsNode)),
-            splitBiasesNode);
-
-        return splitLogits;
     }
 }

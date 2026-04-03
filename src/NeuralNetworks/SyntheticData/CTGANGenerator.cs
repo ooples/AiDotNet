@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -1066,60 +1066,6 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
     #endregion
 
     #region IJitCompilable Override
-
-    /// <summary>
-    /// Gets whether this CTGAN generator supports JIT compilation for accelerated generation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// CTGAN supports JIT compilation when the model is fitted and using the default
-    /// (non-custom) layer configuration. The computation graph exports the generator
-    /// MLP forward pass with batch normalization and residual connections.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> After training, you can JIT compile the generator for faster
-    /// synthetic data creation. This compiles the neural network forward pass (the
-    /// computationally expensive part) into optimized native code.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation =>
-        IsFitted && Layers.Count > 1 && !_usingCustomLayers &&
-        _genBNLayers.Count > 0 &&
-        Layers.All(l => l.SupportsJitCompilation) &&
-        _genBNLayers.All(l => l.SupportsJitCompilation);
-
-    /// <summary>
-    /// Exports the CTGAN generator network as a computation graph for JIT compilation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Exports the generator MLP with residual connections and batch normalization.
-    /// The graph covers: noise input → FC + BN + ReLU (with residual concat) → output FC.
-    /// Column-specific output activations (Tanh/Softmax) are applied separately after
-    /// the JIT-compiled forward pass.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (!SupportsJitCompilation)
-        {
-            throw new NotSupportedException(
-                $"{GetType().Name} does not support JIT compilation in its current configuration.");
-        }
-
-        int genInputDim = _options.EmbeddingDimension + _condWidth;
-        var hiddenLayers = Layers.Take(Layers.Count - 1).ToList();
-
-        return TapeLayerBridge<T>.ExportMLPGeneratorGraph(
-            inputNodes,
-            genInputDim,
-            hiddenLayers,
-            _genBNLayers.Cast<ILayer<T>>().ToList(),
-            Layers[^1],
-            TapeLayerBridge<T>.HiddenActivation.ReLU,
-            TapeLayerBridge<T>.HiddenActivation.None,
-            useResidualConcat: true);
-    }
 
     #endregion
 }

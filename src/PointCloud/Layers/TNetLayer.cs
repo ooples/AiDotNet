@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -304,14 +304,6 @@ public class TNetLayer<T> : LayerBase<T>
         }
 
         _maxPooling.ResetState();
-    }
-
-    public override bool SupportsJitCompilation => false;
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "TNetLayer does not support computation graph export due to point cloud-specific operations.");
     }
 
     public override int ParameterCount

@@ -323,14 +323,6 @@ public class FlattenLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> because flatten is a simple reshape operation that can be JIT compiled.
-    /// </value>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     /// <value>
@@ -381,37 +373,5 @@ public class FlattenLayer<T> : LayerBase<T>
         int batchSize = input.Shape[0];
         int flattenedSize = input.Length / batchSize;
         return input.Reshape([batchSize, flattenedSize]);
-    }
-
-    /// <summary>
-    /// Exports the flatten layer's forward pass as a JIT-compilable computation graph.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the flattened result.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph for the flatten operation using a reshape node.
-    /// The flatten operation is equivalent to reshaping the input to [batchSize, product of dimensions].
-    /// </para>
-    /// </remarks>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create placeholder for input data with symbolic batch dimension
-        var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(_inputShape).ToArray());
-        var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, "input");
-
-        inputNodes.Add(inputNode);
-
-        // Flatten is just a reshape operation: reshape to [batchSize, outputSize]
-        var flattenedShape = new int[] { -1, _outputSize }; // -1 means variable batch size
-        var outputNode = Autodiff.TensorOperations<T>.Reshape(inputNode, flattenedShape);
-
-        return outputNode;
     }
 }

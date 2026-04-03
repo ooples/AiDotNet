@@ -606,7 +606,6 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public override int ParameterCount => _kernels.Length + _biases.Length;
     public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => false;
 
     public ConvLayerTensor(int outputChannels, int kernelSize, int seed = 42)
         : base(new[] { kernelSize }, new[] { outputChannels })
@@ -695,11 +694,6 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         for (int i = 0; i < _kernels.Length; i++) p.Add(_kernels[i]);
         for (int i = 0; i < _biases.Length; i++) p.Add(_biases[i]);
         return new Vector<T>(p.ToArray());
-    }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
-    {
-        throw new NotSupportedException("ConvLayerTensor JIT compilation is not yet implemented.");
     }
 
     public override void Serialize(BinaryWriter writer)

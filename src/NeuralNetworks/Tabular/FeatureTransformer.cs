@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
@@ -58,9 +58,6 @@ public class FeatureTransformer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Initializes a new instance of the FeatureTransformer class.
@@ -464,24 +461,5 @@ public class FeatureTransformer<T> : LayerBase<T>
     {
         foreach (var fc in _sharedFCLayers) fc.SetTrainingMode(isTraining);
         foreach (var fc in _stepFCLayers) fc.SetTrainingMode(isTraining);
-    }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Chain computation graphs through shared and step-specific FC layers
-        ComputationNode<T> current = _sharedFCLayers.Count > 0
-            ? _sharedFCLayers[0].ExportComputationGraph(inputNodes)
-            : throw new InvalidOperationException("No shared layers initialized.");
-
-        for (int i = 1; i < _sharedFCLayers.Count; i++)
-        {
-            current = _sharedFCLayers[i].ExportComputationGraph(inputNodes);
-        }
-
-        return current;
     }
 }

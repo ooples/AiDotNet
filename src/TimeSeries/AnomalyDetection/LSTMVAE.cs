@@ -404,18 +404,12 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
                                   _logVarWeights.Length + _logVarBias.Length;
 
     public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
 
     public override void ResetState() { ResetGradients(); }
 
     public override void UpdateParameters(T learningRate)
     {
         ApplyGradients(learningRate, 1);
-    }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
-    {
-        return Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _latentDim * 2 }), "lstm_encoder_output");
     }
 
     public override Vector<T> GetParameters()
@@ -661,18 +655,12 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T>? _lastHidden;
 
     public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
 
     public override void ResetState() { ResetGradients(); _lastLatent = null; _lastHidden = null; }
 
     public override void UpdateParameters(T learningRate)
     {
         ApplyGradients(learningRate, 1);
-    }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
-    {
-        return Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _outputSize }), "lstm_decoder_output");
     }
 
     public override Vector<T> GetParameters()

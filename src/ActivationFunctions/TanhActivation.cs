@@ -162,20 +162,6 @@ public class TanhActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>
     }
 
     /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because Tanh gradient computation is fully implemented and tested.</value>
-    /// <remarks>
-    /// <para>
-    /// Tanh supports JIT compilation because:
-    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - The operation is well-defined and differentiable
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
     /// Applies this activation function to a computation graph node.
     /// </summary>
     /// <param name="input">The computation node to apply the activation to.</param>

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -215,53 +215,5 @@ public class QuantizedTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Gets whether this teacher supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> if constructed with an IJitCompilable model that supports JIT;
-    /// <c>false</c> if using dynamic quantization with runtime min/max finding.
-    /// </value>
-    public override bool SupportsJitCompilation => _jitCompilableBase?.SupportsJitCompilation ?? false;
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation with FakeQuantization.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input nodes.</param>
-    /// <returns>The output computation node with quantization applied.</returns>
-    /// <exception cref="NotSupportedException">Thrown when using dynamic quantization mode.</exception>
-    /// <remarks>
-    /// <para>
-    /// When constructed with an IJitCompilable model, this method exports the base model's
-    /// computation graph and wraps the output with a FakeQuantization operation. The FakeQuantization
-    /// uses Straight-Through Estimator (STE) for gradients, allowing backpropagation through
-    /// the quantization operation.
-    /// </para>
-    /// <para>
-    /// When using dynamic quantization (per-batch min/max), JIT compilation is not supported
-    /// because the quantization parameters are computed at runtime.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (_jitCompilableBase != null && _jitCompilableBase.SupportsJitCompilation)
-        {
-            // Export base model's computation graph
-            var baseOutput = _jitCompilableBase.ExportComputationGraph(inputNodes);
-
-            // Apply FakeQuantization to the output
-            return TensorOperations<T>.FakeQuantize(
-                baseOutput,
-                _quantizationBits,
-                _scale,
-                _zeroPoint,
-                _symmetric);
-        }
-
-        return ThrowJitNotSupported(
-            nameof(QuantizedTeacherModel<T>),
-            "it uses dynamic quantization with runtime min/max finding. Use the constructor with an IJitCompilable model for JIT support with fixed-scale quantization");
     }
 }

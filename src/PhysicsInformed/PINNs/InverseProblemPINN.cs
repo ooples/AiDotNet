@@ -884,8 +884,5 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
         /// <inheritdoc/>
         public override bool SupportsTraining => true;
-
-        /// <inheritdoc/>
-        public override bool SupportsJitCompilation => false;
     }
 }

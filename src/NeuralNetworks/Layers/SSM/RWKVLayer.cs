@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -692,28 +692,6 @@ public class RWKVLayer<T> : LayerBase<T>
     }
 
     #endregion
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
-        var outWeightsNode = TensorOperations<T>.Variable(_outputWeights, "W_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(outWeightsNode);
-
-        var outWeightsT = TensorOperations<T>.Transpose(outWeightsNode);
-        var outputNode = TensorOperations<T>.MatrixMultiply(xNode, outWeightsT);
-
-        return outputNode;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

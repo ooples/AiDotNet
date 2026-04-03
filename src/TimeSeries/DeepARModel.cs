@@ -670,12 +670,6 @@ internal class DeepARLstmCellTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     public override int ParameterCount => _weights.Length + _bias.Length;
 
     public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
-    {
-        return Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _hiddenSize }), "lstm_cell_output");
-    }
 
     public override Vector<T> GetParameters()
     {

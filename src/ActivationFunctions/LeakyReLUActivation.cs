@@ -203,20 +203,6 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because gradient computation is fully implemented in TensorOperations.LeakyReLU.</value>
-    /// <remarks>
-    /// <para>
-    /// LeakyReLU supports JIT compilation because:
-    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - The operation uses IEngine for GPU acceleration
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
     /// Applies this activation function to a computation graph node.
     /// </summary>
     /// <param name="input">The computation node to apply the activation to.</param>

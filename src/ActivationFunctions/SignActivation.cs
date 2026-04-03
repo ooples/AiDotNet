@@ -215,20 +215,6 @@ public class SignActivation<T> : ActivationFunctionBase<T>
         return output;
     }
 
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.Sign provides surrogate gradient support for training.</value>
-    /// <remarks>
-    /// <para>
-    /// Sign supports JIT compilation using surrogate gradients. The forward pass produces
-    /// the hard sign function (-1, 0, or 1), while the backward pass uses a sigmoid surrogate
-    /// for gradient flow. This enables training despite the discontinuous nature of the sign function.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
     /// <summary>
     /// Applies this activation function to a computation graph node.
     /// </summary>

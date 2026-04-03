@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -55,7 +55,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// with Pure Synthetic Data", ICCV 2021. https://arxiv.org/abs/2107.10833
 /// </para>
 /// </remarks>
-public class RRDBNetGenerator<T> : LayerBase<T>, IChainableComputationGraph<T>
+public class RRDBNetGenerator<T> : LayerBase<T>
 {
     #region Fields
 
@@ -151,36 +151,6 @@ public class RRDBNetGenerator<T> : LayerBase<T>, IChainableComputationGraph<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // Check all sub-components support JIT
-            if (!_convFirst.SupportsJitCompilation) return false;
-            if (!_trunkConv.SupportsJitCompilation) return false;
-            if (!_hrConv.SupportsJitCompilation) return false;
-            if (!_convLast.SupportsJitCompilation) return false;
-
-            foreach (var rrdb in _rrdbBlocks)
-            {
-                if (!rrdb.SupportsJitCompilation) return false;
-            }
-
-            foreach (var conv in _upsampleConvs)
-            {
-                if (!conv.SupportsJitCompilation) return false;
-            }
-
-            foreach (var ps in _pixelShuffleLayers)
-            {
-                if (!ps.SupportsJitCompilation) return false;
-            }
-
-            return true;
-        }
-    }
 
     #endregion
 
@@ -536,23 +506,6 @@ public class RRDBNetGenerator<T> : LayerBase<T>, IChainableComputationGraph<T>
     #endregion
 
     #region JIT Compilation
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape is null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input node with batch dimension
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return BuildComputationGraph(inputNode, "");
-    }
 
     /// <inheritdoc />
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)

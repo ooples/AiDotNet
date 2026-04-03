@@ -1053,7 +1053,6 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
         _layerNorm1Gamma.Length * 2 + _layerNorm2Gamma.Length * 2;
 
     public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
 
     public override void ResetState()
     {
@@ -1077,27 +1076,6 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
     {
         // Apply gradient descent to all weight tensors
         // Gradients are computed and applied by the model's ApplyGradients method
-    }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
-    {
-        var input = Autodiff.TensorOperations<T>.Variable(
-            new Tensor<T>(new[] { _embeddingDim }), "chr_input", requiresGradient: false);
-        nodes.Add(input);
-
-        // Self-attention block
-        var attnOut = TransformerGraphHelper<T>.SelfAttentionGraph(
-            input, _queryProj, _keyProj, _valueProj, _outputProj, "chr_attn");
-        var residual1 = Autodiff.TensorOperations<T>.Add(input, attnOut);
-        var norm1 = TransformerGraphHelper<T>.LayerNormGraph(
-            residual1, _layerNorm1Gamma, _layerNorm1Beta, "chr_ln1");
-
-        // FFN block
-        var ffnOut = TransformerGraphHelper<T>.FeedForwardGraph(
-            norm1, _ffn1, _ffn1Bias, _ffn2, _ffn2Bias, "chr_ffn");
-        var residual2 = Autodiff.TensorOperations<T>.Add(norm1, ffnOut);
-        return TransformerGraphHelper<T>.LayerNormGraph(
-            residual2, _layerNorm2Gamma, _layerNorm2Beta, "chr_ln2");
     }
 
     public override Vector<T> GetParameters()

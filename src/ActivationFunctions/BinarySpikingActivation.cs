@@ -322,20 +322,6 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
         return new BinarySpikingActivation<T>(newThreshold, _derivativeSlope, _derivativeWidth);
     }
 
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.SurrogateSpike provides surrogate gradient support for spiking networks.</value>
-    /// <remarks>
-    /// <para>
-    /// Binary spiking supports JIT compilation using surrogate gradients. The forward pass produces
-    /// hard spikes (0 or 1), while the backward pass uses a sigmoid surrogate for gradient flow.
-    /// This enables training of spiking neural networks with standard backpropagation.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
     /// <summary>
     /// Applies this activation function to a computation graph node.
     /// </summary>

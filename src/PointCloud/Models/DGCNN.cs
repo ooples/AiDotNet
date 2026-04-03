@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
@@ -822,14 +822,6 @@ internal class EdgeConvLayer<T> : LayerBase<T>
         _knnIndices = null;
         _maxIndices = null;
         _mlp.ResetState();
-    }
-
-    public override bool SupportsJitCompilation => false;
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "EdgeConvLayer does not support computation graph export due to dynamic k-NN construction.");
     }
 
     public override int ParameterCount => _mlp.ParameterCount;

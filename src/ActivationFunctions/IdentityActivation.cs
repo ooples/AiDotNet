@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -107,20 +107,6 @@ public class IdentityActivation<T> : ActivationFunctionBase<T>
     /// </summary>
     /// <returns>Always returns true as the Identity function can be applied to individual values.</returns>
     protected override bool SupportsScalarOperations() => true;
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because Identity activation requires no computation and is trivially differentiable.</value>
-    /// <remarks>
-    /// <para>
-    /// Identity supports JIT compilation because:
-    /// - It's a no-op (returns input unchanged)
-    /// - The gradient is constant (always 1)
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -1336,33 +1336,6 @@ public class CopulaGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     #endregion
 
     #region IJitCompilable Override
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation =>
-        IsFitted && Layers.Count > 1 && !_usingCustomLayers &&
-        _genBNLayers.Count > 0 &&
-        Layers.All(l => l.SupportsJitCompilation) &&
-        _genBNLayers.All(l => l.SupportsJitCompilation);
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (!SupportsJitCompilation)
-        {
-            throw new NotSupportedException(
-                $"{GetType().Name} does not support JIT compilation in its current configuration.");
-        }
-
-        int genInputDim = _options.EmbeddingDimension + _condWidth;
-        var hiddenLayers = Layers.Take(Layers.Count - 1).ToList();
-
-        return TapeLayerBridge<T>.ExportMLPGeneratorGraph(
-            inputNodes, genInputDim, hiddenLayers,
-            _genBNLayers.Cast<ILayer<T>>().ToList(), Layers[^1],
-            TapeLayerBridge<T>.HiddenActivation.ReLU,
-            TapeLayerBridge<T>.HiddenActivation.None,
-            useResidualConcat: true);
-    }
 
     #endregion
 }

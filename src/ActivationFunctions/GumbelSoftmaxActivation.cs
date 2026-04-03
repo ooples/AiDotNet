@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -228,19 +228,6 @@ public class GumbelSoftmaxActivation<T> : ActivationFunctionBase<T>
 
         return expValues.Transform(x => NumOps.Divide(x, sum));
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.GumbelSoftmax provides full forward and backward pass support.</value>
-    /// <remarks>
-    /// <para>
-    /// Gumbel-Softmax supports JIT compilation with straight-through gradient estimation.
-    /// The backward pass computes softmax gradients scaled by inverse temperature.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

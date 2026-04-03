@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -829,11 +829,6 @@ public class REaLTabFormerGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabular
     #endregion
 
     #region IJitCompilable Override
-
-    /// <summary>
-    /// REaLTabFormer uses autoregressive token-by-token generation which cannot be represented as a single computation graph.
-    /// </summary>
-    public override bool SupportsJitCompilation => false;
 
     #endregion
 }

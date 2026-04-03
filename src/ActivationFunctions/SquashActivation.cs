@@ -344,19 +344,6 @@ public class SquashActivation<T> : ActivationFunctionBase<T>
         return flatOutput.Reshape(outputShape);
     }
 
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.Squash provides full forward and backward pass support.</value>
-    /// <remarks>
-    /// <para>
-    /// Squash supports JIT compilation with gradient computation for capsule networks.
-    /// The squash function normalizes vectors: v * (||v||² / (1 + ||v||²)) / ||v||.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
     /// <summary>
     /// Applies this activation function to a computation graph node.
     /// </summary>

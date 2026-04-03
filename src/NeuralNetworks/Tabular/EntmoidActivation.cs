@@ -187,11 +187,6 @@ public class EntmoidActivation<T> : ActivationFunctionBase<T>
     }
 
     /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation => false;
-
-    /// <summary>
     /// Applies this activation function to a computation graph node.
     /// </summary>
     /// <param name="input">The computation node to apply the activation to.</param>

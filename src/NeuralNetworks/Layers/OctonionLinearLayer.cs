@@ -1,4 +1,4 @@
-#pragma warning disable CS0649, CS0414, CS0169
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -102,12 +102,6 @@ public class OctonionLinearLayer<T> : LayerBase<T>
     /// Gets whether this layer supports training.
     /// </summary>
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Gets whether this layer supports JIT compilation.
-    /// Returns true only if the activation function also supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation => CanActivationBeJitted();
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
@@ -350,53 +344,6 @@ public class OctonionLinearLayer<T> : LayerBase<T>
         _originalInputShape = null;
         _weightsGradient = null;
         _biasesGradient = null;
-    }
-
-    /// <summary>
-    /// Exports the layer's forward pass as a JIT-compilable computation graph.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph for the octonion linear layer using the
-    /// TensorOperations.OctonionMatMul operation. The weights and biases are converted
-    /// to tensor format for use in the computation graph.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape is null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input node with batch dimension
-        // Input shape is [inputFeatures * 8]
-        var symbolicInput = new Tensor<T>(new int[] { 1, InputFeatures * 8 });
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Weights are already Tensor<T> with shape [outputFeatures, inputFeatures, 8]
-        var weightsNode = TensorOperations<T>.Constant(_weights, "weights");
-
-        // Biases are already Tensor<T> with shape [outputFeatures, 8]
-        var biasesNode = TensorOperations<T>.Constant(_biases, "biases");
-
-        // Perform octonion matrix multiplication
-        var outputNode = TensorOperations<T>.OctonionMatMul(inputNode, weightsNode, biasesNode);
-
-        // Apply activation function if needed
-        // Note: Octonion activation is applied element-wise to all 8 components
-        if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
-        {
-            // Use the activation's ApplyToGraph for proper computation graph integration
-            // CanActivationBeJitted() ensures this is only called when activation supports JIT
-            outputNode = ScalarActivation.ApplyToGraph(outputNode);
-        }
-
-        return outputNode;
     }
 
 }

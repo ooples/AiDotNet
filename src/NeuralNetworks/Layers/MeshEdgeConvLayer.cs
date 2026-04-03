@@ -82,13 +82,6 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
     /// <value>Always <c>true</c> for MeshEdgeConvLayer as it has learnable parameters.</value>
     public override bool SupportsTraining => true;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value><c>false</c>. JIT compilation is not currently supported for MeshEdgeConvLayer due to
-    /// the lack of graph-specific operations for edge aggregation in TensorOperations.</value>
-    public override bool SupportsJitCompilation => false;
-
     #endregion
 
     #region Private Fields
@@ -802,19 +795,6 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>
     #endregion
 
     #region JIT Compilation
-
-    /// <summary>
-    /// Exports the layer as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input nodes.</param>
-    /// <returns>The output computation node.</returns>
-    /// <exception cref="NotSupportedException">Thrown because MeshEdgeConv JIT is not yet implemented.</exception>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "MeshEdgeConvLayer.ExportComputationGraph requires graph-specific operations " +
-            "for edge aggregation which are not yet available in TensorOperations.");
-    }
 
     #endregion
 }

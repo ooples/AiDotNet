@@ -857,7 +857,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         }
 
         public override bool SupportsTraining => true;
-        public override bool SupportsJitCompilation => false;
     }
 
     /// <summary>
@@ -922,9 +921,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             InitializeSpectralWeights();
             InitializePointwiseWeights();
         }
-
-        /// <inheritdoc/>
-        public override bool SupportsJitCompilation => false;
 
         public override bool SupportsTraining => true;
 
@@ -1124,13 +1120,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             }
 
             return inputGradient;
-        }
-
-        /// <inheritdoc/>
-        public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-        {
-            throw new NotSupportedException(
-                "FourierLayer does not support computation graph export yet for spectral convolution.");
         }
 
         public override Vector<T> GetParameters()
