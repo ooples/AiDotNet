@@ -97,8 +97,16 @@ public class FGSMAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, T
             using var tape = new GradientTape<T>();
             // Forward pass through model (tape records engine ops)
             var modelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(vectorInput, input);
-            var output = targetModel.Predict(modelInput);
-            var outputTensor = Tensor<T>.FromVector(ConversionsHelper.ConvertToVector<T, TOutput>(output));
+            Tensor<T> outputTensor;
+            if (targetModel is NeuralNetworks.NeuralNetworkBase<T> nnModel)
+            {
+                outputTensor = nnModel.ForwardForTraining(inputTensor);
+            }
+            else
+            {
+                var output = targetModel.Predict(modelInput);
+                outputTensor = Tensor<T>.FromVector(ConversionsHelper.ConvertToVector<T, TOutput>(output));
+            }
             // Compute loss via tape-recorded ops
             var diff = eng.TensorSubtract(outputTensor, targetTensor);
             var squared = eng.TensorMultiply(diff, diff);
