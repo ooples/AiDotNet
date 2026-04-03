@@ -212,9 +212,10 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
                 T diff = NumOps.Subtract(data[i, j], means[j]);
                 variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            double stdVal = Math.Sqrt(NumOps.ToDouble(variance) / n);
-            if (stdVal < 1e-10) stdVal = 1;
-            stds[j] = NumOps.FromDouble(stdVal);
+            T stdVal = NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(n)));
+            T eps = NumOps.FromDouble(1e-10);
+            if (NumOps.LessThan(stdVal, eps)) stdVal = NumOps.One;
+            stds[j] = stdVal;
         }
 
         // Normalize
@@ -716,7 +717,8 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
             T sum = encB1[j];
             for (int ii = 0; ii < _inputDim; ii++) wColInput[ii] = encW1[ii, j];
             sum = NumOps.Add(sum, Engine.DotProduct(x, wColInput));
-            encH[j] = NumOps.FromDouble(Math.Tanh(NumOps.ToDouble(sum)));
+            T exp2x_enc = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(2), sum));
+            encH[j] = NumOps.Divide(NumOps.Subtract(exp2x_enc, NumOps.One), NumOps.Add(exp2x_enc, NumOps.One));
         }
 
         // Encoder layer 2
@@ -726,7 +728,8 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
             T sum = encB2[j];
             for (int ii = 0; ii < _hiddenDim; ii++) wColHidden[ii] = encW2[ii, j];
             sum = NumOps.Add(sum, Engine.DotProduct(encH, wColHidden));
-            z[j] = NumOps.FromDouble(Math.Tanh(NumOps.ToDouble(sum)));
+            T exp2x_z = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(2), sum));
+            z[j] = NumOps.Divide(NumOps.Subtract(exp2x_z, NumOps.One), NumOps.Add(exp2x_z, NumOps.One));
         }
 
         // Decoder layer 1
@@ -736,7 +739,8 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
             T sum = decB1[j];
             for (int ii = 0; ii < _latentDim; ii++) wColLatent[ii] = decW1[ii, j];
             sum = NumOps.Add(sum, Engine.DotProduct(z, wColLatent));
-            decH[j] = NumOps.FromDouble(Math.Tanh(NumOps.ToDouble(sum)));
+            T exp2x_dec = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(2), sum));
+            decH[j] = NumOps.Divide(NumOps.Subtract(exp2x_dec, NumOps.One), NumOps.Add(exp2x_dec, NumOps.One));
         }
 
         // Decoder layer 2
@@ -783,7 +787,8 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
             T sum = estB1[j];
             for (int ii = 0; ii < _zDim; ii++) wColZ[ii] = estW1[ii, j];
             sum = NumOps.Add(sum, Engine.DotProduct(zc, wColZ));
-            estH[j] = NumOps.FromDouble(Math.Tanh(NumOps.ToDouble(sum)));
+            T exp2x_est = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(2), sum));
+            estH[j] = NumOps.Divide(NumOps.Subtract(exp2x_est, NumOps.One), NumOps.Add(exp2x_est, NumOps.One));
         }
 
         // Estimation network layer 2
@@ -874,8 +879,8 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = encB1[j];
             { var wCol_6 = new Vector<T>(_inputDim); for (int ii = 0; ii < _inputDim; ii++) wCol_6[ii] = encW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, wCol_6)); }
-            double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
-            h[j] = NumOps.FromDouble(tanhVal);
+            T exp2xH = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(2), sum));
+            h[j] = NumOps.Divide(NumOps.Subtract(exp2xH, NumOps.One), NumOps.Add(exp2xH, NumOps.One));
         }
 
         // Layer 2
@@ -884,8 +889,8 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = encB2[j];
             { var wCol_7 = new Vector<T>(_hiddenDim); for (int ii = 0; ii < _hiddenDim; ii++) wCol_7[ii] = encW2[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(h, wCol_7)); }
-            double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
-            z[j] = NumOps.FromDouble(tanhVal);
+            T exp2xZ = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(2), sum));
+            z[j] = NumOps.Divide(NumOps.Subtract(exp2xZ, NumOps.One), NumOps.Add(exp2xZ, NumOps.One));
         }
 
         return z;
@@ -909,8 +914,8 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = decB1[j];
             { var wCol_8 = new Vector<T>(_latentDim); for (int ii = 0; ii < _latentDim; ii++) wCol_8[ii] = decW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(z, wCol_8)); }
-            double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
-            h[j] = NumOps.FromDouble(tanhVal);
+            T exp2xH = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(2), sum));
+            h[j] = NumOps.Divide(NumOps.Subtract(exp2xH, NumOps.One), NumOps.Add(exp2xH, NumOps.One));
         }
 
         // Layer 2
@@ -943,8 +948,8 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = estB1[j];
             { var wCol_10 = new Vector<T>(_zDim); for (int ii = 0; ii < _zDim; ii++) wCol_10[ii] = estW1[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(zc, wCol_10)); }
-            double tanhVal = Math.Tanh(NumOps.ToDouble(sum));
-            h[j] = NumOps.FromDouble(tanhVal);
+            T exp2xH = NumOps.Exp(NumOps.Multiply(NumOps.FromDouble(2), sum));
+            h[j] = NumOps.Divide(NumOps.Subtract(exp2xH, NumOps.One), NumOps.Add(exp2xH, NumOps.One));
         }
 
         // Layer 2

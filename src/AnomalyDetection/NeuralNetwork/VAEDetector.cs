@@ -178,9 +178,10 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
                 T diff = NumOps.Subtract(data[i, j], means[j]);
                 variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            double stdVal = Math.Sqrt(NumOps.ToDouble(variance) / n);
-            if (stdVal < 1e-10) stdVal = 1;
-            stds[j] = NumOps.FromDouble(stdVal);
+            T stdVal = NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(n)));
+            T eps = NumOps.FromDouble(1e-10);
+            if (NumOps.LessThan(stdVal, eps)) stdVal = NumOps.One;
+            stds[j] = stdVal;
         }
 
         var normalized = new Matrix<T>(n, d);
@@ -307,8 +308,8 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = encoderB1[j];
             { var _w0 = new Vector<T>(_inputDim); for (int _i = 0; _i < _inputDim; _i++) _w0[_i] = encoderW1[_i, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, _w0)); }
-            double reluVal = ReLU(NumOps.ToDouble(sum));
-            hidden[j] = NumOps.FromDouble(reluVal);
+            T reluVal = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
+            hidden[j] = reluVal;
         }
 
         // Encoder: hidden -> mean, logVar
@@ -327,15 +328,14 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
             logVar[j] = sumLogVar;
         }
 
-        // Reparameterization: z = mean + std * epsilon
+        // Reparameterization: z = mean + exp(0.5 * logVar) * epsilon
         var z = new Vector<T>(_latentDim);
+        T half = NumOps.FromDouble(0.5);
         for (int j = 0; j < _latentDim; j++)
         {
-            double epsilon = GaussianRandom();
-            double meanVal = NumOps.ToDouble(mean[j]);
-            double logVarVal = NumOps.ToDouble(logVar[j]);
-            double zVal = meanVal + Math.Exp(0.5 * logVarVal) * epsilon;
-            z[j] = NumOps.FromDouble(zVal);
+            T epsilon = NumOps.FromDouble(GaussianRandom()); // Random boundary
+            T std = NumOps.Exp(NumOps.Multiply(half, logVar[j]));
+            z[j] = NumOps.Add(mean[j], NumOps.Multiply(std, epsilon));
         }
 
         // Decoder: z -> hidden2
@@ -344,8 +344,8 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = decoderB1[j];
             { var _w1 = new Vector<T>(_latentDim); for (int _i = 0; _i < _latentDim; _i++) _w1[_i] = decoderW1[_i, j]; sum = NumOps.Add(sum, Engine.DotProduct(z, _w1)); }
-            double reluVal = ReLU(NumOps.ToDouble(sum));
-            hidden2[j] = NumOps.FromDouble(reluVal);
+            T reluVal = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
+            hidden2[j] = reluVal;
         }
 
         // Decoder: hidden2 -> reconstruction
@@ -615,7 +615,7 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
         }
     }
 
-    private static double ReLU(double x) => Math.Max(0, x);
+    // ReLU is now inline: NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Zero
 
     private double GaussianRandom()
     {

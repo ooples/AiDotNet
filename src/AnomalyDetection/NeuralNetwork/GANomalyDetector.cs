@@ -183,9 +183,10 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
                 T diff = NumOps.Subtract(data[i, j], means[j]);
                 variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            double stdVal = Math.Sqrt(NumOps.ToDouble(variance) / n);
-            if (stdVal < 1e-10) stdVal = 1;
-            stds[j] = NumOps.FromDouble(stdVal);
+            T stdVal = NumOps.Sqrt(NumOps.Divide(variance, NumOps.FromDouble(n)));
+            T eps = NumOps.FromDouble(1e-10);
+            if (NumOps.LessThan(stdVal, eps)) stdVal = NumOps.One;
+            stds[j] = stdVal;
         }
 
         var normalized = new Matrix<T>(n, d);
@@ -307,8 +308,8 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = encB1[j];
             { var _w0 = new Vector<T>(_inputDim); for (int _i = 0; _i < _inputDim; _i++) _w0[_i] = encW1[_i, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, _w0)); }
-            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
-            h[j] = NumOps.FromDouble(leakyVal);
+            T alpha = NumOps.FromDouble(0.2);
+            h[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
         }
 
         // Layer 2
@@ -341,8 +342,8 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = decB1[j];
             { var _w2 = new Vector<T>(_latentDim); for (int _i = 0; _i < _latentDim; _i++) _w2[_i] = decW1[_i, j]; sum = NumOps.Add(sum, Engine.DotProduct(z, _w2)); }
-            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
-            h[j] = NumOps.FromDouble(leakyVal);
+            T alpha = NumOps.FromDouble(0.2);
+            h[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
         }
 
         // Layer 2
@@ -375,8 +376,8 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = reEncB1[j];
             { var _w4 = new Vector<T>(_inputDim); for (int _i = 0; _i < _inputDim; _i++) _w4[_i] = reEncW1[_i, j]; sum = NumOps.Add(sum, Engine.DotProduct(xRecon, _w4)); }
-            double leakyVal = LeakyReLU(NumOps.ToDouble(sum));
-            h[j] = NumOps.FromDouble(leakyVal);
+            T alpha = NumOps.FromDouble(0.2);
+            h[j] = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Multiply(alpha, sum);
         }
 
         // Layer 2
@@ -391,10 +392,7 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         return zRecon;
     }
 
-    private static double LeakyReLU(double x, double alpha = 0.2)
-    {
-        return x >= 0 ? x : alpha * x;
-    }
+    // LeakyReLU is now inline: NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Multiply(alpha, x)
 
     private GradientAccumulators InitializeGradients()
     {
