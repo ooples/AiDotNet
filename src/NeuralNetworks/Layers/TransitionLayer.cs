@@ -136,6 +136,10 @@ public class TransitionLayer<T> : LayerBase<T>
             inputShape: [OutputChannels, inputHeight, inputWidth],
             poolSize: 2,
             strides: 2);
+
+        RegisterSubLayer(_bn);
+        RegisterSubLayer(_conv);
+        RegisterSubLayer(_pool);
     }
 
     /// <summary>
@@ -467,5 +471,4 @@ public class TransitionLayer<T> : LayerBase<T>
         return poolNode;
     }
 
-    public override IReadOnlyList<ILayer<T>> GetSubLayers() => new ILayer<T>[] { _bn, _conv, _pool };
 }
