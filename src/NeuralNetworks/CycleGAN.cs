@@ -133,7 +133,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
     /// Controls the importance of cycle consistency. Typical value: 10.0.
     /// Higher values enforce stronger cycle consistency.
     /// </remarks>
-    private double _cycleConsistencyLambda;
+    private T _cycleConsistencyLambda;
 
     /// <summary>
     /// Coefficient for identity loss.
@@ -141,7 +141,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// Encourages G and F to preserve color composition. Typical value: 0.5 * cycleConsistencyLambda.
     /// </remarks>
-    private double _identityLambda;
+    private T _identityLambda;
 
     /// <summary>
     /// Generator A→B.

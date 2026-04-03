@@ -160,7 +160,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// - Default (1.0): balanced approach
     /// </para>
     /// </remarks>
-    private double _mutualInfoCoefficient;
+    private T _mutualInfoCoefficient;
 
     /// <summary>
     /// Gets the generator network.

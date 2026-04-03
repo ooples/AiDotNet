@@ -80,7 +80,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// making it sensitive to patterns that stretch over longer time periods.
     /// </para>
     /// </remarks>
-    private double _tau;
+    private T _tau;
 
     /// <summary>
     /// Refractory period in time steps during which the neuron cannot fire again after spiking.
@@ -101,13 +101,13 @@ public class SpikingLayer<T> : LayerBase<T>
     /// a maximum firing rate similar to biological neurons.
     /// </para>
     /// </remarks>
-    private double _refractoryPeriod;
+    private T _refractoryPeriod;
 
     /// <summary>
     /// Firing threshold for spike generation. Default 0.5 (calibrated for
     /// typical [0,1] input magnitudes through Dense-like weight transforms).
     /// </summary>
-    private double _threshold = 0.5;
+    private T _threshold;
 
     // Cached tensors for hot-loop operations (avoid per-call allocation)
     private Tensor<T>? _cachedOnes;
@@ -332,7 +332,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// helps determine what type of firing pattern the neuron exhibits.
     /// </para>
     /// </remarks>
-    private double _a = 0.02;
+    private T _a;
 
     /// <summary>
     /// Sensitivity of recovery variable to membrane potential in Izhikevich model.
@@ -349,7 +349,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// excitability and responsiveness to input.
     /// </para>
     /// </remarks>
-    private double _b = 0.2;
+    private T _b;
 
     /// <summary>
     /// After-spike reset value of membrane potential in Izhikevich model.
@@ -366,7 +366,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// to reach threshold again.
     /// </para>
     /// </remarks>
-    private double _c = -65.0;
+    private T _c;
 
     /// <summary>
     /// After-spike reset of recovery variable in Izhikevich model.
@@ -383,7 +383,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// creating different patterns of activity like bursting or chattering.
     /// </para>
     /// </remarks>
-    private double _d = 8.0;
+    private T _d;
 
     /// <summary>
     /// Adaptation variable for Adaptive Exponential neuron model.
@@ -421,7 +421,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// membrane potential just before a real neuron fires.
     /// </para>
     /// </remarks>
-    private double _deltaT = 2.0;
+    private T _deltaT;
 
     /// <summary>
     /// Threshold potential in Adaptive Exponential model.
@@ -438,7 +438,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// membrane potential that typically leads to a spike.
     /// </para>
     /// </remarks>
-    private double _vT = -50.0;
+    private T _vT;
 
     /// <summary>
     /// Adaptation time constant in Adaptive Exponential model.
@@ -455,7 +455,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// take time to recover their full responsiveness after periods of high activity.
     /// </para>
     /// </remarks>
-    private double _tauw = 30.0;
+    private T _tauw;
 
     /// <summary>
     /// Subthreshold adaptation in Adaptive Exponential model.
@@ -473,7 +473,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// that don't cause firing.
     /// </para>
     /// </remarks>
-    private double _a_adex = 4.0;
+    private T _a_adex;
 
     /// <summary>
     /// Spike-triggered adaptation in Adaptive Exponential model.
@@ -490,7 +490,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// that real neurons experience after firing.
     /// </para>
     /// </remarks>
-    private double _b_adex = 80.5;
+    private T _b_adex;
 
     /// <summary>
     /// Potassium activation gating variable for Hodgkin-Huxley model.

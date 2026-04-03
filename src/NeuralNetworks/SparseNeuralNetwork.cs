@@ -69,7 +69,7 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// The sparsity level (fraction of weights that are zero).
     /// </summary>
-    private double _sparsity;
+    private T _sparsity;
 
     /// <summary>
     /// Initializes a new instance of the SparseNeuralNetwork class.

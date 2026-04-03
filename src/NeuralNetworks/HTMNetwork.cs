@@ -151,7 +151,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
     /// everything - it helps you focus on what really matters.
     /// </para>
     /// </remarks>
-    private double _sparsityThreshold { get; set; }
+    private T _sparsityThreshold { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HTMNetwork{T}"/> class with the specified architecture and parameters.

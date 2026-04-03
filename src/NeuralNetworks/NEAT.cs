@@ -135,7 +135,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// - Too low: networks don't explore enough new possibilities
     /// </para>
     /// </remarks>
-    private double _mutationRate { get; set; }
+    private T _mutationRate { get; set; }
 
     /// <summary>
     /// Gets or sets the probability of crossover occurring during reproduction.
@@ -162,7 +162,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// - Too little crossover limits how well good features can be combined
     /// </para>
     /// </remarks>
-    private double _crossoverRate { get; set; }
+    private T _crossoverRate { get; set; }
 
     /// <summary>
     /// Gets or sets the global innovation number counter used to track historical origins of genes.

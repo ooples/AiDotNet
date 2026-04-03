@@ -138,7 +138,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// This helps prevent false alarms from temporary fluctuations in the data.
     /// </para>
     /// </remarks>
-    private double _smoothedAnomalyScore;
+    private T _smoothedAnomalyScore;
 
     /// <summary>
     /// Stores the most recent input shape for any-rank tensor support.

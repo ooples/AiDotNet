@@ -65,7 +65,7 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// The curvature of the hyperbolic space (must be negative).
     /// </summary>
-    private double _curvature;
+    private T _curvature;
 
     /// <summary>
     /// Initializes a new instance of the HyperbolicNeuralNetwork class.

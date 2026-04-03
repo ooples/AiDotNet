@@ -448,7 +448,7 @@ public class MegalodonLayer<T> : LayerBase<T>
         return normed;
     }
 
-    private double[,]? _cachedCemaKernel;
+    private Matrix<T>? _cachedCemaKernel;
 
     private Tensor<T> CEMAForward(Tensor<T> input, int batchSize, int seqLen)
     {

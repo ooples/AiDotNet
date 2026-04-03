@@ -91,7 +91,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// - Paper uses 100 as default
     /// </para>
     /// </remarks>
-    private double _l1Lambda;
+    private T _l1Lambda;
 
     /// <summary>
     /// Gets the U-Net generator network.

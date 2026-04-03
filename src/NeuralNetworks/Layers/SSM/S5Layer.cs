@@ -434,8 +434,8 @@ public class S5Layer<T> : LayerBase<T>
         return output;
     }
 
-    private double[,,]? _cachedKernel;
-    private double[]? _cachedDelta;
+    private T[,,]? _cachedKernel;
+    private Vector<T>? _cachedDelta;
 
     private Tensor<T> MIMOParallelScan(Tensor<T> u, int batchSize, int seqLen)
     {

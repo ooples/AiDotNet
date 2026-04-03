@@ -65,7 +65,7 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
     private Tensor<T>? _cachedResidual1;
     private Tensor<T>? _cachedNorm2Output;
     private Tensor<T>? _cachedQkv; // [numWindows, windowArea, 3*dim]
-    private double[,,,]? _cachedAttnProbs; // [numWindows, numHeads, windowArea, windowArea]
+    private T[,,,]? _cachedAttnProbs; // [numWindows, numHeads, windowArea, windowArea]
     private int _cachedNumWindows;
     private int _cachedWindowArea;
     private int _cachedH;

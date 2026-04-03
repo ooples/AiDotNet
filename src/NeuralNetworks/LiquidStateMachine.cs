@@ -107,7 +107,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// Finding the right balance helps the network process complex patterns efficiently.
     /// </para>
     /// </remarks>
-    private double _connectionProbability;
+    private T _connectionProbability;
 
     /// <summary>
     /// Gets the spectral radius of the reservoir weight matrix.
@@ -134,7 +134,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// This parameter helps balance the network's memory capacity with its stability.
     /// </para>
     /// </remarks>
-    private double _spectralRadius;
+    private T _spectralRadius;
 
     /// <summary>
     /// Gets the scaling factor applied to input signals.
@@ -159,7 +159,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// Finding the right input scaling helps the network properly respond to the strength of your signals.
     /// </para>
     /// </remarks>
-    private double _inputScaling;
+    private T _inputScaling;
 
     /// <summary>
     /// Gets the leaking rate of the reservoir neurons.
@@ -187,7 +187,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// This parameter helps control the network's memory duration.
     /// </para>
     /// </remarks>
-    private double _leakingRate;
+    private T _leakingRate;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="LiquidStateMachine{T}"/> class with the specified architecture and parameters.

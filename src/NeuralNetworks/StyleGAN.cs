@@ -185,7 +185,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Probability of style mixing during training.
     /// </summary>
-    private double _styleMixingProbability;
+    private T _styleMixingProbability;
 
     private ILossFunction<T> _lossFunction;
 

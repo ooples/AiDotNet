@@ -102,7 +102,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// while still being responsive to new inputs.
     /// </para>
     /// </remarks>
-    private double _spectralRadius;
+    private T _spectralRadius;
 
     /// <summary>
     /// Gets the sparsity level of connections in the reservoir.
@@ -127,7 +127,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// to create complex dynamics while keeping computation manageable.
     /// </para>
     /// </remarks>
-    private double _sparsity;
+    private T _sparsity;
 
     /// <summary>
     /// Gets or sets the current state of the reservoir.
@@ -700,7 +700,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="matrix">The matrix to calculate the spectral radius for.</param>
     /// <returns>The spectral radius.</returns>
-    private double CalculateSpectralRadius(Matrix<T> matrix)
+    private T CalculateSpectralRadius(Matrix<T> matrix)
     {
         int n = matrix.Rows;
         Vector<T> x = new Vector<T>(n);
@@ -723,10 +723,9 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
 
         // Calculate Rayleigh quotient
         Vector<T> Ax = matrix.Multiply(x);
-        T rayleighQuotient = NumOps.Zero;
-        rayleighQuotient = NumOps.Add(rayleighQuotient, Engine.DotProduct(Ax, x));
+        T rayleighQuotient = Engine.DotProduct(Ax, x);
 
-        return Math.Abs(Convert.ToDouble(rayleighQuotient));
+        return NumOps.Abs(rayleighQuotient);
     }
 
     /// <summary>

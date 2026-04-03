@@ -104,9 +104,9 @@ public class AutoDiffTabGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
 
     // Diffusion parameters (set after search)
     private int _numTimesteps;
-    private double[] _betas = Array.Empty<double>();
-    private double[] _alphas = Array.Empty<double>();
-    private double[] _alphasCumprod = Array.Empty<double>();
+    private Vector<T>? _betas;
+    private Vector<T>? _alphas;
+    private Vector<T>? _alphasCumprod;
 
     // Whether custom layers are being used
     private bool _usingCustomLayers;

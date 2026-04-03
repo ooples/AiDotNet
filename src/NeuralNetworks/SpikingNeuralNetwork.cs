@@ -42,7 +42,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets or sets the simulation time step for the spiking neural network.
     /// </summary>
-    private double _timeStep { get; set; }
+    private T _timeStep { get; set; }
 
     /// <summary>
     /// Gets or sets the number of time steps to simulate when processing input.
