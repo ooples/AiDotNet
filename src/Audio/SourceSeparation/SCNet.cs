@@ -199,7 +199,7 @@ public class SCNet<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false);
+        SetTrainingMode(true); try { TrainWithTape(input, expected); } finally { SetTrainingMode(false); }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
