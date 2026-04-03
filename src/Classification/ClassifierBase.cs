@@ -28,7 +28,8 @@ namespace AiDotNet.Classification;
 /// functionality.
 /// </para>
 /// </remarks>
-public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>, IModelShape
+public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>, IModelShape,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>, IJitCompilable<T>
 {
     /// <summary>
     /// Gets the numeric operations for the specified type T.

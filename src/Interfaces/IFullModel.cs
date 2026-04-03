@@ -41,16 +41,17 @@ namespace AiDotNet.Interfaces;
 /// - Used in knowledge distillation as teacher or student models
 /// </remarks>
 public interface IFullModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>,
-    IModelSerializer, ICheckpointableModel, IParameterizable<T, TInput, TOutput>, IFeatureAware, IFeatureImportance<T>,
-    ICloneable<IFullModel<T, TInput, TOutput>>, IGradientComputable<T, TInput, TOutput>, IJitCompilable<T>
+    IModelSerializer, ICheckpointableModel, IFeatureImportance<T>,
+    ICloneable<IFullModel<T, TInput, TOutput>>
 {
     /// <summary>
     /// Gets the default loss function used by this model for gradient computation.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This loss function is used when calling <see cref="IGradientComputable{T, TInput, TOutput}.ComputeGradients"/>
-    /// without explicitly providing a loss function. It represents the model's primary training objective.
+    /// This loss function is used when computing gradients (on models that implement
+    /// <see cref="IGradientComputable{T, TInput, TOutput}"/>) without explicitly providing one.
+    /// It represents the model's primary training objective.
     /// </para>
     /// <para><b>For Beginners:</b>
     /// The loss function tells the model "what counts as a mistake". For example:
