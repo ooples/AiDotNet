@@ -10,7 +10,7 @@ namespace AiDotNet.Generators;
 /// <summary>
 /// Source generator that discovers [TrainableParameter] fields on LayerBase subclasses
 /// and emits GetTrainableParameters, SetTrainableParameters, and ZeroGrad overrides.
-/// Also discovers ILayer fields for sub-layer tracking.
+/// Also discovers ILayer fields and emits InitializeSubLayers() for recursive parameter collection.
 /// </summary>
 /// <remarks>
 /// <para>This is the production equivalent of PyTorch's nn.Parameter auto-registration.
@@ -22,7 +22,10 @@ namespace AiDotNet.Generators;
 /// null it. For non-nullable gradient fields, it calls Fill(NumOps.Zero).</para>
 ///
 /// <para><b>Sub-layer discovery:</b> Fields typed as ILayer&lt;T&gt; or LayerBase&lt;T&gt;
-/// subclasses are discovered for future sub-layer registration support.</para>
+/// subclasses are emitted as RegisterSubLayer calls in a generated InitializeSubLayers method.</para>
+///
+/// <para><b>Parameter roles:</b> [TrainableParameter(Role = "weight")] attributes generate
+/// GetParameterRoles() for per-role optimizer configuration (e.g., weight decay exemption for biases).</para>
 /// </remarks>
 [Generator]
 public class TrainableParameterGenerator : IIncrementalGenerator
@@ -208,6 +211,47 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                     else
                         sb.AppendLine($"        {grad.Name}.Fill(NumOps.Zero);");
                 }
+            }
+            sb.AppendLine("    }");
+        }
+
+        // GetParameterRoles — maps parameter names to their roles for per-role learning rates / weight decay
+        if (paramFields.Any(f => !string.IsNullOrEmpty(f.Role)))
+        {
+            sb.AppendLine();
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// Returns parameter roles for per-role optimizer configuration (e.g., weight decay exemption for biases).");
+            sb.AppendLine("    /// Auto-generated from [TrainableParameter(Role = \"...\")] attributes.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine($"    public virtual System.Collections.Generic.Dictionary<string, string> GetParameterRoles()");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        return new System.Collections.Generic.Dictionary<string, string>");
+            sb.AppendLine("        {");
+            foreach (var param in paramFields.Where(f => !string.IsNullOrEmpty(f.Role)))
+            {
+                sb.AppendLine($"            {{ \"{param.Name}\", \"{param.Role}\" }},");
+            }
+            sb.AppendLine("        };");
+            sb.AppendLine("    }");
+        }
+
+        // InitializeSubLayers — auto-discovers and registers sub-layer fields
+        if (subLayerFields.Count > 0)
+        {
+            var tp = GetTypeParamName(classSymbol);
+            sb.AppendLine();
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// Registers discovered sub-layer fields for recursive parameter collection.");
+            sb.AppendLine("    /// Auto-generated from fields typed as ILayer or LayerBase subclasses.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine($"    protected virtual void InitializeSubLayers()");
+            sb.AppendLine("    {");
+            foreach (var sl in subLayerFields)
+            {
+                if (sl.IsNullable)
+                    sb.AppendLine($"        if ({sl.Name} is not null) RegisterSubLayer({sl.Name});");
+                else
+                    sb.AppendLine($"        RegisterSubLayer({sl.Name});");
             }
             sb.AppendLine("    }");
         }
