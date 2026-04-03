@@ -1138,7 +1138,11 @@ public class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         Tensor<T> query, Tensor<T> keys, Tensor<T> attentionWeights)
     {
         if (_attentionLayers.Count < 4)
-            return (keys, attentionWeights);
+        {
+            // Fallback: mean-pool over sequence dimension to get [1, hiddenDim] context
+            var fallbackContext = Engine.ReduceMean(keys, new[] { 1 }, keepDims: false);
+            return (fallbackContext, attentionWeights);
+        }
 
         // Location-sensitive attention (Chorowski et al.):
         // e_i = v^T * tanh(W_s * s + V_h * h_j + U_f * f_j + b)

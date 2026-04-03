@@ -190,7 +190,7 @@ public class UMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        if (input.Shape.Length == 3 || input.Shape.Length == 4) { input = AddBatchDimension(input); expectedOutput = AddBatchDimension(expectedOutput); } else if (input.Shape.Length != 5) throw new ArgumentException($"UMamba supports 2D [C,H,W]/[B,C,H,W] and 3D [C,D,H,W]/[B,C,D,H,W]. Got rank {input.Shape.Length}.", nameof(input));
+        if (input.Shape.Length == 3) { input = AddBatchDimension(input); expectedOutput = AddBatchDimension(expectedOutput); } else if (input.Shape.Length != 4 && input.Shape.Length != 5) throw new ArgumentException($"UMamba supports 2D [C,H,W]/[B,C,H,W] and 3D [C,D,H,W]/[B,C,D,H,W]. Got rank {input.Shape.Length}.", nameof(input));
         SetTrainingMode(true);
         try
         {
@@ -231,7 +231,7 @@ public class UMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     }
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
-    { var result = new Tensor<T>([1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2]]); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
+    { var s = new int[tensor.Shape.Length + 1]; s[0] = 1; for (int i = 0; i < tensor.Shape.Length; i++) s[i + 1] = tensor.Shape[i]; var result = new Tensor<T>(s); tensor.Data.Span.CopyTo(result.Data.Span); return result; }
 
     private Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
     { int[] s = new int[tensor.Shape.Length - 1]; for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1]; var r = new Tensor<T>(s); tensor.Data.Span.CopyTo(r.Data.Span); return r; }
