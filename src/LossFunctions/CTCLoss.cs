@@ -38,6 +38,9 @@ public class CTCLoss<T> : ISequenceLossFunction<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly int _blankIndex;
+
+    /// <summary>Gets the blank symbol index used by this CTC loss.</summary>
+    public int BlankIndex => _blankIndex;
     private readonly bool _inputsAreLogProbs;
     private readonly T _logZero;
 
@@ -617,9 +620,52 @@ public class CTCLossAdapter<T> : LossFunctionBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Uses the tape-tracked TensorCTCLoss engine op for differentiable CTC loss.
+    /// The predicted tensor should be log-probabilities [batch, time, classes].
+    /// The target tensor encodes labels as: [batchSize, targetLen0, label0_0, ..., targetLen1, label1_0, ...].
+    /// </remarks>
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        throw new NotImplementedException(
-            "CTC ComputeTapeLoss requires differentiable forward algorithm via tensor ops. See task #72.");
+        // Parse the target encoding to extract batch structure
+        int batchSize;
+        if (predicted.Shape.Length == 3)
+        {
+            batchSize = predicted.Shape[0];
+        }
+        else
+        {
+            // Flattened: first element of target encodes batch size
+            batchSize = (int)Convert.ToDouble(NumOps.ToDouble(target[0]));
+        }
+
+        int timeSteps = predicted.Shape.Length == 3 ? predicted.Shape[1] : predicted.Length / (_numClasses * batchSize);
+
+        // Extract targets, inputLengths, targetLengths from the target tensor encoding
+        var inputLengths = new int[batchSize];
+        var targetLengths = new int[batchSize];
+        var allTargets = new List<int>();
+        int idx = 1; // skip batch size at position 0
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            inputLengths[b] = timeSteps;
+            int tLen = (int)Convert.ToDouble(NumOps.ToDouble(target[idx++]));
+            targetLengths[b] = tLen;
+            for (int t = 0; t < tLen; t++)
+                allTargets.Add((int)Convert.ToDouble(NumOps.ToDouble(target[idx++])));
+        }
+
+        // Build flat targets tensor for the engine op
+        var targetsIntArray = allTargets.ToArray();
+        var targetsTensor = new Tensor<int>(targetsIntArray, new[] { targetsIntArray.Length });
+
+        // Reshape predicted to [batch, time, classes] if flattened
+        var logProbs = predicted;
+        if (predicted.Shape.Length != 3)
+            logProbs = Engine.Reshape(predicted, new[] { batchSize, timeSteps, _numClasses });
+
+        // Call the tape-tracked CTC loss engine op
+        return Engine.TensorCTCLoss(logProbs, targetsTensor, inputLengths, targetLengths, _ctcLoss.BlankIndex);
     }
 }

@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -117,7 +118,7 @@ public static class TapeTrainingStep<T>
         }
 
         // Cache miss: recursive walk
-        var seen = new HashSet<Tensor<T>>(ReferenceEqualityComparer.Instance);
+        var seen = new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
         var parameters = new List<Tensor<T>>();
 
         CollectRecursive(layerList, parameters, seen);
@@ -176,7 +177,7 @@ public static class TapeTrainingStep<T>
         }
 
         var trainableLayers = new List<ITrainableLayer<T>>();
-        var seen = new HashSet<ILayer<T>>(ReferenceEqualityComparer.Instance);
+        var seen = new HashSet<ILayer<T>>(TensorReferenceComparer<ILayer<T>>.Instance);
         CollectTrainableRecursive(layers, trainableLayers, seen);
 
         var result = trainableLayers.ToArray();

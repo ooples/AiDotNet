@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -479,15 +480,15 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         var gradients = context.Gradients;
 
         // Negate gradient: we solve H*d = -g
-        var negGrad = new Dictionary<Tensor<T>, Tensor<T>>(ReferenceEqualityComparer.Instance);
+        var negGrad = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
         foreach (var (param, grad) in gradients)
             negGrad[param] = Engine.TensorNegate(grad);
 
         // Conjugate gradient solve for H*d = -g
         // Initialize: d=0, r=-g, p=r
-        var d = new Dictionary<Tensor<T>, Tensor<T>>(ReferenceEqualityComparer.Instance);
-        var r = new Dictionary<Tensor<T>, Tensor<T>>(ReferenceEqualityComparer.Instance);
-        var p = new Dictionary<Tensor<T>, Tensor<T>>(ReferenceEqualityComparer.Instance);
+        var d = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        var r = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        var p = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
 
         foreach (var param in parameters)
         {
