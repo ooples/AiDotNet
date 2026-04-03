@@ -408,12 +408,23 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     /// </summary>
     private T TrainGeneratorOnBatch(Tensor<T> generatorInput, Tensor<T> fakeImagesWithConditions, Tensor<T> targetLabels)
     {
-        // Tape-based generator training: forward through G then D, compute loss, get gradients
+        // Train generator to fool discriminator (adversarial objective)
         Generator.SetTrainingMode(true);
-        Generator.Train(generatorInput, targetLabels);
-        var genOutput = Generator.Predict(generatorInput);
-        var discOutput = Discriminator.Predict(fakeImagesWithConditions);
-        return LossFunction.CalculateLoss(discOutput.ToVector(), targetLabels.ToVector());
+        var trainableGen = (NeuralNetworkBase<T>)Generator;
+        return trainableGen.TrainWithCustomLoss(generatorInput, genOutput =>
+        {
+            // Concatenate generator output with conditions for discriminator
+            var conditions = Engine.TensorSlice(generatorInput,
+                new[] { 0, Generator.Architecture.InputSize - _conditionSize },
+                new[] { generatorInput.Shape[0], _conditionSize });
+            var withConditions = ConcatenateImageAndCondition(genOutput, conditions);
+            var discScore = Discriminator.Predict(withConditions);
+            // BCE(disc(fake_with_cond), real_labels) via engine ops
+            var diff = Engine.TensorSubtract(discScore, targetLabels);
+            var squared = Engine.TensorMultiply(diff, diff);
+            var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+            return Engine.ReduceMean(squared, allAxes, keepDims: false);
+        });
     }
 
     /// <summary>

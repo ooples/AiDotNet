@@ -423,26 +423,37 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         // We just don't call UpdateDiscriminatorParameters() during generator training
         QNetwork.SetTrainingMode(true);
 
-        // Generate new fake images
+        // Train generator with adversarial + mutual information loss via tape
         var newGeneratorInput = ConcatenateTensors(noise, latentCodes);
-        var newFakeImages = Generator.Predict(newGeneratorInput);
-
-        // GAN loss: fool the discriminator
-        var genPredictions = Discriminator.Predict(newFakeImages);
         var allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
-        T ganLoss = CalculateBinaryLoss(genPredictions, allRealLabels, batchSize);
-
-        // Mutual information loss: Q predicts latent codes
-        var predictedCodes = QNetwork.Predict(newFakeImages);
-        T mutualInfoLoss = CalculateMutualInfoLoss(predictedCodes, latentCodes, batchSize);
-
-        // Total generator loss
         T miCoeff = NumOps.FromDouble(_mutualInfoCoefficient);
-        T generatorLoss = NumOps.Add(ganLoss, NumOps.Multiply(miCoeff, mutualInfoLoss));
+        var capturedLatentCodes = latentCodes;
 
-        // Train generator with tape-based autodiff
-        var genTarget = CreateLabelTensor(batchSize, NumOps.One);
-        Generator.Train(noise, genTarget);
+        var trainableGen = (NeuralNetworkBase<T>)Generator;
+        T generatorLoss = trainableGen.TrainWithCustomLoss(newGeneratorInput, genOutput =>
+        {
+            // GAN loss: fool discriminator — BCE(disc(fake), real_labels)
+            var discScore = Discriminator.Predict(genOutput);
+            var diff = Engine.TensorSubtract(discScore, allRealLabels);
+            var squared = Engine.TensorMultiply(diff, diff);
+            var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+            var ganLossTensor = Engine.ReduceMean(squared, allAxes, keepDims: false);
+
+            // Mutual information loss: Q(fake) should predict latent codes
+            var predictedCodes = QNetwork.Predict(genOutput);
+            var codeDiff = Engine.TensorSubtract(predictedCodes, capturedLatentCodes);
+            var codeSq = Engine.TensorMultiply(codeDiff, codeDiff);
+            var codeAxes = Enumerable.Range(0, codeSq.Shape.Length).ToArray();
+            var miLossTensor = Engine.ReduceMean(codeSq, codeAxes, keepDims: false);
+
+            // Total = GAN loss + lambda * MI loss
+            return Engine.TensorAdd(ganLossTensor, Engine.TensorMultiplyScalar(miLossTensor, miCoeff));
+        });
+
+        // Compute mutual info loss separately for tracking
+        var newFakeImages = Generator.Predict(newGeneratorInput);
+        var predictedCodesTracking = QNetwork.Predict(newFakeImages);
+        T mutualInfoLoss = CalculateMutualInfoLoss(predictedCodesTracking, latentCodes, batchSize);
 
         // Track losses
         _discriminatorLosses.Add(discriminatorLoss);

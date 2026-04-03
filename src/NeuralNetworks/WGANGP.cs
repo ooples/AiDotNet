@@ -281,13 +281,16 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         // Average critic loss
         T avgCriticLoss = NumOps.Divide(totalCriticLoss, NumOps.FromDouble(_criticIterations));
 
-        // Train generator with tape
+        // Train generator: minimize -mean(Critic(fake)) (Wasserstein objective with GP)
         Tensor<T> newNoise = GenerateRandomNoiseTensor(noise.Shape[0], Generator.Architecture.InputSize);
-        var genLabels = new Tensor<T>([noise.Shape[0], 1]);
-        genLabels.Fill(NumOps.One);
-        Generator.Train(newNoise, genLabels);
-        var genPred = Critic.Predict(GenerateImages(newNoise));
-        T generatorLoss = LossFunction.CalculateLoss(genPred.ToVector(), genLabels.ToVector());
+        var trainableGen = (NeuralNetworkBase<T>)Generator;
+        T generatorLoss = trainableGen.TrainWithCustomLoss(newNoise, genOutput =>
+        {
+            var criticScore = Critic.Predict(genOutput);
+            var negScore = Engine.TensorNegate(criticScore);
+            var allAxes = Enumerable.Range(0, negScore.Shape.Length).ToArray();
+            return Engine.ReduceMean(negScore, allAxes, keepDims: false);
+        });
 
         // Track losses
         _criticLosses.Add(avgCriticLoss);
