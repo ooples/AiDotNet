@@ -458,25 +458,105 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
     /// <inheritdoc />
     /// <remarks>
     /// DETR set loss with Hungarian matching:
-    /// 1. Hungarian matching (discrete, under NoGradScope — not differentiable)
-    /// 2. Classification + L1 box + GIoU losses on matched pairs (differentiable via engine ops)
-    /// For tape compatibility, uses the non-tape CalculateLoss internally and wraps the
-    /// scalar result. The gradients flow through the matched loss computations.
+    /// 1. Hungarian matching is discrete (run under non-tape path on detached data)
+    /// 2. Once matching is determined, compute differentiable losses on matched pairs
+    ///    using engine ops so gradients flow through predicted boxes/logits
+    ///
+    /// Expected shapes:
+    /// - predicted: [batch, num_queries, num_classes + 4]
+    /// - target: [batch, max_objects, 1 + 4] (class_id + x1,y1,x2,y2, padded with -1 class)
     /// </remarks>
     public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
-        // DETR loss operates on structured prediction/target formats that don't map cleanly
-        // to the standard (predicted, target) tensor API. Use the existing CalculateLoss
-        // which handles Hungarian matching + composite loss computation.
-        // The matched pairs' losses (classification CE, box L1, GIoU) are computed
-        // per-element and are differentiable — the matching itself is discrete.
-        var diff = Engine.TensorSubtract(predicted, target);
-        var sq = Engine.TensorMultiply(diff, diff);
-        var allAxes = Enumerable.Range(0, sq.Shape.Length).ToArray();
-        var mseLoss = Engine.ReduceMean(sq, allAxes, keepDims: false);
+        int batch = predicted.Shape[0];
+        int numQueries = predicted.Shape[1];
+        int predDim = predicted.Shape[2]; // num_classes + 4
 
-        // Scale by the composite weight to approximate the DETR loss behavior
-        return Engine.TensorMultiplyScalar(mseLoss,
-            NumOps.FromDouble(_classWeight + _boxL1Weight + _boxGIoUWeight));
+        // Step 1: Run Hungarian matching on detached data (discrete, not differentiable)
+        // Extract CPU data for matching computation
+        var matchedPredBoxIndices = new List<(int batch, int predIdx, int gtIdx)>();
+        for (int b = 0; b < batch; b++)
+        {
+            var predBoxes = ExtractPredictedBoxes(predicted, b, numQueries);
+            var predLogits = ExtractPredictedLogits(predicted, b, numQueries, _numClasses);
+            var gtBoxes = ExtractGroundTruthBoxes(target, b);
+            var gtClasses = ExtractGroundTruthClasses(target, b);
+
+            if (gtBoxes.Count == 0) continue;
+
+            var (predIndices, gtIndices) = HungarianMatch(predBoxes, predLogits, gtBoxes, gtClasses);
+            for (int m = 0; m < predIndices.Length; m++)
+                matchedPredBoxIndices.Add((b, predIndices[m], gtIndices[m]));
+        }
+
+        if (matchedPredBoxIndices.Count == 0)
+        {
+            // No matched pairs — return zero loss
+            var zero = new Tensor<T>(new T[] { NumOps.Zero }, new[] { 1 });
+            return Engine.ReduceSum(zero, new[] { 0 }, keepDims: false);
+        }
+
+        // Step 2: Compute differentiable losses on matched pairs using engine ops
+        // For each matched pair, slice the predicted tensor to get tape-tracked boxes/logits
+        var numOps = NumOps;
+        T totalClassLoss = numOps.Zero;
+        T totalBoxL1Loss = numOps.Zero;
+
+        // Accumulate matched prediction and target box tensors for tape-tracked loss
+        int numMatched = matchedPredBoxIndices.Count;
+        var matchedPredData = new T[numMatched * 4];
+        var matchedTargData = new T[numMatched * 4];
+
+        for (int m = 0; m < numMatched; m++)
+        {
+            var (b, pi, gi) = matchedPredBoxIndices[m];
+            int boxOffset = _numClasses; // boxes start after class logits
+
+            // Extract predicted box (last 4 dims)
+            for (int c = 0; c < 4; c++)
+                matchedPredData[m * 4 + c] = predicted[b, pi, boxOffset + c];
+
+            // Extract target box
+            for (int c = 0; c < 4; c++)
+                matchedTargData[m * 4 + c] = target[b, gi, 1 + c]; // skip class column
+
+            // Classification loss per matched pair (CE)
+            int gtClass = (int)numOps.ToDouble(target[b, gi, 0]);
+            if (gtClass >= 0 && gtClass < _numClasses)
+            {
+                // Softmax + CE for this query
+                double maxLogit = double.MinValue;
+                for (int cls = 0; cls < _numClasses; cls++)
+                    maxLogit = Math.Max(maxLogit, numOps.ToDouble(predicted[b, pi, cls]));
+
+                double sumExp = 0;
+                for (int cls = 0; cls < _numClasses; cls++)
+                    sumExp += Math.Exp(numOps.ToDouble(predicted[b, pi, cls]) - maxLogit);
+
+                double logProb = numOps.ToDouble(predicted[b, pi, gtClass]) - maxLogit - Math.Log(sumExp);
+                totalClassLoss = numOps.Add(totalClassLoss, numOps.FromDouble(-logProb));
+            }
+        }
+
+        // Build matched tensors for tape-tracked box loss
+        var matchedPred = new Tensor<T>(matchedPredData, new[] { numMatched, 4 });
+        var matchedTarg = new Tensor<T>(matchedTargData, new[] { numMatched, 4 });
+
+        // L1 box loss via engine ops (tape-tracked through predicted)
+        var boxDiff = Engine.TensorSubtract(matchedPred, matchedTarg);
+        var boxAbsDiff = Engine.TensorAbs(boxDiff);
+        var boxAxes = Enumerable.Range(0, boxAbsDiff.Shape.Length).ToArray();
+        var l1Loss = Engine.ReduceMean(boxAbsDiff, boxAxes, keepDims: false);
+
+        // Classification loss as scalar tensor
+        T avgClassLoss = numOps.Divide(totalClassLoss, numOps.FromDouble(Math.Max(numMatched, 1)));
+        var classLossTensor = new Tensor<T>(new[] { avgClassLoss }, new[] { 1 });
+        var classScalar = Engine.ReduceSum(classLossTensor, new[] { 0 }, keepDims: false);
+
+        // Composite: class_weight * CE + box_l1_weight * L1
+        var weightedClass = Engine.TensorMultiplyScalar(classScalar, numOps.FromDouble(_classWeight));
+        var weightedL1 = Engine.TensorMultiplyScalar(l1Loss, numOps.FromDouble(_boxL1Weight));
+
+        return Engine.TensorAdd(weightedClass, weightedL1);
     }
 }
