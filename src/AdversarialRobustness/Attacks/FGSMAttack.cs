@@ -114,7 +114,11 @@ public class FGSMAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, T
             var loss = eng.ReduceMean(squared, allAxes, keepDims: false);
             // Get gradient of loss w.r.t. input
             var grads = tape.ComputeGradients(loss, [inputTensor]);
-            gradient = grads.TryGetValue(inputTensor, out var g) ? g.ToVector() : new Vector<T>(vectorInput.Length);
+            if (!grads.TryGetValue(inputTensor, out var g))
+                throw new InvalidOperationException(
+                    "FGSM: gradient computation failed — no gradient for input tensor. " +
+                    "The target model must be a NeuralNetworkBase<T> for tape-based adversarial attacks.");
+            gradient = g.ToVector();
         }
 
         // Apply FGSM perturbation using vectorized operations:

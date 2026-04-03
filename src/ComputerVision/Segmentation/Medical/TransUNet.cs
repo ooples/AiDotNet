@@ -191,13 +191,13 @@ public class TransUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        if (input.Shape.Length < 4)
-            throw new ArgumentException($"Tape-based training requires an explicit batch dimension (rank >= 4), got rank {input.Shape.Length}. Reshape to [batch, channels, height, width].", nameof(input));
-        if (expectedOutput.Shape.Length < 4)
-            throw new ArgumentException($"Tape-based training requires an explicit batch dimension (rank >= 4), got rank {expectedOutput.Shape.Length}.", nameof(expectedOutput));
-        SetTrainingMode(true);
+        if (input.Shape.Length != 4)
+            throw new ArgumentException($"Training requires rank 4 [batch, channels, height, width], got rank {input.Shape.Length}.", nameof(input));
+        if (expectedOutput.Shape.Length != 4)
+            throw new ArgumentException($"Training requires rank 4 [batch, channels, height, width], got rank {expectedOutput.Shape.Length}.", nameof(expectedOutput));
         try
         {
+            SetTrainingMode(true);
             TrainWithTape(input, expectedOutput);
         }
         finally

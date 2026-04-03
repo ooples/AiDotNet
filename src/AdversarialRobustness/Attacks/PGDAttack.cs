@@ -123,7 +123,11 @@ public class PGDAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TO
                 var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
                 var loss = eng.ReduceMean(squared, allAxes, keepDims: false);
                 var grads = tape.ComputeGradients(loss, [inputTensor]);
-                gradient = grads.TryGetValue(inputTensor, out var g) ? g.ToVector() : new Vector<T>(adversarial.Length);
+                if (!grads.TryGetValue(inputTensor, out var g))
+                    throw new InvalidOperationException(
+                        "PGD: gradient computation failed — no gradient for input tensor. " +
+                        "The target model must be a NeuralNetworkBase<T> for tape-based adversarial attacks.");
+                gradient = g.ToVector();
             }
 
             // Compute perturbation: stepSize * sign(gradient)
