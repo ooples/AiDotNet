@@ -261,35 +261,6 @@ public class UpBlock<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through the up block.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of loss with respect to output.</param>
-    /// <returns>Gradient of loss with respect to input.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        var gradient = outputGradient;
-
-        // Backward through residual blocks in reverse order
-        for (int i = _numLayers - 1; i >= 0; i--)
-        {
-            gradient = _resBlocks[i].Backward(gradient);
-        }
-
-        // Backward through upsample if present
-        if (_hasUpsample && _upsample != null)
-        {
-            gradient = _upsample.Backward(gradient);
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
     /// Updates all learnable parameters using gradient descent.
     /// </summary>
     /// <param name="learningRate">The learning rate for the update.</param>
@@ -383,16 +354,6 @@ public class UpBlock<T> : LayerBase<T>
         }
     }
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "UpBlock JIT compilation is not yet implemented. " +
-            "Use the layer in interpreted mode.");
-    }
 
     /// <summary>
     /// Saves the block's state to a binary writer.

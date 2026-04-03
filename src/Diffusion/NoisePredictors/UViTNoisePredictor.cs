@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -249,7 +249,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> Forward(Tensor<T> x, Tensor<T> timeEmbed, Tensor<T>? conditioning)
     {
-        var shape = x.Shape.ToArray();
+        var shape = x._shape;
         var batch = shape[0];
 
         // Patchify and embed
@@ -293,7 +293,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
                         }
                     }
                 }
-                patches = new Tensor<T>(patches.Shape.ToArray(), new Vector<T>(resultData));
+                patches = new Tensor<T>(patches._shape, new Vector<T>(resultData));
             }
         }
 
@@ -350,7 +350,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> Patchify(Tensor<T> x)
     {
-        var shape = x.Shape.ToArray();
+        var shape = x._shape;
         var batch = shape[0];
         var height = shape.Length > 2 ? shape[2] : 1;
         var width = shape.Length > 3 ? shape[3] : 1;
@@ -462,7 +462,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         var span = t.AsSpan();
         var data = new T[span.Length];
         span.CopyTo(data);
-        return new Tensor<T>(t.Shape.ToArray(), new Vector<T>(data));
+        return new Tensor<T>(t._shape, new Vector<T>(data));
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -591,6 +591,43 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var allGrads = new List<T>();
+        AddLayerGrads(allGrads, _patchEmbed);
+        AddLayerGrads(allGrads, _timeEmbed1);
+        AddLayerGrads(allGrads, _timeEmbed2);
+
+        foreach (var block in _encoderBlocks) AddBlockGrads(allGrads, block);
+        AddBlockGrads(allGrads, _middleBlock);
+
+        for (int i = 0; i < _decoderBlocks.Count; i++)
+        {
+            AddBlockGrads(allGrads, _decoderBlocks[i]);
+            AddLayerGrads(allGrads, _skipProjections[i]);
+        }
+
+        AddLayerGrads(allGrads, _finalNorm);
+        AddLayerGrads(allGrads, _outputProj);
+
+        return new Vector<T>(allGrads.ToArray());
+    }
+
+    private static void AddLayerGrads(List<T> list, ILayer<T> layer)
+    {
+        var g = layer.GetParameterGradients();
+        for (int i = 0; i < g.Length; i++) list.Add(g[i]);
+    }
+
+    private static void AddBlockGrads(List<T> list, UViTBlock block)
+    {
+        if (block.Norm1 != null) AddLayerGrads(list, block.Norm1);
+        if (block.Attention != null) AddLayerGrads(list, block.Attention);
+        if (block.Norm2 != null) AddLayerGrads(list, block.Norm2);
+        if (block.MLP1 != null) AddLayerGrads(list, block.MLP1);
+        if (block.MLP2 != null) AddLayerGrads(list, block.MLP2);
+    }
 
     /// <summary>
     /// Block structure for U-ViT transformer layers.

@@ -288,51 +288,6 @@ public class LongLoRAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass with optional shifted sparse attention.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass mirrors the forward pass behavior:
-    /// - Applies the same shifting pattern to gradients during training
-    /// - Ensures gradient flow is consistent with the forward pass attention pattern
-    /// </para>
-    /// <para><b>For Beginners:</b> This propagates learning signals backward through the network.
-    /// It uses the same shifted pattern as the forward pass to ensure the gradients match
-    /// the attention pattern used during the forward pass.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // If not using shifted attention or not in training mode, use standard LoRA backward
-        if (!_useShiftedAttention || !_isTraining)
-        {
-            return base.Backward(outputGradient);
-        }
-
-        // Apply shift to output gradient to match forward pass shifting
-        Tensor<T> shiftedGradient = ApplyShiftedAttention(outputGradient);
-
-        // Backward through LoRA layer
-        Tensor<T> loraInputGrad = _loraLayer.Backward(shiftedGradient);
-
-        // Backward through base layer
-        Tensor<T> baseInputGrad = _baseLayer.Backward(shiftedGradient);
-
-        // Sum input gradients
-        Tensor<T> inputGrad = Engine.TensorAdd(loraInputGrad, baseInputGrad);
-
-        // Reverse the shift to restore original sequence positions
-        inputGrad = ReverseShiftedAttention(inputGrad);
-
-        // Update parameter gradients vector
-        UpdateParameterGradientsFromLayers();
-
-        return inputGrad;
-    }
-
-    /// <summary>
     /// Applies shifted sparse attention pattern to the input tensor.
     /// </summary>
     /// <param name="input">Input tensor to shift.</param>
@@ -459,7 +414,7 @@ public class LongLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Determine tensor dimensions
-        int[] shape = tensor.Shape.ToArray();
+        int[] shape = tensor._shape;
 
         if (shape.Length == 1)
         {

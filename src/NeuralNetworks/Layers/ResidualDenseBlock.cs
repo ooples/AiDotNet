@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Engines;
@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4, 3")]
-public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
+public class ResidualDenseBlock<T> : LayerBase<T>
 {
     #region Fields
 
@@ -113,20 +113,20 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     private Tensor<T>[]? _concatInputs;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuConv1Out;
-    private IGpuTensor<T>? _gpuX1Activated;
-    private IGpuTensor<T>? _gpuConcat1;
-    private IGpuTensor<T>? _gpuConv2Out;
-    private IGpuTensor<T>? _gpuX2Activated;
-    private IGpuTensor<T>? _gpuConcat2;
-    private IGpuTensor<T>? _gpuConv3Out;
-    private IGpuTensor<T>? _gpuX3Activated;
-    private IGpuTensor<T>? _gpuConcat3;
-    private IGpuTensor<T>? _gpuConv4Out;
-    private IGpuTensor<T>? _gpuX4Activated;
-    private IGpuTensor<T>? _gpuConcat4;
-    private IGpuTensor<T>? _gpuConv5Out;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuConv1Out;
+    private Tensor<T>? _gpuX1Activated;
+    private Tensor<T>? _gpuConcat1;
+    private Tensor<T>? _gpuConv2Out;
+    private Tensor<T>? _gpuX2Activated;
+    private Tensor<T>? _gpuConcat2;
+    private Tensor<T>? _gpuConv3Out;
+    private Tensor<T>? _gpuX3Activated;
+    private Tensor<T>? _gpuConcat3;
+    private Tensor<T>? _gpuConv4Out;
+    private Tensor<T>? _gpuX4Activated;
+    private Tensor<T>? _gpuConcat4;
+    private Tensor<T>? _gpuConv5Out;
     private int _gpuBatch;
     private int _gpuHeight;
     private int _gpuWidth;
@@ -153,21 +153,6 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// <inheritdoc />
     public override int ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // Check all conv layers support JIT
-            foreach (var conv in _convLayers)
-            {
-                if (!conv.SupportsJitCompilation)
-                    return false;
-            }
-            return true;
-        }
-    }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports GPU execution.
@@ -282,6 +267,9 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
             stride: 1,
             padding: 1,
             activationFunction: null);
+
+        foreach (var conv in _convLayers)
+            RegisterSubLayer(conv);
     }
 
     #endregion
@@ -341,7 +329,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// </summary>
     /// <param name="inputs">GPU tensor inputs.</param>
     /// <returns>GPU tensor output after residual dense block processing.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -416,7 +404,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         var concat1Buffer = backend.AllocateBuffer(concat1Size);
         ConcatenateChannelsGpu(backend, x0Buffer, x1ActivatedBuffer, concat1Buffer,
             batch, _numFeatures, _growthChannels, spatialSize);
-        var concat1Tensor = new GpuTensor<T>(backend, concat1Buffer,
+        var concat1Tensor = GpuTensorHelper.UploadToGpu<T>(backend, concat1Buffer,
             shape.Length == 3 ? [concat1Channels, height, width] : [batch, concat1Channels, height, width],
             GpuTensorRole.Activation, ownsBuffer: !IsTrainingMode);
 
@@ -432,7 +420,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         var concat2Buffer = backend.AllocateBuffer(concat2Size);
         ConcatenateChannelsGpu(backend, concat1Buffer, x2ActivatedBuffer, concat2Buffer,
             batch, concat1Channels, _growthChannels, spatialSize);
-        var concat2Tensor = new GpuTensor<T>(backend, concat2Buffer,
+        var concat2Tensor = GpuTensorHelper.UploadToGpu<T>(backend, concat2Buffer,
             shape.Length == 3 ? [concat2Channels, height, width] : [batch, concat2Channels, height, width],
             GpuTensorRole.Activation, ownsBuffer: !IsTrainingMode);
 
@@ -448,7 +436,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         var concat3Buffer = backend.AllocateBuffer(concat3Size);
         ConcatenateChannelsGpu(backend, concat2Buffer, x3ActivatedBuffer, concat3Buffer,
             batch, concat2Channels, _growthChannels, spatialSize);
-        var concat3Tensor = new GpuTensor<T>(backend, concat3Buffer,
+        var concat3Tensor = GpuTensorHelper.UploadToGpu<T>(backend, concat3Buffer,
             shape.Length == 3 ? [concat3Channels, height, width] : [batch, concat3Channels, height, width],
             GpuTensorRole.Activation, ownsBuffer: !IsTrainingMode);
 
@@ -464,7 +452,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         var concat4Buffer = backend.AllocateBuffer(concat4Size);
         ConcatenateChannelsGpu(backend, concat3Buffer, x4ActivatedBuffer, concat4Buffer,
             batch, concat3Channels, _growthChannels, spatialSize);
-        var concat4Tensor = new GpuTensor<T>(backend, concat4Buffer,
+        var concat4Tensor = GpuTensorHelper.UploadToGpu<T>(backend, concat4Buffer,
             shape.Length == 3 ? [concat4Channels, height, width] : [batch, concat4Channels, height, width],
             GpuTensorRole.Activation, ownsBuffer: !IsTrainingMode);
 
@@ -488,16 +476,16 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
                 : [batch, _growthChannels, height, width];
 
             _gpuConv1Out = conv1Out;
-            _gpuX1Activated = new GpuTensor<T>(backend, x1ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuX1Activated = GpuTensorHelper.UploadToGpu<T>(backend, x1ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
             _gpuConcat1 = concat1Tensor;
             _gpuConv2Out = conv2Out;
-            _gpuX2Activated = new GpuTensor<T>(backend, x2ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuX2Activated = GpuTensorHelper.UploadToGpu<T>(backend, x2ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
             _gpuConcat2 = concat2Tensor;
             _gpuConv3Out = conv3Out;
-            _gpuX3Activated = new GpuTensor<T>(backend, x3ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuX3Activated = GpuTensorHelper.UploadToGpu<T>(backend, x3ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
             _gpuConcat3 = concat3Tensor;
             _gpuConv4Out = conv4Out;
-            _gpuX4Activated = new GpuTensor<T>(backend, x4ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
+            _gpuX4Activated = GpuTensorHelper.UploadToGpu<T>(backend, x4ActivatedBuffer, activationShape, GpuTensorRole.Intermediate, ownsBuffer: true);
             _gpuConcat4 = concat4Tensor;
             _gpuConv5Out = x5;
         }
@@ -510,7 +498,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
             x4ActivatedBuffer.Dispose();
         }
 
-        var result = new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+        var result = GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
 
         // Restore original tensor rank for higher-rank input
         if (originalShape.Length > 4)
@@ -554,145 +542,6 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     #endregion
 
     #region Backward Pass
-
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _convOutputs == null || _activationOutputs == null || _concatInputs == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var x0 = _lastInput;
-
-        // Gradient through residual: d(x5 * scale + x0)/d(x5) = scale, d(...)/d(x0) = 1
-        var x5Gradient = ScaleGradient(outputGradient, _residualScale);
-        var x0GradFromResidual = outputGradient; // Identity gradient
-
-        // Backward through Conv5 (no activation)
-        var concat4Gradient = _convLayers[4].Backward(x5Gradient);
-
-        // Split concat4 gradient: [concat3, x4]
-        var (concat3Grad, x4Grad) = SplitGradient(concat4Gradient,
-            _numFeatures + 3 * _growthChannels, _growthChannels);
-
-        // Backward through activation and Conv4
-        var conv4PreGrad = BackwardActivation(_activationOutputs[3], x4Grad);
-        var concat3GradFromConv4 = _convLayers[3].Backward(conv4PreGrad);
-        concat3Grad = AddTensors(concat3Grad, concat3GradFromConv4);
-
-        // Split concat3 gradient: [concat2, x3]
-        var (concat2Grad, x3Grad) = SplitGradient(concat3Grad,
-            _numFeatures + 2 * _growthChannels, _growthChannels);
-
-        // Backward through activation and Conv3
-        var conv3PreGrad = BackwardActivation(_activationOutputs[2], x3Grad);
-        var concat2GradFromConv3 = _convLayers[2].Backward(conv3PreGrad);
-        concat2Grad = AddTensors(concat2Grad, concat2GradFromConv3);
-
-        // Split concat2 gradient: [concat1, x2]
-        var (concat1Grad, x2Grad) = SplitGradient(concat2Grad,
-            _numFeatures + _growthChannels, _growthChannels);
-
-        // Backward through activation and Conv2
-        var conv2PreGrad = BackwardActivation(_activationOutputs[1], x2Grad);
-        var concat1GradFromConv2 = _convLayers[1].Backward(conv2PreGrad);
-        concat1Grad = AddTensors(concat1Grad, concat1GradFromConv2);
-
-        // Split concat1 gradient: [x0, x1]
-        var (x0GradFromConcat1, x1Grad) = SplitGradient(concat1Grad,
-            _numFeatures, _growthChannels);
-
-        // Backward through activation and Conv1
-        var conv1PreGrad = BackwardActivation(_activationOutputs[0], x1Grad);
-        var x0GradFromConv1 = _convLayers[0].Backward(conv1PreGrad);
-
-        // Combine all gradients flowing to x0
-        var totalX0Grad = AddTensors(x0GradFromResidual, x0GradFromConcat1);
-        totalX0Grad = AddTensors(totalX0Grad, x0GradFromConv1);
-
-        return totalX0Grad;
-    }
-
-    /// <summary>
-    /// Performs the backward pass on GPU tensors.
-    /// </summary>
-    /// <param name="outputGradient">GPU tensor representing the gradient from the next layer.</param>
-    /// <returns>GPU tensor representing the gradient with respect to the input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (_gpuInput == null || _gpuConv1Out == null || _gpuX1Activated == null ||
-            _gpuConcat1 == null || _gpuConv2Out == null || _gpuX2Activated == null ||
-            _gpuConcat2 == null || _gpuConv3Out == null || _gpuX3Activated == null ||
-            _gpuConcat3 == null || _gpuConv4Out == null || _gpuX4Activated == null ||
-            _gpuConcat4 == null || _gpuConv5Out == null)
-        {
-            throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");
-        }
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        int spatialSize = _gpuHeight * _gpuWidth;
-        int outputSize = _gpuBatch * _numFeatures * spatialSize;
-
-        // Gradient through residual: d(x5 * scale + x0)/d(x5) = scale, d(...)/d(x0) = 1
-        // Scale outputGradient by residualScale for x5 gradient
-        var x5GradBuffer = backend.AllocateBuffer(outputSize);
-        backend.Scale(outputGradient.Buffer, x5GradBuffer, (float)_residualScale, outputSize);
-        var x5Grad = new GpuTensor<T>(backend, x5GradBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
-
-        // Keep original outputGradient as x0GradFromResidual (will be accumulated later)
-
-        // Backward through Conv5 (no activation) to get concat4 gradient
-        var concat4Grad = _convLayers[4].BackwardGpu(x5Grad);
-
-        // Split concat4 gradient into [concat3, x4] using SliceGpu (axis=1 for channels)
-        int concat3Channels = _numFeatures + 3 * _growthChannels;
-        var concat3Grad = gpuEngine.SliceGpu<T>(concat4Grad, 1, 0, concat3Channels);
-        var x4Grad = gpuEngine.SliceGpu<T>(concat4Grad, 1, concat3Channels, concat3Channels + _growthChannels);
-
-        // Backward through activation and Conv4
-        var conv4PreGrad = gpuEngine.LeakyReluBackwardGpu<T>(x4Grad, _gpuConv4Out, 0.2f);
-        var concat3GradFromConv4 = _convLayers[3].BackwardGpu(conv4PreGrad);
-        concat3Grad = gpuEngine.AddGpu<T>(concat3Grad, concat3GradFromConv4);
-
-        // Split concat3 gradient into [concat2, x3]
-        int concat2Channels = _numFeatures + 2 * _growthChannels;
-        var concat2Grad = gpuEngine.SliceGpu<T>(concat3Grad, 1, 0, concat2Channels);
-        var x3Grad = gpuEngine.SliceGpu<T>(concat3Grad, 1, concat2Channels, concat2Channels + _growthChannels);
-
-        // Backward through activation and Conv3
-        var conv3PreGrad = gpuEngine.LeakyReluBackwardGpu<T>(x3Grad, _gpuConv3Out, 0.2f);
-        var concat2GradFromConv3 = _convLayers[2].BackwardGpu(conv3PreGrad);
-        concat2Grad = gpuEngine.AddGpu<T>(concat2Grad, concat2GradFromConv3);
-
-        // Split concat2 gradient into [concat1, x2]
-        int concat1Channels = _numFeatures + _growthChannels;
-        var concat1Grad = gpuEngine.SliceGpu<T>(concat2Grad, 1, 0, concat1Channels);
-        var x2Grad = gpuEngine.SliceGpu<T>(concat2Grad, 1, concat1Channels, concat1Channels + _growthChannels);
-
-        // Backward through activation and Conv2
-        var conv2PreGrad = gpuEngine.LeakyReluBackwardGpu<T>(x2Grad, _gpuConv2Out, 0.2f);
-        var concat1GradFromConv2 = _convLayers[1].BackwardGpu(conv2PreGrad);
-        concat1Grad = gpuEngine.AddGpu<T>(concat1Grad, concat1GradFromConv2);
-
-        // Split concat1 gradient into [x0, x1]
-        var x0GradFromConcat1 = gpuEngine.SliceGpu<T>(concat1Grad, 1, 0, _numFeatures);
-        var x1Grad = gpuEngine.SliceGpu<T>(concat1Grad, 1, _numFeatures, _numFeatures + _growthChannels);
-
-        // Backward through activation and Conv1
-        var conv1PreGrad = gpuEngine.LeakyReluBackwardGpu<T>(x1Grad, _gpuConv1Out, 0.2f);
-        var x0GradFromConv1 = _convLayers[0].BackwardGpu(conv1PreGrad);
-
-        // Combine all gradients flowing to x0: residual + concat split + conv1 backward
-        var totalX0Grad = gpuEngine.AddGpu<T>(outputGradient, x0GradFromConcat1);
-        totalX0Grad = gpuEngine.AddGpu<T>(totalX0Grad, x0GradFromConv1);
-
-        return totalX0Grad;
-    }
 
     #endregion
 
@@ -921,23 +770,6 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     }
 
     /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape is null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input node with batch dimension [batch, channels, height, width]
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return BuildComputationGraph(inputNode, "");
-    }
-
-    /// <inheritdoc />
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
     {
         // x0 = input
@@ -1005,4 +837,5 @@ public class ResidualDenseBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
     }
 
     #endregion
+
 }

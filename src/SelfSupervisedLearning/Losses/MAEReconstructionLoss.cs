@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -316,7 +316,7 @@ public class MAEReconstructionLoss<T> : IContrastiveLoss<T>
     /// </summary>
     T IContrastiveLoss<T>.ComputeLoss(Tensor<T> view1, Tensor<T> view2)
     {
-        var mask = Tensor<T>.CreateDefault(view1.Shape.ToArray(), NumOps.One);
+        var mask = Tensor<T>.CreateDefault(view1._shape, NumOps.One);
         return ComputeLoss(view1, view2, mask);
     }
 }

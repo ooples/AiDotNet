@@ -1,6 +1,5 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 
@@ -69,8 +68,11 @@ public class MockLossFunction<T> : ILossFunction<T>
     /// <summary>
     /// GPU loss and gradient calculation - not supported in mock.
     /// </summary>
-    public (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    public (T Loss, Tensor<T> Gradient) CalculateLossAndGradientGpu(Tensor<T> predicted, Tensor<T> actual)
     {
-        throw new NotSupportedException("GPU operations are not supported in MockLossFunction.");
+        // CPU fallback for mock: compute MSE loss and gradient
+        var loss = CalculateLoss(predicted.ToVector(), actual.ToVector());
+        var gradient = CalculateDerivative(predicted.ToVector(), actual.ToVector());
+        return (loss, Tensor<T>.FromVector(gradient));
     }
 }

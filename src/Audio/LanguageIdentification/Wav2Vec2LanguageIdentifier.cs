@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -372,14 +372,14 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
             normalized[i] = _numOps.FromDouble((_numOps.ToDouble(rawAudio[i]) - mean) / std);
         }
 
-        return new Tensor<T>(normalized, rawAudio.Shape.ToArray());
+        return new Tensor<T>(normalized, rawAudio._shape);
     }
 
     /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
     {
         var probs = Softmax(modelOutput.Data.ToArray());
-        return new Tensor<T>(probs, modelOutput.Shape.ToArray());
+        return new Tensor<T>(probs, modelOutput._shape);
     }
 
     /// <inheritdoc/>
@@ -413,9 +413,8 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
 
         var loss = _lossFunction.CalculateLoss(predictedVector, expectedVector);
         var gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
-        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted.Shape.ToArray());
+        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted._shape);
 
-        BackwardNative(gradientTensor);
         _optimizer?.UpdateParameters(Layers);
 
         SetTrainingMode(false);
@@ -594,36 +593,6 @@ public class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, ILanguag
         }
 
         return output;
-    }
-
-    private void BackwardNative(Tensor<T> gradient)
-    {
-        var grad = gradient;
-
-        if (_classifierLayer is not null)
-        {
-            grad = _classifierLayer.Backward(grad);
-        }
-
-        if (_poolingProjection is not null)
-        {
-            grad = _poolingProjection.Backward(grad);
-        }
-
-        for (int i = _transformerLayers.Count - 1; i >= 0; i--)
-        {
-            grad = _transformerLayers[i].Backward(grad);
-        }
-
-        for (int i = _featureProjection.Count - 1; i >= 0; i--)
-        {
-            grad = _featureProjection[i].Backward(grad);
-        }
-
-        for (int i = _featureEncoder.Count - 1; i >= 0; i--)
-        {
-            grad = _featureEncoder[i].Backward(grad);
-        }
     }
 
     private IEnumerable<ILayer<T>> GetAllLayers()

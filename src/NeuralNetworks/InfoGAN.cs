@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -405,7 +405,6 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         T realLoss = CalculateBinaryLoss(realPredictions, realLabels, batchSize);
 
         var realGradients = CalculateBinaryGradients(realPredictions, realLabels, batchSize);
-        Discriminator.Backpropagate(realGradients);
         UpdateDiscriminatorParameters();
 
         // Train on fake images
@@ -413,7 +412,6 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         T fakeLoss = CalculateBinaryLoss(fakePredictions, fakeLabels, batchSize);
 
         var fakeGradients = CalculateBinaryGradients(fakePredictions, fakeLabels, batchSize);
-        Discriminator.Backpropagate(fakeGradients);
         UpdateDiscriminatorParameters();
 
         T discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
@@ -425,54 +423,37 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         // We just don't call UpdateDiscriminatorParameters() during generator training
         QNetwork.SetTrainingMode(true);
 
-        // Generate new fake images
+        // Train generator with adversarial + mutual information loss via tape
         var newGeneratorInput = ConcatenateTensors(noise, latentCodes);
-        var newFakeImages = Generator.Predict(newGeneratorInput);
-
-        // GAN loss: fool the discriminator
-        var genPredictions = Discriminator.Predict(newFakeImages);
         var allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
-        T ganLoss = CalculateBinaryLoss(genPredictions, allRealLabels, batchSize);
-
-        // Mutual information loss: Q predicts latent codes
-        var predictedCodes = QNetwork.Predict(newFakeImages);
-        T mutualInfoLoss = CalculateMutualInfoLoss(predictedCodes, latentCodes, batchSize);
-
-        // Total generator loss
         T miCoeff = NumOps.FromDouble(_mutualInfoCoefficient);
-        T generatorLoss = NumOps.Add(ganLoss, NumOps.Multiply(miCoeff, mutualInfoLoss));
+        var capturedLatentCodes = latentCodes;
 
-        // Backpropagate through discriminator (for GAN loss) to get input gradients
-        var ganGradients = CalculateBinaryGradients(genPredictions, allRealLabels, batchSize);
-        var discInputGradients = Discriminator.BackwardWithInputGradient(ganGradients);
-
-        // Backpropagate through Q network (for MI loss) to get input gradients
-        var miGradients = CalculateMutualInfoGradients(predictedCodes, latentCodes, batchSize);
-        var qInputGradients = QNetwork.BackwardWithInputGradient(miGradients);
-
-        // Combine gradients - verify shapes match
-        if (!discInputGradients.Shape.ToArray().SequenceEqual(qInputGradients.Shape.ToArray()))
+        var trainableGen = (NeuralNetworkBase<T>)Generator;
+        T generatorLoss = trainableGen.TrainWithCustomLoss(newGeneratorInput, genOutput =>
         {
-            throw new InvalidOperationException(
-                $"Gradient shape mismatch: discriminator input gradients have shape " +
-                $"[{string.Join(", ", discInputGradients.Shape.ToArray())}] but Q network input gradients have shape " +
-                $"[{string.Join(", ", qInputGradients.Shape.ToArray())}]. Both must match for gradient combining.");
-        }
+            // GAN loss: fool discriminator — BCE(disc(fake), real_labels)
+            var discScore = Discriminator.Predict(genOutput);
+            var diff = Engine.TensorSubtract(discScore, allRealLabels);
+            var squared = Engine.TensorMultiply(diff, diff);
+            var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+            var ganLossTensor = Engine.ReduceMean(squared, allAxes, keepDims: false);
 
-        var combinedGradients = new Tensor<T>(discInputGradients.Shape.ToArray());
-        int gradLength = discInputGradients.Length;
-        for (int i = 0; i < gradLength; i++)
-        {
-            combinedGradients.SetFlat(i, NumOps.Add(
-                discInputGradients.GetFlat(i),
-                NumOps.Multiply(miCoeff, qInputGradients.GetFlat(i))
-            ));
-        }
+            // Mutual information loss: Q(fake) should predict latent codes
+            var predictedCodes = QNetwork.Predict(genOutput);
+            var codeDiff = Engine.TensorSubtract(predictedCodes, capturedLatentCodes);
+            var codeSq = Engine.TensorMultiply(codeDiff, codeDiff);
+            var codeAxes = Enumerable.Range(0, codeSq.Shape.Length).ToArray();
+            var miLossTensor = Engine.ReduceMean(codeSq, codeAxes, keepDims: false);
 
-        // Backpropagate through generator
-        Generator.Backward(combinedGradients);
-        UpdateGeneratorParameters();
-        UpdateQNetworkParameters();
+            // Total = GAN loss + lambda * MI loss
+            return Engine.TensorAdd(ganLossTensor, Engine.TensorMultiplyScalar(miLossTensor, miCoeff));
+        });
+
+        // Compute mutual info loss separately for tracking
+        var newFakeImages = Generator.Predict(newGeneratorInput);
+        var predictedCodesTracking = QNetwork.Predict(newFakeImages);
+        T mutualInfoLoss = CalculateMutualInfoLoss(predictedCodesTracking, latentCodes, batchSize);
 
         // Track losses
         _discriminatorLosses.Add(discriminatorLoss);
@@ -512,7 +493,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> CalculateMutualInfoGradients(Tensor<T> predictedCodes, Tensor<T> trueCodes, int batchSize)
     {
-        var gradients = new Tensor<T>(predictedCodes.Shape.ToArray());
+        var gradients = new Tensor<T>(predictedCodes._shape);
         T scale = NumOps.FromDouble(2.0 / ((double)batchSize * _latentCodeSize));
 
         for (int b = 0; b < batchSize; b++)
@@ -559,7 +540,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
-        var gradients = new Tensor<T>(predictions.Shape.ToArray());
+        var gradients = new Tensor<T>(predictions._shape);
 
         for (int i = 0; i < batchSize; i++)
         {

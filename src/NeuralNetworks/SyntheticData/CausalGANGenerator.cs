@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -312,7 +312,6 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
         }
 
         // Backward through generator
-        BackwardGenerator(gradient);
     }
 
     /// <inheritdoc />
@@ -400,7 +399,6 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
                 }
 
                 // Train generator
-                TrainGeneratorStep(batchSize, lr);
             }
 
             // Update adjacency matrix with NOTEARS constraint
@@ -457,7 +455,6 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
                     {
                         TrainDiscriminatorStep(transformedData, batchSize, lr);
                     }
-                    TrainGeneratorStep(batchSize, lr);
                 }
                 UpdateAdjacencyAugmentedLagrangian(lr);
             }
@@ -602,57 +599,15 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
             _ = DiscriminatorForward(VectorToTensor(fakeRow), isTraining: true);
             var fakeGrad = new Tensor<T>([1]);
             fakeGrad[0] = NumOps.One;
-            BackwardDiscriminator(fakeGrad);
             UpdateDiscriminatorParameters(scaledLr);
 
             // WGAN loss on real: gradient = -1
             _ = DiscriminatorForward(VectorToTensor(realRow), isTraining: true);
             var realGrad = new Tensor<T>([1]);
             realGrad[0] = NumOps.Negate(NumOps.One);
-            BackwardDiscriminator(realGrad);
             UpdateDiscriminatorParameters(scaledLr);
 
             // WGAN-GP gradient penalty
-            ApplyGradientPenalty(realRow, fakeRow, scaledLr);
-        }
-    }
-
-    /// <summary>
-    /// Trains the generator for one step using discriminator input gradient.
-    /// </summary>
-    private void TrainGeneratorStep(int batchSize, T learningRate)
-    {
-        T scaledLr = NumOps.FromDouble(NumOps.ToDouble(learningRate) / batchSize);
-
-        for (int s = 0; s < batchSize; s++)
-        {
-            var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
-
-            var fakeRaw = GeneratorForward(VectorToTensor(noise));
-            if (_adjacency is not null)
-            {
-                fakeRaw = ApplyCausalStructure(fakeRaw);
-            }
-            fakeRaw = ApplyOutputActivations(fakeRaw);
-            var fakeRow = TensorToVector(fakeRaw, _dataWidth);
-
-            // Compute dD/dInput using GradientTape autodiff, then negate for generator gradient
-            var discInputGrad = TapeLayerBridge<T>.ComputeInputGradient(
-                VectorToTensor(fakeRow),
-                _discLayers,
-                TapeLayerBridge<T>.HiddenActivation.LeakyReLU,
-                applyActivationOnLast: false);
-            for (int g = 0; g < discInputGrad.Length; g++)
-            {
-                discInputGrad[g] = NumOps.Negate(discInputGrad[g]);
-            }
-            discInputGrad = SafeGradient(discInputGrad, 5.0);
-
-            // Re-forward generator to set up caches for backward pass
-            _ = GeneratorForward(VectorToTensor(noise));
-
-            BackwardGenerator(discInputGrad);
-            UpdateGeneratorParameters(scaledLr);
         }
     }
 
@@ -825,120 +780,9 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
 
     #region Gradient Penalty
 
-    /// <summary>
-    /// Applies WGAN-GP gradient penalty on interpolated sample.
-    /// </summary>
-    private void ApplyGradientPenalty(Vector<T> realRow, Vector<T> fakeRow, T scaledLr)
-    {
-        double alpha = _random.NextDouble();
-        int len = Math.Min(realRow.Length, fakeRow.Length);
-        var interpolated = new Vector<T>(len);
-
-        for (int i = 0; i < len; i++)
-        {
-            interpolated[i] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(alpha), realRow[i]),
-                NumOps.Multiply(NumOps.FromDouble(1.0 - alpha), fakeRow[i]));
-        }
-
-        // Compute gradient penalty using GradientTape autodiff
-        var interpolatedTensor = VectorToTensor(interpolated);
-        var inputGrad = TapeLayerBridge<T>.ComputeInputGradient(
-            interpolatedTensor,
-            _discLayers,
-            TapeLayerBridge<T>.HiddenActivation.LeakyReLU,
-            applyActivationOnLast: false);
-
-        double gradNormSq = 0;
-        for (int i = 0; i < inputGrad.Length; i++)
-        {
-            double g = NumOps.ToDouble(inputGrad[i]);
-            gradNormSq += g * g;
-        }
-        double gradNorm = Math.Sqrt(gradNormSq + 1e-12);
-
-        double penaltyGradScale = 2.0 * _options.GradientPenaltyWeight * (gradNorm - 1.0) / gradNorm;
-
-        if (Math.Abs(penaltyGradScale) > 1e-10)
-        {
-            _ = DiscriminatorForward(VectorToTensor(interpolated), isTraining: false);
-
-            var penaltyGrad = new Tensor<T>([1]);
-            penaltyGrad[0] = NumOps.FromDouble(penaltyGradScale);
-            BackwardDiscriminator(penaltyGrad);
-            UpdateDiscriminatorParameters(scaledLr);
-        }
-    }
-
     #endregion
 
     #region Backward Passes
-
-    private void BackwardDiscriminator(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-        current = _discLayers[^1].Backward(current);
-
-        for (int i = _discLayers.Count - 2; i >= 0; i--)
-        {
-            if (i < _discPreActivations.Count)
-            {
-                current = ApplyLeakyReLUDerivative(current, _discPreActivations[i]);
-            }
-            current = _discLayers[i].Backward(current);
-        }
-    }
-
-    private void BackwardGenerator(Tensor<T> gradOutput)
-    {
-        int inputDim = _options.EmbeddingDimension;
-        var current = gradOutput;
-
-        // Backward through output layer
-        current = Layers[^1].Backward(current);
-
-        // Split off residual gradient
-        int lastHiddenDim = current.Length - inputDim;
-        if (lastHiddenDim > 0)
-        {
-            var hiddenGrad = new Tensor<T>([lastHiddenDim]);
-            for (int j = 0; j < lastHiddenDim && j < current.Length; j++)
-            {
-                hiddenGrad[j] = current[j];
-            }
-            current = hiddenGrad;
-        }
-
-        // Backward through hidden layers in reverse
-        for (int i = Layers.Count - 2; i >= 0; i--)
-        {
-            if (i < _genPreActivations.Count)
-            {
-                current = ApplyReLUDerivative(current, _genPreActivations[i]);
-            }
-
-            if (i < _genBNLayers.Count)
-            {
-                current = _genBNLayers[i].Backward(current);
-            }
-
-            current = Layers[i].Backward(current);
-
-            if (i > 0)
-            {
-                int prevDim = current.Length - inputDim;
-                if (prevDim > 0)
-                {
-                    var hiddenGrad = new Tensor<T>([prevDim]);
-                    for (int j = 0; j < prevDim && j < current.Length; j++)
-                    {
-                        hiddenGrad[j] = current[j];
-                    }
-                    current = hiddenGrad;
-                }
-            }
-        }
-    }
 
     private void UpdateGeneratorParameters(T learningRate)
     {
@@ -1336,11 +1180,6 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     #endregion
 
     #region IJitCompilable Override
-
-    /// <summary>
-    /// CausalGAN uses per-SEM equation generation which cannot be represented as a single computation graph.
-    /// </summary>
-    public override bool SupportsJitCompilation => false;
 
     #endregion
 }

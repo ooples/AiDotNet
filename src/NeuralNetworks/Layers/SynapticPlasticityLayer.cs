@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -35,7 +35,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, SupportsBackpropagation = false, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
-public class SynapticPlasticityLayer<T> : LayerBase<T>
+public partial class SynapticPlasticityLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The input tensor from the last forward pass.
@@ -99,6 +99,8 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     /// which gets updated as the network learns patterns.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
@@ -343,15 +345,15 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     public override int ParameterCount => _weights.Length;
     public override bool SupportsTraining => true;
 
-    private IGpuTensor<T>? _lastInputGpu;
-    private IGpuTensor<T>? _lastOutputGpu;
-    private IGpuTensor<T>? _presynapticTracesGpu;
-    private IGpuTensor<T>? _postsynapticTracesGpu;
-    private IGpuTensor<T>? _presynapticSpikesGpu;
-    private IGpuTensor<T>? _postsynapticSpikesGpu;
+    private Tensor<T>? _lastInputGpu;
+    private Tensor<T>? _lastOutputGpu;
+    private Tensor<T>? _presynapticTracesGpu;
+    private Tensor<T>? _postsynapticTracesGpu;
+    private Tensor<T>? _presynapticSpikesGpu;
+    private Tensor<T>? _postsynapticSpikesGpu;
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         var input = inputs[0];
 
@@ -369,7 +371,7 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
             _lastOutputGpu = input; // Pass-through
 
             // Also update CPU cache for compatibility if needed, or skip if fully GPU
-            // _lastInput = input.ToTensor(); 
+            // _lastInput = input; 
         }
 
         return input;
@@ -567,6 +569,8 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
         _presynapticSpikes.Fill(NumOps.Zero);
         _postsynapticSpikes = new Tensor<T>([size]);
         _postsynapticSpikes.Fill(NumOps.Zero);
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
     }
 
     /// <summary>
@@ -607,111 +611,6 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
         return input;
     }
 
-    /// <summary>
-    /// Performs the backward pass of the synaptic plasticity layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input (same as output gradient for this pass-through layer).</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the synaptic plasticity layer. As a pass-through layer, it simply
-    /// passes the gradient back without modification. The actual weight updates are handled in the UpdateParameters method.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method passes the gradient unchanged back to the previous layer.
-    /// 
-    /// During the backward pass:
-    /// - The layer receives error gradients from the next layer
-    /// - It passes these gradients back without changing them
-    /// - No learning happens in this step for this particular layer
-    /// 
-    /// This layer uses a different learning mechanism than backpropagation:
-    /// - Instead of using gradients directly, it uses spike timing relationships
-    /// - The actual learning happens in the UpdateParameters method
-    /// - This backward pass is only needed to maintain compatibility with the neural network framework
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        // This is a pass-through layer, so we simply pass the gradient back
-        // No weight updates are performed here as they're handled in UpdateParameters
-        return outputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. Specialized operations
-    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Identity passthrough graph for gradients
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "stdp_input", requiresGradient: true);
-        var outputNode = inputNode;
-        outputNode.Gradient = outputGradient;
-
-        // Inline topological sort
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed in synaptic plasticity autodiff.");
-    }
-
 
 
 
@@ -736,7 +635,7 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Return the weight tensor as a flattened vector
-        return Vector<T>.FromMemory(_weights.Data);
+        return new Vector<T>(_weights.ToArray());
     }
 
     /// <summary>
@@ -803,59 +702,4 @@ public class SynapticPlasticityLayer<T> : LayerBase<T>
         _postsynapticSpikes = new Tensor<T>([size]);
         _postsynapticSpikes.Fill(NumOps.Zero);
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
-
-        // SynapticPlasticityLayer JIT provides a differentiable approximation of STDP:
-        // The forward pass is a simple weighted transformation: output = W @ input
-        // The STDP learning rule is approximated through standard gradient descent
-        // during backpropagation.
-
-        var input = inputNodes[0];
-
-        // Get dimensions
-        int inputSize = _weights.Shape[1];
-        int outputSize = _weights.Shape[0];
-
-        // Create weights constant
-        var weightsNode = TensorOperations<T>.Constant(_weights, "stdp_weights");
-
-        // Reshape input for matrix multiplication
-        var inputReshaped = TensorOperations<T>.Reshape(input, inputSize, 1);
-
-        // Forward: W @ input
-        var weighted = TensorOperations<T>.MatrixMultiply(weightsNode, inputReshaped);
-        var output = TensorOperations<T>.Reshape(weighted, outputSize);
-
-        // Apply activation
-        output = ApplyActivationToGraph(output);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c>. SynapticPlasticityLayer uses a differentiable forward pass.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// JIT compilation for SynapticPlasticity exports the forward pass as a simple
-    /// matrix multiplication. The STDP learning dynamics are approximated through
-    /// standard gradient-based optimization during training. The temporal spike
-    /// timing information is not used in the JIT-compiled forward pass.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
 }

@@ -313,19 +313,6 @@ public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointClou
         return x;
     }
 
-    public override Tensor<T> Backpropagate(Tensor<T> outputGradient)
-    {
-        Tensor<T> gradient = outputGradient;
-
-        // Backpropagate through layers in reverse order
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-
-        return gradient;
-    }
-
     public Vector<T> ExtractGlobalFeatures(Tensor<T> pointCloud)
     {
         bool originalMode = IsTrainingMode;
@@ -383,33 +370,13 @@ public class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPointClou
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-
-        // Reset global features
-        _globalFeatures = null;
-
-        // Forward pass
-        var prediction = ForwardWithMemory(input);
-
-        // Compute loss
-        if (LossFunction == null)
+        try
         {
-            throw new InvalidOperationException("Loss function not set for training.");
+            TrainWithTape(input, expectedOutput);
         }
-
-        var loss = LossFunction.ComputeLoss(prediction, expectedOutput);
-        LastLoss = loss;
-
-        // Backward pass
-        var lossGradient = LossFunction.ComputeGradient(prediction, expectedOutput);
-        Backpropagate(lossGradient);
-
-        // Basic SGD parameter update
-        foreach (var layer in Layers)
+        finally
         {
-            if (layer.SupportsTraining && layer.ParameterCount > 0)
-            {
-                layer.UpdateParameters(_learningRate);
-            }
+            SetTrainingMode(false);
         }
     }
 

@@ -122,28 +122,6 @@ public class NeuralNetworkModelsIntegrationTests
         Assert.True(hasNonZero, "Output should have non-zero values");
     }
 
-    [Fact]
-    public void FeedForwardNeuralNetwork_Backward_ProducesGradientWithCorrectShape()
-    {
-        // Arrange
-        var architecture = new NeuralNetworkArchitecture<float>(
-            inputType: InputType.OneDimensional,
-            taskType: NeuralNetworkTaskType.Regression,
-            complexity: NetworkComplexity.Simple,
-            inputSize: 16,
-            outputSize: 4);
-
-        var network = new FeedForwardNeuralNetwork<float>(architecture);
-        var input = CreateUnbatchedInput(16);
-        var outputGrad = CreateRandomTensor([4], 123);
-
-        // Act
-        var output = network.Forward(input);
-        var inputGrad = network.Backward(outputGrad);
-
-        // Assert
-        Assert.Equal(16, inputGrad.Shape[0]);
-    }
 
     [Fact]
     public void FeedForwardNeuralNetwork_GetParameterCount_ReturnsPositiveValue()

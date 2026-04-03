@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -330,13 +330,12 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
             // Reshape gradient to match output tensor shape for proper BPTT
             var gradTensor = Tensor<T>.FromVector(lossGrad);
             if (gradTensor.Rank < output.Rank)
-                gradTensor = gradTensor.Reshape(output.Shape.ToArray());
+                gradTensor = gradTensor.Reshape(output._shape);
 
             // Clip loss gradient before backprop (Pascanu et al. 2013 — essential for RNNs)
             var clippedLossGrad = ClipGradient(gradTensor);
 
             // Backpropagate error through time
-            BackpropagateError(clippedLossGrad);
 
             // Per-layer direct update (avoids serialize/deserialize overhead)
             T lr = _learningRate;
@@ -352,36 +351,6 @@ public class RecurrentNeuralNetwork<T> : NeuralNetworkBase<T>
             SetTrainingMode(false);
             foreach (var layer in Layers)
                 layer.SetTrainingMode(false);
-        }
-    }
-
-    /// <summary>
-    /// Backpropagates the error through the network layers.
-    /// </summary>
-    /// <param name="error">The initial error tensor to backpropagate.</param>
-    /// <remarks>
-    /// <para>
-    /// This method propagates the error backwards through each layer of the network, allowing each layer
-    /// to compute its local gradients. In an RNN, this process involves unrolling the network through time,
-    /// which is crucial for capturing dependencies in sequential data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is how the network learns from its mistakes.
-    /// 
-    /// The backpropagation process:
-    /// 1. Starts with the error at the output layer
-    /// 2. Moves backwards through each layer
-    /// 3. Each layer figures out how much it contributed to the error
-    /// 4. This information is used to update the network's parameters
-    /// 
-    /// Think of it like tracing back through a series of decisions to understand where things went wrong,
-    /// so you can make better decisions next time.
-    /// </para>
-    /// </remarks>
-    private void BackpropagateError(Tensor<T> error)
-    {
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            error = Layers[i].Backward(error);
         }
     }
 

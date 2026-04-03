@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -950,7 +950,7 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape.ToArray());
+        var normalized = new Tensor<T>(image._shape);
 
         // COCO/ImageNet normalization (industry standard for TableTransformer)
         double[] means = [0.485, 0.456, 0.406];
@@ -1180,22 +1180,10 @@ public class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableExtractor
 
         SetTrainingMode(true);
 
-        var output = Predict(input);
-        LastLoss = LossFunction.CalculateLoss(output.ToVector(), expectedOutput.ToVector());
-
-        var lossGradient = LossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector());
-        var gradient = Tensor<T>.FromVector(lossGradient);
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-
+        TrainWithTape(input, expectedOutput);
         var paramGradients = CollectParameterGradients();
         UpdateParameters(paramGradients);
-
-        SetTrainingMode(false);
-    }
+        SetTrainingMode(false);}
 
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> gradients)

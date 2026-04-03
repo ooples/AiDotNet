@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -53,6 +54,7 @@ namespace AiDotNet.NeuralNetworks;
 public class MemoryNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly MemoryNetworkOptions _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
@@ -175,9 +177,10 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     {
     }
 
-    public MemoryNetwork(NeuralNetworkArchitecture<T> architecture, int memorySize, int embeddingSize, ILossFunction<T>? lossFunction = null, MemoryNetworkOptions? options = null) :
+    public MemoryNetwork(NeuralNetworkArchitecture<T> architecture, int memorySize, int embeddingSize, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null, MemoryNetworkOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new MemoryNetworkOptions();
         Options = _options;
         _memorySize = memorySize;
@@ -405,7 +408,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     private Tensor<T> ReadFromMemory(Tensor<T> attentionWeights)
     {
         // Get shape information
-        int[] shape = attentionWeights.Shape.ToArray();
+        int[] shape = attentionWeights._shape;
         int batchSize = shape[0];
 
         // Create result tensor with shape [batchSize, embeddingSize]
@@ -446,8 +449,8 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     private Tensor<T> CombineInputAndMemory(Tensor<T> encoded, Tensor<T> memoryReadout)
     {
         // Get shape information
-        int[] encodedShape = encoded.Shape.ToArray();
-        int[] readoutShape = memoryReadout.Shape.ToArray();
+        int[] encodedShape = encoded._shape;
+        int[] readoutShape = memoryReadout._shape;
         int batchSize = encodedShape[0];
         int encodedSize = encodedShape[1];
 
@@ -528,7 +531,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         // For simplicity, we'll just use the layer output directly as write vector
 
         // Get shape information
-        int[] shape = current.Shape.ToArray();
+        int[] shape = current._shape;
         int batchSize = shape[0];
 
         // Use first batch's attention and write values
@@ -592,40 +595,23 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Persistent Adam optimizer for stable training.
     /// </summary>
+    #pragma warning disable CS0169
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+#pragma warning restore CS0169
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
-
-        // Ensure 2D input
-        if (input.Rank == 1)
-            input = input.Reshape([1, input.Shape[0]]);
-
-        // Forward pass through all layers
-        var output = ForwardWithMemory(input);
-        var outputVector = output.ToVector();
-        var expectedVector = expectedOutput.ToVector();
-
-        // Calculate loss
-        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
-
-        // Backward pass
-        var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
-        var gradTensor = Tensor<T>.FromVector(lossGrad);
-        if (gradTensor.Rank < output.Rank)
-            gradTensor = gradTensor.Reshape(output.Shape.ToArray());
-
-        Backpropagate(gradTensor);
-
-        // Persistent Adam optimizer
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        var paramGrads = GetParameterGradients();
-        var currentParams = GetParameters();
-        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
-        UpdateParameters(updatedParams);
+try
+{
+    TrainWithTape(input, expectedOutput, _optimizer);
+}
+finally
+{
+    SetTrainingMode(false);
+}
     }
 
     /// <summary>
@@ -637,7 +623,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     private T CalculateMeanSquaredError(Tensor<T> predictions, Tensor<T> expected)
     {
         // Verify tensor shapes match
-        if (!AreShapesCompatible(predictions.Shape.ToArray(), expected.Shape.ToArray()))
+        if (!AreShapesCompatible(predictions._shape, expected._shape))
         {
             throw new ArgumentException("Prediction and expected output shapes must be compatible");
         }
@@ -721,7 +707,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
     private Tensor<T> CalculateOutputGradients(Tensor<T> predictions, Tensor<T> expected)
     {
         // Verify tensor shapes match
-        if (!AreShapesCompatible(predictions.Shape.ToArray(), expected.Shape.ToArray()))
+        if (!AreShapesCompatible(predictions._shape, expected._shape))
         {
             throw new ArgumentException("Prediction and expected output shapes must be compatible");
         }
@@ -730,7 +716,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         // We can simplify to (predictions - expected) and adjust learning rate
 
         // Create gradient tensor with same shape as predictions
-        Tensor<T> gradients = new Tensor<T>(predictions.Shape.ToArray());
+        Tensor<T> gradients = new Tensor<T>(predictions._shape);
 
         // Calculate gradients
         if (predictions.Shape.Length == 2)
@@ -767,36 +753,6 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         }
 
         return gradients;
-    }
-
-    /// <summary>
-    /// Performs backpropagation through the memory network.
-    /// </summary>
-    /// <param name="outputGradients">The gradients from the output layer.</param>
-    private void BackpropagateMemoryNetwork(Tensor<T> outputGradients)
-    {
-        // Start with output gradients
-        Tensor<T> gradients = outputGradients;
-
-        // Backpropagate through output layers (fourth quarter)
-        for (int i = Layers.Count - 1; i >= 3 * Layers.Count / 4; i--)
-        {
-            gradients = Layers[i].Backward(gradients);
-        }
-
-        // Split gradients for memory reading and input encoding paths
-        // In a real implementation, we would calculate:
-        // - gradients for memory attention
-        // - gradients for memory content
-        // - gradients for input encoding
-
-        // For simplicity, we'll just continue backpropagation through all previous layers
-        for (int i = 3 * Layers.Count / 4 - 1; i >= 0; i--)
-        {
-            gradients = Layers[i].Backward(gradients);
-        }
-
-        // The result is that all layers now have their gradients computed and stored internally
     }
 
     /// <summary>

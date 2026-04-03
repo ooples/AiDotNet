@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -248,11 +248,16 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
             throw new InvalidOperationException(
                 "Training is not supported in ONNX mode. Use the native mode constructor for training.");
 
-        var predicted = Forward(input);
-        var lossGradient = predicted.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
-        BackwardPass(lossGradient);
-        _optimizer?.UpdateParameters(Layers);
+        if (input.Shape.Length < 4) throw new ArgumentException($"Tape-based training requires rank >= 4, got rank {input.Shape.Length}. Reshape to [batch, channels, height, width].", nameof(input));
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     #endregion
@@ -297,7 +302,7 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         for (int i = 0; i < input.Length; i++)
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "pixel_values";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
 
@@ -311,14 +316,6 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         var result = new Tensor<T>(outputShape, new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result);
         return result;
-    }
-
-    private void BackwardPass(Tensor<T> gradient)
-    {
-        if (!_useNativeMode || Layers.Count == 0) return;
-        if (gradient.Rank == 3) gradient = AddBatchDimension(gradient);
-        for (int i = Layers.Count - 1; i >= 0; i--)
-            gradient = Layers[i].Backward(gradient);
     }
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)

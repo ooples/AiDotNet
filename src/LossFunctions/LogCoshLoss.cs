@@ -1,8 +1,9 @@
-
+﻿
 
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.LossFunctions;
 
@@ -106,7 +107,7 @@ public class LogCoshLoss<T> : LossFunctionBase<T>
     /// <param name="predicted">The predicted GPU tensor from the model.</param>
     /// <param name="actual">The actual (target) GPU tensor.</param>
     /// <returns>A tuple containing the loss value and gradient tensor.</returns>
-    public override (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    public override (T Loss, Tensor<T> Gradient) CalculateLossAndGradientGpu(Tensor<T> predicted, Tensor<T> actual)
     {
         var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
         var backend = engine?.GetBackend();
@@ -116,7 +117,7 @@ public class LogCoshLoss<T> : LossFunctionBase<T>
             return base.CalculateLossAndGradientGpu(predicted, actual);
         }
 
-        int size = predicted.ElementCount;
+        int size = predicted.Length;
 
         // Compute loss on GPU
         float lossValue = backend.LogCoshLoss(predicted.Buffer, actual.Buffer, size);
@@ -126,8 +127,24 @@ public class LogCoshLoss<T> : LossFunctionBase<T>
         backend.LogCoshBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape.ToArray(), GpuTensorRole.Gradient);
+        var gradientTensor = GpuTensorHelper.UploadToGpu<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // log(cosh(x)) = |x| + log(1 + exp(-2|x|)) - log(2) (numerically stable)
+        var diff = Engine.TensorSubtract(predicted, target);
+        var absDiff = Engine.TensorAbs(diff);
+        var negTwoAbs = Engine.TensorMultiplyScalar(absDiff, NumOps.FromDouble(-2.0));
+        var expPart = Engine.TensorExp(negTwoAbs);
+        var onePlusExp = Engine.TensorAddScalar(expPart, NumOps.One);
+        var logPart = Engine.TensorLog(onePlusExp);
+        var combined = Engine.TensorAdd(absDiff, logPart);
+        var result = Engine.TensorSubtractScalar(combined, NumOps.FromDouble(Math.Log(2.0)));
+        var allAxes = Enumerable.Range(0, result.Shape.Length).ToArray();
+        return Engine.ReduceMean(result, allAxes, keepDims: false);
     }
 }

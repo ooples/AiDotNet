@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors;
 
@@ -514,7 +514,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         // Weight gradients: dWeight = dOutput @ input^T — vectorized outer product
         var dOutCol = dOutput.Reshape(outSize, 1);
         var inputRow = input.Reshape(1, inSize);
-        var dWeight = Engine.TensorMatMul(dOutCol, inputRow).Reshape(weight.Shape.ToArray());
+        var dWeight = Engine.TensorMatMul(dOutCol, inputRow).Reshape(weight._shape);
         gradients[$"layer_{layerIdx}_weight"] = dWeight;
 
         // Bias gradients: dBias = dOutput
@@ -1023,7 +1023,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor.Shape.ToArray())
+        foreach (var dim in tensor._shape)
             writer.Write(dim);
         for (int i = 0; i < tensor.Length; i++)
             writer.Write(Convert.ToDouble(tensor[i]));

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
@@ -85,7 +85,7 @@ public class ViTImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
         var span = image.Data.Span;
         if (span.Length == 0) return findings;
 
-        var layout = DetermineLayout(image.Shape.ToArray(), span.Length);
+        var layout = DetermineLayout(image._shape, span.Length);
         if (layout.Height < _patchSize || layout.Width < _patchSize) return findings;
 
         // Extract patch features

@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -6,6 +6,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -249,6 +250,18 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         }
 
         InitializeParameters();
+
+        // Register after initialization so tensor references are final
+        RegisterTrainableParameter(_incomingWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outgoingWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_selfWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_incomingBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outgoingBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_selfBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_combinationWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_combinationBias, PersistentTensorRole.Biases);
+        if (_gateWeights is not null) RegisterTrainableParameter(_gateWeights, PersistentTensorRole.Weights);
+        if (_gateBias is not null) RegisterTrainableParameter(_gateBias, PersistentTensorRole.Biases);
     }
 
     private void InitializeParameters()
@@ -485,7 +498,7 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// GPU-accelerated forward pass for DirectionalGraphLayer.
     /// Uses sparse matrix operations for efficient directed graph aggregation.
     /// </summary>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -558,13 +571,19 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             gateBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_gateBias.Data.ToArray()));
         }
 
-        // Convert adjacency matrix to CSR format for sparse operations
+        // Convert adjacency matrix to CSR format — upload to GPU buffers for sparse ops
         var (adjValues, adjColIndices, adjRowPointers) = ConvertToCSR(_adjacencyMatrix);
-        using var adjCsr = new CsrGpuTensor<T>(backend, adjValues, adjColIndices, adjRowPointers, numNodes, numNodes);
+        using var adjValsBuf = backend.AllocateBuffer(adjValues);
+        using var adjColsBuf = backend.AllocateBuffer(adjColIndices.Select(x => (float)x).ToArray());
+        using var adjRowPtrBuf = backend.AllocateBuffer(adjRowPointers.Select(x => (float)x).ToArray());
+        int adjNnz = adjValues.Length;
 
         // Create transposed adjacency for outgoing aggregation
         var (adjTValues, adjTColIndices, adjTRowPointers) = ConvertToCSRTranspose(_adjacencyMatrix);
-        using var adjTCsr = new CsrGpuTensor<T>(backend, adjTValues, adjTColIndices, adjTRowPointers, numNodes, numNodes);
+        using var adjTValsBuf = backend.AllocateBuffer(adjTValues);
+        using var adjTColsBuf = backend.AllocateBuffer(adjTColIndices.Select(x => (float)x).ToArray());
+        using var adjTRowPtrBuf = backend.AllocateBuffer(adjTRowPointers.Select(x => (float)x).ToArray());
+        int adjTNnz = adjTValues.Length;
 
         // Allocate output buffer [batch, nodes, outputFeatures]
         int outputSize = batchSize * numNodes * _outputFeatures;
@@ -576,7 +595,7 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Reshape input to 3D for batch processing if needed
         var input3D = inputShape.Length == 2
-            ? input.CreateView(0, new[] { 1, numNodes, inputFeatures })
+            ? input.Reshape(new[] { 1, numNodes, inputFeatures })
             : input;
 
         for (int b = 0; b < batchSize; b++)
@@ -597,9 +616,9 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             // A @ (X @ W_in): SpMM with sparse adjacency
             using var incomingBuffer = backend.AllocateBuffer(transformedSize);
             backend.CsrSpMM(
-                adjCsr.Values, adjCsr.ColumnIndices, adjCsr.RowPointers,
+                adjValsBuf, adjColsBuf, adjRowPtrBuf,
                 xwInBuffer, incomingBuffer,
-                numNodes, inputFeatures, _outputFeatures, adjCsr.Nnz);
+                numNodes, inputFeatures, _outputFeatures, adjNnz);
 
             // Add bias: incoming + b_in
             backend.BiasAdd(incomingBuffer, inBiasBuffer, incomingBuffer, numNodes, _outputFeatures);
@@ -616,9 +635,9 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             // A^T @ (X @ W_out): SpMM with transposed sparse adjacency
             using var outgoingBuffer = backend.AllocateBuffer(transformedSize);
             backend.CsrSpMM(
-                adjTCsr.Values, adjTCsr.ColumnIndices, adjTCsr.RowPointers,
+                adjTValsBuf, adjTColsBuf, adjTRowPtrBuf,
                 xwOutBuffer, outgoingBuffer,
-                numNodes, inputFeatures, _outputFeatures, adjTCsr.Nnz);
+                numNodes, inputFeatures, _outputFeatures, adjTNnz);
 
             // Add bias: outgoing + b_out
             backend.BiasAdd(outgoingBuffer, outBiasBuffer, outgoingBuffer, numNodes, _outputFeatures);
@@ -740,7 +759,7 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             outputShape = new[] { batchSize, numNodes, _outputFeatures };
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -934,191 +953,6 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     }
 
     /// <summary>
-    /// Computes the backward pass for this Directional Graph layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to this layer's output.</param>
-    /// <returns>The gradient of the loss with respect to this layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This backward pass computes gradients for all parameters and propagates gradients to the input.
-    /// It handles the complex flow through directional aggregation, gating, and combination stages.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null || _adjForBatch == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before Backward.");
-        }
-
-        if (_lastIncoming == null || _lastOutgoing == null || _lastSelf == null || _lastCombined == null)
-        {
-            throw new InvalidOperationException("Forward pass data incomplete.");
-        }
-
-        // Reshape outputGradient to match _lastOutput shape if needed
-        var gradForBackward = outputGradient;
-        if (_originalInputShape != null && _originalInputShape.Length != _lastOutput.Shape.Length)
-        {
-            gradForBackward = outputGradient.Reshape(_lastOutput.Shape.ToArray());
-        }
-
-        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, gradForBackward);
-
-        int batchSize = _lastInput.Shape[0];
-        int numNodes = _lastInput.Shape[1];
-        int inputFeatures = _lastInput.Shape[2];
-
-        // Gradient w.r.t. combination bias: sum over batch and nodes
-        _combinationBiasGradient = Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
-
-        // Gradient w.r.t. combination weights and gatedCombined
-        // output = gatedCombined @ W_comb + b_comb
-        // dL/dW_comb = gatedCombined^T @ dL/doutput
-        // dL/dgatedCombined = dL/doutput @ W_comb^T
-        _combinationWeightsGradient = new Tensor<T>([3 * _outputFeatures, _outputFeatures]);
-        _combinationWeightsGradient.Fill(NumOps.Zero);
-
-        var gatedCombinedGradient = new Tensor<T>([batchSize, numNodes, 3 * _outputFeatures]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            var gatedCombinedBatch = _lastCombined;
-            if (_useGating && _lastGates != null)
-            {
-                gatedCombinedBatch = ApplyGatesToFeatures(_lastCombined, _lastGates, batchSize, numNodes, _outputFeatures);
-            }
-
-            var gatedSlice = Engine.TensorSlice(gatedCombinedBatch, [b, 0, 0], [1, numNodes, 3 * _outputFeatures]).Reshape([numNodes, 3 * _outputFeatures]);
-            var gradSlice = Engine.TensorSlice(activationGradient, [b, 0, 0], [1, numNodes, _outputFeatures]).Reshape([numNodes, _outputFeatures]);
-
-            // Accumulate weight gradient
-            var gatedT = Engine.TensorTranspose(gatedSlice);
-            var batchWeightGrad = Engine.TensorMatMul(gatedT, gradSlice);
-            _combinationWeightsGradient = Engine.TensorAdd(_combinationWeightsGradient, batchWeightGrad);
-
-            // Compute gradient w.r.t. gatedCombined
-            var weightsT = Engine.TensorTranspose(_combinationWeights);
-            var gatedGradBatch = Engine.TensorMatMul(gradSlice, weightsT);
-            gatedCombinedGradient = Engine.TensorSetSlice(gatedCombinedGradient, gatedGradBatch.Reshape([1, numNodes, 3 * _outputFeatures]), [b, 0, 0]);
-        }
-
-        // Gradient through gating (if enabled)
-        Tensor<T> combinedGradient;
-        if (_useGating && _lastGates != null && _gateWeights != null && _gateBias != null)
-        {
-            combinedGradient = BackwardThroughGating(gatedCombinedGradient, batchSize, numNodes);
-        }
-        else
-        {
-            combinedGradient = gatedCombinedGradient;
-        }
-
-        // Split gradient back into incoming, outgoing, self
-        var incomingGrad = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
-        var outgoingGrad = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
-        var selfGrad = new Tensor<T>([batchSize, numNodes, _outputFeatures]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int n = 0; n < numNodes; n++)
-            {
-                for (int f = 0; f < _outputFeatures; f++)
-                {
-                    incomingGrad[b, n, f] = combinedGradient[b, n, f];
-                    outgoingGrad[b, n, f] = combinedGradient[b, n, _outputFeatures + f];
-                    selfGrad[b, n, f] = combinedGradient[b, n, 2 * _outputFeatures + f];
-                }
-            }
-        }
-
-        // Gradient w.r.t. biases
-        _incomingBiasGradient = Engine.ReduceSum(incomingGrad, [0, 1], keepDims: false);
-        _outgoingBiasGradient = Engine.ReduceSum(outgoingGrad, [0, 1], keepDims: false);
-        _selfBiasGradient = Engine.ReduceSum(selfGrad, [0, 1], keepDims: false);
-
-        // Gradient w.r.t. weights and input for each path
-        _incomingWeightsGradient = new Tensor<T>([inputFeatures, _outputFeatures]);
-        _outgoingWeightsGradient = new Tensor<T>([inputFeatures, _outputFeatures]);
-        _selfWeightsGradient = new Tensor<T>([inputFeatures, _outputFeatures]);
-        _incomingWeightsGradient.Fill(NumOps.Zero);
-        _outgoingWeightsGradient.Fill(NumOps.Zero);
-        _selfWeightsGradient.Fill(NumOps.Zero);
-
-        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
-        inputGradient.Fill(NumOps.Zero);
-
-        var adjTransposed = Engine.TensorPermute(_adjForBatch, [0, 2, 1]); // Batched transpose
-
-        // Incoming path: A @ (X @ W_in)
-        // dL/dW_in = X^T @ A^T @ dL/dincoming
-        // dL/dX += A^T @ dL/dincoming @ W_in^T
-        for (int b = 0; b < batchSize; b++)
-        {
-            var inputBatch = Engine.TensorSlice(_lastInput, [b, 0, 0], [1, numNodes, inputFeatures]).Reshape([numNodes, inputFeatures]);
-            var adjTBatch = Engine.TensorSlice(adjTransposed, [b, 0, 0], [1, numNodes, numNodes]).Reshape([numNodes, numNodes]);
-            var inGradBatch = Engine.TensorSlice(incomingGrad, [b, 0, 0], [1, numNodes, _outputFeatures]).Reshape([numNodes, _outputFeatures]);
-
-            var inputT = Engine.TensorTranspose(inputBatch);
-            var adjTGrad = Engine.TensorMatMul(adjTBatch, inGradBatch);
-            var batchWeightGrad = Engine.TensorMatMul(inputT, adjTGrad);
-            _incomingWeightsGradient = Engine.TensorAdd(_incomingWeightsGradient, batchWeightGrad);
-
-            var weightsT = Engine.TensorTranspose(_incomingWeights);
-            var inputGradBatch = Engine.TensorMatMul(adjTGrad, weightsT);
-            inputGradient = Engine.TensorSetSlice(inputGradient, inputGradBatch.Reshape([1, numNodes, inputFeatures]), [b, 0, 0]);
-        }
-
-        // Outgoing path: A^T @ (X @ W_out)
-        // dL/dW_out = X^T @ A @ dL/doutgoing
-        // dL/dX += A @ dL/doutgoing @ W_out^T
-        for (int b = 0; b < batchSize; b++)
-        {
-            var inputBatch = Engine.TensorSlice(_lastInput, [b, 0, 0], [1, numNodes, inputFeatures]).Reshape([numNodes, inputFeatures]);
-            var adjBatch = Engine.TensorSlice(_adjForBatch, [b, 0, 0], [1, numNodes, numNodes]).Reshape([numNodes, numNodes]);
-            var outGradBatch = Engine.TensorSlice(outgoingGrad, [b, 0, 0], [1, numNodes, _outputFeatures]).Reshape([numNodes, _outputFeatures]);
-
-            var inputT = Engine.TensorTranspose(inputBatch);
-            var adjGrad = Engine.TensorMatMul(adjBatch, outGradBatch);
-            var batchWeightGrad = Engine.TensorMatMul(inputT, adjGrad);
-            _outgoingWeightsGradient = Engine.TensorAdd(_outgoingWeightsGradient, batchWeightGrad);
-
-            var weightsT = Engine.TensorTranspose(_outgoingWeights);
-            var inputGradBatch = Engine.TensorMatMul(adjGrad, weightsT);
-            var existingGrad = Engine.TensorSlice(inputGradient, [b, 0, 0], [1, numNodes, inputFeatures]).Reshape([numNodes, inputFeatures]);
-            var summedGrad = Engine.TensorAdd(existingGrad, inputGradBatch);
-            inputGradient = Engine.TensorSetSlice(inputGradient, summedGrad.Reshape([1, numNodes, inputFeatures]), [b, 0, 0]);
-        }
-
-        // Self path: X @ W_self
-        // dL/dW_self = X^T @ dL/dself
-        // dL/dX += dL/dself @ W_self^T
-        for (int b = 0; b < batchSize; b++)
-        {
-            var inputBatch = Engine.TensorSlice(_lastInput, [b, 0, 0], [1, numNodes, inputFeatures]).Reshape([numNodes, inputFeatures]);
-            var selfGradBatch = Engine.TensorSlice(selfGrad, [b, 0, 0], [1, numNodes, _outputFeatures]).Reshape([numNodes, _outputFeatures]);
-
-            var inputT = Engine.TensorTranspose(inputBatch);
-            var batchWeightGrad = Engine.TensorMatMul(inputT, selfGradBatch);
-            _selfWeightsGradient = Engine.TensorAdd(_selfWeightsGradient, batchWeightGrad);
-
-            var weightsT = Engine.TensorTranspose(_selfWeights);
-            var inputGradBatch = Engine.TensorMatMul(selfGradBatch, weightsT);
-            var existingGrad = Engine.TensorSlice(inputGradient, [b, 0, 0], [1, numNodes, inputFeatures]).Reshape([numNodes, inputFeatures]);
-            var summedGrad = Engine.TensorAdd(existingGrad, inputGradBatch);
-            inputGradient = Engine.TensorSetSlice(inputGradient, summedGrad.Reshape([1, numNodes, inputFeatures]), [b, 0, 0]);
-        }
-
-        // Reshape to match original input shape
-        if (_originalInputShape != null && _originalInputShape.Length != inputGradient.Shape.Length)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
     /// Computes gradients through the gating mechanism.
     /// </summary>
     private Tensor<T> BackwardThroughGating(Tensor<T> gatedCombinedGradient, int batchSize, int numNodes)
@@ -1292,21 +1126,21 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
-        var gIncomingWeights = _incomingWeightsGradient != null ? (_incomingWeightsGradient is not null ? Vector<T>.FromMemory(_incomingWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_incomingWeights.Length);
-        var gOutgoingWeights = _outgoingWeightsGradient != null ? (_outgoingWeightsGradient is not null ? Vector<T>.FromMemory(_outgoingWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outgoingWeights.Length);
-        var gSelfWeights = _selfWeightsGradient != null ? (_selfWeightsGradient is not null ? Vector<T>.FromMemory(_selfWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_selfWeights.Length);
-        var gCombinationWeights = _combinationWeightsGradient != null ? (_combinationWeightsGradient is not null ? Vector<T>.FromMemory(_combinationWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_combinationWeights.Length);
-        var gIncomingBias = _incomingBiasGradient != null ? (_incomingBiasGradient is not null ? Vector<T>.FromMemory(_incomingBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_incomingBias.Length);
-        var gOutgoingBias = _outgoingBiasGradient != null ? (_outgoingBiasGradient is not null ? Vector<T>.FromMemory(_outgoingBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outgoingBias.Length);
-        var gSelfBias = _selfBiasGradient != null ? (_selfBiasGradient is not null ? Vector<T>.FromMemory(_selfBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_selfBias.Length);
-        var gCombinationBias = _combinationBiasGradient != null ? (_combinationBiasGradient is not null ? Vector<T>.FromMemory(_combinationBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_combinationBias.Length);
+        var gIncomingWeights = _incomingWeightsGradient != null ? new Vector<T>(_incomingWeightsGradient.ToArray()) : new Vector<T>(_incomingWeights.Length);
+        var gOutgoingWeights = _outgoingWeightsGradient != null ? new Vector<T>(_outgoingWeightsGradient.ToArray()) : new Vector<T>(_outgoingWeights.Length);
+        var gSelfWeights = _selfWeightsGradient != null ? new Vector<T>(_selfWeightsGradient.ToArray()) : new Vector<T>(_selfWeights.Length);
+        var gCombinationWeights = _combinationWeightsGradient != null ? new Vector<T>(_combinationWeightsGradient.ToArray()) : new Vector<T>(_combinationWeights.Length);
+        var gIncomingBias = _incomingBiasGradient != null ? new Vector<T>(_incomingBiasGradient.ToArray()) : new Vector<T>(_incomingBias.Length);
+        var gOutgoingBias = _outgoingBiasGradient != null ? new Vector<T>(_outgoingBiasGradient.ToArray()) : new Vector<T>(_outgoingBias.Length);
+        var gSelfBias = _selfBiasGradient != null ? new Vector<T>(_selfBiasGradient.ToArray()) : new Vector<T>(_selfBias.Length);
+        var gCombinationBias = _combinationBiasGradient != null ? new Vector<T>(_combinationBiasGradient.ToArray()) : new Vector<T>(_combinationBias.Length);
 
         var parts = new List<Vector<T>> { gIncomingWeights, gOutgoingWeights, gSelfWeights, gCombinationWeights, gIncomingBias, gOutgoingBias, gSelfBias, gCombinationBias };
 
         if (_useGating && _gateWeights != null && _gateBias != null)
         {
-            parts.Add(_gateWeightsGradient != null ? (_gateWeightsGradient is not null ? Vector<T>.FromMemory(_gateWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_gateWeights.Length));
-            parts.Add(_gateBiasGradient != null ? (_gateBiasGradient is not null ? Vector<T>.FromMemory(_gateBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_gateBias.Length));
+            parts.Add(_gateWeightsGradient != null ? new Vector<T>(_gateWeightsGradient.ToArray()) : new Vector<T>(_gateWeights.Length));
+            parts.Add(_gateBiasGradient != null ? new Vector<T>(_gateBiasGradient.ToArray()) : new Vector<T>(_gateBias.Length));
         }
 
         return Vector<T>.Concatenate(parts.ToArray());
@@ -1413,121 +1247,5 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         _combinationBiasGradient = null;
         _gateWeightsGradient = null;
         _gateBiasGradient = null;
-    }
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => true;
-
-    /// <inheritdoc/>
-    /// <summary>
-    /// Exports the layer's forward pass as a JIT-compilable computation graph.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the directional graph convolution.</returns>
-    /// <remarks>
-    /// <para>
-    /// The computation graph performs directional graph convolution:
-    /// 1. Incoming aggregation: A @ (X @ W_in) + b_in
-    /// 2. Outgoing aggregation: A^T @ (X @ W_out) + b_out
-    /// 3. Self transformation: X @ W_self + b_self
-    /// 4. Concatenate all three representations
-    /// 5. Apply gating if enabled
-    /// 6. Final combination: combined @ W_comb + b_comb
-    /// 7. Apply activation function
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic inputs for node features [batch, nodes, features]
-        int numNodes = InputShape[0];
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "node_features");
-        inputNodes.Add(inputNode);
-
-        // Create symbolic input for adjacency matrix [batch, nodes, nodes]
-        var symbolicAdj = new Tensor<T>([1, numNodes, numNodes]);
-        var adjNode = Autodiff.TensorOperations<T>.Variable(symbolicAdj, "adjacency_matrix");
-        inputNodes.Add(adjNode);
-
-        // Export learnable parameters as constants
-        var incomingWeightsNode = Autodiff.TensorOperations<T>.Constant(_incomingWeights, "incoming_weights");
-        var outgoingWeightsNode = Autodiff.TensorOperations<T>.Constant(_outgoingWeights, "outgoing_weights");
-        var selfWeightsNode = Autodiff.TensorOperations<T>.Constant(_selfWeights, "self_weights");
-        var combinationWeightsNode = Autodiff.TensorOperations<T>.Constant(_combinationWeights, "combination_weights");
-
-        var incomingBiasNode = Autodiff.TensorOperations<T>.Constant(_incomingBias, "incoming_bias");
-        var outgoingBiasNode = Autodiff.TensorOperations<T>.Constant(_outgoingBias, "outgoing_bias");
-        var selfBiasNode = Autodiff.TensorOperations<T>.Constant(_selfBias, "self_bias");
-        var combinationBiasNode = Autodiff.TensorOperations<T>.Constant(_combinationBias, "combination_bias");
-
-        // Step 1: Incoming aggregation: A @ (X @ W_in) + b_in
-        var xwIn = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, incomingWeightsNode);
-        var incomingAggregated = Autodiff.TensorOperations<T>.BatchMatrixMultiply(adjNode, xwIn);
-        var incomingWithBias = Autodiff.TensorOperations<T>.Add(incomingAggregated, incomingBiasNode);
-
-        // Step 2: Outgoing aggregation: A^T @ (X @ W_out) + b_out
-        var adjTransposed = Autodiff.TensorOperations<T>.Transpose(adjNode);
-        var xwOut = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, outgoingWeightsNode);
-        var outgoingAggregated = Autodiff.TensorOperations<T>.BatchMatrixMultiply(adjTransposed, xwOut);
-        var outgoingWithBias = Autodiff.TensorOperations<T>.Add(outgoingAggregated, outgoingBiasNode);
-
-        // Step 3: Self transformation: X @ W_self + b_self
-        var selfTransformed = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, selfWeightsNode);
-        var selfWithBias = Autodiff.TensorOperations<T>.Add(selfTransformed, selfBiasNode);
-
-        // Step 4: Concatenate incoming, outgoing, and self features
-        var combinedList = new List<ComputationNode<T>> { incomingWithBias, outgoingWithBias, selfWithBias };
-        var combined = Autodiff.TensorOperations<T>.Concat(combinedList, axis: -1);
-
-        ComputationNode<T> gatedCombined;
-
-        // Step 5: Apply gating if enabled
-        if (_useGating && _gateWeights != null && _gateBias != null)
-        {
-            var gateWeightsNode = Autodiff.TensorOperations<T>.Constant(_gateWeights, "gate_weights");
-            var gateBiasNode = Autodiff.TensorOperations<T>.Constant(_gateBias, "gate_bias");
-
-            // Compute gates: combined @ W_gate + b_gate
-            var gateLogits = Autodiff.TensorOperations<T>.MatrixMultiply(combined, gateWeightsNode);
-            var gateLogitsWithBias = Autodiff.TensorOperations<T>.Add(gateLogits, gateBiasNode);
-
-            // Apply sigmoid to get gates
-            var gates = Autodiff.TensorOperations<T>.Sigmoid(gateLogitsWithBias);
-
-            // For JIT, we simplify gating by using element-wise multiplication of broadcasted gates
-            // This is an approximation that applies gates uniformly across features in each group
-            gatedCombined = Autodiff.TensorOperations<T>.ElementwiseMultiply(combined, gates);
-        }
-        else
-        {
-            gatedCombined = combined;
-        }
-
-        // Step 6: Final combination: gatedCombined @ W_comb + b_comb
-        var output = Autodiff.TensorOperations<T>.MatrixMultiply(gatedCombined, combinationWeightsNode);
-        output = Autodiff.TensorOperations<T>.Add(output, combinationBiasNode);
-
-        // Step 7: Apply activation function if needed
-        if (ScalarActivation is not null && ScalarActivation is not IdentityActivation<T>)
-        {
-            if (ScalarActivation.SupportsJitCompilation)
-            {
-                output = ScalarActivation.ApplyToGraph(output);
-            }
-            else
-            {
-                // Fallback: apply activation directly to values
-                var activated = ScalarActivation.Activate(output.Value);
-                output = Autodiff.TensorOperations<T>.Constant(activated, "activated_output");
-            }
-        }
-
-        return output;
     }
 }

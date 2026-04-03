@@ -517,46 +517,6 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through the LoRETTA adapter.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass computes gradients for all TT cores and propagates gradients
-    /// back through the tensor-train contraction.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where learning happens for LoRETTA!
-    ///
-    /// The backward pass:
-    /// 1. Backpropagate through base layer
-    /// 2. Backpropagate through tensor-train cores
-    /// 3. Compute gradients for each core
-    /// 4. Combine input gradients from both paths
-    ///
-    /// This is more complex than standard LoRA because we need to backpropagate through
-    /// multiple cores, but the principle is the same: figure out how each parameter
-    /// contributed to the error.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Backward through base layer
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        // Backward through tensor-train
-        Tensor<T> ttInputGrad = ComputeTensorTrainBackward(outputGradient);
-
-        // Sum input gradients
-        Tensor<T> inputGrad = Engine.TensorAdd(baseInputGrad, ttInputGrad);
-
-        // Update parameter gradients vector
-        UpdateParameterGradientsFromCores();
-
-        return inputGrad;
-    }
-
-    /// <summary>
     /// Computes the backward pass through the tensor-train decomposition.
     /// </summary>
     /// <param name="outputGradient">Gradient from the output.</param>
@@ -567,7 +527,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         _ttCoreGradients = new List<Tensor<T>>();
         for (int k = 0; k < _numCores; k++)
         {
-            _ttCoreGradients.Add(new Tensor<T>(_ttCores[k].Shape.ToArray()));
+            _ttCoreGradients.Add(new Tensor<T>(_ttCores[k]._shape));
         }
 
         int batchSize = outputGradient.Shape[0];

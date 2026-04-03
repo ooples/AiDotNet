@@ -343,73 +343,8 @@ public class AdvancedAlgebraLayerTests
 
     #region Training Integration Tests
 
-    [Fact]
-    public void OctonionLinearLayer_ForwardBackward_ProducesGradients()
-    {
-        // Arrange
-        var layer = new OctonionLinearLayer<double>(2, 1);
-        var input = new Tensor<double>([1, 16]); // 2 octonions * 8 components
-        for (int i = 0; i < 16; i++) input[0, i] = 0.1 * (i + 1);
 
-        var outputGrad = new Tensor<double>([1, 8]); // 1 octonion * 8 components
-        for (int i = 0; i < 8; i++) outputGrad[0, i] = 1.0;
 
-        // Act
-        layer.Forward(input);
-        var inputGrad = layer.Backward(outputGrad);
-
-        // Assert
-        Assert.NotNull(inputGrad);
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-    }
-
-    [Fact]
-    public void HyperbolicLinearLayer_ForwardBackward_ProducesGradients()
-    {
-        // Arrange
-        var layer = new HyperbolicLinearLayer<double>(5, 3);
-        var input = new Tensor<double>([2, 5]);
-        for (int b = 0; b < 2; b++)
-            for (int i = 0; i < 5; i++)
-                input[b, i] = 0.01 * (i + 1);
-
-        var outputGrad = new Tensor<double>([2, 3]);
-        for (int b = 0; b < 2; b++)
-            for (int o = 0; o < 3; o++)
-                outputGrad[b, o] = 1.0;
-
-        // Act
-        layer.Forward(input);
-        var inputGrad = layer.Backward(outputGrad);
-
-        // Assert
-        Assert.NotNull(inputGrad);
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-    }
-
-    [Fact]
-    public void SparseLinearLayer_ForwardBackward_ProducesGradients()
-    {
-        // Arrange
-        var layer = new SparseLinearLayer<double>(10, 5, sparsity: 0.5);
-        var input = new Tensor<double>([2, 10]);
-        for (int b = 0; b < 2; b++)
-            for (int i = 0; i < 10; i++)
-                input[b, i] = 0.1 * (i + 1);
-
-        var outputGrad = new Tensor<double>([2, 5]);
-        for (int b = 0; b < 2; b++)
-            for (int o = 0; o < 5; o++)
-                outputGrad[b, o] = 1.0;
-
-        // Act
-        layer.Forward(input);
-        var inputGrad = layer.Backward(outputGrad);
-
-        // Assert
-        Assert.NotNull(inputGrad);
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-    }
 
     #endregion
 
@@ -555,33 +490,6 @@ public class AdvancedAlgebraLayerTests
         Assert.True(layer.SupportsJitCompilation);
     }
 
-    [Fact]
-    public void InstanceNormalizationLayer_ForwardBackward_ProducesGradients()
-    {
-        // Arrange
-        var layer = new InstanceNormalizationLayer<double>(4);
-        var input = new Tensor<double>([2, 4, 3, 3]); // batch=2, channels=4, 3x3 spatial
-        for (int b = 0; b < 2; b++)
-            for (int c = 0; c < 4; c++)
-                for (int h = 0; h < 3; h++)
-                    for (int w = 0; w < 3; w++)
-                        input[b, c, h, w] = 0.1 * (c + 1) + 0.01 * h;
-
-        var outputGrad = new Tensor<double>([2, 4, 3, 3]);
-        for (int b = 0; b < 2; b++)
-            for (int c = 0; c < 4; c++)
-                for (int h = 0; h < 3; h++)
-                    for (int w = 0; w < 3; w++)
-                        outputGrad[b, c, h, w] = 1.0;
-
-        // Act
-        layer.Forward(input);
-        var inputGrad = layer.Backward(outputGrad);
-
-        // Assert
-        Assert.NotNull(inputGrad);
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-    }
 
     [Fact]
     public void InstanceNormalizationLayer_NonAffine_HasNoParameters()

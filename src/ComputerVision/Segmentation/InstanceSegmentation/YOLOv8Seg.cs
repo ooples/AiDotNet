@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.Enums;
@@ -191,10 +191,15 @@ public class YOLOv8Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode.");
 
-        var predicted = Forward(input);
-        var lossGradient = LossFunction.ComputeGradient(predicted, expectedOutput);
-        BackwardPass(lossGradient);
-        _optimizer?.UpdateParameters(Layers);
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     #endregion
@@ -240,7 +245,7 @@ public class YOLOv8Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         for (int i = 0; i < input.Length; i++)
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
 
@@ -253,14 +258,6 @@ public class YOLOv8Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result);
         return result;
-    }
-
-    private void BackwardPass(Tensor<T> gradient)
-    {
-        if (!_useNativeMode || Layers.Count == 0) return;
-        if (gradient.Rank == 3) gradient = AddBatchDimension(gradient);
-        for (int i = Layers.Count - 1; i >= 0; i--)
-            gradient = Layers[i].Backward(gradient);
     }
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)

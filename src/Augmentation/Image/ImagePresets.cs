@@ -1,4 +1,4 @@
-namespace AiDotNet.Augmentation.Image;
+﻿namespace AiDotNet.Augmentation.Image;
 
 /// <summary>
 /// Preset preprocessing configurations for common models.
@@ -24,7 +24,7 @@ public static class ImagePresets<T>
                     .CenterCrop(224, 224);
         }
 
-        pipeline.ToTensor()
+        pipeline
                 .Normalize(
                     new[] { 0.485, 0.456, 0.406 },
                     new[] { 0.229, 0.224, 0.225 });
@@ -39,7 +39,7 @@ public static class ImagePresets<T>
     {
         return new ImagePreprocessor<T>()
             .Add(new ResizeWithAspectRatio<T>(targetSize, targetSize))
-            .ToTensor()
+            
             .Normalize(
                 new[] { 0.485, 0.456, 0.406 },
                 new[] { 0.229, 0.224, 0.225 });
@@ -52,7 +52,7 @@ public static class ImagePresets<T>
     {
         return new ImagePreprocessor<T>()
             .Resize(targetSize, targetSize)
-            .ToTensor()
+            
             .Normalize(
                 new[] { 0.485, 0.456, 0.406 },
                 new[] { 0.229, 0.224, 0.225 });
@@ -66,7 +66,7 @@ public static class ImagePresets<T>
         return new ImagePreprocessor<T>()
             .Resize(224, 224)
             .CenterCrop(224, 224)
-            .ToTensor()
+            
             .Normalize(
                 new[] { 0.48145466, 0.4578275, 0.40821073 },
                 new[] { 0.26862954, 0.26130258, 0.27577711 });
@@ -80,7 +80,7 @@ public static class ImagePresets<T>
         return new ImagePreprocessor<T>()
             .Resize(imageSize, imageSize)
             .CenterCrop(imageSize, imageSize)
-            .ToTensor()
+            
             .Normalize(
                 new[] { 0.485, 0.456, 0.406 },
                 new[] { 0.229, 0.224, 0.225 });
@@ -94,7 +94,7 @@ public static class ImagePresets<T>
         return new ImagePreprocessor<T>()
             .Add(new LongestMaxSize<T>(imageSize))
             .Add(new PadToSquare<T>())
-            .ToTensor()
+            
             .Normalize(
                 new[] { 0.485, 0.456, 0.406 },
                 new[] { 0.229, 0.224, 0.225 });

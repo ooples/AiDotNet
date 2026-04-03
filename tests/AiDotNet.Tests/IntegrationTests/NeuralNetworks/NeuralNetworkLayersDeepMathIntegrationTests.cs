@@ -137,28 +137,6 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
             $"Low-dimension sin should have higher magnitude: |sin(1)|={pe_1_0} vs |sin(0.01)|={pe_1_2}");
     }
 
-    [Fact]
-    public void PositionalEncoding_Backward_PassesGradientThrough()
-    {
-        // Since positional encoding just adds a constant, backward should pass gradient through unchanged
-        int embeddingSize = 4;
-        var layer = new PositionalEncodingLayer<double>(maxSequenceLength: 10, embeddingSize: embeddingSize);
-
-        var input = new Tensor<double>(new[] { 2, embeddingSize });
-        layer.Forward(input);
-
-        var grad = new Tensor<double>(new[] { 2, embeddingSize });
-        grad[0, 0] = 1.0;
-        grad[0, 1] = 2.0;
-        grad[1, 2] = 3.0;
-
-        var inputGrad = layer.Backward(grad);
-
-        // Input gradient should equal output gradient (addition of constant)
-        Assert.Equal(1.0, NumOps<double>.ToDouble(inputGrad[0, 0]), Tol);
-        Assert.Equal(2.0, NumOps<double>.ToDouble(inputGrad[0, 1]), Tol);
-        Assert.Equal(3.0, NumOps<double>.ToDouble(inputGrad[1, 2]), Tol);
-    }
 
     // ========================================================================
     // LayerNormalization - Forward pass math verification

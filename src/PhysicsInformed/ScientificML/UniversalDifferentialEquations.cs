@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -180,22 +180,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             }
 
             return output;
-        }
-
-        /// <summary>
-        /// Performs a backward pass through the network (backpropagation).
-        /// </summary>
-        /// <param name="outputGradient">Gradient of the loss with respect to network output.</param>
-        /// <returns>Gradient of the loss with respect to input.</returns>
-        public Tensor<T> Backward(Tensor<T> outputGradient)
-        {
-            Tensor<T> gradient = outputGradient;
-            for (int i = Layers.Count - 1; i >= 0; i--)
-            {
-                gradient = Layers[i].Backward(gradient);
-            }
-
-            return gradient;
         }
 
         /// <summary>
@@ -419,8 +403,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
 
             // Step 3: Backward pass - compute gradients
             var outputGradient = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-            Backward(outputGradientTensor);
+            var outputGradientTensor = new Tensor<T>(prediction._shape, outputGradient);
 
             // Step 4: Update parameters
             _optimizer.UpdateParameters(Layers);
@@ -480,7 +463,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// Indicates whether this model supports training.
         /// </summary>
         public override bool SupportsTraining => true;
-        public override bool SupportsJitCompilation => false;
 
         private void ValidateState(T[] state, string paramName)
         {

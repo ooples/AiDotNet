@@ -629,30 +629,8 @@ public class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
                 "without modelPath parameter to train natively.");
         }
 
-        // Set training mode
         SetTrainingMode(true);
-
-        // Forward pass
-        var output = Predict(input);
-
-        // Compute loss and gradients
-        var loss = LossFunction.CalculateLoss(output.ToVector(), expected.ToVector());
-        var gradient = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-
-        // Backward pass
-        var gradientTensor = new Tensor<T>([gradient.Length]);
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            gradientTensor[i] = gradient[i];
-        }
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradientTensor = Layers[i].Backward(gradientTensor);
-        }
-
-        // Update parameters using optimizer
-        _optimizer?.UpdateParameters(Layers);
+        TrainWithTape(input, expected);
 
         // Set inference mode
         SetTrainingMode(false);

@@ -321,7 +321,7 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         }
 
         // Create ONNX input tensor
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = _onnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -403,15 +403,14 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
             throw new InvalidOperationException("Training is not supported in ONNX mode. Use native mode constructor for training.");
         }
 
-        var predicted = Predict(input);
-        var lossGradient = predicted.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
-
-        BackwardPass(lossGradient);
-
-        if (_optimizer != null)
+        SetTrainingMode(true);
+        try
         {
-            _optimizer.UpdateParameters(Layers);
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
         }
     }
 
@@ -574,19 +573,6 @@ public class DepthAnythingV2<T> : NeuralNetworkBase<T>
         var result = new Tensor<T>([c, h, w]);
         tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
-    }
-
-    private void BackwardPass(Tensor<T> gradient)
-    {
-        if (!_useNativeMode || Layers.Count == 0)
-        {
-            return;
-        }
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
     }
 
     #endregion

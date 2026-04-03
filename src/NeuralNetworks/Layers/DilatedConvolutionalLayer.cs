@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 8, 8", TestConstructorArgs = "1, 2, 3, 8, 8, 2, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class DilatedConvolutionalLayer<T> : LayerBase<T>
+public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The number of channels in the input data.
@@ -197,6 +197,8 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// weights on one side and negative weights on the other.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _kernels;
 
     /// <summary>
@@ -217,6 +219,8 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// Think of biases like adjusting the baseline sensitivity of each pattern detector.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -312,8 +316,8 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _biasGradients;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuOutput;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuOutput;
     private int[]? _gpuOriginalInputShape;
     private bool _gpuAddedBatchDimension;
     private FusedActivationType _gpuActivationType;
@@ -346,7 +350,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_kernelGradients == null || _biasGradients == null) return new Vector<T>(ParameterCount);
-        return Vector<T>.Concatenate(Vector<T>.FromMemory(_kernelGradients.Data), Vector<T>.FromMemory(_biasGradients.Data));
+        return Vector<T>.Concatenate(new Vector<T>(_kernelGradients.ToArray()), new Vector<T>(_biasGradients.ToArray()));
     }
 
     public override void ClearGradients() { base.ClearGradients(); _kernelGradients = null; _biasGradients = null; }
@@ -635,7 +639,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
     /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.</para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -660,12 +664,12 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         bool addedBatchDimension = false;
 
         // Reshape input to 4D [B, C, H, W] for convolution
-        IGpuTensor<T> input4D;
+        Tensor<T> input4D;
         if (rank == 3)
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]
             addedBatchDimension = true;
-            input4D = input.CreateView(0, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+            input4D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
         }
         else if (rank == 4)
         {
@@ -680,7 +684,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
             {
                 flatBatch *= input.Shape[d];
             }
-            input4D = input.CreateView(0, [flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
+            input4D = input.Reshape([flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
         // Validate input channels
@@ -726,313 +730,16 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
             outputShape[originalInputShape.Length - 3] = _outputDepth;
             outputShape[originalInputShape.Length - 2] = result.Shape[2];
             outputShape[originalInputShape.Length - 1] = result.Shape[3];
-            return result.CreateView(0, outputShape);
+            return result.Reshape(outputShape);
         }
 
         if (addedBatchDimension)
         {
             // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
-            return result.CreateView(0, [_outputDepth, result.Shape[2], result.Shape[3]]);
+            return result.Reshape([_outputDepth, result.Shape[2], result.Shape[3]]);
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the convolutional layer to compute gradients.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass (backpropagation) of the dilated convolutional layer.
-    /// It computes the gradients of the loss with respect to the layer's weights, biases, and inputs.
-    /// These gradients are used to update the parameters during training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where the layer learns from its mistakes during training.
-    ///
-    /// During the backward pass:
-    /// 1. The layer receives information about how its output contributed to errors
-    /// 2. It calculates three things:
-    ///    - How to adjust each filter value (kernel gradients)
-    ///    - How to adjust each bias value (bias gradients)
-    ///    - How the error flows back to the previous layer (input gradients)
-    /// 3. These gradients are used to update the filters and biases
-    ///
-    /// The dilation is also taken into account when calculating these gradients,
-    /// ensuring that the learning process understands the dilated nature of the convolution.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        // Handle any-rank gradient input by reshaping to 4D to match _lastOutput
-        Tensor<T> gradient4D;
-        int gradRank = outputGradient.Shape.Length;
-        if (gradRank == 3)
-        {
-            // 3D gradient [C, H, W] -> 4D [1, C, H, W]
-            gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
-        }
-        else if (gradRank == 4)
-        {
-            gradient4D = outputGradient;
-        }
-        else
-        {
-            // Higher-rank: flatten leading dimensions
-            int flatBatch = 1;
-            for (int d = 0; d < gradRank - 3; d++)
-                flatBatch *= outputGradient.Shape[d];
-            gradient4D = outputGradient.Reshape(flatBatch, outputGradient.Shape[gradRank - 3],
-                outputGradient.Shape[gradRank - 2], outputGradient.Shape[gradRank - 1]);
-        }
-
-        // Apply activation derivative (both _lastOutput and gradient4D are in NCHW format)
-        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, gradient4D);
-
-        var strideArr = new int[] { _stride, _stride };
-        var paddingArr = new int[] { _padding, _padding };
-        var dilationArr = new int[] { _dilation, _dilation };
-
-        // Calculate bias gradient: sum over batch, height, width (axes 0, 2, 3 in NCHW)
-        _biasGradients = Engine.ReduceSum(delta, new[] { 0, 2, 3 }, keepDims: false);
-
-        // Calculate input gradient using Engine (NCHW format)
-        var inputGradient = Engine.Conv2DBackwardInput(delta, _kernels, _lastInput.Shape.ToArray(), strideArr, paddingArr, dilationArr);
-
-        // Calculate kernel gradient using Engine
-        _kernelGradients = Engine.Conv2DBackwardKernel(delta, _lastInput, _kernels.Shape.ToArray(), strideArr, paddingArr, dilationArr);
-
-        // Restore original input shape for higher-rank tensors
-        if (_originalInputShape != null && _originalInputShape.Length > 4)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        if (_addedBatchDimension && _originalInputShape != null)
-        {
-            // 3D input [C, H, W] should produce 3D gradient [C, H, W]
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients using DilatedConv2D operation.
-    /// The layer uses NHWC format [batch, H, W, channels], while TensorOperations uses NCHW format,
-    /// so format conversion is performed.
-    /// </para>
-    /// <para>
-    /// Production-grade pattern: Uses cached _lastOutput for activation derivative computation,
-    /// Engine.TensorMultiply for GPU/CPU acceleration, and minimal autodiff graph.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Production-grade: Compute activation derivative using cached output
-        Tensor<T> preActivationGradient;
-        if (VectorActivation != null)
-        {
-            var actDeriv = VectorActivation.Derivative(_lastOutput);
-            preActivationGradient = Engine.TensorMultiply(outputGradient, actDeriv);
-        }
-        else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
-        {
-            var activation = ScalarActivation;
-            var activationDerivative = _lastOutput.Transform((x, _) => activation.Derivative(x));
-            preActivationGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
-        }
-        else
-        {
-            preActivationGradient = outputGradient;
-        }
-
-        // Convert from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W] using Tensor.Transpose
-        var inputNCHW = _lastInput.Transpose([0, 3, 1, 2]);
-        var preActivationGradientNCHW = preActivationGradient.Transpose([0, 3, 1, 2]);
-
-        // Create computation nodes
-        var inputNode = Autodiff.TensorOperations<T>.Variable(inputNCHW, "input", requiresGradient: true);
-        var kernelNode = Autodiff.TensorOperations<T>.Variable(_kernels, "kernel", requiresGradient: true);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(_biases, "bias", requiresGradient: true);
-
-        // Build minimal autodiff graph for linear operations (activation derivative already applied)
-        var preActivationNode = Autodiff.TensorOperations<T>.DilatedConv2D(
-            inputNode,
-            kernelNode,
-            biasNode,
-            stride: new int[] { _stride, _stride },
-            padding: new int[] { _padding, _padding },
-            dilation: new int[] { _dilation, _dilation });
-
-        // Set gradient on pre-activation node (activation derivative already applied)
-        preActivationNode.Gradient = preActivationGradientNCHW;
-
-        // Inline topological sort and backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((preActivationNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract gradients
-        if (kernelNode.Gradient != null)
-            _kernelGradients = kernelNode.Gradient;
-
-        if (biasNode.Gradient != null)
-            _biasGradients = biasNode.Gradient;
-
-        // Convert input gradient from NCHW back to NHWC using Transpose
-        var inputGradientNCHW = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-        return inputGradientNCHW.Transpose([0, 2, 3, 1]);
-    }
-
-    /// <summary>
-    /// Performs a GPU-resident backward pass for dilated convolution.
-    /// </summary>
-    /// <param name="outputGradient">GPU-resident gradient from subsequent layer.</param>
-    /// <returns>GPU-resident gradient with respect to input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (_gpuInput == null || _gpuOutput == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        // Handle shape restoration if batch dimension was added
-        IGpuTensor<T> grad4D = outputGradient;
-        if (_gpuAddedBatchDimension && outputGradient.Shape.Length == 3)
-        {
-            grad4D = outputGradient.CreateView(0, [1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]]);
-        }
-        else if (outputGradient.Shape.Length > 4 && _gpuOriginalInputShape != null)
-        {
-            // Flatten higher-rank gradient
-            int flatBatch = 1;
-            for (int d = 0; d < outputGradient.Shape.Length - 3; d++)
-                flatBatch *= outputGradient.Shape[d];
-            grad4D = outputGradient.CreateView(0, [flatBatch, outputGradient.Shape[^3], outputGradient.Shape[^2], outputGradient.Shape[^1]]);
-        }
-
-        // Step 1: Backprop through activation
-        IGpuTensor<T> activationGrad;
-        if (_gpuActivationType == FusedActivationType.None)
-        {
-            activationGrad = grad4D;
-        }
-        else
-        {
-            activationGrad = _gpuActivationType switch
-            {
-                FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(grad4D, _gpuOutput),
-                FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(grad4D, _gpuOutput),
-                FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(grad4D, _gpuOutput),
-                FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(grad4D, _gpuOutput, 0.01f),
-                FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(grad4D, _gpuOutput),
-                _ => grad4D
-            };
-        }
-
-        // Step 2: Compute bias gradient - sum over batch and spatial dimensions
-        var biasGradGpu = gpuEngine.Conv2DBackwardBiasGpu<T>(activationGrad);
-        _biasGradients = biasGradGpu.ToTensor();
-
-        // Step 3: Compute kernel gradient
-        var kernelGradGpu = gpuEngine.Conv2DBackwardKernelGpu<T>(
-            activationGrad,
-            _gpuInput,
-            _kernels.Shape.ToArray(),
-            new[] { _stride, _stride },
-            new[] { _padding, _padding },
-            new[] { _dilation, _dilation });
-        _kernelGradients = kernelGradGpu.ToTensor();
-
-        // Step 4: Compute input gradient
-        var inputGrad = gpuEngine.Conv2DBackwardInputGpu<T>(
-            activationGrad,
-            _kernels,
-            _gpuInput.Shape.ToArray(),
-            new[] { _stride, _stride },
-            new[] { _padding, _padding },
-            new[] { _dilation, _dilation });
-
-        // Restore original shape if needed
-        if (_gpuAddedBatchDimension && _gpuOriginalInputShape != null)
-        {
-            return inputGrad.CreateView(0, _gpuOriginalInputShape);
-        }
-        if (_gpuOriginalInputShape != null && _gpuOriginalInputShape.Length > 4)
-        {
-            return inputGrad.CreateView(0, _gpuOriginalInputShape);
-        }
-
-        return inputGrad;
     }
 
     /// <summary>
@@ -1202,7 +909,7 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        return Vector<T>.Concatenate(Vector<T>.FromMemory(_kernels.Data), Vector<T>.FromMemory(_biases.Data));
+        return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
     }
 
     /// <summary>
@@ -1287,48 +994,5 @@ public class DilatedConvolutionalLayer<T> : LayerBase<T>
         _gpuOriginalInputShape = null;
         _gpuAddedBatchDimension = false;
         _gpuActivationType = FusedActivationType.None;
-    }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (_kernels == null || _biases == null)
-            throw new InvalidOperationException("Layer weights not initialized.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        var kernelNode = TensorOperations<T>.Constant(_kernels, "kernel");
-        var biasNode = TensorOperations<T>.Constant(_biases, "bias");
-
-        var dilatedConvNode = TensorOperations<T>.DilatedConv2D(inputNode, kernelNode, biasNode,
-            stride: new[] { _stride, _stride }, padding: new[] { _padding, _padding }, dilation: new[] { _dilation, _dilation });
-
-        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
-        {
-            return ScalarActivation.ApplyToGraph(dilatedConvNode);
-        }
-
-        return dilatedConvNode;
-    }
-
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            if (_kernels == null || _biases == null)
-                return false;
-
-            if (ScalarActivation != null)
-                return ScalarActivation.SupportsJitCompilation;
-
-            return true;
-        }
     }
 }

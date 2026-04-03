@@ -1,6 +1,6 @@
-using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.SyntheticData;
@@ -78,301 +78,6 @@ public static class TapeLayerBridge<T>
     }
 
     /// <summary>
-    /// Computes the gradient of a layer sequence's output with respect to its input
-    /// using GradientTape automatic differentiation.
-    /// </summary>
-    /// <param name="input">The input tensor to compute gradients for.</param>
-    /// <param name="layers">The discriminator layers (FullyConnectedLayer + optional DropoutLayer).</param>
-    /// <param name="activation">The activation function applied between hidden layers.</param>
-    /// <param name="applyActivationOnLast">Whether to apply activation on the final layer output.</param>
-    /// <param name="leakyAlpha">The alpha parameter for LeakyReLU (default 0.2).</param>
-    /// <returns>The gradient tensor of the same shape as input, representing dOutput/dInput.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method replaces the manual ManualLinearBackward pattern used in GAN generators.
-    /// It creates a temporary GradientTape, performs a forward pass through the layers
-    /// using TensorOperations (which records to the tape), then computes the gradient
-    /// automatically via reverse-mode automatic differentiation.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> Instead of manually calculating how each layer affects the gradient,
-    /// we let the GradientTape do it automatically. This is exactly how PyTorch and TensorFlow
-    /// compute gradients — by recording operations and playing them backwards.
-    /// </para>
-    /// <para>
-    /// The layers' internal state is NOT modified by this method — weights are extracted
-    /// and used as constants in the computation graph.
-    /// </para>
-    /// </remarks>
-    public static Tensor<T> ComputeInputGradient(
-        Tensor<T> input,
-        IReadOnlyList<ILayer<T>> layers,
-        HiddenActivation activation = HiddenActivation.LeakyReLU,
-        bool applyActivationOnLast = false,
-        double leakyAlpha = 0.2)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-
-        // Ensure input is 2D for matrix operations: [1, features]
-        bool was1D = input.Shape.Length == 1;
-        var input2D = was1D ? input.Reshape([1, input.Length]) : input;
-
-        using var tape = new GradientTape<T>();
-
-        var inputNode = TensorOperations<T>.Variable(input2D, "disc_input", requiresGradient: true);
-        tape.Watch(inputNode);
-
-        // Forward through layers using TensorOperations
-        var outputNode = ForwardWithTape(inputNode, layers, activation, applyActivationOnLast, leakyAlpha);
-
-        // Compute gradient: dOutput/dInput
-        var gradients = tape.Gradient(outputNode, new[] { inputNode });
-
-        if (gradients.TryGetValue(inputNode, out var inputGrad))
-        {
-            // Reshape back to original shape if needed
-            return was1D ? inputGrad.Reshape([inputGrad.Length]) : inputGrad;
-        }
-
-        // Fallback: return zero gradient
-        return new Tensor<T>(input.Shape.ToArray());
-    }
-
-    /// <summary>
-    /// Computes the WGAN-GP gradient penalty for a discriminator given interpolated samples.
-    /// </summary>
-    /// <param name="interpolated">Interpolated samples between real and fake data.</param>
-    /// <param name="layers">The discriminator layers.</param>
-    /// <param name="activation">The activation function between hidden layers.</param>
-    /// <param name="leakyAlpha">The alpha parameter for LeakyReLU.</param>
-    /// <returns>The gradient penalty value (||grad||_2 - 1)^2.</returns>
-    /// <remarks>
-    /// <para>
-    /// Computes the complete gradient penalty: GP = (||∇_x D(x)||_2 - 1)^2
-    /// where x is an interpolation between real and fake samples.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> The gradient penalty ensures the discriminator is a smooth function.
-    /// It checks that the gradient norm is close to 1 everywhere between real and fake data.
-    /// If the gradient is too large or too small, a penalty is applied to encourage smoothness.
-    /// This stabilizes GAN training and prevents mode collapse.
-    /// </para>
-    /// </remarks>
-    public static double ComputeGradientPenalty(
-        Tensor<T> interpolated,
-        IReadOnlyList<ILayer<T>> layers,
-        HiddenActivation activation = HiddenActivation.LeakyReLU,
-        double leakyAlpha = 0.2)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-
-        var inputGrad = ComputeInputGradient(
-            interpolated, layers, activation,
-            applyActivationOnLast: false, leakyAlpha: leakyAlpha);
-
-        // Compute L2 norm of the gradient
-        double gradNormSq = 0;
-        for (int i = 0; i < inputGrad.Length; i++)
-        {
-            double g = numOps.ToDouble(inputGrad[i]);
-            gradNormSq += g * g;
-        }
-        double gradNorm = Math.Sqrt(gradNormSq + 1e-12);
-
-        // Gradient penalty: (||grad||_2 - 1)^2
-        double deviation = gradNorm - 1.0;
-        return deviation * deviation;
-    }
-
-    /// <summary>
-    /// Forwards a computation node through a sequence of layers using TensorOperations,
-    /// recording all operations on the active GradientTape.
-    /// </summary>
-    private static ComputationNode<T> ForwardWithTape(
-        ComputationNode<T> input,
-        IReadOnlyList<ILayer<T>> layers,
-        HiddenActivation activation,
-        bool applyActivationOnLast,
-        double leakyAlpha)
-    {
-        var current = input;
-
-        // Identify dense layers (skip dropout)
-        var denseLayers = new List<ILayer<T>>();
-        foreach (var layer in layers)
-        {
-            if (layer is not DropoutLayer<T>)
-            {
-                denseLayers.Add(layer);
-            }
-        }
-
-        for (int i = 0; i < denseLayers.Count; i++)
-        {
-            bool isLast = (i == denseLayers.Count - 1);
-            var layer = denseLayers[i];
-
-            if (layer is FullyConnectedLayer<T>)
-            {
-                current = ForwardFCWithTape(current, layer);
-            }
-            else if (layer is BatchNormalizationLayer<T>)
-            {
-                current = ForwardBNWithTape(current, layer);
-            }
-            else
-            {
-                // Unsupported layer type — use opaque forward as fallback
-                current = ForwardOpaqueWithTape(current, layer);
-            }
-
-            // Apply activation on hidden layers (and optionally on last)
-            if (!isLast || applyActivationOnLast)
-            {
-                current = ApplyTapeActivation(current, activation, leakyAlpha);
-            }
-        }
-
-        return current;
-    }
-
-    /// <summary>
-    /// Forwards through a FullyConnectedLayer using TensorOperations for proper tape recording.
-    /// </summary>
-    /// <remarks>
-    /// Extracts weights and biases from the layer and performs:
-    /// output = input * W^T + bias
-    /// where W is the weight matrix [outputSize, inputSize].
-    /// </remarks>
-    private static ComputationNode<T> ForwardFCWithTape(
-        ComputationNode<T> input,
-        ILayer<T> layer)
-    {
-        var weights = layer.GetWeights();
-        var biases = layer.GetBiases();
-
-        if (weights == null)
-        {
-            throw new InvalidOperationException(
-                "FullyConnectedLayer has null weights. Ensure the layer is initialized before computing gradients.");
-        }
-
-        // Weights are [outputSize, inputSize], need transpose for matmul
-        var weightsNode = TensorOperations<T>.Constant(weights, "fc_weights");
-        var weightsTNode = TensorOperations<T>.Transpose(weightsNode);
-
-        // Linear transform: input [batch, inputSize] * W^T [inputSize, outputSize] = [batch, outputSize]
-        var linear = TensorOperations<T>.MatrixMultiply(input, weightsTNode);
-
-        // Add bias if present
-        if (biases != null)
-        {
-            // Reshape bias to [1, outputSize] for broadcasting
-            var biasReshaped = biases.Reshape([1, biases.Length]);
-            var biasNode = TensorOperations<T>.Constant(biasReshaped, "fc_biases");
-            linear = TensorOperations<T>.Add(linear, biasNode);
-        }
-
-        return linear;
-    }
-
-    /// <summary>
-    /// Forwards through a BatchNormalizationLayer using running statistics as an affine transform.
-    /// </summary>
-    /// <remarks>
-    /// In eval mode, BatchNorm is: output = gamma * (input - mean) / sqrt(var + eps) + beta.
-    /// This is equivalent to: output = scale * input + offset, where:
-    /// - scale = gamma / sqrt(var + eps)
-    /// - offset = beta - gamma * mean / sqrt(var + eps)
-    /// </remarks>
-    private static ComputationNode<T> ForwardBNWithTape(
-        ComputationNode<T> input,
-        ILayer<T> layer)
-    {
-        // BN in eval mode is a simple affine transform using running statistics.
-        // Since we can't easily extract running mean/var from the interface,
-        // fall back to opaque forward.
-        return ForwardOpaqueWithTape(input, layer);
-    }
-
-    /// <summary>
-    /// Forwards through a layer using its Forward() method as an opaque operation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This is a fallback for layer types that can't be expressed as TensorOperations.
-    /// The forward pass is computed directly, and the backward function uses the layer's
-    /// Backward() method. This still provides correct gradients but doesn't support
-    /// higher-order differentiation through this layer.
-    /// </para>
-    /// </remarks>
-    private static ComputationNode<T> ForwardOpaqueWithTape(
-        ComputationNode<T> input,
-        ILayer<T> layer)
-    {
-        // Compute forward pass directly
-        var output = layer.Forward(input.Value);
-
-        // Create a computation node with a backward function that uses the layer's Backward()
-        var resultNode = new ComputationNode<T>(
-            value: output,
-            requiresGradient: true,
-            parents: new List<ComputationNode<T>> { input },
-            backwardFunction: gradient =>
-            {
-                // Use the layer's built-in backward pass
-                var inputGrad = layer.Backward(gradient);
-
-                // Accumulate gradient at the input node
-                if (input.Gradient == null)
-                {
-                    input.Gradient = inputGrad;
-                }
-                else
-                {
-                    var numOps = MathHelper.GetNumericOperations<T>();
-                    var accumulated = new Tensor<T>(input.Gradient.Shape.ToArray());
-                    for (int i = 0; i < accumulated.Length && i < input.Gradient.Length && i < inputGrad.Length; i++)
-                    {
-                        accumulated[i] = numOps.Add(input.Gradient[i], inputGrad[i]);
-                    }
-                    input.Gradient = accumulated;
-                }
-            },
-            name: $"opaque_{layer.GetType().Name}");
-
-        // Record on active tape
-        var tape = GradientTape<T>.Current;
-        if (tape != null)
-        {
-            tape.RecordOperation(resultNode);
-        }
-
-        return resultNode;
-    }
-
-    /// <summary>
-    /// Applies the specified activation function using TensorOperations.
-    /// </summary>
-    private static ComputationNode<T> ApplyTapeActivation(
-        ComputationNode<T> node,
-        HiddenActivation activation,
-        double leakyAlpha)
-    {
-        return activation switch
-        {
-            HiddenActivation.LeakyReLU => TensorOperations<T>.LeakyReLU(node, leakyAlpha),
-            HiddenActivation.ReLU => TensorOperations<T>.ReLU(node),
-            HiddenActivation.Sigmoid => TensorOperations<T>.Sigmoid(node),
-            HiddenActivation.Tanh => TensorOperations<T>.Tanh(node),
-            HiddenActivation.SiLU => TensorOperations<T>.Swish(node),
-            HiddenActivation.GELU => TensorOperations<T>.GELU(node),
-            HiddenActivation.None => node,
-            _ => node,
-        };
-    }
-
-    /// <summary>
     /// Exports an MLP-based generator network as a JIT-compilable computation graph.
     /// </summary>
     /// <remarks>
@@ -436,7 +141,7 @@ public static class TapeLayerBridge<T>
             }
 
             // Apply hidden activation
-            current = ApplyTapeActivation(current, hiddenAct, 0.2);
+            current = ApplyComputationNodeActivation(current, hiddenAct, 0.2);
         }
 
         // Output layer with optional residual concat
@@ -450,8 +155,29 @@ public static class TapeLayerBridge<T>
         current = outputLayer.ExportComputationGraph(outInputs);
 
         // Apply output activation
-        current = ApplyTapeActivation(current, outputAct, 0.2);
+        current = ApplyComputationNodeActivation(current, outputAct, 0.2);
 
         return current;
+    }
+
+    /// <summary>
+    /// Applies activation using ComputationNode API (legacy, for ExportMLPGeneratorGraph).
+    /// </summary>
+    private static ComputationNode<T> ApplyComputationNodeActivation(
+        ComputationNode<T> node,
+        HiddenActivation activation,
+        double leakyAlpha)
+    {
+        return activation switch
+        {
+            HiddenActivation.LeakyReLU => TensorOperations<T>.LeakyReLU(node, leakyAlpha),
+            HiddenActivation.ReLU => TensorOperations<T>.ReLU(node),
+            HiddenActivation.Sigmoid => TensorOperations<T>.Sigmoid(node),
+            HiddenActivation.Tanh => TensorOperations<T>.Tanh(node),
+            HiddenActivation.SiLU => TensorOperations<T>.Swish(node),
+            HiddenActivation.GELU => TensorOperations<T>.GELU(node),
+            HiddenActivation.None => node,
+            _ => node,
+        };
     }
 }

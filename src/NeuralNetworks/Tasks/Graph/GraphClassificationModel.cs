@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Data.Structures;
 using AiDotNet.Enums;
@@ -326,26 +326,6 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
         }
     }
 
-    /// <summary>
-    /// Performs a backward pass through the network.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of loss with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Backprop through pooling (distribute gradient to all nodes)
-        var gradientNodeEmb = BackpropPooling(outputGradient);
-
-        // Backprop through GNN layers
-        var currentGradient = gradientNodeEmb;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            currentGradient = Layers[i].Backward(currentGradient);
-        }
-
-        return currentGradient;
-    }
-
     private Tensor<T> BackpropPooling(Tensor<T> gradGraphEmb)
     {
         if (_nodeEmbeddings is null)
@@ -468,7 +448,6 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
 
                 // Backward pass - gradient of cross-entropy with softmax is (prob - label)
                 var gradient = ComputeGradient(probs, task.TrainLabels, i);
-                Backward(gradient);
 
                 // Update parameters
                 foreach (var layer in Layers)
@@ -665,10 +644,9 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
 
         if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
         {
-            gradOutput = gradOutput.Reshape(predictions.Shape.ToArray());
+            gradOutput = gradOutput.Reshape(predictions._shape);
         }
 
-        Backward(gradOutput);
 
         Vector<T> parameterGradients = GetParameterGradients();
         Vector<T> currentParameters = GetParameters();

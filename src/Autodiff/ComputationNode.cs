@@ -226,59 +226,6 @@ public class ComputationNode<T>
     }
 
     /// <summary>
-    /// Performs backward propagation from this node.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method triggers backpropagation through the computation graph starting
-    /// from this node. It performs a topological sort to determine the correct order
-    /// for computing gradients, then calls each node's backward function in reverse
-    /// topological order.
-    /// </para>
-    /// <para><b>For Beginners:</b> This computes gradients for all nodes that led to this one.
-    ///
-    /// The backward process:
-    /// 1. Starts with this node's gradient (usually set to 1 for the final loss)
-    /// 2. Works backwards through the graph in the right order
-    /// 3. Each node passes gradients to its parents
-    /// 4. Gradients accumulate if a node has multiple children
-    ///
-    /// This is how neural networks learn - by computing gradients and using them
-    /// to update parameters.
-    /// </para>
-    /// </remarks>
-    public void Backward()
-    {
-        // Build topological order
-        var topoOrder = TopologicalSort();
-
-        // Clear all gradients in the topological order to ensure clean state
-        // This is critical for multiple backward passes (persistent tapes, higher-order gradients)
-        foreach (var node in topoOrder)
-        {
-            node.Gradient = null;
-        }
-
-        // Initialize root gradient to ones (for final node)
-        Gradient = new Tensor<T>(Value.Shape.ToArray());
-        var numOps = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < Gradient.Length; i++)
-        {
-            Gradient[i] = numOps.One;
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-    }
-
-    /// <summary>
     /// Performs a topological sort of the computation graph rooted at this node.
     /// </summary>
     /// <returns>A list of nodes in topological order.</returns>

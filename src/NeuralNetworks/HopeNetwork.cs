@@ -1,4 +1,4 @@
-
+﻿
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -60,6 +60,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     private Vector<T>? _metaState;
     private int _adaptationStep;
     private T _selfModificationRate;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
@@ -85,6 +86,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         HopeNetworkOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), maxGradNorm: 1.0)
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new HopeNetworkOptions();
         Options = _options;
         _hiddenDim = hiddenDim;
@@ -205,50 +207,6 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs a backward pass through the Hope architecture.
-    /// Propagates gradients through recurrent layers, context flow, and CMS blocks.
-    /// </summary>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var gradient = outputGradient;
-
-        // Backprop through output layer
-        if (_outputLayer != null)
-        {
-            gradient = _outputLayer.Backward(gradient);
-        }
-
-        // Backprop through recurrent layers (in reverse)
-        for (int i = _numRecurrentLayers - 1; i >= 0; i--)
-        {
-            gradient = _recurrentLayers[i].Backward(gradient);
-        }
-
-        // Backprop through context flow levels (applied after CMS blocks in forward pass)
-        // Context flow blended with the output of CMS blocks, so we propagate gradients through
-        for (int level = _inContextLearningLevels - 1; level >= 0; level--)
-        {
-            // Compute and accumulate context flow gradients for this level
-            var contextGrad = _contextFlow.ComputeContextGradients(gradient.ToVector(), level);
-            var contextTensor = new Tensor<T>(new[] { _hiddenDim }, contextGrad);
-
-            // Add context gradient to current upstream gradient (blending was additive in forward)
-            gradient = AddTensors(gradient, contextTensor);
-        }
-
-        // Backprop through CMS blocks in reverse order (no modulo - proper chain rule)
-        // Each block receives the accumulated gradient from the previous block
-        for (int i = _numCMSLevels - 1; i >= 0; i--)
-        {
-            // Pass combined gradient to this CMS block's backward
-            gradient = _cmsBlocks[i].Backward(gradient);
-            // gradient now contains the downstream gradient for the next (previous) block
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
     /// Applies self-modification to input based on meta-state.
     /// Implements self-referential optimization.
     /// </summary>
@@ -274,7 +232,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             }
         }
 
-        return new Tensor<T>(input.Shape.ToArray(), modified);
+        return new Tensor<T>(input._shape, modified);
     }
 
     /// <summary>
@@ -323,7 +281,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             blended[i] = _numOps.Add(partA, partB);
         }
 
-        return new Tensor<T>(a.Shape.ToArray(), blended);
+        return new Tensor<T>(a._shape, blended);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -494,7 +452,9 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Persistent Adam optimizer for stable training.
     /// </summary>
+    #pragma warning disable CS0169
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+#pragma warning restore CS0169
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
@@ -505,34 +465,15 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
 
-        // Forward pass
-        var output = ForwardWithMemory(input);
-        var outputVector = output.ToVector();
-        var expectedVector = expectedOutput.ToVector();
-
-        // Compute loss
-        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
-
-        // Backward pass with proper gradient
-        var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
-        var gradTensor = Tensor<T>.FromVector(lossGrad);
-        if (gradTensor.Rank < output.Rank)
-            gradTensor = gradTensor.Reshape(output.Shape.ToArray());
-
-        Backpropagate(gradTensor);
-
-        // Persistent Adam optimizer
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        var paramGrads = GetParameterGradients();
-        var currentParams = GetParameters();
-        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
-        UpdateParameters(updatedParams);
+        TrainWithTape(input, expectedOutput, _optimizer);
 
         // Periodically consolidate memory
         if (_adaptationStep % 100 == 0)
         {
             ConsolidateMemory();
         }
+
+        SetTrainingMode(false);
     }
 
     /// <summary>

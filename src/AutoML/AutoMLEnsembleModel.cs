@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -433,13 +433,6 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
             offset += count;
         }
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("Ensemble models do not currently support JIT compilation.");
-    }
-
-    public override bool SupportsJitCompilation => false;
 
     private Vector<T> WeightedAverage(IReadOnlyList<Vector<T>> predictions)
     {

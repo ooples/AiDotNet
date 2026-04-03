@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
@@ -305,83 +305,6 @@ public class SymmetricProjector<T> : IProjectorHead<T>
         return Predict(projection);
     }
 
-    /// <inheritdoc />
-    public Tensor<T> Backward(Tensor<T> gradOutput) => Backward(gradOutput, -1);
-
-    /// <summary>
-    /// Backward pass with explicit branch selection.
-    /// </summary>
-    /// <param name="gradOutput">The gradient from downstream.</param>
-    /// <param name="branchIndex">0 for branch1, 1 for branch2, or -1 for round-robin (legacy).</param>
-    public Tensor<T> Backward(Tensor<T> gradOutput, int branchIndex)
-    {
-        ForwardContext ctx;
-        if (branchIndex >= 0)
-        {
-            if (branchIndex > 1)
-                throw new ArgumentOutOfRangeException(nameof(branchIndex), "Branch index must be 0 or 1.");
-            ctx = branchIndex == 0 ? _branch1 : _branch2;
-        }
-        else
-        {
-            ctx = GetNextBackwardContext();
-        }
-
-        var grad = gradOutput;
-
-        // Backward through predictor if present
-        if (_hasPredictor && ctx.CachedPredH1Relu is not null)
-        {
-            grad = LinearBackward(grad, PredWeight2, _predictorHiddenDim, _projectionDim);
-            var cachedPredH1Bn = ctx.CachedPredH1Bn ?? throw new InvalidOperationException(
-                "Cached predictor H1 BN not available. Call Project() before Backward().");
-            grad = ReLUBackward(grad, cachedPredH1Bn);
-            grad = BatchNormBackward(grad, PredBn1Gamma, ctx.PredBn1Var, ctx.PredBn1Normalized,
-                out ctx.PredBn1GammaGrad, out ctx.PredBn1BetaGrad);
-            grad = LinearBackward(grad, PredWeight1, _projectionDim, _predictorHiddenDim);
-        }
-
-        var gradAtProjectorOutput = grad;
-
-        var bn2Var = ctx.ProjBn2Var ?? throw new InvalidOperationException(
-            "ProjBn2Var not available. Call Project() before Backward().");
-        var bn2Norm = ctx.ProjBn2Normalized ?? throw new InvalidOperationException(
-            "ProjBn2Normalized not available. Call Project() before Backward().");
-        grad = BatchNormBackward(grad, _projBn2Gamma, bn2Var, bn2Norm,
-            out ctx.ProjBn2GammaGrad, out ctx.ProjBn2BetaGrad);
-        ctx.GradBeforeBn2 = grad; // Cache for reuse in ComputeParameterGradients
-        grad = LinearBackward(grad, _projWeight2, _hiddenDim, _projectionDim);
-        var cachedH1Bn = ctx.CachedH1Bn ?? throw new InvalidOperationException(
-            "Cached H1 BN not available. Call Project() before Backward().");
-        grad = ReLUBackward(grad, cachedH1Bn);
-        var bn1Var = ctx.ProjBn1Var ?? throw new InvalidOperationException(
-            "ProjBn1Var not available. Call Project() before Backward().");
-        var bn1Norm = ctx.ProjBn1Normalized ?? throw new InvalidOperationException(
-            "ProjBn1Normalized not available. Call Project() before Backward().");
-        grad = BatchNormBackward(grad, _projBn1Gamma, bn1Var, bn1Norm,
-            out ctx.ProjBn1GammaGrad, out ctx.ProjBn1BetaGrad);
-        ctx.GradAtH1 = grad; // Cache for reuse in ComputeParameterGradients
-        grad = LinearBackward(grad, _projWeight1, _inputDim, _hiddenDim);
-
-        // Compute parameter gradients and accumulate across backward passes
-        var branchGradients = ComputeParameterGradients(gradAtProjectorOutput, gradOutput, ctx);
-        if (_gradients is null)
-        {
-            _gradients = branchGradients;
-        }
-        else
-        {
-            var accumulated = new T[_gradients.Length];
-            for (int i = 0; i < accumulated.Length; i++)
-            {
-                accumulated[i] = NumOps.Add(_gradients[i], branchGradients[i]);
-            }
-            _gradients = new Vector<T>(accumulated);
-        }
-
-        return grad;
-    }
-
     private Tensor<T> LinearBackward(Tensor<T> gradOutput, T[] weight, int inDim, int outDim)
     {
         // Vectorized: gradInput = gradOutput @ weight^T using Engine.TensorMatMul
@@ -394,7 +317,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     {
         // Vectorized ReLU backward: grad * (preActivation > 0)
         var mask = Engine.TensorGreaterThan(preActivation, NumOps.Zero);
-        var zeros = Tensor<T>.CreateDefault(gradOutput.Shape.ToArray(), NumOps.Zero);
+        var zeros = Tensor<T>.CreateDefault(gradOutput._shape, NumOps.Zero);
         return Engine.TensorWhere(mask, gradOutput, zeros);
     }
 
@@ -935,6 +858,6 @@ public class SymmetricProjector<T> : IProjectorHead<T>
             output[i] = NumOps.GreaterThan(val, NumOps.Zero) ? val : NumOps.Zero;
         }
 
-        return new Tensor<T>(output, input.Shape.ToArray());
+        return new Tensor<T>(output, input._shape);
     }
 }

@@ -237,48 +237,6 @@ public abstract class FTTransformerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through the FT-Transformer backbone.
-    /// </summary>
-    /// <param name="clsGradient">Gradient from the prediction head [batch_size, embedding_dim].</param>
-    /// <returns>Gradient with respect to numerical input [batch_size, num_numerical].</returns>
-    protected Tensor<T> BackwardBackbone(Tensor<T> clsGradient)
-    {
-        if (_tokenizedCache == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int batchSize = clsGradient.Shape[0];
-        int embedDim = clsGradient.Shape[1];
-        int seqLen = Tokenizer.SequenceLength;
-
-        // Convert [CLS] gradient to full sequence gradient
-        // Gradient is zero for all positions except [CLS] (position 0)
-        var seqGradient = new Tensor<T>([batchSize, seqLen, embedDim]);
-        seqGradient.Fill(NumOps.Zero);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < embedDim; d++)
-            {
-                seqGradient[b * seqLen * embedDim + 0 * embedDim + d] = clsGradient[b * embedDim + d];
-            }
-        }
-
-        // Backward through final layer norm
-        var grad = FinalLayerNorm.Backward(seqGradient);
-
-        // Backward through transformer encoder layers (reverse order)
-        for (int i = EncoderLayers.Count - 1; i >= 0; i--)
-        {
-            grad = EncoderLayers[i].Backward(grad);
-        }
-
-        // Backward through tokenizer
-        return Tokenizer.Backward(grad);
-    }
-
-    /// <summary>
     /// Updates all parameters using the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate.</param>

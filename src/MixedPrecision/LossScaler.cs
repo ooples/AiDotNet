@@ -46,7 +46,7 @@ namespace AiDotNet.MixedPrecision;
 /// float scaledLoss = scaler.ScaleLoss(loss);
 ///
 /// // Backpropagation with scaled loss...
-/// var gradients = model.Backward(scaledLoss);
+/// var gradients = /* model.Backward(scaledLoss) removed — tape-based */ ;
 ///
 /// // Unscale and check for overflow
 /// if (scaler.UnscaleGradientsAndCheck(gradients))

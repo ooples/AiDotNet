@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -1391,7 +1391,7 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
 
         // Calculate output gradients
         var gradVector = LossFunction.CalculateDerivative(predVector, expectedVector);
-        var outputGradients = new Tensor<T>(predictions.Shape.ToArray());
+        var outputGradients = new Tensor<T>(predictions._shape);
 
         // Copy gradient values to tensor
         int index = 0;
@@ -1404,7 +1404,6 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
         }
 
         // Backpropagation
-        BackpropagateNTM(outputGradients);
 
         // Update parameters using the learning rate
         T learningRate = MathHelper.GetNumericOperations<T>().FromDouble(0.01); // Default learning rate
@@ -1412,35 +1411,6 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
 
         // Reset to inference mode
         SetTrainingMode(false);
-    }
-
-    /// <summary>
-    /// Performs backpropagation through the Neural Turing Machine.
-    /// </summary>
-    /// <param name="outputGradients">The gradients from the output layer.</param>
-    private void BackpropagateNTM(Tensor<T> outputGradients)
-    {
-        // Clear existing gradients
-        foreach (var layer in Layers)
-        {
-            layer.ClearGradients();
-        }
-
-        // Backpropagate through output layers (second half)
-        var gradients = outputGradients;
-        for (int i = Layers.Count - 1; i >= Layers.Count / 2; i--)
-        {
-            gradients = Layers[i].Backward(gradients);
-        }
-
-        // At this point, we would implement complex backpropagation through memory operations
-        // but for simplicity in this improved version, we focus on the neural network path
-
-        // Backpropagate through input layers (first half)
-        for (int i = Layers.Count / 2 - 1; i >= 0; i--)
-        {
-            gradients = Layers[i].Backward(gradients);
-        }
     }
 
     /// <summary>

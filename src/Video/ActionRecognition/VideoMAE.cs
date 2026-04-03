@@ -361,17 +361,14 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
             throw new InvalidOperationException("Training is not supported in ONNX mode. Use native mode constructor for training.");
         }
 
-        var predicted = Predict(input);
-
-        // Compute loss gradient using the configured loss function
-        var gradientVector = LossFunction.CalculateDerivative(predicted.ToVector(), expectedOutput.ToVector());
-        var lossGradient = new Tensor<T>(predicted.Shape.ToArray(), gradientVector);
-
-        BackwardPass(lossGradient);
-
-        if (_optimizer != null)
+        SetTrainingMode(true);
+        try
         {
-            _optimizer.UpdateParameters(Layers);
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
         }
     }
 
@@ -470,7 +467,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         for (int i = 0; i < input.Length; i++)
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };
 
         using var results = _onnxSession.Run(inputs);
@@ -714,19 +711,6 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         var result = new Tensor<T>(newShape);
         tensor.Data.Span.CopyTo(result.Data.Span);
         return result;
-    }
-
-    private void BackwardPass(Tensor<T> gradient)
-    {
-        if (!_useNativeMode || Layers.Count == 0)
-        {
-            return;
-        }
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
     }
 
     #endregion

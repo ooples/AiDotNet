@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -45,9 +45,8 @@ namespace AiDotNet.LossFunctions;
 [LossCategory(LossCategory.Contrastive)]
 [LossTask(LossTask.MultiClass)]
 [LossProperty(IsNonNegative = true, ZeroForIdentical = true, ApiShape = LossApiShape.SelfSupervised, ExpectedOutput = OutputType.Probabilities)]
-public class RotationPredictionLoss<T> : ISelfSupervisedLoss<T>
+public class RotationPredictionLoss<T> : LossFunctionBase<T>, ISelfSupervisedLoss<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <inheritdoc/>
     public (TInput augmentedX, TOutput augmentedY) CreateTask<TInput, TOutput>(TInput input)
@@ -69,7 +68,7 @@ public class RotationPredictionLoss<T> : ISelfSupervisedLoss<T>
         {
             throw new ArgumentException(
                 $"Input tensor must have at least 3 dimensions [N, H, W] or [N, H, W, C], " +
-                $"but got shape [{string.Join(", ", tensorInput.Shape.ToArray())}]");
+                $"but got shape [{string.Join(", ", tensorInput._shape)}]");
         }
 
         int numImages = tensorInput.Shape[0];
@@ -319,5 +318,52 @@ public class RotationPredictionLoss<T> : ISelfSupervisedLoss<T>
         TInput resultX = (TInput)(object)augmentedX;
         TOutput resultY = (TOutput)outputY;
         return (resultX, resultY);
+    }
+
+    /// <summary>
+    /// Categorical cross-entropy loss for rotation prediction (4-class).
+    /// predicted = softmax probabilities [4*N], target = one-hot labels [4*N].
+    /// </summary>
+    public override T CalculateLoss(Vector<T> predicted, Vector<T> target)
+    {
+        T loss = NumOps.Zero;
+        T eps = NumOps.FromDouble(1e-7);
+        for (int i = 0; i < predicted.Length; i++)
+        {
+            var clipped = NumOps.Add(predicted[i], eps);
+            loss = NumOps.Subtract(loss, NumOps.Multiply(target[i], NumericalStabilityHelper.SafeLog(clipped, NumericalStabilityHelper.SmallEpsilon)));
+        }
+        return NumOps.Divide(loss, NumOps.FromDouble(predicted.Length / 4.0));
+    }
+
+    /// <summary>
+    /// Gradient of categorical cross-entropy: -target / predicted.
+    /// </summary>
+    public override Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> target)
+    {
+        var gradient = new Vector<T>(predicted.Length);
+        T eps = NumOps.FromDouble(1e-7);
+        T scale = NumOps.FromDouble(4.0 / predicted.Length);
+        for (int i = 0; i < predicted.Length; i++)
+        {
+            var clipped = NumOps.Add(predicted[i], eps);
+            gradient[i] = NumOps.Multiply(NumOps.Negate(NumOps.Divide(target[i], clipped)), scale);
+        }
+        return gradient;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Categorical cross-entropy via engine ops: -mean(sum(target * log(predicted + eps)))
+    /// </remarks>
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        var eps = NumOps.FromDouble(1e-7);
+        var clipped = Engine.TensorAddScalar(predicted, eps);
+        var logPred = Engine.TensorLog(clipped);
+        var weighted = Engine.TensorMultiply(target, logPred);
+        var negWeighted = Engine.TensorNegate(weighted);
+        var allAxes = Enumerable.Range(0, negWeighted.Shape.Length).ToArray();
+        return Engine.ReduceMean(negWeighted, allAxes, keepDims: false);
     }
 }

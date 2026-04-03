@@ -236,26 +236,6 @@ public class S6ScanTests
         Assert.False(ContainsNaNDouble(output));
     }
 
-    [Fact]
-    public void MambaBlock_StillProducesValidOutput_AfterS6ScanRefactor()
-    {
-        int seqLen = 4;
-        int modelDim = 32;
-        int stateDim = 8;
-        var block = new MambaBlock<float>(seqLen, modelDim, stateDim);
-        var input = CreateRandomTensor(new[] { 1, seqLen, modelDim });
-
-        var output = block.Forward(input);
-
-        Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
-        Assert.False(ContainsNaN(output));
-
-        // Backward should also still work
-        var grad = CreateRandomTensor(output.Shape.ToArray());
-        var inputGrad = block.Backward(grad);
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGrad));
-    }
 
     #region Helpers
 

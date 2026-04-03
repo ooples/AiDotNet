@@ -1,3 +1,4 @@
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.DecompositionMethods.MatrixDecomposition;
@@ -9,6 +10,7 @@ using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Validation;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -49,7 +51,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, 4, 128, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var lap = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { lap[i, i] = 2.0; if (i > 0) { lap[i, i-1] = -1.0; lap[i-1, i] = -1.0; } } ((AiDotNet.NeuralNetworks.Layers.DiffusionConvLayer<double>)layer).SetLaplacian(lap);")]
-public class DiffusionConvLayer<T> : LayerBase<T>
+public partial class DiffusionConvLayer<T> : LayerBase<T>
 {
     #region Properties
 
@@ -107,11 +109,6 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     /// </summary>
     public override bool SupportsGpuTraining => true;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation => _weights != null && _biases != null && CanActivationBeJitted();
-
     #endregion
 
     #region Private Fields
@@ -119,11 +116,15 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     /// <summary>
     /// Learnable weights [OutputChannels, InputChannels * NumTimeScales].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
     /// Learnable bias values [OutputChannels].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -205,7 +206,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     /// <summary>
     /// Cached GPU input from the last forward pass.
     /// </summary>
-    private IGpuTensor<T>? _gpuInput;
+    private Tensor<T>? _gpuInput;
 
     /// <summary>
     /// Cached GPU input shape from the last forward pass.
@@ -215,68 +216,68 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     /// <summary>
     /// Cached GPU diffused features for backward pass.
     /// </summary>
-    private IGpuTensor<T>? _gpuDiffusedFeatures;
+    private Tensor<T>? _gpuDiffusedFeatures;
 
     /// <summary>
     /// Cached GPU pre-activation output for backward pass.
     /// </summary>
-    private IGpuTensor<T>? _gpuPreActivation;
+    private Tensor<T>? _gpuPreActivation;
 
     /// <summary>
     /// Cached GPU activated output for backward pass.
     /// </summary>
-    private IGpuTensor<T>? _gpuOutput;
+    private Tensor<T>? _gpuOutput;
 
     /// <summary>
     /// GPU weight tensor.
     /// </summary>
-    private GpuTensor<T>? _gpuWeights;
+    private Tensor<T>? _gpuWeights;
 
     /// <summary>
     /// GPU bias tensor.
     /// </summary>
-    private GpuTensor<T>? _gpuBiases;
+    private Tensor<T>? _gpuBiases;
 
     /// <summary>
     /// GPU diffusion time tensor.
     /// </summary>
-    private GpuTensor<T>? _gpuDiffusionTimes;
+    private Tensor<T>? _gpuDiffusionTimes;
 
     /// <summary>
     /// GPU weight gradients.
     /// </summary>
-    private GpuTensor<T>? _gpuWeightsGradient;
+    private Tensor<T>? _gpuWeightsGradient;
 
     /// <summary>
     /// GPU bias gradients.
     /// </summary>
-    private GpuTensor<T>? _gpuBiasesGradient;
+    private Tensor<T>? _gpuBiasesGradient;
 
     /// <summary>
     /// GPU diffusion time gradients.
     /// </summary>
-    private GpuTensor<T>? _gpuDiffusionTimesGradient;
+    private Tensor<T>? _gpuDiffusionTimesGradient;
 
     /// <summary>
     /// GPU optimizer state for weights.
     /// </summary>
-    private GpuTensor<T>? _gpuWeightsVelocity;
-    private GpuTensor<T>? _gpuWeightsM;
-    private GpuTensor<T>? _gpuWeightsV;
+    private Tensor<T>? _gpuWeightsVelocity;
+    private Tensor<T>? _gpuWeightsM;
+    private Tensor<T>? _gpuWeightsV;
 
     /// <summary>
     /// GPU optimizer state for biases.
     /// </summary>
-    private GpuTensor<T>? _gpuBiasesVelocity;
-    private GpuTensor<T>? _gpuBiasesM;
-    private GpuTensor<T>? _gpuBiasesV;
+    private Tensor<T>? _gpuBiasesVelocity;
+    private Tensor<T>? _gpuBiasesM;
+    private Tensor<T>? _gpuBiasesV;
 
     /// <summary>
     /// GPU optimizer state for diffusion times.
     /// </summary>
-    private GpuTensor<T>? _gpuDiffusionTimesVelocity;
-    private GpuTensor<T>? _gpuDiffusionTimesM;
-    private GpuTensor<T>? _gpuDiffusionTimesV;
+    private Tensor<T>? _gpuDiffusionTimesVelocity;
+    private Tensor<T>? _gpuDiffusionTimesM;
+    private Tensor<T>? _gpuDiffusionTimesV;
 
     #endregion
 
@@ -430,11 +431,14 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             NumOps.FromDouble(fanIn)));
 
         // Initialize weights in [-scale, scale] range
-        _weights = Engine.TensorRandomUniformRange<T>(_weights.Shape.ToArray(), NumOps.Negate(scale), scale);
+        _weights = Engine.TensorRandomUniformRange<T>(_weights._shape, NumOps.Negate(scale), scale);
 
         // Initialize biases to zero
-        _biases = new Tensor<T>(_biases.Shape.ToArray());
+        _biases = new Tensor<T>(_biases._shape);
         Engine.TensorFill(_biases, NumOps.Zero);
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     #endregion
@@ -836,7 +840,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     /// </remarks>
     /// <param name="inputs">Input GPU tensors (uses first input).</param>
     /// <returns>GPU-resident output tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -1054,7 +1058,7 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             if (IsTrainingMode)
             {
                 _gpuDiffusedFeatures?.Dispose();
-                _gpuDiffusedFeatures = new GpuTensor<T>(backend, diffusedBuffer,
+                _gpuDiffusedFeatures = GpuTensorHelper.UploadToGpu<T>(backend, diffusedBuffer,
                     [batchSize * numVertices, diffusedSize], GpuTensorRole.Activation, ownsBuffer: true);
                 diffusedRetained = true;
             }
@@ -1103,12 +1107,12 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             if (IsTrainingMode)
             {
                 _gpuPreActivation?.Dispose();
-                _gpuPreActivation = new GpuTensor<T>(backend, preActivationBuffer,
+                _gpuPreActivation = GpuTensorHelper.UploadToGpu<T>(backend, preActivationBuffer,
                     [batchSize * numVertices, OutputChannels], GpuTensorRole.Activation, ownsBuffer: true);
                 preActivationRetained = true;
             }
 
-            var outputTensor = new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+            var outputTensor = GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
             if (IsTrainingMode)
                 _gpuOutput = outputTensor;
 
@@ -1133,362 +1137,6 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     #region GPU Training Methods
 
     /// <summary>
-    /// Performs the backward pass using GPU-resident tensors.
-    /// </summary>
-    /// <param name="outputGradient">GPU-resident gradient tensor.</param>
-    /// <returns>GPU-resident input gradient tensor.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        if (_gpuInput == null || _gpuInputShape == null || _gpuDiffusedFeatures == null ||
-            _gpuPreActivation == null || _gpuOutput == null)
-            throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");
-
-        if (_eigenvalues == null || _eigenvectors == null)
-            throw new InvalidOperationException(
-                "GPU backward requires an eigenbasis. Call SetEigenbasis or SetLaplacian before training.");
-
-        int batchSize;
-        int numVertices;
-        int inputChannels;
-
-        if (_gpuInputShape.Length == 2)
-        {
-            batchSize = 1;
-            numVertices = _gpuInputShape[0];
-            inputChannels = _gpuInputShape[1];
-        }
-        else if (_gpuInputShape.Length == 3)
-        {
-            batchSize = _gpuInputShape[0];
-            numVertices = _gpuInputShape[1];
-            inputChannels = _gpuInputShape[2];
-        }
-        else
-        {
-            // Higher rank: flatten leading dimensions into batch
-            batchSize = 1;
-            for (int d = 0; d < _gpuInputShape.Length - 2; d++)
-                batchSize *= _gpuInputShape[d];
-            numVertices = _gpuInputShape[_gpuInputShape.Length - 2];
-            inputChannels = _gpuInputShape[_gpuInputShape.Length - 1];
-        }
-
-        int diffusedSize = InputChannels * NumTimeScales;
-        int outputRows = batchSize * numVertices;
-        int outputCols = OutputChannels;
-
-        IGpuTensor<T> outputGrad2D;
-        if (outputGradient.Shape.Length == 2)
-        {
-            outputGrad2D = outputGradient;
-        }
-        else
-        {
-            // Flatten any rank >= 3 to 2D [batchSize * numVertices, outputCols]
-            outputGrad2D = outputGradient.CreateView(0, [outputRows, outputCols]);
-        }
-
-        if (outputGrad2D.Shape[0] != outputRows || outputGrad2D.Shape[1] != outputCols)
-            throw new ArgumentException("Output gradient shape does not match cached output.");
-
-        IGpuBuffer? weightGradBuffer = null;
-        IGpuBuffer? biasGradBuffer = null;
-        IGpuBuffer? inputGradBuffer = null;
-
-        try
-        {
-            int outputGradSize = outputRows * outputCols;
-            using var deltaBuffer = backend.AllocateBuffer(outputGradSize);
-
-            bool activationHandled = ApplyActivationBackwardGpu(
-                backend,
-                outputGrad2D.Buffer,
-                _gpuPreActivation.Buffer,
-                _gpuOutput.Buffer,
-                deltaBuffer,
-                outputGradSize);
-
-            if (!activationHandled)
-            {
-                var fusedActivation = GetFusedActivationType();
-                if (fusedActivation != FusedActivationType.None)
-                {
-                    activationHandled = ApplyGpuActivationBackward(
-                        backend,
-                        outputGrad2D.Buffer,
-                        _gpuPreActivation.Buffer,
-                        _gpuOutput.Buffer,
-                        deltaBuffer,
-                        outputGradSize,
-                        fusedActivation);
-                }
-            }
-
-            if (!activationHandled)
-            {
-                var cpuGrad = outputGradient.ToTensor();
-                var cpuOutput = _gpuOutput.ToTensor();
-                var deltaCpu = ApplyActivationDerivative(cpuOutput, cpuGrad);
-                var deltaReshaped = deltaCpu.Reshape(outputRows, outputCols);
-                using var deltaUpload = backend.AllocateBuffer(
-                    DirectGpuEngine.ToFloatArray<T>(deltaReshaped.Data));
-                backend.Copy(deltaUpload, deltaBuffer, outputGradSize);
-            }
-
-            using var deltaTransposed = backend.AllocateBuffer(outputCols * outputRows);
-            backend.Transpose(deltaBuffer, deltaTransposed, outputRows, outputCols);
-
-            weightGradBuffer = backend.AllocateBuffer(_weights.Length);
-            backend.Gemm(deltaTransposed, _gpuDiffusedFeatures.Buffer, weightGradBuffer,
-                outputCols, diffusedSize, outputRows);
-
-            biasGradBuffer = backend.AllocateBuffer(OutputChannels);
-            backend.SumAxis(deltaTransposed, biasGradBuffer, OutputChannels, outputRows);
-
-            inputGradBuffer = backend.AllocateBuffer(outputRows * inputChannels);
-            backend.Fill(inputGradBuffer, 0.0f, outputRows * inputChannels);
-
-            int numEig = Math.Min(_numEigenvectors, _eigenvalues.Length);
-
-            using var eigenvectorsBuffer = backend.AllocateBuffer(
-                DirectGpuEngine.ToFloatArray<T>(_eigenvectors.Data));
-            using var eigenvectorsTransposedBuffer = backend.AllocateBuffer(numEig * numVertices);
-            backend.Transpose(eigenvectorsBuffer, eigenvectorsTransposedBuffer, numVertices, numEig);
-
-            IGpuBuffer? tiledEigBuffer = null;
-            IGpuBuffer? tiledEigTBuffer = null;
-
-            try
-            {
-                if (batchSize > 1)
-                {
-                    tiledEigBuffer = backend.AllocateBuffer(batchSize * numVertices * numEig);
-                    backend.TileBatch(eigenvectorsBuffer, tiledEigBuffer, batchSize, numVertices * numEig);
-
-                    tiledEigTBuffer = backend.AllocateBuffer(batchSize * numEig * numVertices);
-                    backend.TileBatch(eigenvectorsTransposedBuffer, tiledEigTBuffer, batchSize, numEig * numVertices);
-                }
-
-                using var spectralCoeffsBuffer = backend.AllocateBuffer(batchSize * numEig * inputChannels);
-                if (batchSize == 1)
-                {
-                    backend.Gemm(eigenvectorsTransposedBuffer, _gpuInput.Buffer, spectralCoeffsBuffer,
-                        numEig, inputChannels, numVertices);
-                }
-                else
-                {
-                    var batchedEigTBuffer = tiledEigTBuffer
-                        ?? throw new InvalidOperationException("Batched eigenvector buffers were not initialized.");
-                    backend.BatchedGemm(batchedEigTBuffer, _gpuInput.Buffer, spectralCoeffsBuffer,
-                        numEig, inputChannels, numVertices, batchSize);
-                }
-
-                _diffusionTimesGradient = new T[NumTimeScales];
-
-                var weightsData = DirectGpuEngine.ToFloatArray<T>(_weights.Data);
-
-                for (int t = 0; t < NumTimeScales; t++)
-                {
-                    float time = (float)NumOps.ToDouble(DiffusionTimes[t]);
-                    var decayData = new float[numEig];
-                    var derivData = new float[numEig];
-                    for (int k = 0; k < numEig; k++)
-                    {
-                        float lambda = (float)NumOps.ToDouble(_eigenvalues[k]);
-                        float decay = (float)Math.Exp(-lambda * time);
-                        decayData[k] = decay;
-                        derivData[k] = -lambda * decay;
-                    }
-
-                    var weightsSlice = new float[OutputChannels * inputChannels];
-                    for (int oc = 0; oc < OutputChannels; oc++)
-                    {
-                        int srcOffset = oc * diffusedSize + t * inputChannels;
-                        int dstOffset = oc * inputChannels;
-                        Array.Copy(weightsData, srcOffset, weightsSlice, dstOffset, inputChannels);
-                    }
-
-                    using var weightsSliceBuffer = backend.AllocateBuffer(weightsSlice);
-                    using var diffusedGradBuffer = backend.AllocateBuffer(outputRows * inputChannels);
-                    backend.Gemm(deltaBuffer, weightsSliceBuffer, diffusedGradBuffer,
-                        outputRows, inputChannels, OutputChannels);
-
-                    using var spectralGradBuffer = backend.AllocateBuffer(batchSize * numEig * inputChannels);
-                    if (batchSize == 1)
-                    {
-                        backend.Gemm(eigenvectorsTransposedBuffer, diffusedGradBuffer, spectralGradBuffer,
-                            numEig, inputChannels, numVertices);
-                    }
-                    else
-                    {
-                        var batchedEigTBuffer = tiledEigTBuffer
-                            ?? throw new InvalidOperationException("Batched eigenvector buffers were not initialized.");
-                        backend.BatchedGemm(batchedEigTBuffer, diffusedGradBuffer, spectralGradBuffer,
-                            numEig, inputChannels, numVertices, batchSize);
-                    }
-
-                    var decayTiledData = new float[batchSize * numEig * inputChannels];
-                    int decayIndex = 0;
-                    for (int b = 0; b < batchSize; b++)
-                    {
-                        for (int k = 0; k < numEig; k++)
-                        {
-                            float decay = decayData[k];
-                            for (int c = 0; c < inputChannels; c++)
-                            {
-                                decayTiledData[decayIndex++] = decay;
-                            }
-                        }
-                    }
-
-                    using var decayTiledBuffer = backend.AllocateBuffer(decayTiledData);
-                    backend.Multiply(spectralGradBuffer, decayTiledBuffer, spectralGradBuffer,
-                        batchSize * numEig * inputChannels);
-
-                    using var spatialGradBuffer = backend.AllocateBuffer(outputRows * inputChannels);
-                    if (batchSize == 1)
-                    {
-                        backend.Gemm(eigenvectorsBuffer, spectralGradBuffer, spatialGradBuffer,
-                            numVertices, inputChannels, numEig);
-                    }
-                    else
-                    {
-                        var batchedEigBuffer = tiledEigBuffer
-                            ?? throw new InvalidOperationException("Batched eigenvector buffers were not initialized.");
-                        backend.BatchedGemm(batchedEigBuffer, spectralGradBuffer, spatialGradBuffer,
-                            numVertices, inputChannels, numEig, batchSize);
-                    }
-
-                    backend.Add(inputGradBuffer, spatialGradBuffer, inputGradBuffer,
-                        outputRows * inputChannels);
-
-                    var derivTiledData = new float[batchSize * numEig * inputChannels];
-                    int derivIndex = 0;
-                    for (int b = 0; b < batchSize; b++)
-                    {
-                        for (int k = 0; k < numEig; k++)
-                        {
-                            float deriv = derivData[k];
-                            for (int c = 0; c < inputChannels; c++)
-                            {
-                                derivTiledData[derivIndex++] = deriv;
-                            }
-                        }
-                    }
-
-                    using var derivTiledBuffer = backend.AllocateBuffer(derivTiledData);
-                    using var derivCoeffsBuffer = backend.AllocateBuffer(batchSize * numEig * inputChannels);
-                    backend.Multiply(spectralCoeffsBuffer, derivTiledBuffer, derivCoeffsBuffer,
-                        batchSize * numEig * inputChannels);
-
-                    using var spatialDerivBuffer = backend.AllocateBuffer(outputRows * inputChannels);
-                    if (batchSize == 1)
-                    {
-                        backend.Gemm(eigenvectorsBuffer, derivCoeffsBuffer, spatialDerivBuffer,
-                            numVertices, inputChannels, numEig);
-                    }
-                    else
-                    {
-                        var batchedEigBuffer = tiledEigBuffer
-                            ?? throw new InvalidOperationException("Batched eigenvector buffers were not initialized.");
-                        backend.BatchedGemm(batchedEigBuffer, derivCoeffsBuffer, spatialDerivBuffer,
-                            numVertices, inputChannels, numEig, batchSize);
-                    }
-
-                    using var productBuffer = backend.AllocateBuffer(outputRows * inputChannels);
-                    backend.Multiply(spatialDerivBuffer, diffusedGradBuffer, productBuffer,
-                        outputRows * inputChannels);
-
-                    float timeGrad = backend.Sum(productBuffer, outputRows * inputChannels);
-                    _diffusionTimesGradient[t] = NumOps.FromDouble(timeGrad);
-                }
-            }
-            finally
-            {
-                tiledEigBuffer?.Dispose();
-                tiledEigTBuffer?.Dispose();
-            }
-
-            var weightGradData = backend.DownloadBuffer(weightGradBuffer);
-            _weightsGradient = new Tensor<T>(
-                DirectGpuEngine.FromFloatArray<T>(weightGradData),
-                _weights.Shape.ToArray());
-
-            var biasGradData = backend.DownloadBuffer(biasGradBuffer);
-            _biasesGradient = new Tensor<T>(
-                DirectGpuEngine.FromFloatArray<T>(biasGradData),
-                _biases.Shape.ToArray());
-
-            _gpuWeightsGradient?.Dispose();
-            _gpuWeightsGradient = new GpuTensor<T>(
-                backend,
-                weightGradBuffer,
-                _weights.Shape.ToArray(),
-                GpuTensorRole.Gradient,
-                ownsBuffer: true);
-            weightGradBuffer = null;
-
-            _gpuBiasesGradient?.Dispose();
-            _gpuBiasesGradient = new GpuTensor<T>(
-                backend,
-                biasGradBuffer,
-                _biases.Shape.ToArray(),
-                GpuTensorRole.Gradient,
-                ownsBuffer: true);
-            biasGradBuffer = null;
-
-            if (_diffusionTimesGradient != null)
-            {
-                _gpuDiffusionTimesGradient?.Dispose();
-                _gpuDiffusionTimesGradient = new GpuTensor<T>(
-                    backend,
-                    _diffusionTimesGradient,
-                    [NumTimeScales],
-                    GpuTensorRole.Gradient);
-            }
-
-            // Restore original tensor rank for the input gradient
-            int[] inputGradShape;
-            if (_gpuInputShape.Length > 3)
-            {
-                inputGradShape = _gpuInputShape;
-            }
-            else if (_gpuInputShape.Length == 2)
-            {
-                inputGradShape = [numVertices, inputChannels];
-            }
-            else
-            {
-                inputGradShape = [batchSize, numVertices, inputChannels];
-            }
-
-            ClearGpuCache();
-
-            var inputGradTensor = new GpuTensor<T>(
-                backend,
-                inputGradBuffer,
-                inputGradShape,
-                GpuTensorRole.Gradient,
-                ownsBuffer: true);
-            inputGradBuffer = null;
-            return inputGradTensor;
-        }
-        finally
-        {
-            weightGradBuffer?.Dispose();
-            biasGradBuffer?.Dispose();
-            inputGradBuffer?.Dispose();
-        }
-    }
-
-    /// <summary>
     /// Updates parameters on GPU using the configured optimizer.
     /// </summary>
     /// <param name="config">The GPU optimizer configuration.</param>
@@ -1504,9 +1152,9 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         if (_gpuWeightsGradient == null || _gpuBiasesGradient == null || _gpuDiffusionTimesGradient == null)
             throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
 
-        _gpuWeights ??= new GpuTensor<T>(backend, _weights, GpuTensorRole.Weight);
-        _gpuBiases ??= new GpuTensor<T>(backend, _biases, GpuTensorRole.Bias);
-        _gpuDiffusionTimes ??= new GpuTensor<T>(backend, DiffusionTimes, [NumTimeScales], GpuTensorRole.Weight);
+        _gpuWeights ??= GpuTensorHelper.UploadToGpu<T>(backend, _weights, GpuTensorRole.Weight);
+        _gpuBiases ??= GpuTensorHelper.UploadToGpu<T>(backend, _biases, GpuTensorRole.Bias);
+        _gpuDiffusionTimes ??= GpuTensorHelper.UploadToGpu<T>(backend, DiffusionTimes, [NumTimeScales], GpuTensorRole.Weight);
 
         EnsureDiffusionConvOptimizerState(backend, config.OptimizerType);
 
@@ -1533,10 +1181,10 @@ public class DiffusionConvLayer<T> : LayerBase<T>
 
         backend.Clamp(_gpuDiffusionTimes.Buffer, _gpuDiffusionTimes.Buffer, 1e-6f, float.MaxValue, NumTimeScales);
 
-        _weights = _gpuWeights.ToTensor();
-        _biases = _gpuBiases.ToTensor();
+        _weights = _gpuWeights;
+        _biases = _gpuBiases;
 
-        var updatedTimes = _gpuDiffusionTimes.ToTensor().Data.Span;
+        var updatedTimes = _gpuDiffusionTimes.Data.Span;
         for (int t = 0; t < NumTimeScales; t++)
         {
             DiffusionTimes[t] = updatedTimes[t];
@@ -1554,27 +1202,27 @@ public class DiffusionConvLayer<T> : LayerBase<T>
             case GpuOptimizerType.Sgd:
             case GpuOptimizerType.Nag:
             case GpuOptimizerType.Lars:
-                _gpuWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasesVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuDiffusionTimesVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([timeSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasesVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuDiffusionTimesVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([timeSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
 
             case GpuOptimizerType.Adam:
             case GpuOptimizerType.AdamW:
             case GpuOptimizerType.Lamb:
-                _gpuWeightsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasesM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasesV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuDiffusionTimesM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([timeSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuDiffusionTimesV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([timeSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasesM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasesV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuDiffusionTimesM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([timeSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuDiffusionTimesV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([timeSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
 
             case GpuOptimizerType.RmsProp:
             case GpuOptimizerType.Adagrad:
-                _gpuWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasesVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuDiffusionTimesVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([timeSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightsVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasesVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuDiffusionTimesVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([timeSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
         }
     }
@@ -1614,79 +1262,6 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     #endregion
 
     #region Backward Pass
-
-    /// <summary>
-    /// Performs the backward pass to compute gradients.
-    /// </summary>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation.
-    /// </summary>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastPreActivation == null || _lastOutput == null || _diffusedFeatures == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
-
-        bool hasBatch = _lastInput.Rank == 3;
-        int numVertices = hasBatch ? _lastInput.Shape[1] : _lastInput.Shape[0];
-
-        // Initialize diffusion times gradient
-        _diffusionTimesGradient = new T[NumTimeScales];
-        for (int t = 0; t < NumTimeScales; t++)
-        {
-            _diffusionTimesGradient[t] = NumOps.Zero;
-        }
-
-        if (hasBatch)
-        {
-            // For batched inputs, accumulate gradients across all batches
-            int batchSize = _lastInput.Shape[0];
-
-            // Reshape delta to [batchSize * numVertices, OutputChannels] for matrix operations
-            var deltaReshaped = delta.Reshape(batchSize * numVertices, OutputChannels);
-            var diffusedReshaped = _diffusedFeatures.Reshape(batchSize * numVertices, InputChannels * NumTimeScales);
-
-            // Compute weight gradients: sum over all samples
-            var transposedDelta = Engine.TensorTranspose(deltaReshaped);
-            _weightsGradient = Engine.TensorMatMul(transposedDelta, diffusedReshaped);
-
-            // Compute bias gradients: sum over all samples
-            _biasesGradient = Engine.ReduceSum(deltaReshaped, [0], keepDims: false);
-
-            // Compute input gradients
-            var diffusedGrad = Engine.TensorMatMul(deltaReshaped, _weights);
-
-            // Compute diffusion time gradients (accumulate across batches)
-            ComputeDiffusionTimeGradients(diffusedGrad, _lastInput.Reshape(batchSize * numVertices, InputChannels), numVertices * batchSize);
-
-            var inputGrad = BackpropagateThroughDiffusion(diffusedGrad, numVertices * batchSize);
-
-            return inputGrad.Reshape(batchSize, numVertices, InputChannels);
-        }
-        else
-        {
-            var transposedDelta = Engine.TensorTranspose(delta);
-            _weightsGradient = Engine.TensorMatMul(transposedDelta, _diffusedFeatures);
-            _biasesGradient = Engine.ReduceSum(delta, [0], keepDims: false);
-
-            var diffusedGrad = Engine.TensorMatMul(delta, _weights);
-
-            // Compute diffusion time gradients
-            ComputeDiffusionTimeGradients(diffusedGrad, _lastInput, numVertices);
-
-            var inputGrad = BackpropagateThroughDiffusion(diffusedGrad, numVertices);
-
-            return inputGrad;
-        }
-    }
 
     /// <summary>
     /// Computes gradients for diffusion time parameters using the chain rule.
@@ -1855,21 +1430,6 @@ public class DiffusionConvLayer<T> : LayerBase<T>
         // Copy to output
         var currentArray = current.ToArray();
         Array.Copy(currentArray, output, output.Length);
-    }
-
-    /// <summary>
-    /// Backward pass using automatic differentiation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Currently routes to manual implementation. Full autodiff integration pending
-    /// the addition of diffusion-specific operations to the computation graph.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        // TODO: Implement proper autodiff when diffusion graph operations are available
-        return BackwardManual(outputGradient);
     }
 
     /// <summary>
@@ -2046,8 +1606,8 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     {
         var timeParams = new Vector<T>(DiffusionTimes);
         return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_weights.Data),
-            Vector<T>.FromMemory(_biases.Data),
+            new Vector<T>(_weights.ToArray()),
+            new Vector<T>(_biases.ToArray()),
             timeParams);
     }
 
@@ -2337,35 +1897,6 @@ public class DiffusionConvLayer<T> : LayerBase<T>
     #endregion
 
     #region JIT Compilation
-
-    /// <summary>
-    /// Exports the layer as a computation graph for JIT compilation.
-    /// </summary>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (_weights == null || _biases == null)
-            throw new InvalidOperationException("Layer weights not initialized.");
-
-        var symbolicInput = new Tensor<T>(InputShape);
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "diffusion_conv_input");
-        inputNodes.Add(inputNode);
-
-        var weightNode = TensorOperations<T>.Constant(_weights, "diffusion_conv_weights");
-        var biasNode = TensorOperations<T>.Constant(_biases, "diffusion_conv_bias");
-
-        var transposedWeights = TensorOperations<T>.Transpose(weightNode);
-        var matmulNode = TensorOperations<T>.MatrixMultiply(inputNode, transposedWeights);
-        var biasedNode = TensorOperations<T>.Add(matmulNode, biasNode);
-
-        var activatedOutput = ApplyActivationToGraph(biasedNode);
-        return activatedOutput;
-    }
 
     #endregion
 }

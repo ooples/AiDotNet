@@ -890,7 +890,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         }
 
         // ImageNet normalization: (x - mean) / std
-        var normalized = new Tensor<T>(image.Shape.ToArray());
+        var normalized = new Tensor<T>(image._shape);
         double[] means = [0.485, 0.456, 0.406];
         double[] stds = [0.229, 0.224, 0.225];
 
@@ -1063,7 +1063,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Rank);
-        foreach (var dim in tensor.Shape.ToArray())
+        foreach (var dim in tensor._shape)
             writer.Write(dim);
 
         writer.Write(tensor.Data.Length);
@@ -1165,31 +1165,14 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
         }
 
         SetTrainingMode(true);
-
-        // Forward pass
-        var output = Predict(input);
-
-        // Compute loss
-        LastLoss = LossFunction.CalculateLoss(output.ToVector(), expectedOutput.ToVector());
-
-        // Backward pass - compute gradients
-        var lossGradient = LossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector());
-        var gradient = Tensor<T>.FromVector(lossGradient);
-
-        // Propagate gradients backward through layers
-        for (int i = Layers.Count - 1; i >= 0; i--)
+        try
         {
-            gradient = Layers[i].Backward(gradient);
+            TrainWithTape(input, expectedOutput);
         }
-
-        // Update embedding gradients
-        UpdateEmbeddingGradients(gradient);
-
-        // Apply optimizer update
-        var paramGradients = CollectParameterGradients();
-        UpdateParameters(paramGradients);
-
-        SetTrainingMode(false);
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>

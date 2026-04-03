@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
@@ -144,7 +144,7 @@ public class LayerActivationStats<T>
     /// </summary>
     private void UpdatePerChannelStats(Tensor<T> activations)
     {
-        var shape = activations.Shape.ToArray();
+        var shape = activations._shape;
         if (shape.Length < 2) return;
 
         int numChannels = shape[^1]; // Last dimension is typically channels

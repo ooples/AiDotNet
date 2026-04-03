@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -61,22 +61,9 @@ public class InputLayer<T> : LayerBase<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         return inputs[0];
-    }
-
-    /// <summary>
-    /// Computes the gradient of the loss with respect to the input on the GPU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The same output gradient, unchanged.</returns>
-    /// <remarks>
-    /// InputLayer is an identity operation, so the gradient passes through unchanged.
-    /// </remarks>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        return outputGradient;
     }
 
     /// <summary>
@@ -128,64 +115,6 @@ public class InputLayer<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         return input;
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the input layer, simply returning the output gradient unchanged.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The same output gradient, unchanged.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the input layer. Since the input layer does not transform
-    /// the data and has no parameters to learn, it simply passes the gradient back unchanged.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method passes error information backward through the network.
-    ///
-    /// During the backward pass:
-    /// - The layer receives information about how its output contributed to errors
-    /// - Since this layer doesn't change anything, it passes this information back unchanged
-    /// - There are no parameters to update
-    ///
-    /// This method is still needed even though the layer doesn't learn, because
-    /// it's part of the backpropagation process that allows the entire network to learn.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation (optimized).
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The same output gradient, unchanged.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        return outputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The same output gradient, unchanged.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. For InputLayer,
-    /// since it performs identity operation (passthrough), the gradient is simply passed through.
-    /// This implementation exists for consistency with other layers and verification purposes.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        // InputLayer is an identity operation: output = input
-        // The gradient of identity is 1, so: d(loss)/d(input) = d(loss)/d(output) * 1 = d(loss)/d(output)
-        // Therefore, we simply return the output gradient unchanged
-        return outputGradient;
     }
 
     /// <summary>
@@ -261,21 +190,4 @@ public class InputLayer<T> : LayerBase<T>
     {
         // InputLayer has no state to reset
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode; // Identity - pass through unchanged
-    }
-
-    public override bool SupportsJitCompilation => true; // Always supports JIT (identity operation)
 }

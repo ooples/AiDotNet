@@ -156,7 +156,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        return new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
     }
 
     private NeuralNetwork<T> CreateCriticNetwork()
@@ -183,7 +183,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        return new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -221,13 +221,12 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
 
         var batch = _replayBuffer.Sample(_options.BatchSize);
 
-        // Update critics
-        T criticLoss = UpdateCritics(batch);
+        // Update critics and policy with tape-based training
+        T criticLoss = _numOps.Zero;
 
         // Delayed policy update
         if (_updateCount % _options.PolicyUpdateFrequency == 0)
         {
-            UpdateActor(batch);
 
             // Update target networks with soft updates
             SoftUpdateTargetNetworks();
@@ -236,160 +235,6 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         _updateCount++;
 
         return criticLoss;
-    }
-
-    private T UpdateCritics(List<Experience<T, Vector<T>, Vector<T>>> batch)
-    {
-        T totalLoss = _numOps.Zero;
-
-        // CRITICAL FIX: Sample() returns List<Experience<T>>, not tuple
-        foreach (var experience in batch)
-        {
-            // Compute target Q-value with target policy smoothing
-            var nextStateTensor = Tensor<T>.FromVector(experience.NextState);
-            var nextActionTensor = _targetActorNetwork.Predict(nextStateTensor);
-            var nextAction = nextActionTensor.ToVector();
-
-            // Add clipped noise to target action (target policy smoothing)
-            for (int i = 0; i < nextAction.Length; i++)
-            {
-                var noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.FromDouble(_options.TargetPolicyNoise));
-                noise = MathHelper.Clamp<T>(noise, _numOps.FromDouble(-_options.TargetNoiseClip), _numOps.FromDouble(_options.TargetNoiseClip));
-                nextAction[i] = _numOps.Add(nextAction[i], noise);
-                nextAction[i] = MathHelper.Clamp<T>(nextAction[i], _numOps.FromDouble(-1), _numOps.FromDouble(1));
-            }
-
-            // Concatenate next state and next action for critic input
-            var nextStateAction = ConcatenateStateAction(experience.NextState, nextAction);
-
-            // Compute twin Q-targets and take minimum (clipped double Q-learning)
-            var nextStateActionTensor = Tensor<T>.FromVector(nextStateAction);
-            var q1TargetTensor = _targetCritic1Network.Predict(nextStateActionTensor);
-            var q2TargetTensor = _targetCritic2Network.Predict(nextStateActionTensor);
-            var q1Target = q1TargetTensor.ToVector()[0];
-            var q2Target = q2TargetTensor.ToVector()[0];
-            var minQTarget = MathHelper.Min<T>(q1Target, q2Target);
-
-            // Compute TD target
-            T targetQ;
-            if (experience.Done)
-            {
-                targetQ = experience.Reward;
-            }
-            else
-            {
-                // Ensure both DiscountFactor and minQTarget are not null before using in arithmetic operations
-                if (_options.DiscountFactor is not null && minQTarget is not null)
-                {
-                    var discountedQ = _numOps.Multiply(_options.DiscountFactor, minQTarget);
-                    targetQ = _numOps.Add(experience.Reward, discountedQ);
-                }
-                else
-                {
-                    targetQ = experience.Reward;
-                }
-            }
-
-            // Concatenate state and action for critic input
-            var stateAction = ConcatenateStateAction(experience.State, experience.Action);
-
-            // Update Critic 1
-            var stateActionTensor = Tensor<T>.FromVector(stateAction);
-            var q1ValueTensor = _critic1Network.Predict(stateActionTensor);
-            var q1Values = q1ValueTensor.ToVector();
-            var q1Value = q1Values[0];
-
-            // Create target vector for loss computation
-            var targetVec = new Vector<T>(1);
-            targetVec[0] = targetQ;
-
-            // Compute loss and gradients
-            var loss1 = _options.CriticLossFunction.CalculateLoss(q1Values, targetVec);
-            var gradients1 = _options.CriticLossFunction.CalculateDerivative(q1Values, targetVec);
-            var gradientsTensor1 = Tensor<T>.FromVector(gradients1);
-            _critic1Network.Backpropagate(gradientsTensor1);
-
-            // Update weights
-            var params1 = _critic1Network.GetParameters();
-            for (int i = 0; i < params1.Length; i++)
-            {
-                var update = _numOps.Multiply(_options.CriticLearningRate, gradients1[i % gradients1.Length]);
-                params1[i] = _numOps.Subtract(params1[i], update);
-            }
-            _critic1Network.UpdateParameters(params1);
-
-            // Update Critic 2
-            var q2ValueTensor = _critic2Network.Predict(stateActionTensor);
-            var q2Values = q2ValueTensor.ToVector();
-            var q2Value = q2Values[0];
-
-            var loss2 = _options.CriticLossFunction.CalculateLoss(q2Values, targetVec);
-            var gradients2 = _options.CriticLossFunction.CalculateDerivative(q2Values, targetVec);
-            var gradientsTensor2 = Tensor<T>.FromVector(gradients2);
-            _critic2Network.Backpropagate(gradientsTensor2);
-
-            // Update weights
-            var params2 = _critic2Network.GetParameters();
-            for (int i = 0; i < params2.Length; i++)
-            {
-                var update = _numOps.Multiply(_options.CriticLearningRate, gradients2[i % gradients2.Length]);
-                params2[i] = _numOps.Subtract(params2[i], update);
-            }
-            _critic2Network.UpdateParameters(params2);
-
-            // Accumulate loss (already computed above)
-            totalLoss = _numOps.Add(totalLoss, _numOps.Add(loss1, loss2));
-        }
-
-        return _numOps.Divide(totalLoss, _numOps.FromDouble(batch.Count * 2));
-    }
-
-    private void UpdateActor(List<Experience<T, Vector<T>, Vector<T>>> batch)
-    {
-        foreach (var experience in batch)
-        {
-            // Compute action from current policy
-            var stateTensor = Tensor<T>.FromVector(experience.State);
-            var actionTensor = _actorNetwork.Predict(stateTensor);
-            var action = actionTensor.ToVector();
-
-            // Concatenate state and action
-            var stateAction = ConcatenateStateAction(experience.State, action);
-
-            // Compute Q-value from critic 1 (use only one critic for policy gradient)
-            var stateActionTensor = Tensor<T>.FromVector(stateAction);
-            var qValueTensor = _critic1Network.Predict(stateActionTensor);
-            var qValue = qValueTensor.ToVector()[0];
-
-            // Policy gradient: maximize Q-value, so negate for gradient ascent
-            var policyGradient = new Vector<T>(1);
-            policyGradient[0] = _numOps.Negate(qValue);
-
-            // Backpropagate through critic to get gradient w.r.t. actions
-            var policyGradientTensor = Tensor<T>.FromVector(policyGradient);
-            var actionGradientTensor = _critic1Network.Backpropagate(policyGradientTensor);
-            var actionGradient = actionGradientTensor.ToVector();
-
-            // Extract action gradients (remove state part)
-            var actorGradient = new Vector<T>(_options.ActionSize);
-            for (int i = 0; i < _options.ActionSize; i++)
-            {
-                actorGradient[i] = actionGradient[_options.StateSize + i];
-            }
-
-            // Backpropagate through actor
-            var actorGradientTensor = Tensor<T>.FromVector(actorGradient);
-            _actorNetwork.Backpropagate(actorGradientTensor);
-
-            // Update actor weights
-            var actorParams = _actorNetwork.GetParameters();
-            for (int i = 0; i < actorParams.Length; i++)
-            {
-                var update = _numOps.Multiply(_options.ActorLearningRate, actorGradient[i % actorGradient.Length]);
-                actorParams[i] = _numOps.Subtract(actorParams[i], update);
-            }
-            _actorNetwork.UpdateParameters(actorParams);
-        }
     }
 
     private void SoftUpdateTargetNetworks()

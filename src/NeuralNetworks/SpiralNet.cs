@@ -351,23 +351,6 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs a backward pass to compute gradients.
-    /// </summary>
-    /// <param name="lossGradient">Gradient of the loss with respect to network output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    public Tensor<T> Backward(Tensor<T> lossGradient)
-    {
-        Tensor<T> gradient = lossGradient;
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
     /// Updates network parameters using the optimizer.
     /// </summary>
     /// <param name="learningRate">Learning rate for parameter updates.</param>
@@ -421,9 +404,8 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
                 epochLoss += NumOps.ToDouble(loss);
 
                 var lossGrad = _lossFunction.CalculateDerivative(output.ToVector(), target);
-                var lossGradTensor = new Tensor<T>(lossGrad.ToArray(), output.Shape.ToArray());
+                var lossGradTensor = new Tensor<T>(lossGrad.ToArray(), output._shape);
 
-                Backward(lossGradTensor);
                 UpdateParameters(learningRate);
             }
 
@@ -500,24 +482,15 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        var prediction = Forward(input);
-
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
-
-        var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-
-        var gradients = new List<Tensor<T>>();
-        var currentGradient = outputGradientTensor;
-        for (int i = Layers.Count - 1; i >= 0; i--)
+        SetTrainingMode(true);
+        try
         {
-            currentGradient = Layers[i].Backward(currentGradient);
-            gradients.Insert(0, currentGradient);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
-
-        ClipGradients(gradients);
-        _optimizer.UpdateParameters(Layers);
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

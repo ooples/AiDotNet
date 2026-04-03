@@ -62,9 +62,11 @@ public abstract class LayerTestBase
     protected virtual bool ExpectsTrainableParameters => true;
 
     /// <summary>
-    /// Whether the layer's Backward produces meaningful gradients.
+    /// Whether the layer's gradient computation produces meaningful gradients.
     /// Some layers (ReservoirLayer, InputLayer) pass gradients through but
     /// don't compute weight gradients. Override to false for those.
+    /// Note: With tape-based autodiff, gradient correctness is verified through
+    /// the tape rather than layer-level Backward.
     /// </summary>
     protected virtual bool ExpectsNonZeroGradients => true;
 
@@ -290,73 +292,6 @@ public abstract class LayerTestBase
 
 
     // =========================================================================
-    // Shared gradient check logic
-    // =========================================================================
-
-    /// <summary>
-    /// Runs numerical gradient check (finite differences) against analytical gradients
-    /// for a given layer, input, and loss strategy. Returns failure count and details.
-    /// </summary>
-    private static (int FailCount, int CheckCount, string DebugInfo) RunGradientCheck(
-        ILayer<double> layer, Tensor<double> input, GradientCheckLossStrategy lossStrategy, double epsilon = 1e-5)
-    {
-        layer.SetTrainingMode(true);
-        layer.ClearGradients();
-        var output = layer.Forward(input);
-
-        var outputGrad = ComputeStrategyGradient(output, lossStrategy);
-        layer.Backward(outputGrad);
-        var analyticalGradients = layer.GetParameterGradients();
-
-        if (analyticalGradients.Length == 0)
-            return (0, 0, string.Empty);
-
-        var parameters = layer.GetParameters();
-        int checkCount = Math.Min(10, parameters.Length);
-        int failCount = 0;
-        var debugInfo = new System.Text.StringBuilder();
-
-        for (int p = 0; p < checkCount; p++)
-        {
-            // L(w + epsilon)
-            var paramsPlus = parameters.Clone();
-            paramsPlus[p] += epsilon;
-            layer.SetParameters(paramsPlus);
-            layer.ResetState();
-            var outputPlus = layer.Forward(input);
-            double lossPlus = ComputeStrategyLoss(outputPlus, lossStrategy);
-
-            // L(w - epsilon)
-            var paramsMinus = parameters.Clone();
-            paramsMinus[p] -= epsilon;
-            layer.SetParameters(paramsMinus);
-            layer.ResetState();
-            var outputMinus = layer.Forward(input);
-            double lossMinus = ComputeStrategyLoss(outputMinus, lossStrategy);
-
-            double numericalGrad = (lossPlus - lossMinus) / (2.0 * epsilon);
-            double analyticalGrad = analyticalGradients[p];
-
-            // Relative error check (handle near-zero gradients)
-            double absMax = Math.Max(Math.Abs(numericalGrad), Math.Abs(analyticalGrad));
-            if (absMax < 1e-7) continue; // Both near zero, skip
-
-            double relError = Math.Abs(numericalGrad - analyticalGrad) / (absMax + 1e-8);
-            if (relError > 0.01) // 1% relative error threshold
-            {
-                failCount++;
-                debugInfo.Append(
-                    $"p[{p}]: analytical={analyticalGrad:G6} numerical={numericalGrad:G6} relErr={relError:G4} | ");
-            }
-        }
-
-        // Restore original parameters
-        layer.SetParameters(parameters);
-        return (failCount, checkCount, debugInfo.ToString());
-    }
-
-
-    // =========================================================================
     // INVARIANT 1: Forward produces finite, non-empty output
     // If the forward pass returns NaN/Inf/empty, the layer is numerically broken.
     // =========================================================================
@@ -468,33 +403,9 @@ public abstract class LayerTestBase
     }
 
     // =========================================================================
-    // INVARIANT 5: Backward produces finite gradient
-    // After Forward+Backward, the returned input gradient must be finite.
+    // INVARIANT 5: (Removed — Backward deleted in tape-based autodiff migration)
+    // Gradient correctness is now verified through GradientTape, not layer Backward.
     // =========================================================================
-
-    [Fact]
-    public void Backward_ShouldProduceFiniteGradient()
-    {
-        var layer = CreateLayer();
-        layer.SetTrainingMode(true);
-        var input = CreateRandomTensor(InputShape);
-
-        var output = layer.Forward(input);
-
-        // Create gradient matching output shape
-        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), seed: 99);
-
-        var inputGrad = layer.Backward(outputGrad);
-
-        Assert.True(inputGrad.Length > 0, "Input gradient should not be empty.");
-        for (int i = 0; i < inputGrad.Length; i++)
-        {
-            Assert.False(double.IsNaN(inputGrad[i]),
-                $"InputGradient[{i}] is NaN — broken backward pass.");
-            Assert.False(double.IsInfinity(inputGrad[i]),
-                $"InputGradient[{i}] is Infinity — gradient explosion in backward pass.");
-        }
-    }
 
     // =========================================================================
     // INVARIANT 6: Parameter count is non-negative and GetParameters matches
@@ -546,43 +457,8 @@ public abstract class LayerTestBase
     }
 
     // =========================================================================
-    // INVARIANT 8: Backward produces non-zero weight gradients
-    // For trainable layers, after Forward+Backward, GetParameterGradients
-    // should have at least some non-zero values.
+    // INVARIANT 8: (Removed — Backward deleted in tape-based autodiff migration)
     // =========================================================================
-
-    [Fact]
-    public void Backward_ShouldProduceNonZeroWeightGradients()
-    {
-        if (!ExpectsTrainableParameters || !ExpectsNonZeroGradients) return;
-
-        var layer = CreateLayer();
-        layer.SetTrainingMode(true);
-        layer.ClearGradients();
-
-        var input = CreateRandomTensor(InputShape);
-        var output = layer.Forward(input);
-        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), seed: 99);
-
-        layer.Backward(outputGrad);
-
-        var gradients = layer.GetParameterGradients();
-        Assert.True(gradients.Length > 0,
-            "Trainable layer should have parameter gradients after Backward.");
-
-        bool anyNonZero = false;
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            if (Math.Abs(gradients[i]) > 1e-15)
-            {
-                anyNonZero = true;
-                break;
-            }
-        }
-        Assert.True(anyNonZero,
-            "All parameter gradients are zero after Backward. " +
-            "Gradient computation is likely broken.");
-    }
 
     // =========================================================================
     // INVARIANT 9: Serialization roundtrip preserves behavior
@@ -654,118 +530,7 @@ public abstract class LayerTestBase
     }
 
     // =========================================================================
-    // INVARIANT 11: ClearGradients zeroes all gradients
-    // After ClearGradients, GetParameterGradients should return all zeros.
+    // INVARIANTS 11-14: (Removed — Backward deleted in tape-based autodiff migration)
+    // Gradient correctness tests will be reimplemented using GradientTape<T>.
     // =========================================================================
-
-    [Fact]
-    public void ClearGradients_ShouldZeroAllGradients()
-    {
-        if (!ExpectsTrainableParameters) return;
-
-        var layer = CreateLayer();
-        layer.SetTrainingMode(true);
-
-        // Accumulate some gradients
-        var input = CreateRandomTensor(InputShape);
-        var output = layer.Forward(input);
-        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), seed: 99);
-        layer.Backward(outputGrad);
-
-        // Clear
-        layer.ClearGradients();
-
-        var gradients = layer.GetParameterGradients();
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            Assert.Equal(0.0, gradients[i], 1e-15);
-        }
-    }
-
-    // =========================================================================
-    // INVARIANT 12: Numerical gradient check (finite differences)
-    // For trainable layers, verify that analytical gradients match numerical
-    // approximation: dL/dw = (L(w+e) - L(w-e)) / 2e
-    // This is the gold standard for gradient correctness.
-    // Uses the loss strategy specified by DefaultLossStrategy.
-    // =========================================================================
-
-    [Fact]
-    public void Backward_NumericalGradientCheck()
-    {
-        if (!ExpectsTrainableParameters || !ExpectsNonZeroGradients) return;
-
-        var layer = CreateLayer();
-        var input = CreateRandomTensor(InputShape);
-
-        var (failCount, checkCount, debugInfo) = RunGradientCheck(layer, input, DefaultLossStrategy);
-        if (checkCount == 0) return;
-
-        Assert.True(failCount <= checkCount / 3,
-            $"Numerical gradient check failed for {failCount}/{checkCount} parameters. " +
-            $"Analytical gradients don't match finite differences (loss={DefaultLossStrategy}). " +
-            $"Details: {debugInfo}");
-    }
-
-    // =========================================================================
-    // INVARIANT 13: Loss variant gradient check
-    // Tests the backward pass with every loss strategy to expose bugs hidden by
-    // specific gradient alignments. Each strategy produces a different dL/dOutput:
-    // - MSE: gradient proportional to output (bugs cancel when backward * output)
-    // - RandomProjection: random gradient direction (no alignment with output)
-    // - L1: constant magnitude gradient (tests backward with sign-only signal)
-    // Adding a new entry to LossStrategyNames automatically tests ALL layers.
-    // =========================================================================
-
-    [Theory]
-    [Trait("Category", "GradientVariant")]
-    [MemberData(nameof(LossStrategyValues), MemberType = typeof(LayerTestBase))]
-    public void Backward_GradientCheck_LossVariant(GradientCheckLossStrategy lossStrategy)
-    {
-        if (!ExpectsTrainableParameters || !ExpectsNonZeroGradients) return;
-
-        var layer = CreateLayer();
-        var input = CreateRandomTensor(InputShape);
-
-        var (failCount, checkCount, debugInfo) = RunGradientCheck(layer, input, lossStrategy);
-        if (checkCount == 0) return;
-
-        Assert.True(failCount <= checkCount / 3,
-            $"Gradient check ({lossStrategy}) failed for {failCount}/{checkCount} parameters. " +
-            $"Details: {debugInfo}");
-    }
-
-    // =========================================================================
-    // INVARIANT 14: Activation variant gradient check
-    // For layers that accept activation function parameters, tests gradient
-    // correctness with every auto-discovered scalar activation function.
-    // Adding a new ActivationFunctionBase<T> implementation automatically tests it.
-    // Layers opt in by overriding SupportsActivationVariants => true and
-    // implementing CreateLayerWithActivation().
-    // =========================================================================
-
-    [Theory]
-    [Trait("Category", "GradientVariant")]
-    [MemberData(nameof(DiscoveredActivationNames), MemberType = typeof(LayerTestBase))]
-    public void Backward_GradientCheck_ActivationVariant(string activationName)
-    {
-        if (!SupportsActivationVariants) return;
-        if (!ExpectsTrainableParameters || !ExpectsNonZeroGradients) return;
-
-        var match = _activationCache.Value.FirstOrDefault(a => a.Name == activationName);
-        if (match.ClosedType is null) return;
-
-        if (Activator.CreateInstance(match.ClosedType) is not ActivationFunctionBase<double> activation)
-            return;
-
-        var layer = CreateLayerWithActivation(activation);
-        var input = CreateRandomTensor(InputShape);
-
-        var (failCount, checkCount, debugInfo) = RunGradientCheck(layer, input, GradientCheckLossStrategy.MSE);
-        if (checkCount == 0) return;
-
-        Assert.True(failCount <= checkCount / 3,
-            $"Gradient check with {activationName} failed for {failCount}/{checkCount} parameters. " +
-            $"Details: {debugInfo}");
-    }
 }

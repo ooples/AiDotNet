@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -453,7 +453,6 @@ public class TimeGPT<T> : ForecastingModelBase<T>
 
             // Backward pass
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -752,28 +751,6 @@ public class TimeGPT<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass for gradient computation.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of the loss with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The backward pass computes gradients for all trainable
-    /// parameters to update them during fine-tuning.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var current = outputGradient;
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            current = Layers[i].Backward(current);
-        }
-
-        return current;
-    }
-
-    /// <summary>
     /// Performs ONNX-based inference for forecasting.
     /// </summary>
     /// <param name="input">Input tensor with historical data.</param>
@@ -796,7 +773,7 @@ public class TimeGPT<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1033,7 +1010,7 @@ public class TimeGPT<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         // Use effective context length based on actual input size
         int effectiveContext = Math.Min(_contextLength, input.Length);
         int steps = Math.Min(stepsUsed, effectiveContext);

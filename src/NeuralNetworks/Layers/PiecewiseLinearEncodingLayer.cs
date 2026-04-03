@@ -1,9 +1,8 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
-using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.NeuralNetworks.Tabular;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Piecewise Linear Encoding for numerical features in tabular models like TabM.
@@ -24,7 +23,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class PiecewiseLinearEncoding<T> : LayerBase<T>
+public class PiecewiseLinearEncodingLayer<T> : LayerBase<T>
 {
     private readonly int _numFeatures;
     private readonly int _numBins;
@@ -46,9 +45,6 @@ public class PiecewiseLinearEncoding<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc/>
     public override int ParameterCount => _numFeatures * (_numBins - 1);
 
     /// <summary>
@@ -56,7 +52,7 @@ public class PiecewiseLinearEncoding<T> : LayerBase<T>
     /// </summary>
     /// <param name="numFeatures">Number of input features.</param>
     /// <param name="numBins">Number of bins per feature.</param>
-    public PiecewiseLinearEncoding(int numFeatures, int numBins = 16)
+    public PiecewiseLinearEncodingLayer(int numFeatures, int numBins = 16)
         : base([numFeatures], [numFeatures * numBins])
     {
         if (numFeatures < 1)
@@ -158,42 +154,6 @@ public class PiecewiseLinearEncoding<T> : LayerBase<T>
         return NumOps.Compare(a, b) < 0 ? a : b;
     }
 
-    /// <summary>
-    /// Computes gradients for the backward pass.
-    /// </summary>
-    /// <param name="gradient">Gradient with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    public override Tensor<T> Backward(Tensor<T> gradient)
-    {
-        if (_inputCache == null)
-            throw new InvalidOperationException("Forward must be called before backward");
-
-        int batchSize = gradient.Shape[0];
-        var inputGrad = new Tensor<T>([batchSize, _numFeatures]);
-
-        // Reset boundary gradients using Engine
-        Engine.TensorFill(_binBoundaryGradients, NumOps.Zero);
-
-        // Compute gradients (simplified - full implementation would track bin assignments)
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < _numFeatures; f++)
-            {
-                var grad = NumOps.Zero;
-                int gradOffset = b * _numFeatures * _numBins + f * _numBins;
-
-                for (int bin = 0; bin < _numBins; bin++)
-                {
-                    grad = NumOps.Add(grad, gradient[gradOffset + bin]);
-                }
-
-                inputGrad[b * _numFeatures + f] = grad;
-            }
-        }
-
-        return inputGrad;
-    }
-
     /// <inheritdoc/>
     public override void UpdateParameters(T learningRate)
     {
@@ -217,21 +177,5 @@ public class PiecewiseLinearEncoding<T> : LayerBase<T>
         for (int i = 0; i < _binBoundaries.Length; i++)
             result[i] = _binBoundaries[i];
         return result;
-    }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Export bin boundaries as a constant for the computation graph
-        var boundariesNode = TensorOperations<T>.Constant(_binBoundaries, "binBoundaries");
-
-        return inputNode;
     }
 }

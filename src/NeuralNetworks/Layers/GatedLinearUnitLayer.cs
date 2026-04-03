@@ -1,8 +1,9 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -43,7 +44,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Gating)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class GatedLinearUnitLayer<T> : LayerBase<T>
+public partial class GatedLinearUnitLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The weight tensor for the linear transformation path.
@@ -65,6 +66,8 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// which parts are important to keep or filter out (that's the gate's job).
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _linearWeights;
 
     /// <summary>
@@ -107,6 +110,8 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// Each output neuron in the linear path has its own bias value.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _linearBias;
 
     /// <summary>
@@ -196,9 +201,9 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     private Tensor<T>? _lastGateOutput;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuLinearOutput;
-    private IGpuTensor<T>? _gpuGateOutput;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuLinearOutput;
+    private Tensor<T>? _gpuGateOutput;
 
     /// <summary>
     /// The gradients for the linear weights, computed during backpropagation.
@@ -536,7 +541,7 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">The GPU input tensors.</param>
     /// <returns>The GPU output tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -562,7 +567,7 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable.");
 
-        int size = linearOutput.ElementCount;
+        int size = linearOutput.Length;
         var outputBuffer = backend.AllocateBuffer(size);
 
         // Element-wise multiply on GPU
@@ -577,205 +582,12 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
             _gpuGateOutput = gateOutput;
 
             // Also cache CPU tensors for fallback backward pass
-            _lastInput = input.ToTensor();
-            _lastLinearOutput = linearOutput.ToTensor();
-            _lastGateOutput = gateOutput.ToTensor();
+            _lastInput = input;
+            _lastLinearOutput = linearOutput;
+            _lastGateOutput = gateOutput;
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, linearOutput.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <summary>
-    /// Performs the backward pass using GPU-resident tensors.
-    /// </summary>
-    /// <param name="outputGradient">GPU-resident gradient of the loss w.r.t. output.</param>
-    /// <returns>GPU-resident gradient of the loss w.r.t. input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        if (_gpuInput == null || _gpuLinearOutput == null || _gpuGateOutput == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
-
-        int inputDim = _linearWeights.Shape[1];
-        int outputDim = _linearWeights.Shape[0];
-        int batchSize = _gpuInput.Shape[0];
-
-        // GLU backward: output = linear * gate
-        // d(linear) = outputGrad * gate
-        // d(gate) = outputGrad * linear
-        var dLinearOutput = gpuEngine.MultiplyGpu(outputGradient, _gpuGateOutput);
-        var dGateBeforeSigmoid = gpuEngine.MultiplyGpu(outputGradient, _gpuLinearOutput);
-
-        // Apply sigmoid derivative to gate gradient: sigmoid'(x) = sigmoid(x) * (1 - sigmoid(x))
-        // d(gate_pre_activation) = d(gate_output) * gate_output * (1 - gate_output)
-        var dGateOutput = gpuEngine.SigmoidBackwardGpu(dGateBeforeSigmoid, _gpuGateOutput);
-
-        // Flatten to 2D for matmul
-        var input2D = gpuEngine.ReshapeGpu(_gpuInput, new[] { batchSize, inputDim });
-        var dLinear2D = gpuEngine.ReshapeGpu(dLinearOutput, new[] { batchSize, outputDim });
-        var dGate2D = gpuEngine.ReshapeGpu(dGateOutput, new[] { batchSize, outputDim });
-
-        // Linear weights gradient: dLinear^T @ input
-        var dLinearT = gpuEngine.TransposeGpu(dLinear2D);
-        var linearWeightsGrad = gpuEngine.MatMulGpuTensors(dLinearT, input2D);
-        _linearWeightsGradient = linearWeightsGrad.ToTensor();
-
-        // Gate weights gradient: dGate^T @ input
-        var dGateT = gpuEngine.TransposeGpu(dGate2D);
-        var gateWeightsGrad = gpuEngine.MatMulGpuTensors(dGateT, input2D);
-        _gateWeightsGradient = gateWeightsGrad.ToTensor();
-
-        // Linear bias gradient: sum(dLinear, axis=0)
-        var linearBiasGrad = gpuEngine.SumAxisGpu(dLinear2D, 0);
-        _linearBiasGradient = linearBiasGrad.ToTensor().Reshape([outputDim]);
-
-        // Gate bias gradient: sum(dGate, axis=0)
-        var gateBiasGrad = gpuEngine.SumAxisGpu(dGate2D, 0);
-        _gateBiasGradient = gateBiasGrad.ToTensor().Reshape([outputDim]);
-
-        // Input gradient: dLinear @ linearWeights + dGate @ gateWeights
-        // Note: weights are [outputDim, inputDim], need to transpose
-        var linearWeightsT = gpuEngine.UploadToGpu(Engine.TensorTranspose(_linearWeights), GpuTensorRole.Weight);
-        var gateWeightsT = gpuEngine.UploadToGpu(Engine.TensorTranspose(_gateWeights), GpuTensorRole.Weight);
-
-        var dInputFromLinear = gpuEngine.MatMulGpuTensors(dLinear2D, linearWeightsT);
-        var dInputFromGate = gpuEngine.MatMulGpuTensors(dGate2D, gateWeightsT);
-        var inputGradient = gpuEngine.AddGpu(dInputFromLinear, dInputFromGate);
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the GLU layer to compute gradients.
-    /// </summary>
-    /// <param name="outputGradient">The gradient tensor from the next layer. Shape: [batchSize, outputDimension].</param>
-    /// <returns>The gradient tensor to be passed to the previous layer. Shape: [batchSize, inputDimension].</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass (backpropagation) of the GLU layer. It computes the gradients
-    /// of the loss with respect to the layer's weights, biases, and inputs. The computation accounts for
-    /// the two paths (linear and gating) and their interaction through element-wise multiplication.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where the layer learns from its mistakes during training.
-    /// 
-    /// The backward pass is more complex in GLU layers because of the two paths:
-    /// 
-    /// 1. First, compute gradients for both paths:
-    ///    - Linear path gradient: outputGradient × gate values
-    ///    - Gate path gradient: outputGradient × linear output
-    /// 
-    /// 2. For the gate path, apply the activation derivative
-    ///    - This accounts for how the activation affected the gates
-    /// 
-    /// 3. Compute gradients for all parameters:
-    ///    - Linear weights: Based on input and linear gradient
-    ///    - Gate weights: Based on input and gate gradient
-    ///    - Linear biases: Sum of linear gradients
-    ///    - Gate biases: Sum of gate gradients
-    /// 
-    /// 4. Compute gradient for the input (to pass to previous layer):
-    ///    - Combine contributions from both paths
-    /// 
-    /// This process ensures that both paths learn appropriately
-    /// based on their contribution to the final output.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastLinearOutput == null || _lastGateOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // dL/dLinear = dL/dOutput * gate
-        var linearGradient = Engine.TensorMultiply(outputGradient, _lastGateOutput);
-        // dL/dGate = dL/dOutput * linear
-        var gateGradient = Engine.TensorMultiply(outputGradient, _lastLinearOutput);
-
-        // Apply gate activation derivative
-        gateGradient = ApplyActivationDerivative(_lastGateOutput, gateGradient);
-
-        // Weight gradients: dW = grad^T @ input
-        var linearGradT = linearGradient.Transpose([1, 0]);
-        var gateGradT = gateGradient.Transpose([1, 0]);
-        _linearWeightsGradient = linearGradT.MatrixMultiply(_lastInput);
-        _gateWeightsGradient = gateGradT.MatrixMultiply(_lastInput);
-
-        // Bias gradients: sum over batch
-        _linearBiasGradient = linearGradient.Sum([0]);
-        _gateBiasGradient = gateGradient.Sum([0]);
-
-        // Input gradient: dL/dInput = linearGrad @ linearWeights + gateGrad @ gateWeights
-        var inputGradFromLinear = linearGradient.MatrixMultiply(_linearWeights);
-        var inputGradFromGate = gateGradient.MatrixMultiply(_gateWeights);
-        var inputGradient = Engine.TensorAdd(inputGradFromLinear, inputGradFromGate);
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation principles.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass using the same mathematical formulas as the manual
-    /// implementation but structured to demonstrate autodiff concepts. Both paths now produce
-    /// identical results by using the same cached values and computation order.
-    /// </para>
-    /// <para>
-    /// For the GLU layer, the computations are:
-    /// - Forward: output = linearOutput * sigmoid(gatePreactivation)
-    /// - Backward: dL/dinput = (dL/dlinearOutput @ linearWeights) + (dL/dgatePreactivation @ gateWeights)
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastLinearOutput == null || _lastGateOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // === Step 1: Compute gradients through the GLU output ===
-        // output = linearOutput * gateOutput (element-wise)
-        // dL/dlinearOutput = dL/dOutput * gateOutput
-        // dL/dgateOutput = dL/dOutput * linearOutput
-        // Production-grade: Use Engine.TensorMultiply for GPU/CPU accelerated element-wise ops
-        var linearGradient = Engine.TensorMultiply(outputGradient, _lastGateOutput);
-        var gateGradient = Engine.TensorMultiply(outputGradient, _lastLinearOutput);
-
-        // === Step 2: Apply activation derivative to gate gradient using cached values ===
-        // This matches BackwardManual exactly by using _lastGateOutput
-        gateGradient = ApplyActivationDerivative(_lastGateOutput, gateGradient);
-
-        // === Step 3: Compute weight and bias gradients ===
-        var linearGradT = linearGradient.Transpose([1, 0]);
-        var gateGradT = gateGradient.Transpose([1, 0]);
-        _linearWeightsGradient = linearGradT.MatrixMultiply(_lastInput);
-        _gateWeightsGradient = gateGradT.MatrixMultiply(_lastInput);
-
-        _linearBiasGradient = linearGradient.Sum([0]);
-        _gateBiasGradient = gateGradient.Sum([0]);
-
-        // === Step 4: Compute input gradient ===
-        // dL/dinput = (linearGradient @ linearWeights) + (gateGradient @ gateWeights)
-        var inputGradFromLinear = linearGradient.MatrixMultiply(_linearWeights);
-        var inputGradFromGate = gateGradient.MatrixMultiply(_gateWeights);
-        var inputGradient = Engine.TensorAdd(inputGradFromLinear, inputGradFromGate);
-
-        return inputGradient;
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, linearOutput.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -818,10 +630,15 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         var scaledLinearBiasGrad = Engine.TensorMultiplyScalar(_linearBiasGradient, learningRate);
         var scaledGateBiasGrad = Engine.TensorMultiplyScalar(_gateBiasGradient, learningRate);
 
-        _linearWeights = Engine.TensorSubtract(_linearWeights, scaledLinearWeightsGrad);
-        _gateWeights = Engine.TensorSubtract(_gateWeights, scaledGateWeightsGrad);
-        _linearBias = Engine.TensorSubtract(_linearBias, scaledLinearBiasGrad);
-        _gateBias = Engine.TensorSubtract(_gateBias, scaledGateBiasGrad);
+        // Update in-place to preserve GPU-registered tensor references
+        var updLW = Engine.TensorSubtract(_linearWeights, scaledLinearWeightsGrad);
+        var updGW = Engine.TensorSubtract(_gateWeights, scaledGateWeightsGrad);
+        var updLB = Engine.TensorSubtract(_linearBias, scaledLinearBiasGrad);
+        var updGB = Engine.TensorSubtract(_gateBias, scaledGateBiasGrad);
+        for (int i = 0; i < _linearWeights.Length; i++) _linearWeights[i] = updLW[i];
+        for (int i = 0; i < _gateWeights.Length; i++) _gateWeights[i] = updGW[i];
+        for (int i = 0; i < _linearBias.Length; i++) _linearBias[i] = updLB[i];
+        for (int i = 0; i < _gateBias.Length; i++) _gateBias[i] = updGB[i];
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_linearWeights);
@@ -865,10 +682,10 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_linearWeights.Data),
-            Vector<T>.FromMemory(_gateWeights.Data),
-            Vector<T>.FromMemory(_linearBias.Data),
-            Vector<T>.FromMemory(_gateBias.Data));
+            new Vector<T>(_linearWeights.ToArray()),
+            new Vector<T>(_gateWeights.ToArray()),
+            new Vector<T>(_linearBias.ToArray()),
+            new Vector<T>(_gateBias.ToArray()));
     }
 
     /// <summary>
@@ -958,10 +775,10 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
             _linearBiasGradient == null || _gateBiasGradient == null)
             return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_linearWeightsGradient is not null ? Vector<T>.FromMemory(_linearWeightsGradient.Data) : new Vector<T>(0)),
-            (_gateWeightsGradient is not null ? Vector<T>.FromMemory(_gateWeightsGradient.Data) : new Vector<T>(0)),
-            (_linearBiasGradient is not null ? Vector<T>.FromMemory(_linearBiasGradient.Data) : new Vector<T>(0)),
-            (_gateBiasGradient is not null ? Vector<T>.FromMemory(_gateBiasGradient.Data) : new Vector<T>(0)));
+            new Vector<T>(_linearWeightsGradient.ToArray()),
+            new Vector<T>(_gateWeightsGradient.ToArray()),
+            new Vector<T>(_linearBiasGradient.ToArray()),
+            new Vector<T>(_gateBiasGradient.ToArray()));
     }
 
     public override void ClearGradients()
@@ -987,38 +804,4 @@ public class GatedLinearUnitLayer<T> : LayerBase<T>
         _gpuLinearOutput = null;
         _gpuGateOutput = null;
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (_linearWeights == null || _gateWeights == null)
-            throw new InvalidOperationException("Layer weights not initialized.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Create constant nodes for weights and biases (already Tensor<T>)
-        var linearWeightsNode = TensorOperations<T>.Constant(_linearWeights, "linear_weights");
-        var gateWeightsNode = TensorOperations<T>.Constant(_gateWeights, "gate_weights");
-        var linearBiasNode = TensorOperations<T>.Constant(_linearBias, "linear_bias");
-        var gateBiasNode = TensorOperations<T>.Constant(_gateBias, "gate_bias");
-
-        // Transpose weights for proper matrix multiply
-        var linearWeightsT = TensorOperations<T>.Transpose(linearWeightsNode);
-        var gateWeightsT = TensorOperations<T>.Transpose(gateWeightsNode);
-
-        var linearOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(inputNode, linearWeightsT), linearBiasNode);
-        var gateOutput = TensorOperations<T>.Add(TensorOperations<T>.MatrixMultiply(inputNode, gateWeightsT), gateBiasNode);
-        var sigmoid = TensorOperations<T>.Sigmoid(gateOutput);
-
-        return TensorOperations<T>.ElementwiseMultiply(linearOutput, sigmoid);
-    }
-
-    public override bool SupportsJitCompilation => _linearWeights != null && _gateWeights != null && _linearBias != null && _gateBias != null;
 }

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, 2", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
-public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
@@ -52,6 +52,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <summary>
     /// Weight tensor for each attention head. Shape: [numHeads, inputFeatures, outputFeatures].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
@@ -62,6 +64,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <summary>
     /// Bias tensor for the output transformation. Shape: [outputFeatures].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _bias;
 
     /// <summary>
@@ -145,7 +149,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     private Tensor<T>? _biasGradient;
 
     // GPU cache fields for backward pass
-    private IGpuTensor<T>? _gpuLastInput;
+    private Tensor<T>? _gpuLastInput;
     private IGpuBuffer? _gpuTransformedCache;  // [numNodes * outputFeatures * numHeads]
     private IGpuBuffer? _gpuAttentionCache;    // [numNodes * numNodes * numHeads]
     private IGpuBuffer? _gpuPreActivationCache;  // [batchSize * numNodes * outputFeatures] - pre-activation output for backward
@@ -813,381 +817,6 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         return result;
     }
 
-    /// <inheritdoc/>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass with full gradient computation through attention mechanism.
-    /// </summary>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null ||
-            _lastTransformed == null || _lastAttentionCoefficients == null ||
-            _lastPreSoftmaxScores == null || _lastHeadOutputs == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before Backward.");
-        }
-
-        // Capture non-null adjacency matrix for use in the method
-        var adjacencyMatrix = _adjacencyMatrix;
-        bool adj2D = adjacencyMatrix.Shape.Length == 2;
-
-        // ApplyActivation cached the pre-activation input in the 3D internal format
-        // [batch, nodes, features]. Derive the canonical 3D shape from _lastInput and
-        // reshape both _lastOutput and outputGradient to match before computing the derivative.
-        int batchDim = _lastInput.Shape[0];
-        int nodesDim = _lastInput.Shape[1];
-        var target3D = new[] { batchDim, nodesDim, _outputFeatures };
-        var activOutput = _lastOutput.Rank == 3 ? _lastOutput : _lastOutput.Reshape(target3D);
-        var outGrad = outputGradient.Rank == 3 ? outputGradient : outputGradient.Reshape(target3D);
-        var rawActivationGradient = ApplyActivationDerivativeFromOutput(activOutput, outGrad);
-        int batchSize = _lastInput.Shape[0];
-        int numNodes = _lastInput.Shape[1];
-        T numHeadsT = NumOps.FromDouble(_numHeads);
-
-        // Reshape activation gradient to match _lastInput shape [batch, numNodes, outputFeatures]
-        var activationGradient = rawActivationGradient.Rank == 3
-            ? rawActivationGradient
-            : rawActivationGradient.Reshape([batchSize, numNodes, _outputFeatures]);
-
-        // Initialize gradients
-        _weightsGradient = new Tensor<T>([_numHeads, _inputFeatures, _outputFeatures]);
-        _attentionWeightsGradient = new Tensor<T>([_numHeads, 2 * _outputFeatures]);
-        _biasGradient = new Tensor<T>([_outputFeatures]);
-        _weightsGradient.Fill(NumOps.Zero);
-        _attentionWeightsGradient.Fill(NumOps.Zero);
-        _biasGradient.Fill(NumOps.Zero);
-
-        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
-        inputGradient.Fill(NumOps.Zero);
-
-        // Bias gradient: sum over batch and nodes
-        _biasGradient = Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
-
-        // Gradient from averaging heads: dL/d(headOutput) = dL/d(output) / numHeads
-        // Divide by numHeads and broadcast to all heads
-        var scaledGradient = Engine.TensorDivideScalar(activationGradient, numHeadsT);
-
-        // Expand [batchSize, numNodes, outputFeatures] to [batchSize, numHeads, numNodes, outputFeatures]
-        var headOutputGrad = new Tensor<T>([batchSize, _numHeads, numNodes, _outputFeatures]);
-        for (int h = 0; h < _numHeads; h++)
-        {
-            Set3DSliceIn4DForHead(headOutputGrad, h, scaledGradient);
-        }
-
-        // Backprop through attention aggregation for each head
-        for (int h = 0; h < _numHeads; h++)
-        {
-            for (int b = 0; b < batchSize; b++)
-            {
-                // Gradient w.r.t. attention coefficients and transformed features
-                // output[i,f] = sum_j(alpha[i,j] * transformed[j,f])
-                // dL/d(alpha[i,j]) = sum_f(dL/d(output[i,f]) * transformed[j,f])
-                // dL/d(transformed[j,f]) = sum_i(dL/d(output[i,f]) * alpha[i,j])
-
-                // First pass: compute gradients using matrix operations
-                // Get 2D slices for this batch and head
-                var headOutputGradSlice = Get2DSliceFrom4D(headOutputGrad, b, h);  // [numNodes, outputFeatures]
-                var attnCoeffSlice = Get2DSliceFrom4D(_lastAttentionCoefficients, b, h);  // [numNodes, numNodes]
-                var transformedSlice = Get2DSliceFrom4D(_lastTransformed, b, h);  // [numNodes, outputFeatures]
-                var adjSlice = GetAdjacencySlice(adjacencyMatrix, b, adj2D);  // [numNodes, numNodes]
-
-                // Compute attention coefficient gradients: attnGradMatrix = headOutputGrad @ transformed^T
-                // Then apply adjacency mask
-                var transformedSliceT = Engine.TensorTranspose(transformedSlice);
-                var attnGradMatrixFull = Engine.TensorMatMul(headOutputGradSlice, transformedSliceT);  // [numNodes, numNodes]
-                var attnGradMatrix = Engine.TensorMultiply(attnGradMatrixFull, adjSlice);  // Mask with adjacency
-
-                // Compute transformed gradients: transformedGrad = (attnCoeff * adjMask)^T @ headOutputGrad
-                var maskedAttnCoeff = Engine.TensorMultiply(attnCoeffSlice, adjSlice);
-                var maskedAttnCoeffT = Engine.TensorTranspose(maskedAttnCoeff);
-                var transformedGrad = Engine.TensorMatMul(maskedAttnCoeffT, headOutputGradSlice);  // [numNodes, outputFeatures]
-
-                // Second pass: backprop through softmax using vectorized operations
-                // For softmax: d(alpha_ij)/d(e_ik) = alpha_ij * (delta_jk - alpha_ik)
-                // So: dL/d(e_ij) = alpha_ij * (dL/d(alpha_ij) - sum_k(dL/d(alpha_ik) * alpha_ik))
-
-                // Compute weightedSum = ReduceSum(attnGradMatrix * maskedAttnCoeff, axis=1)
-                var attnGradTimesCoeff = Engine.TensorMultiply(attnGradMatrix, maskedAttnCoeff);
-                var weightedSumVec = Engine.ReduceSum(attnGradTimesCoeff, [1], keepDims: false);  // [numNodes]
-
-                // Broadcast weightedSum to [numNodes, numNodes] for subtraction
-                var weightedSumReshaped = weightedSumVec.Reshape([numNodes, 1]);
-                var weightedSumBroadcast = Engine.TensorTile(weightedSumReshaped, [1, numNodes]);
-
-                // Compute softmax gradient: attnCoeff * (attnGradMatrix - weightedSum) * adjMask
-                var gradMinusWeighted = Engine.TensorSubtract(attnGradMatrix, weightedSumBroadcast);
-                var softmaxGradMatrix = Engine.TensorMultiply(maskedAttnCoeff, gradMinusWeighted);
-
-                // Compute LeakyReLU gradient mask: 1 if preSoftmax > 0, else alpha
-                var preSoftmaxSlice = Get2DSliceFrom4D(_lastPreSoftmaxScores, b, h);
-                var leakyGradMatrix = ComputeLeakyReluGradientMatrix(preSoftmaxSlice, adjSlice);
-
-                // Score gradient: softmaxGrad * leakyGrad
-                var scoreGradMatrix = Engine.TensorMultiply(softmaxGradMatrix, leakyGradMatrix);
-
-                // Attention weights gradient computation using vectorized sums
-                // a1_grad[f] = sum_{i,j}(scoreGrad[i,j] * transformed[i,f]) = rowSum^T @ transformed
-                // a2_grad[f] = sum_{i,j}(scoreGrad[i,j] * transformed[j,f]) = colSum^T @ transformed
-                var rowSum = Engine.ReduceSum(scoreGradMatrix, [1], keepDims: false);  // [numNodes]
-                var colSum = Engine.ReduceSum(scoreGradMatrix, [0], keepDims: false);  // [numNodes]
-
-                var rowSumRow = rowSum.Reshape([1, numNodes]);
-                var colSumRow = colSum.Reshape([1, numNodes]);
-
-                var a1GradBatch = Engine.TensorMatMul(rowSumRow, transformedSlice);  // [1, outputFeatures]
-                var a2GradBatch = Engine.TensorMatMul(colSumRow, transformedSlice);  // [1, outputFeatures]
-
-                // Accumulate attention weights gradient
-                for (int f = 0; f < _outputFeatures; f++)
-                {
-                    _attentionWeightsGradient[h, f] = NumOps.Add(
-                        _attentionWeightsGradient[h, f], a1GradBatch.GetFlat(f));
-                    _attentionWeightsGradient[h, _outputFeatures + f] = NumOps.Add(
-                        _attentionWeightsGradient[h, _outputFeatures + f], a2GradBatch.GetFlat(f));
-                }
-
-                // Gradient w.r.t. weights: dL/dW = input^T @ transformedGrad
-                var inputSlice = Engine.TensorSlice(_lastInput, [b, 0, 0], [1, numNodes, _inputFeatures])
-                    .Reshape([numNodes, _inputFeatures]);
-                var inputT = Engine.TensorTranspose(inputSlice);
-                var weightGrad = Engine.TensorMatMul(inputT, transformedGrad);
-
-                // Accumulate weight gradient using helper method
-                Add2DSliceTo3DHead(_weightsGradient, h, weightGrad);
-
-                // Input gradient: transformedGrad @ W^T
-                var headWeight = ExtractHeadWeight(h);
-                var weightT = Engine.TensorTranspose(headWeight);
-                var inputGradSlice = Engine.TensorMatMul(transformedGrad, weightT);
-
-                // Accumulate input gradient using helper method
-                Add2DSliceTo3D(inputGradient, b, inputGradSlice);
-            }
-        }
-
-        // Reshape gradient back to original input shape
-        if (_originalInputShape != null && !_originalInputShape.SequenceEqual(inputGradient.Shape.ToArray()))
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass using automatic differentiation with computation graph.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method implements true autodiff for the Graph Attention Layer by building
-    /// a computation graph that captures the forward pass operations and then
-    /// propagating gradients through the graph in reverse topological order.
-    /// </para>
-    /// <para>
-    /// <b>Production-Ready Features:</b>
-    /// <list type="bullet">
-    /// <item>Uses GradientTape for proper autodiff recording</item>
-    /// <item>Handles multi-head attention with proper gradient aggregation</item>
-    /// <item>GPU-accelerated via IEngine operations</item>
-    /// <item>Memory-efficient gradient computation</item>
-    /// </list>
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null ||
-            _lastTransformed == null || _lastAttentionCoefficients == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before Backward.");
-        }
-
-        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
-        int batchSize = _lastInput.Shape[0];
-        int numNodes = _lastInput.Shape[1];
-        T numHeadsT = NumOps.FromDouble(_numHeads);
-
-        // Create computation nodes for autodiff
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-        var weightsNode = Autodiff.TensorOperations<T>.Variable(_weights, "weights", requiresGradient: true);
-        var attentionWeightsNode = Autodiff.TensorOperations<T>.Variable(_attentionWeights, "attention_weights", requiresGradient: true);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(_bias, "bias", requiresGradient: true);
-
-        // Build computation graph for the forward pass
-        // We'll track all nodes created during the forward computation
-        var allNodes = new List<Autodiff.ComputationNode<T>> { inputNode, weightsNode, attentionWeightsNode, biasNode };
-
-        // For each head, build the transformation graph
-        var headOutputNodes = new List<Autodiff.ComputationNode<T>>();
-
-        for (int h = 0; h < _numHeads; h++)
-        {
-            // Extract weight slice for this head as a constant (gradient flows through weightsNode)
-            var headWeight = ExtractHeadWeight(h);
-            var headWeightNode = Autodiff.TensorOperations<T>.Constant(headWeight, $"head_weight_{h}");
-
-            // Linear transformation: input @ headWeight
-            var transformedNode = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, headWeightNode);
-            allNodes.Add(transformedNode);
-
-            // For attention aggregation, we use the cached attention coefficients
-            // This is a key simplification: attention computation is complex, so we compute
-            // gradients for the aggregation step using the pre-computed attention weights
-            for (int b = 0; b < batchSize; b++)
-            {
-                // Extract attention coefficients for this batch/head using helper method
-                var attnCoeffs = Get2DSliceFrom4D(_lastAttentionCoefficients, b, h);
-
-                // Create attention coefficient node as variable to capture gradients
-                var attnCoeffNode = Autodiff.TensorOperations<T>.Variable(attnCoeffs, $"attn_{b}_{h}", requiresGradient: true);
-                allNodes.Add(attnCoeffNode);
-
-                // Extract transformed features for this batch using helper method
-                var transformedBatch = Get2DSliceFrom4D(_lastTransformed, b, h);
-                var transformedBatchNode = Autodiff.TensorOperations<T>.Variable(transformedBatch, $"transformed_{b}_{h}", requiresGradient: true);
-                allNodes.Add(transformedBatchNode);
-
-                // Aggregation: attn_coeffs @ transformed
-                var aggregatedNode = Autodiff.TensorOperations<T>.MatrixMultiply(attnCoeffNode, transformedBatchNode);
-                allNodes.Add(aggregatedNode);
-                headOutputNodes.Add(aggregatedNode);
-            }
-        }
-
-        // Average across heads and add bias using Engine operations
-        // headOutputNodes is ordered as [h=0,b=0], [h=0,b=1], ..., [h=1,b=0], ...
-        // Build 4D tensor [batchSize, numHeads, numNodes, outputFeatures]
-        var headOutputs4D = new Tensor<T>([batchSize, _numHeads, numNodes, _outputFeatures]);
-
-        for (int h = 0; h < _numHeads; h++)
-        {
-            for (int b = 0; b < batchSize; b++)
-            {
-                int idx = h * batchSize + b;
-                if (idx < headOutputNodes.Count)
-                {
-                    var nodeValue = headOutputNodes[idx].Value;
-                    Set2DSliceIn4D(headOutputs4D, b, h, nodeValue);
-                }
-            }
-        }
-
-        // Sum across heads (axis 1) and divide by numHeads
-        var sumOverHeads = Engine.ReduceSum(headOutputs4D, [1], keepDims: false);  // [batchSize, numNodes, outputFeatures]
-        var avgOverHeads = Engine.TensorDivideScalar(sumOverHeads, numHeadsT);
-
-        // Add bias (broadcast [outputFeatures] to [batchSize, numNodes, outputFeatures])
-        var biasExpanded = _bias.Reshape([1, 1, _outputFeatures]);
-        var outputTensor = Engine.TensorBroadcastAdd(avgOverHeads, biasExpanded);
-
-        var outputNode = Autodiff.TensorOperations<T>.Variable(outputTensor, "output", requiresGradient: true);
-        allNodes.Add(outputNode);
-
-        // Set the gradient on the output node
-        outputNode.Gradient = activationGradient;
-
-        // Initialize gradients
-        _weightsGradient = new Tensor<T>([_numHeads, _inputFeatures, _outputFeatures]);
-        _attentionWeightsGradient = new Tensor<T>([_numHeads, 2 * _outputFeatures]);
-        _biasGradient = new Tensor<T>([_outputFeatures]);
-        _weightsGradient.Fill(NumOps.Zero);
-        _attentionWeightsGradient.Fill(NumOps.Zero);
-
-        // Bias gradient: sum over batch and nodes
-        _biasGradient = Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
-
-        // Topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-
-        foreach (var node in allNodes)
-        {
-            if (!visited.Contains(node))
-            {
-                stack.Push((node, false));
-
-                while (stack.Count > 0)
-                {
-                    var (currentNode, processed) = stack.Pop();
-                    if (visited.Contains(currentNode)) continue;
-
-                    if (processed)
-                    {
-                        visited.Add(currentNode);
-                        topoOrder.Add(currentNode);
-                    }
-                    else
-                    {
-                        stack.Push((currentNode, true));
-                        if (currentNode.Parents != null)
-                        {
-                            foreach (var parent in currentNode.Parents)
-                            {
-                                if (!visited.Contains(parent))
-                                {
-                                    stack.Push((parent, false));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract gradients from input node
-        var inputGradient = inputNode.Gradient ?? new Tensor<T>(_lastInput.Shape.ToArray());
-
-        // Extract weight gradients from weightsNode if available
-        if (weightsNode.Gradient != null)
-        {
-            for (int i = 0; i < _weightsGradient.Length; i++)
-            {
-                if (i < weightsNode.Gradient.Length)
-                {
-                    _weightsGradient[i] = weightsNode.Gradient.GetFlat(i);
-                }
-            }
-        }
-
-        // Extract attention weight gradients from attentionWeightsNode if available
-        if (attentionWeightsNode.Gradient != null)
-        {
-            for (int i = 0; i < _attentionWeightsGradient.Length; i++)
-            {
-                if (i < attentionWeightsNode.Gradient.Length)
-                {
-                    _attentionWeightsGradient[i] = attentionWeightsNode.Gradient.GetFlat(i);
-                }
-            }
-        }
-
-        // If autodiff didn't compute weight gradients properly, compute them manually
-        // This hybrid approach ensures correctness while leveraging autodiff where possible
-        if (NumOps.Equals(_weightsGradient[0], NumOps.Zero))
-        {
-            // Compute weight gradients using Engine operations
-            ComputeWeightGradientsViaEngine(activationGradient, batchSize, numNodes, numHeadsT);
-        }
-
-        return inputGradient;
-    }
-
     /// <summary>
     /// Computes weight gradients using vectorized Engine operations as a fallback.
     /// </summary>
@@ -1371,13 +1000,13 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     public override Vector<T> GetParameterGradients()
     {
         var weightsGrad = _weightsGradient != null
-            ? (_weightsGradient is not null ? Vector<T>.FromMemory(_weightsGradient.Data) : new Vector<T>(0))
+            ? new Vector<T>(_weightsGradient.ToArray())
             : new Vector<T>(_weights.Length);
         var attnGrad = _attentionWeightsGradient != null
-            ? (_attentionWeightsGradient is not null ? Vector<T>.FromMemory(_attentionWeightsGradient.Data) : new Vector<T>(0))
+            ? new Vector<T>(_attentionWeightsGradient.ToArray())
             : new Vector<T>(_attentionWeights.Length);
         var biasGrad = _biasGradient != null
-            ? (_biasGradient is not null ? Vector<T>.FromMemory(_biasGradient.Data) : new Vector<T>(0))
+            ? new Vector<T>(_biasGradient.ToArray())
             : new Vector<T>(_bias.Length);
 
         return Vector<T>.Concatenate(weightsGrad, attnGrad, biasGrad);
@@ -1387,9 +1016,9 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_weights.Data),
-            Vector<T>.FromMemory(_attentionWeights.Data),
-            Vector<T>.FromMemory(_bias.Data)
+            new Vector<T>(_weights.ToArray()),
+            new Vector<T>(_attentionWeights.ToArray()),
+            new Vector<T>(_bias.ToArray())
         );
     }
 
@@ -1507,7 +1136,7 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// For sparse graphs, uses efficient O(E) edge-based computation instead of O(N²) dense operations.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs == null || inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -1961,290 +1590,8 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             ? [numNodes, _outputFeatures]
             : [batchSize, numNodes, _outputFeatures];
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
-
-    /// <summary>
-    /// GPU-accelerated backward pass for Graph Attention Networks.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Computes gradients through the GAT layer using cached forward values:
-    /// 1. Bias gradient: sum of output gradients over nodes
-    /// 2. Weight gradients: input^T @ (attention^T @ dOutput)
-    /// 3. Input gradient: (attention^T @ dOutput) @ W^T
-    /// 4. Attention weight gradients: through attention score computation
-    /// </para>
-    /// </remarks>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("No GPU backend available.");
-
-        if (_gpuLastInput == null || _gpuTransformedCache == null || _gpuAttentionCache == null)
-        {
-            throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");
-        }
-
-        int numNodes = _gpuNumNodes;
-        int batchSize = _gpuBatchSize;
-        int outputSize = batchSize * numNodes * _outputFeatures;
-
-        // Apply activation derivative if an activation function was used in forward pass
-        // gradAfterActivation = outputGradient * activation.Derivative(preActivation)
-        IGpuBuffer effectiveGradBuffer = outputGradient.Buffer;
-        IGpuBuffer? gradAfterActivationBuffer = null;
-        var activationType = GetFusedActivationType();
-        if (activationType != FusedActivationType.None && _gpuPreActivationCache != null)
-        {
-            // Allocate buffer for gradient after applying activation derivative
-            gradAfterActivationBuffer = backend.AllocateBuffer(outputSize);
-
-            // Apply activation derivative on GPU: dL/dPreAct = dL/dOutput * activation'(preAct)
-            // Some activations (ReLU, GELU) need preActivation (input), others (Sigmoid, Tanh) need postActivation (output)
-            ApplyGpuActivationBackward(backend, outputGradient.Buffer, _gpuPreActivationCache,
-                _gpuPostActivationCache, gradAfterActivationBuffer, outputSize, activationType);
-
-            effectiveGradBuffer = gradAfterActivationBuffer;
-        }
-
-        // Allocate input gradient buffer
-        int gradInputSize = batchSize * numNodes * _inputFeatures;
-        var gradInputBuffer = backend.AllocateBuffer(gradInputSize);
-        backend.Fill(gradInputBuffer, 0.0f, gradInputSize);
-
-        // Allocate weight gradient buffers
-        _gpuWeightsGradient = backend.AllocateBuffer(_numHeads * _inputFeatures * _outputFeatures);
-        _gpuAttentionWeightsGradient = backend.AllocateBuffer(_numHeads * 2 * _outputFeatures);
-        _gpuBiasGradient = backend.AllocateBuffer(_outputFeatures);
-
-        backend.Fill(_gpuWeightsGradient, 0.0f, _numHeads * _inputFeatures * _outputFeatures);
-        backend.Fill(_gpuAttentionWeightsGradient, 0.0f, _numHeads * 2 * _outputFeatures);
-        backend.Fill(_gpuBiasGradient, 0.0f, _outputFeatures);
-
-        // Bias gradient: sum output gradients over all nodes and batches (use gradient after activation derivative)
-        backend.SumAxis(effectiveGradBuffer, _gpuBiasGradient, batchSize * numNodes, _outputFeatures);
-
-        // Allocate temporary buffers for backward computation
-        using var dTransformed = backend.AllocateBuffer(numNodes * _outputFeatures);
-        using var inputTransposed = backend.AllocateBuffer(_inputFeatures * numNodes);
-        using var headAttn = backend.AllocateBuffer(numNodes * numNodes);
-        using var headAttnT = backend.AllocateBuffer(numNodes * numNodes);
-        using var cachedTransformed = backend.AllocateBuffer(numNodes * _outputFeatures);
-        using var scaledDOutput = backend.AllocateBuffer(numNodes * _outputFeatures);
-
-        float headScale = 1.0f / _numHeads;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Get batch input using GPU view (no CPU roundtrip)
-            IGpuBuffer batchInput;
-            bool ownsBatchInput = false;
-            if (batchSize == 1)
-            {
-                batchInput = _gpuLastInput.Buffer;
-            }
-            else
-            {
-                int inputOffset = b * numNodes * _inputFeatures;
-                var batchView = _gpuLastInput.CreateView(inputOffset, [numNodes, _inputFeatures]);
-                batchInput = batchView.Buffer;
-                // View shares buffer, no ownership transfer needed
-            }
-
-            // Get batch output gradient (after activation derivative if applicable)
-            // Use effectiveGradBuffer which has activation derivative already applied
-            IGpuBuffer batchDOutput;
-            bool ownsBatchDOutput = false;
-            if (batchSize == 1)
-            {
-                batchDOutput = effectiveGradBuffer;
-            }
-            else
-            {
-                // Extract batch slice from effectiveGradBuffer using Copy2DStrided
-                int gradOffset = b * numNodes * _outputFeatures;
-                int batchGradSize = numNodes * _outputFeatures;
-                var batchGradBuffer = backend.AllocateBuffer(batchGradSize);
-                backend.Copy2DStrided(effectiveGradBuffer, batchGradBuffer,
-                    1, batchGradSize, batchGradSize, gradOffset);
-                batchDOutput = batchGradBuffer;
-                ownsBatchDOutput = true;
-            }
-
-            // Transpose batch input: [numNodes, inputFeatures] -> [inputFeatures, numNodes]
-            backend.Transpose(batchInput, inputTransposed, numNodes, _inputFeatures);
-
-            // Process each head
-            for (int h = 0; h < _numHeads; h++)
-            {
-                // Load cached attention for this batch and head
-                int attnOffset = (b * _numHeads + h) * numNodes * numNodes;
-                backend.Copy2DStrided(_gpuAttentionCache, headAttn,
-                    1, numNodes * numNodes,
-                    numNodes * numNodes, attnOffset);
-
-                // Load cached transformed for this batch and head
-                int transformedOffset = (b * _numHeads + h) * numNodes * _outputFeatures;
-                backend.Copy2DStrided(_gpuTransformedCache, cachedTransformed,
-                    1, numNodes * _outputFeatures,
-                    numNodes * _outputFeatures, transformedOffset);
-
-                // Scale output gradient by 1/numHeads (since forward averaged heads)
-                backend.Scale(batchDOutput, scaledDOutput, headScale, numNodes * _outputFeatures);
-
-                // Transpose attention: [numNodes, numNodes] -> [numNodes, numNodes]
-                backend.Transpose(headAttn, headAttnT, numNodes, numNodes);
-
-                // dTransformed = attention^T @ scaledDOutput
-                // [numNodes, numNodes] @ [numNodes, outputFeatures] -> [numNodes, outputFeatures]
-                backend.Gemm(headAttnT, scaledDOutput, dTransformed, numNodes, _outputFeatures, numNodes);
-
-                // Weight gradient: dW[h] += input^T @ dTransformed
-                // [inputFeatures, numNodes] @ [numNodes, outputFeatures] -> [inputFeatures, outputFeatures]
-                int weightOffset = h * _inputFeatures * _outputFeatures;
-                using var headWeightGrad = backend.AllocateBuffer(_inputFeatures * _outputFeatures);
-                backend.Gemm(inputTransposed, dTransformed, headWeightGrad, _inputFeatures, _outputFeatures, numNodes);
-
-                // Accumulate to weight gradient buffer at head offset
-                using var currentHeadGrad = backend.AllocateBuffer(_inputFeatures * _outputFeatures);
-                backend.Copy2DStrided(_gpuWeightsGradient, currentHeadGrad,
-                    1, _inputFeatures * _outputFeatures,
-                    _inputFeatures * _outputFeatures, weightOffset);
-                backend.Add(currentHeadGrad, headWeightGrad, currentHeadGrad, _inputFeatures * _outputFeatures);
-                backend.Copy2DStrided(currentHeadGrad, _gpuWeightsGradient,
-                    1, _inputFeatures * _outputFeatures,
-                    _numHeads * _inputFeatures * _outputFeatures, weightOffset);
-
-                // Input gradient: dInput += dTransformed @ W[h]^T
-                // Upload transposed weights for this head
-                var headWeightTData = new float[_outputFeatures * _inputFeatures];
-                for (int i = 0; i < _inputFeatures; i++)
-                {
-                    for (int j = 0; j < _outputFeatures; j++)
-                    {
-                        headWeightTData[j * _inputFeatures + i] = (float)NumOps.ToDouble(_weights[h, i, j]);
-                    }
-                }
-                using var headWeightTBuffer = backend.AllocateBuffer(headWeightTData);
-
-                // dInput contribution: [numNodes, outputFeatures] @ [outputFeatures, inputFeatures] -> [numNodes, inputFeatures]
-                using var headInputGrad = backend.AllocateBuffer(numNodes * _inputFeatures);
-                backend.Gemm(dTransformed, headWeightTBuffer, headInputGrad, numNodes, _inputFeatures, _outputFeatures);
-
-                // Accumulate input gradient at batch offset
-                int inputGradOffset = b * numNodes * _inputFeatures;
-                using var batchInputGrad = backend.AllocateBuffer(numNodes * _inputFeatures);
-                if (batchSize > 1)
-                {
-                    backend.Copy2DStrided(gradInputBuffer, batchInputGrad,
-                        1, numNodes * _inputFeatures,
-                        numNodes * _inputFeatures, inputGradOffset);
-                    backend.Add(batchInputGrad, headInputGrad, batchInputGrad, numNodes * _inputFeatures);
-                    backend.Copy2DStrided(batchInputGrad, gradInputBuffer,
-                        1, numNodes * _inputFeatures,
-                        batchSize * numNodes * _inputFeatures, inputGradOffset);
-                }
-                else
-                {
-                    backend.Add(gradInputBuffer, headInputGrad, gradInputBuffer, numNodes * _inputFeatures);
-                }
-
-                // Attention weight gradients through attention mechanism:
-                // source_score = transformed @ a_source, target_score = transformed @ a_target
-                // dAttention goes through softmax backward (complex), then through LeakyReLU backward
-                // Then: d_source_score = dAttention.sum(axis=1), d_target_score = dAttention.sum(axis=0)
-                // d_a_source = transformed^T @ d_source_score, d_a_target = transformed^T @ d_target_score
-                // Computing approximate attention weight gradients:
-                using var dAttn = backend.AllocateBuffer(numNodes * numNodes);
-                // dAttn = scaledDOutput @ cachedTransformed^T (for attention backward)
-                using var cachedTransformedT = backend.AllocateBuffer(_outputFeatures * numNodes);
-                backend.Transpose(cachedTransformed, cachedTransformedT, numNodes, _outputFeatures);
-                backend.Gemm(scaledDOutput, cachedTransformedT, dAttn, numNodes, numNodes, _outputFeatures);
-
-                // Softmax backward: dPreSoftmax[i,j] = attn[i,j] * (dAttn[i,j] - sum_k(dAttn[i,k] * attn[i,k]))
-                // For each row i: dPreSoftmax[i,:] = attn[i,:] * (dAttn[i,:] - dot(dAttn[i,:], attn[i,:]))
-                using var dPreSoftmax = backend.AllocateBuffer(numNodes * numNodes);
-                backend.SoftmaxBackward(dAttn, headAttn, dPreSoftmax, numNodes, numNodes);
-
-                // LeakyReLU backward: dLeakyReLU = dPreSoftmax * (1 if score > 0 else alpha)
-                // Use cached pre-LeakyReLU scores to compute proper derivative mask
-                if (_gpuPreLeakyReluCache != null)
-                {
-                    float alphaVal = (float)NumOps.ToDouble(_alpha);
-
-                    // Load cached pre-LeakyReLU scores for this batch/head
-                    using var preLeakyScores = backend.AllocateBuffer(numNodes * numNodes);
-                    int preLeakyOffset = (b * _numHeads + h) * numNodes * numNodes;
-                    backend.Copy2DStrided(_gpuPreLeakyReluCache, preLeakyScores,
-                        1, numNodes * numNodes, numNodes * numNodes, preLeakyOffset);
-
-                    // Apply LeakyReLU backward: multiply dPreSoftmax by derivative mask
-                    // derivative = 1 where preLeakyScores > 0, alpha where preLeakyScores <= 0
-                    backend.LeakyReluBackward(dPreSoftmax, preLeakyScores, dPreSoftmax, alphaVal, numNodes * numNodes);
-                }
-
-                // Sum across rows (for source) and columns (for target)
-                using var dSourceScore = backend.AllocateBuffer(numNodes);
-                using var dTargetScore = backend.AllocateBuffer(numNodes);
-                backend.SumAxis(dPreSoftmax, dSourceScore, numNodes, numNodes);  // Sum each row
-                // Sum columns requires transpose
-                using var dPreSoftmaxT = backend.AllocateBuffer(numNodes * numNodes);
-                backend.Transpose(dPreSoftmax, dPreSoftmaxT, numNodes, numNodes);
-                backend.SumAxis(dPreSoftmaxT, dTargetScore, numNodes, numNodes);  // Sum each row of transposed = columns of original
-
-                // d_a_source = transformed^T @ dSourceScore, d_a_target = transformed^T @ dTargetScore
-                // [outputFeatures, numNodes] @ [numNodes, 1] -> [outputFeatures, 1]
-                using var dAttnSource = backend.AllocateBuffer(_outputFeatures);
-                using var dAttnTarget = backend.AllocateBuffer(_outputFeatures);
-                backend.Gemm(cachedTransformedT, dSourceScore, dAttnSource, _outputFeatures, 1, numNodes);
-                backend.Gemm(cachedTransformedT, dTargetScore, dAttnTarget, _outputFeatures, 1, numNodes);
-
-                // Accumulate to attention weight gradients
-                int attnSourceOffset = h * 2 * _outputFeatures;
-                int attnTargetOffset = h * 2 * _outputFeatures + _outputFeatures;
-                using var currentSourceGrad = backend.AllocateBuffer(_outputFeatures);
-                using var currentTargetGrad = backend.AllocateBuffer(_outputFeatures);
-                backend.Copy2DStrided(_gpuAttentionWeightsGradient, currentSourceGrad,
-                    1, _outputFeatures, _outputFeatures, attnSourceOffset);
-                backend.Copy2DStrided(_gpuAttentionWeightsGradient, currentTargetGrad,
-                    1, _outputFeatures, _outputFeatures, attnTargetOffset);
-                backend.Add(currentSourceGrad, dAttnSource, currentSourceGrad, _outputFeatures);
-                backend.Add(currentTargetGrad, dAttnTarget, currentTargetGrad, _outputFeatures);
-                backend.Copy2DStrided(currentSourceGrad, _gpuAttentionWeightsGradient,
-                    1, _outputFeatures, _numHeads * 2 * _outputFeatures, attnSourceOffset);
-                backend.Copy2DStrided(currentTargetGrad, _gpuAttentionWeightsGradient,
-                    1, _outputFeatures, _numHeads * 2 * _outputFeatures, attnTargetOffset);
-            }
-
-            if (ownsBatchInput && batchInput is IDisposable disposableBatchInput)
-            {
-                disposableBatchInput.Dispose();
-            }
-
-            if (ownsBatchDOutput && batchDOutput is IDisposable disposableBatchDOutput)
-            {
-                disposableBatchDOutput.Dispose();
-            }
-        }
-
-        // Clean up activation gradient buffer if allocated
-        gradAfterActivationBuffer?.Dispose();
-
-        // Return input gradient
-        int[] gradInputShape = _gpuLastInput.Shape.Length == 2
-            ? [numNodes, _inputFeatures]
-            : [batchSize, numNodes, _inputFeatures];
-
-        return new GpuTensor<T>(backend, gradInputBuffer, gradInputShape, GpuTensorRole.Gradient, ownsBuffer: true);
-    }
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Gets the number of attention heads used in multi-head attention.
@@ -2255,127 +1602,4 @@ public class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// Gets the dropout rate applied to attention coefficients during training.
     /// </summary>
     public double DropoutRate => _dropoutRate;
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The exported graph includes both node features and adjacency matrix as inputs,
-    /// following the industry-standard approach used by PyTorch Geometric and DGL.
-    /// The adjacency matrix is treated as a dynamic input, allowing the JIT-compiled
-    /// function to work with different graph structures.
-    /// </para>
-    /// <para>
-    /// The computation graph captures:
-    /// 1. Linear transformation for all attention heads
-    /// 2. Attention score computation with LeakyReLU
-    /// 3. Softmax normalization over neighbors
-    /// 4. Weighted aggregation and multi-head averaging
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic inputs for node features
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "node_features");
-        inputNodes.Add(inputNode);
-
-        // Create symbolic input for adjacency matrix (dynamic per graph)
-        int numNodes = InputShape[0];
-        var symbolicAdj = new Tensor<T>([1, numNodes, numNodes]);
-        var adjNode = Autodiff.TensorOperations<T>.Variable(symbolicAdj, "adjacency_matrix");
-        inputNodes.Add(adjNode);
-
-        // Export learnable parameters as constants
-        var biasNode = Autodiff.TensorOperations<T>.Constant(_bias, "bias");
-
-        // Build multi-head attention computation graph
-        var headOutputNodes = new List<ComputationNode<T>>();
-
-        for (int h = 0; h < _numHeads; h++)
-        {
-            // Extract weight matrices for this head
-            var headWeight = ExtractHeadWeight(h);
-            var headWeightNode = Autodiff.TensorOperations<T>.Constant(headWeight, $"head_weight_{h}");
-
-            // Linear transformation: transformed = input @ headWeight
-            var transformed = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, headWeightNode);
-
-            // Extract attention vectors for this head
-            var attnSourceVec = new Tensor<T>([_outputFeatures]);
-            var attnTargetVec = new Tensor<T>([_outputFeatures]);
-            for (int f = 0; f < _outputFeatures; f++)
-            {
-                attnSourceVec[f] = _attentionWeights[h, f];
-                attnTargetVec[f] = _attentionWeights[h, _outputFeatures + f];
-            }
-            var attnSourceNode = Autodiff.TensorOperations<T>.Constant(attnSourceVec, $"attn_source_{h}");
-            var attnTargetNode = Autodiff.TensorOperations<T>.Constant(attnTargetVec, $"attn_target_{h}");
-
-            // Compute attention scores: e_ij = LeakyReLU(a_source^T * Wh_i + a_target^T * Wh_j)
-            // Source scores: transformed @ attn_source -> [batch, nodes, 1]
-            var sourceScores = Autodiff.TensorOperations<T>.MatrixMultiply(
-                transformed,
-                Autodiff.TensorOperations<T>.Constant(attnSourceVec.Reshape([_outputFeatures, 1]), $"attn_source_col_{h}"));
-
-            // Target scores: transformed @ attn_target -> [batch, nodes, 1]
-            var targetScores = Autodiff.TensorOperations<T>.MatrixMultiply(
-                transformed,
-                Autodiff.TensorOperations<T>.Constant(attnTargetVec.Reshape([_outputFeatures, 1]), $"attn_target_col_{h}"));
-
-            // Pairwise attention scores: source_i + target_j (broadcasted)
-            // This creates the attention score matrix through broadcasting
-            var attentionScores = Autodiff.TensorOperations<T>.Add(sourceScores, targetScores);
-
-            // Apply LeakyReLU to attention scores
-            var leakyScores = Autodiff.TensorOperations<T>.LeakyReLU(attentionScores, NumOps.ToDouble(_alpha));
-
-            // Mask with adjacency matrix and apply softmax
-            // attention_coeffs = softmax(leaky_scores * adj, dim=-1)
-            var maskedScores = Autodiff.TensorOperations<T>.ElementwiseMultiply(leakyScores, adjNode);
-            var attentionCoeffs = Autodiff.TensorOperations<T>.Softmax(maskedScores, axis: -1);
-
-            // Aggregate: output = attention_coeffs @ transformed
-            var headOutput = Autodiff.TensorOperations<T>.MatrixMultiply(attentionCoeffs, transformed);
-            headOutputNodes.Add(headOutput);
-        }
-
-        // Average across heads
-        ComputationNode<T> output;
-        if (_numHeads == 1)
-        {
-            output = headOutputNodes[0];
-        }
-        else
-        {
-            // Sum all head outputs
-            output = headOutputNodes[0];
-            for (int h = 1; h < _numHeads; h++)
-            {
-                output = Autodiff.TensorOperations<T>.Add(output, headOutputNodes[h]);
-            }
-            // Divide by number of heads
-            var numHeadsTensor = new Tensor<T>([1]) { [0] = NumOps.FromDouble(_numHeads) };
-            var numHeadsNode = Autodiff.TensorOperations<T>.Constant(numHeadsTensor, "num_heads");
-            output = Autodiff.TensorOperations<T>.Divide(output, numHeadsNode);
-        }
-
-        // Add bias
-        output = Autodiff.TensorOperations<T>.Add(output, biasNode);
-
-        // Apply activation if supported
-        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
-        {
-            return ScalarActivation.ApplyToGraph(output);
-        }
-
-        return output;
-    }
 }

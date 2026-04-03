@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -374,7 +374,7 @@ public abstract class SAINTBase<T>
         // Column attention: attention over the feature dimension
         // Input shape: [batch, features, embedding_dim]
         // Each sample attends over its features independently
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -411,7 +411,7 @@ public abstract class SAINTBase<T>
         // Row attention: attention over the batch dimension for each feature
         // Input shape: [batch, features, embedding_dim]
         // Each feature attends across samples
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
 
         for (int f = 0; f < TotalEmbeddedFeatures; f++)
         {
@@ -445,7 +445,7 @@ public abstract class SAINTBase<T>
 
     private Tensor<T> ApplyFeedForward(FullyConnectedLayer<T> layer, Tensor<T> input, int batchSize)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -471,7 +471,7 @@ public abstract class SAINTBase<T>
 
     private Tensor<T> ApplyLayerNorm(LayerNormalizationLayer<T> norm, Tensor<T> input, int batchSize)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -498,22 +498,6 @@ public abstract class SAINTBase<T>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         return Engine.TensorAdd(a, b);
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the backbone.
-    /// </summary>
-    protected Tensor<T> BackwardBackbone(Tensor<T> gradOutput)
-    {
-        // Backward through MLP layers
-        var grad = gradOutput;
-        for (int i = _mlpLayers.Count - 1; i >= 0; i--)
-        {
-            grad = _mlpLayers[i].Backward(grad);
-        }
-
-        // For simplicity, return the gradient (full backward through attention is complex)
-        return grad;
     }
 
     /// <summary>

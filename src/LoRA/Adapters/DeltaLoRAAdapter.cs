@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -239,63 +239,11 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
         // Compute delta contribution: delta_weights @ input * delta_scaling — vectorized
         var deltaWeightsTensor = Tensor<T>.FromMatrix(_deltaWeights);
         var inputCol = input.Reshape(_deltaWeights.Columns, 1);
-        var deltaOutput = Engine.TensorMatMul(deltaWeightsTensor, inputCol).Reshape(baseOutput.Shape.ToArray());
+        var deltaOutput = Engine.TensorMatMul(deltaWeightsTensor, inputCol).Reshape(baseOutput._shape);
         deltaOutput = Engine.TensorMultiplyScalar(deltaOutput, NumOps.FromDouble(_deltaScaling));
 
         // Combine all three outputs — vectorized
         return Engine.TensorAdd(Engine.TensorAdd(baseOutput, loraOutput), deltaOutput);
-    }
-
-    /// <summary>
-    /// Performs the backward pass, computing gradients for delta weights with momentum.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass:
-    /// 1. Propagates gradients through base and LoRA layers (from base class)
-    /// 2. Computes gradients for delta weights
-    /// 3. Updates velocity using momentum
-    /// 4. Accumulates all input gradients
-    /// </para>
-    /// <para><b>For Beginners:</b> This figures out how to improve all components:
-    /// - The LoRA matrices (via the base class)
-    /// - The delta weights (computed here)
-    /// - Applies momentum to smooth out the delta updates
-    ///
-    /// Momentum helps by:
-    /// - Accelerating convergence when gradients are consistent
-    /// - Dampening oscillations when gradients are noisy
-    /// - Creating smoother, more stable training dynamics
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass");
-        }
-
-        // Delta gradients: outer product (outputGradient ⊗ input) * scaling — vectorized
-        var outGradCol = outputGradient.Reshape(_deltaWeights.Rows, 1);
-        var inputRow = _lastInput.Reshape(1, _deltaWeights.Columns);
-        var deltaGradTensor = Engine.TensorMatMul(outGradCol, inputRow);
-        deltaGradTensor = Engine.TensorMultiplyScalar(deltaGradTensor, NumOps.FromDouble(_deltaScaling));
-        _deltaGradients = deltaGradTensor.ToMatrix();
-
-        // Input gradient from delta weights: W^T @ (outputGradient * scaling) — vectorized
-        var scaledOutGrad = Engine.TensorMultiplyScalar(outputGradient, NumOps.FromDouble(_deltaScaling));
-        var deltaWeightsTensor = Tensor<T>.FromMatrix(_deltaWeights).Transpose(new[] { 1, 0 });
-        var scaledOutCol = scaledOutGrad.Reshape(_deltaWeights.Rows, 1);
-        var deltaInputGrad = Engine.TensorMatMul(deltaWeightsTensor, scaledOutCol).Reshape(_lastInput.Shape.ToArray());
-
-        // Backward through LoRA and base layers
-        Tensor<T> loraInputGrad = _loraLayer.Backward(outputGradient);
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        // Combine all input gradients — vectorized
-        return Engine.TensorAdd(Engine.TensorAdd(loraInputGrad, baseInputGrad), deltaInputGrad);
     }
 
     /// <summary>

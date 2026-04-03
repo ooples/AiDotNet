@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -342,6 +343,19 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     }
 
     /// <summary>
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        foreach (var param in context.Parameters)
+        {
+            if (context.Gradients.TryGetValue(param, out var grad))
+            {
+                var update = Engine.TensorMultiplyScalar(grad, CurrentLearningRate);
+                Engine.TensorSubtractInPlace(param, update);
+            }
+        }
+    }
+
     /// Updates parameters on the GPU using vanilla SGD.
     /// </summary>
     public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)

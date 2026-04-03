@@ -119,6 +119,13 @@ public class FlowDiffuser<T> : OpticalFlowBase<T>
     protected override void InitializeLayers()
     {
         ClearLayers();
+
+        if (_featureExtract is not null)
+            Layers.Add(_featureExtract);
+        foreach (var block in _processingBlocks)
+            Layers.Add(block);
+        if (_outputConv is not null)
+            Layers.Add(_outputConv);
     }
 
     /// <inheritdoc/>
@@ -165,23 +172,14 @@ public class FlowDiffuser<T> : OpticalFlowBase<T>
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        var output = Predict(input);
-        var gradient = new Tensor<T>(output.Shape.ToArray());
-        for (int i = 0; i < output.Length; i++)
+        SetTrainingMode(true);
+        try
         {
-            gradient.Data.Span[i] = NumOps.Subtract(output.Data.Span[i], expectedOutput.Data.Span[i]);
+            TrainWithTape(input, expectedOutput);
         }
-        if (_outputConv is not null)
+        finally
         {
-            gradient = _outputConv.Backward(gradient);
-        }
-        for (int i = _processingBlocks.Count - 1; i >= 0; i--)
-        {
-            gradient = _processingBlocks[i].Backward(gradient);
-        }
-        if (_featureExtract is not null)
-        {
-            _featureExtract.Backward(gradient);
+            SetTrainingMode(false);
         }
     }
 

@@ -1,4 +1,5 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
@@ -479,6 +480,76 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // Apply update
         var scaledUpdate = (Vector<T>)Engine.Multiply(fullUpdate, NumOps.Multiply(baseLr, trustRatio));
         return (Vector<T>)Engine.Subtract(parameters, scaledUpdate);
+    }
+
+    // Per-parameter LAMB state for tape-based training
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeM = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeV = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private int _tapeStep;
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        _tapeStep++;
+
+        T beta1 = NumOps.FromDouble(_options.Beta1);
+        T beta2 = NumOps.FromDouble(_options.Beta2);
+        T oneMinusBeta1 = NumOps.FromDouble(1.0 - _options.Beta1);
+        T oneMinusBeta2 = NumOps.FromDouble(1.0 - _options.Beta2);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+        T weightDecay = NumOps.FromDouble(_options.WeightDecay);
+        T maxTrustRatio = NumOps.FromDouble(_options.MaxTrustRatio);
+        T baseLr = NumOps.FromDouble(GetWarmupLearningRate());
+
+        T biasCorrection1 = _options.UseBiasCorrection
+            ? NumOps.FromDouble(1.0 - Math.Pow(_options.Beta1, _tapeStep))
+            : NumOps.One;
+        T biasCorrection2 = _options.UseBiasCorrection
+            ? NumOps.FromDouble(1.0 - Math.Pow(_options.Beta2, _tapeStep))
+            : NumOps.One;
+
+        foreach (var param in context.Parameters)
+        {
+            if (!context.Gradients.TryGetValue(param, out var grad))
+                continue;
+
+            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeM[param] = m; }
+            if (!_tapeV.TryGetValue(param, out var v)) { v = new Tensor<T>(param._shape); _tapeV[param] = v; }
+
+            // Update moments
+            Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1)), m);
+            Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(v, beta2), Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusBeta2)), v);
+
+            // Bias correction
+            var mHat = Engine.TensorDivideScalar(m, biasCorrection1);
+            var vHat = Engine.TensorDivideScalar(v, biasCorrection2);
+
+            // Adam update + weight decay
+            var adamUpdate = Engine.TensorDivide(mHat, Engine.TensorAddScalar(Engine.TensorSqrt(vHat), epsilon));
+            var fullUpdate = Engine.TensorAdd(adamUpdate, Engine.TensorMultiplyScalar(param, weightDecay));
+
+            // LAMB trust ratio: phi(||param||) / ||fullUpdate||
+            var paramNorm = Engine.TensorNorm(param);
+            var updateNorm = Engine.TensorNorm(fullUpdate);
+            T pNorm = paramNorm.Length > 0 ? paramNorm[0] : NumOps.Zero;
+            T uNorm = updateNorm.Length > 0 ? updateNorm[0] : NumOps.Zero;
+
+            T trustRatio;
+            if (NumOps.LessThan(pNorm, epsilon) || NumOps.LessThan(uNorm, epsilon))
+            {
+                trustRatio = NumOps.One;
+            }
+            else
+            {
+                trustRatio = NumOps.Divide(pNorm, uNorm);
+                if (_options.ClipTrustRatio && NumOps.GreaterThan(trustRatio, maxTrustRatio))
+                    trustRatio = maxTrustRatio;
+            }
+
+            // param -= baseLr * trustRatio * fullUpdate
+            var scaledUpdate = Engine.TensorMultiplyScalar(fullUpdate, NumOps.Multiply(baseLr, trustRatio));
+            Engine.TensorSubtractInPlace(param, scaledUpdate);
+        }
     }
 
     /// <summary>

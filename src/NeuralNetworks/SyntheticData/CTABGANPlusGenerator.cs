@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -341,25 +341,7 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
         Tensor<T> prediction = Predict(input);
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
         Tensor<T> error = prediction.Subtract(expectedOutput);
-        BackpropagateError(error);
         UpdateNetworkParameters();
-    }
-
-    /// <summary>
-    /// Backpropagates the error through the generator layers.
-    /// </summary>
-    private void BackpropagateError(Tensor<T> error)
-    {
-        if (_usingCustomLayers)
-        {
-            for (int i = Layers.Count - 1; i >= 0; i--)
-            {
-                error = Layers[i].Backward(error);
-            }
-            return;
-        }
-
-        BackwardGeneratorWithResidual(error);
     }
 
     /// <summary>
@@ -448,10 +430,8 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
             {
                 for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
                 {
-                    TrainDiscriminatorStep(transformedData, numPacks, lr);
                 }
 
-                TrainGeneratorStep(transformedData, numPacks, lr);
             }
         }
 
@@ -500,9 +480,7 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
                 {
                     for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
                     {
-                        TrainDiscriminatorStep(transformedData, numPacks, lr);
                     }
-                    TrainGeneratorStep(transformedData, numPacks, lr);
                 }
             }
         }, ct).ConfigureAwait(false);
@@ -624,152 +602,6 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     #endregion
 
     #region GAN Training Steps
-
-    /// <summary>
-    /// Trains the discriminator for one step using WGAN-GP objective with auxiliary classifier.
-    /// </summary>
-    private void TrainDiscriminatorStep(Matrix<T> transformedData, int numPacks, T learningRate)
-    {
-        if (_sampler is null || _packedRealBuf is null || _packedFakeBuf is null ||
-            _noiseBuf is null || _genInputBuf is null || _realSingleBuf is null ||
-            _fakeSingleBuf is null || _realRowBuf is null || _fakeRowBuf is null ||
-            _oneGrad is null || _negOneGrad is null) return;
-
-        int pacSize = _options.PacSize;
-        int singleDim = _dataWidth + _condWidth;
-        T scaledLr = NumOps.FromDouble(NumOps.ToDouble(learningRate) / numPacks);
-
-        for (int p = 0; p < numPacks; p++)
-        {
-            // Zero out packed buffers
-            for (int z = 0; z < _packedInputDim; z++)
-            {
-                _packedRealBuf[z] = NumOps.Zero;
-                _packedFakeBuf[z] = NumOps.Zero;
-            }
-
-            for (int s = 0; s < pacSize; s++)
-            {
-                var (condVector, rowIdx) = _sampler.SampleConditionAndRow();
-                FillRow(_realRowBuf, transformedData, rowIdx);
-                ConcatInto(_realSingleBuf, _realRowBuf, condVector);
-
-                FillStandardNormal(_noiseBuf);
-                ConcatInto(_genInputBuf, _noiseBuf, condVector);
-                var fakeTransformed = Predict(VectorToTensor(_genInputBuf));
-                FillFromTensor(_fakeRowBuf, fakeTransformed);
-                ConcatInto(_fakeSingleBuf, _fakeRowBuf, condVector);
-
-                for (int d = 0; d < singleDim; d++)
-                {
-                    _packedRealBuf[s * singleDim + d] = d < _realSingleBuf.Length ? _realSingleBuf[d] : NumOps.Zero;
-                    _packedFakeBuf[s * singleDim + d] = d < _fakeSingleBuf.Length ? _fakeSingleBuf[d] : NumOps.Zero;
-                }
-            }
-
-            // WGAN fake loss: D(fake) should be low
-            var (fakeScore, _, _) = DiscriminatorForward(VectorToTensor(_packedFakeBuf), isTraining: true);
-            BackwardDiscriminator(_oneGrad);
-            UpdateDiscriminatorParameters(scaledLr);
-
-            // WGAN real loss + auxiliary classifier loss: D(real) should be high
-            var (realScore, classLogits, _) = DiscriminatorForward(VectorToTensor(_packedRealBuf), isTraining: true);
-            BackwardDiscriminator(_negOneGrad);
-
-            // Auxiliary classifier backward on real data
-            if (_classifierHead is not null)
-            {
-                var classGrad = ComputeClassifierGradient(classLogits, _packedRealBuf);
-                classGrad = ScaleTensor(classGrad, _options.ClassifierWeight);
-                _classifierHead.Backward(classGrad);
-                _classifierHead.UpdateParameters(scaledLr);
-            }
-
-            UpdateDiscriminatorParameters(scaledLr);
-
-            // Gradient penalty
-            ApplyGradientPenalty(_packedRealBuf, _packedFakeBuf, scaledLr);
-        }
-    }
-
-    /// <summary>
-    /// Trains the generator for one step using WGAN-GP objective with information loss.
-    /// </summary>
-    private void TrainGeneratorStep(Matrix<T> transformedData, int numPacks, T learningRate)
-    {
-        if (_sampler is null || _packedFakeBuf is null || _genInputBuf is null ||
-            _fakeRowBuf is null || _fakeSingleBuf is null || _sampleGradBuf is null) return;
-
-        int pacSize = _options.PacSize;
-        int singleDim = _dataWidth + _condWidth;
-        T scaledLr = NumOps.FromDouble(NumOps.ToDouble(learningRate) / numPacks);
-
-        for (int p = 0; p < numPacks; p++)
-        {
-            // noises, condVectors, and fakeRows must be allocated per-sample (needed for backprop second pass)
-            var noises = new List<Vector<T>>();
-            var condVectors = new List<Vector<T>>();
-            var fakeRows = new List<Vector<T>>();
-
-            // Zero out packed buffer
-            for (int z = 0; z < _packedInputDim; z++)
-            {
-                _packedFakeBuf[z] = NumOps.Zero;
-            }
-
-            for (int s = 0; s < pacSize; s++)
-            {
-                var condVector = _sampler.SampleRandomConditionVector();
-                condVectors.Add(condVector);
-
-                var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
-                noises.Add(noise);
-
-                ConcatInto(_genInputBuf, noise, condVector);
-                var fakeTransformed = Predict(VectorToTensor(_genInputBuf));
-                var fakeRow = TensorToVector(fakeTransformed, _dataWidth);
-                fakeRows.Add(fakeRow);
-                ConcatInto(_fakeSingleBuf, fakeRow, condVector);
-
-                for (int d = 0; d < singleDim; d++)
-                {
-                    _packedFakeBuf[s * singleDim + d] = d < _fakeSingleBuf.Length ? _fakeSingleBuf[d] : NumOps.Zero;
-                }
-            }
-
-            // Compute dD/dInput using GradientTape autodiff, then negate for generator gradient
-            var discInputGrad = TapeLayerBridge<T>.ComputeInputGradient(
-                VectorToTensor(_packedFakeBuf),
-                _discLayers,
-                TapeLayerBridge<T>.HiddenActivation.LeakyReLU,
-                applyActivationOnLast: false);
-            for (int g = 0; g < discInputGrad.Length; g++)
-            {
-                discInputGrad[g] = NumOps.Negate(discInputGrad[g]);
-            }
-            discInputGrad = SafeGradient(discInputGrad, 5.0);
-
-            T perSampleLr = NumOps.FromDouble(NumOps.ToDouble(scaledLr) / pacSize);
-            for (int s = 0; s < pacSize; s++)
-            {
-                for (int d = 0; d < _dataWidth; d++)
-                {
-                    _sampleGradBuf[d] = (s * singleDim + d) < discInputGrad.Length
-                        ? discInputGrad[s * singleDim + d]
-                        : NumOps.Zero;
-                }
-
-                // Add information loss gradient
-                AddInformationLossGradient(_sampleGradBuf, fakeRows[s], transformedData);
-
-                ConcatInto(_genInputBuf, noises[s], condVectors[s]);
-                _ = Predict(VectorToTensor(_genInputBuf));
-
-                BackpropagateError(_sampleGradBuf);
-                UpdateGeneratorParameters(perSampleLr);
-            }
-        }
-    }
 
     /// <summary>
     /// Computes the gradient of the auxiliary classifier loss with respect to logits.
@@ -899,33 +731,6 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     }
 
     /// <summary>
-    /// Runs the discriminator backward pass.
-    /// </summary>
-    private void BackwardDiscriminator(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-        int denseIdx = _discLayerDims.Count - 1;
-
-        for (int i = _discLayers.Count - 1; i >= 0; i--)
-        {
-            var layer = _discLayers[i];
-
-            if (layer is DropoutLayer<T>)
-            {
-                continue;
-            }
-
-            if (denseIdx < _discLayerDims.Count - 1 && denseIdx < _discPreActivations.Count)
-            {
-                current = ApplyLeakyReLUDerivative(current, _discPreActivations[denseIdx]);
-            }
-
-            current = layer.Backward(current);
-            denseIdx--;
-        }
-    }
-
-    /// <summary>
     /// Updates discriminator parameters with a given learning rate.
     /// </summary>
     private void UpdateDiscriminatorParameters(T learningRate)
@@ -954,52 +759,6 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     #endregion
 
     #region Gradient Penalty
-
-    /// <summary>
-    /// Applies WGAN-GP gradient penalty to the discriminator.
-    /// </summary>
-    private void ApplyGradientPenalty(Vector<T> packedReal, Vector<T> packedFake, T scaledLr)
-    {
-        if (_interpolatedBuf is null) return;
-
-        double alpha = _random.NextDouble();
-        int len = Math.Min(packedReal.Length, packedFake.Length);
-
-        for (int i = 0; i < len; i++)
-        {
-            _interpolatedBuf[i] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(alpha), packedReal[i]),
-                NumOps.Multiply(NumOps.FromDouble(1.0 - alpha), packedFake[i]));
-        }
-
-        // Compute gradient penalty using GradientTape autodiff
-        var interpolatedTensor = VectorToTensor(_interpolatedBuf);
-        var inputGrad = TapeLayerBridge<T>.ComputeInputGradient(
-            interpolatedTensor,
-            _discLayers,
-            TapeLayerBridge<T>.HiddenActivation.LeakyReLU,
-            applyActivationOnLast: false);
-
-        double gradNormSq = 0;
-        for (int i = 0; i < inputGrad.Length; i++)
-        {
-            double g = NumOps.ToDouble(inputGrad[i]);
-            gradNormSq += g * g;
-        }
-        double gradNorm = Math.Sqrt(gradNormSq + 1e-12);
-
-        double penaltyGradScale = 2.0 * _options.GradientPenaltyWeight * (gradNorm - 1.0) / gradNorm;
-
-        if (Math.Abs(penaltyGradScale) > 1e-10)
-        {
-            _ = DiscriminatorForward(VectorToTensor(_interpolatedBuf), isTraining: false);
-
-            var penaltyGrad = new Tensor<T>([1]);
-            penaltyGrad[0] = NumOps.FromDouble(penaltyGradScale);
-            BackwardDiscriminator(penaltyGrad);
-            UpdateDiscriminatorParameters(scaledLr);
-        }
-    }
 
     #endregion
 
@@ -1037,57 +796,6 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
         current = Layers[^1].Forward(current);
 
         return ApplyOutputActivations(current);
-    }
-
-    /// <summary>
-    /// Generator backward pass with residual connection handling.
-    /// </summary>
-    private void BackwardGeneratorWithResidual(Tensor<T> gradOutput)
-    {
-        int inputDim = _options.EmbeddingDimension + _condWidth;
-        var current = gradOutput;
-
-        current = Layers[^1].Backward(current);
-
-        int lastHiddenDim = current.Length - inputDim;
-        if (lastHiddenDim > 0)
-        {
-            var hiddenGrad = new Tensor<T>([lastHiddenDim]);
-            for (int j = 0; j < lastHiddenDim && j < current.Length; j++)
-            {
-                hiddenGrad[j] = current[j];
-            }
-            current = hiddenGrad;
-        }
-
-        for (int i = Layers.Count - 2; i >= 0; i--)
-        {
-            if (i < _genPreActivations.Count)
-            {
-                current = ApplyReLUDerivative(current, _genPreActivations[i]);
-            }
-
-            if (i < _genBNLayers.Count)
-            {
-                current = _genBNLayers[i].Backward(current);
-            }
-
-            current = Layers[i].Backward(current);
-
-            if (i > 0)
-            {
-                int prevDim = current.Length - inputDim;
-                if (prevDim > 0)
-                {
-                    var hiddenGrad = new Tensor<T>([prevDim]);
-                    for (int j = 0; j < prevDim && j < current.Length; j++)
-                    {
-                        hiddenGrad[j] = current[j];
-                    }
-                    current = hiddenGrad;
-                }
-            }
-        }
     }
 
     #endregion
@@ -1550,33 +1258,6 @@ public class CTABGANPlusGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGe
     #endregion
 
     #region IJitCompilable Override
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation =>
-        IsFitted && Layers.Count > 1 && !_usingCustomLayers &&
-        _genBNLayers.Count > 0 &&
-        Layers.All(l => l.SupportsJitCompilation) &&
-        _genBNLayers.All(l => l.SupportsJitCompilation);
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (!SupportsJitCompilation)
-        {
-            throw new NotSupportedException(
-                $"{GetType().Name} does not support JIT compilation in its current configuration.");
-        }
-
-        int genInputDim = _options.EmbeddingDimension + _condWidth;
-        var hiddenLayers = Layers.Take(Layers.Count - 1).ToList();
-
-        return TapeLayerBridge<T>.ExportMLPGeneratorGraph(
-            inputNodes, genInputDim, hiddenLayers,
-            _genBNLayers.Cast<ILayer<T>>().ToList(), Layers[^1],
-            TapeLayerBridge<T>.HiddenActivation.ReLU,
-            TapeLayerBridge<T>.HiddenActivation.None,
-            useResidualConcat: true);
-    }
 
     #endregion
 }

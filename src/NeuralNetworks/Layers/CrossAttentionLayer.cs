@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -31,7 +31,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.CrossModalAttention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, ChangesShape = false, ApiShape = LayerApiShape.DualTensor, TestInputShape = "1, 16", TestConstructorArgs = "16, 16, 2, 4")]
-public class CrossAttentionLayer<T> : LayerBase<T>
+public partial class CrossAttentionLayer<T> : LayerBase<T>
 {
     private readonly int _queryDim;
     private readonly int _contextDim;
@@ -39,6 +39,8 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     private readonly int _headDim;
 
     // Query projection: queryDim -> queryDim
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _queryWeights;
 
     // Key projection: contextDim -> queryDim
@@ -49,6 +51,8 @@ public class CrossAttentionLayer<T> : LayerBase<T>
 
     // Output projection: queryDim -> queryDim
     private Tensor<T> _outputWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputBias;
 
     // Cached values for backward pass
@@ -70,13 +74,13 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     private int[]? _originalQueryShape;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuQuery;
-    private IGpuTensor<T>? _gpuContext;
-    private IGpuTensor<T>? _gpuQ;
-    private IGpuTensor<T>? _gpuK;
-    private IGpuTensor<T>? _gpuV;
-    private IGpuTensor<T>? _gpuAttnOutput;
-    private IGpuTensor<T>? _gpuAttnWeights;
+    private Tensor<T>? _gpuQuery;
+    private Tensor<T>? _gpuContext;
+    private Tensor<T>? _gpuQ;
+    private Tensor<T>? _gpuK;
+    private Tensor<T>? _gpuV;
+    private Tensor<T>? _gpuAttnOutput;
+    private Tensor<T>? _gpuAttnWeights;
     private int _gpuBatch;
     private int _gpuQueryLen;
     private int _gpuContextLen;
@@ -153,7 +157,7 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (rows + cols)));
 
         var span = weights.AsWritableSpan();
-        var rng = RandomHelper.CreateSeededRandom(42);
+        var rng = RandomHelper.CreateSecureRandom();
         for (int i = 0; i < span.Length; i++)
         {
             double val = (rng.NextDouble() - 0.5) * NumOps.ToDouble(scale);
@@ -478,259 +482,6 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         return Engine.TensorBroadcastAdd(input, biasReshaped);
     }
 
-    /// <inheritdoc/>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Simplified backward pass - in production would use autodiff
-        // For now, return gradient scaled by output weights
-        if (_lastQuery == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Normalize outputGradient to 3D to match canonical _lastQuery shape
-        var outGrad3D = outputGradient;
-        int origRank = _originalQueryShape?.Length ?? 3;
-        int height = 0, width = 0;
-        bool is4D = origRank == 4;
-        bool isHigherRank = origRank > 4;
-
-        if (_originalQueryShape != null && origRank == 2)
-        {
-            // 2D output gradient -> 3D (add batch dim)
-            outGrad3D = outputGradient.Reshape(new[] { 1, outputGradient.Shape[0], outputGradient.Shape[1] });
-        }
-        else if (_originalQueryShape != null && is4D)
-        {
-            // 4D NCHW -> 3D [B, H*W, C]
-            height = _originalQueryShape[2];
-            width = _originalQueryShape[3];
-            outGrad3D = ReshapeNCHWToNLC(outputGradient);
-        }
-        else if (_originalQueryShape != null && isHigherRank)
-        {
-            // Higher-rank output gradient -> 3D (flatten leading dims)
-            int flatBatch = 1;
-            for (int d = 0; d < origRank - 2; d++)
-                flatBatch *= _originalQueryShape[d];
-            int seqLenHigh = _originalQueryShape[origRank - 2];
-            outGrad3D = outputGradient.Reshape(new[] { flatBatch, seqLenHigh, _queryDim });
-        }
-
-        // Compute weight gradients
-        var queryShape = _lastQuery.Shape.ToArray();
-        int batch = queryShape[0];
-        int seqLen = queryShape[1];
-
-        // Output projection backward: output = attended @ Wo + bo
-        // dL/d(attended) = outGrad3D @ Wo^T
-        var dAttended = ProjectTensor(outGrad3D, TransposeWeights(_outputWeights));
-
-        // dL/d(Wo) = sum_b(attended_b^T @ grad_b)
-        // dL/d(bo) = sum(grad, dims=[0,1])
-        _outputWeightsGradient = new Tensor<T>(_outputWeights.Shape.ToArray());
-        _outputBiasGradient = new Tensor<T>(_outputBias.Shape.ToArray());
-        for (int b = 0; b < batch; b++)
-        {
-            var attendedB = _lastOutput != null
-                ? _lastOutput.GetSliceAlongDimension(b, 0).Reshape([seqLen, _queryDim])
-                : new Tensor<T>([seqLen, _queryDim]);
-            var gradB = outGrad3D.GetSliceAlongDimension(b, 0).Reshape([seqLen, _queryDim]);
-            _outputWeightsGradient = _outputWeightsGradient.Add(
-                Engine.TensorMatMul(Engine.TensorTranspose(attendedB), gradB));
-            _outputBiasGradient = _outputBiasGradient.Add(
-                Engine.ReduceSum(gradB, [0], keepDims: false));
-        }
-
-        // Q/K/V weight gradients: approximate via chain rule through projection
-        // dL/d(Wq) ≈ query^T @ dL/d(Q), where dL/d(Q) ≈ dAttended (simplified)
-        _queryWeightsGradient = new Tensor<T>(_queryWeights.Shape.ToArray());
-        _keyWeightsGradient = new Tensor<T>(_keyWeights.Shape.ToArray());
-        _valueWeightsGradient = new Tensor<T>(_valueWeights.Shape.ToArray());
-        for (int b = 0; b < batch; b++)
-        {
-            var queryB = _lastQuery.GetSliceAlongDimension(b, 0).Reshape([seqLen, _queryDim]);
-            var dAttB = dAttended.GetSliceAlongDimension(b, 0).Reshape([seqLen, _queryDim]);
-            _queryWeightsGradient = _queryWeightsGradient.Add(
-                Engine.TensorMatMul(Engine.TensorTranspose(queryB), dAttB));
-
-            if (_lastContext != null)
-            {
-                var ctxB = _lastContext.GetSliceAlongDimension(b, 0);
-                int ctxLen = ctxB.Shape[0];
-                ctxB = ctxB.Reshape([ctxLen, _queryDim]);
-                // K and V gradients approximate: context^T @ dAttended (summed over batch)
-                _keyWeightsGradient = _keyWeightsGradient.Add(
-                    Engine.TensorMatMul(Engine.TensorTranspose(ctxB), dAttB));
-                _valueWeightsGradient = _valueWeightsGradient.Add(
-                    Engine.TensorMatMul(Engine.TensorTranspose(ctxB), dAttB));
-            }
-        }
-
-        // Return input gradient
-        var inputGradient = dAttended;
-
-        // Restore higher-rank gradients to their original shape
-        if (_originalQueryShape != null && origRank != 3)
-        {
-            if (origRank == 2)
-            {
-                // 3D -> 2D (remove batch dim)
-                inputGradient = inputGradient.Reshape(new[] { seqLen, _queryDim });
-            }
-            else if (is4D)
-            {
-                // 3D -> 4D NCHW
-                inputGradient = ReshapeNLCToNCHW(inputGradient, batch, _queryDim, height, width);
-            }
-            else if (isHigherRank)
-            {
-                // 3D -> higher-rank (restore original leading dims)
-                inputGradient = inputGradient.Reshape(_originalQueryShape);
-            }
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Performs the backward pass on GPU for the cross-attention layer.
-    /// </summary>
-    /// <param name="outputGradient">The GPU tensor containing the gradient of the loss with respect to the output.</param>
-    /// <returns>The GPU tensor containing the gradient of the loss with respect to the query input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (_gpuQuery == null || _gpuContext == null || _gpuQ == null || _gpuK == null || _gpuV == null ||
-            _gpuAttnOutput == null || _gpuAttnWeights == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        int batch = _gpuBatch;
-        int queryLen = _gpuQueryLen;
-        int contextLen = _gpuContextLen;
-        int flatQueryLen = batch * queryLen;
-        int flatContextLen = batch * contextLen;
-
-        // Step 1: Backprop through output projection and bias
-        // Forward: output = contextFlat @ outputWeights + bias
-        // Backward: dOutputWeights = dOutput.T @ contextFlat, dAttnOutput = dOutput @ outputWeights.T, dBias = sum(dOutput)
-
-        // Flatten output gradient for matmul
-        var dOutputFlat = gpuEngine.ReshapeGpu(outputGradient, [flatQueryLen, _queryDim]);
-        var attnOutputFlat = gpuEngine.ReshapeGpu(_gpuAttnOutput, [flatQueryLen, _queryDim]);
-
-        // Upload weights to GPU
-        var gpuOutputWeights = gpuEngine.UploadToGpu(_outputWeights, GpuTensorRole.Weight);
-
-        // Compute output weight gradient: dOutput.T @ attnOutput
-        var dOutputFlatT = gpuEngine.TransposeGpu(dOutputFlat);
-        var gpuDOutputWeights = gpuEngine.MatMulGpuTensors(dOutputFlatT, attnOutputFlat);
-        _outputWeightsGradient = gpuDOutputWeights.ToTensor();
-
-        // Compute output bias gradient: sum over batch*seq dimension
-        var gpuDBias = gpuEngine.SumAxisGpu(dOutputFlat, 0);
-        _outputBiasGradient = gpuDBias.ToTensor();
-
-        // Compute gradient through output projection: dAttnOutput = dOutput @ outputWeights.T
-        var outputWeightsT = gpuEngine.TransposeGpu(gpuOutputWeights);
-        var dAttnOutputFlat = gpuEngine.MatMulGpuTensors(dOutputFlat, outputWeightsT);
-        var dAttnOutput = gpuEngine.ReshapeGpu(dAttnOutputFlat, [batch, queryLen, _queryDim]);
-
-        // Step 2: Backprop through attention (multi-head)
-        // Reshape to 4D for attention backward: [B, queryLen, numHeads, headDim] -> [B, numHeads, queryLen, headDim]
-        var dAttnReshaped = gpuEngine.ReshapeGpu(dAttnOutput, [batch, queryLen, _headCount, _headDim]);
-        var dAttnPermuted = gpuEngine.PermuteGpu(dAttnReshaped, [0, 2, 1, 3]);
-
-        // Reshape Q, K, V to 4D for attention backward
-        var qReshaped = gpuEngine.ReshapeGpu(_gpuQ, [batch, queryLen, _headCount, _headDim]);
-        var kReshaped = gpuEngine.ReshapeGpu(_gpuK, [batch, contextLen, _headCount, _headDim]);
-        var vReshaped = gpuEngine.ReshapeGpu(_gpuV, [batch, contextLen, _headCount, _headDim]);
-        var qPermuted = gpuEngine.PermuteGpu(qReshaped, [0, 2, 1, 3]);
-        var kPermuted = gpuEngine.PermuteGpu(kReshaped, [0, 2, 1, 3]);
-        var vPermuted = gpuEngine.PermuteGpu(vReshaped, [0, 2, 1, 3]);
-
-        // Reshape attention weights to 4D
-        var attnWeights4D = gpuEngine.ReshapeGpu(_gpuAttnWeights, [batch, _headCount, queryLen, contextLen]);
-
-        // Use ScaledDotProductAttentionBackwardGpu
-        double scale = 1.0 / Math.Sqrt(_headDim);
-        var (dQ4D, dK4D, dV4D) = gpuEngine.ScaledDotProductAttentionBackwardGpu(
-            dAttnPermuted, qPermuted, kPermuted, vPermuted, attnWeights4D, scale);
-
-        // Permute gradients back to [B, seqLen, numHeads, headDim]
-        var dQPermuted = gpuEngine.PermuteGpu(dQ4D, [0, 2, 1, 3]);
-        var dKPermuted = gpuEngine.PermuteGpu(dK4D, [0, 2, 1, 3]);
-        var dVPermuted = gpuEngine.PermuteGpu(dV4D, [0, 2, 1, 3]);
-
-        // Reshape to [B, seqLen, queryDim]
-        var dQ = gpuEngine.ReshapeGpu(dQPermuted, [batch, queryLen, _queryDim]);
-        var dK = gpuEngine.ReshapeGpu(dKPermuted, [batch, contextLen, _queryDim]);
-        var dV = gpuEngine.ReshapeGpu(dVPermuted, [batch, contextLen, _queryDim]);
-
-        // Step 3: Backprop through Q, K, V projections
-        // Forward: Q = query @ queryWeights, K = context @ keyWeights, V = context @ valueWeights
-        // Backward: dQueryWeights = dQ.T @ query, dKeyWeights = dK.T @ context, dValueWeights = dV.T @ context
-
-        // Flatten for matmul
-        var dQFlat = gpuEngine.ReshapeGpu(dQ, [flatQueryLen, _queryDim]);
-        var dKFlat = gpuEngine.ReshapeGpu(dK, [flatContextLen, _queryDim]);
-        var dVFlat = gpuEngine.ReshapeGpu(dV, [flatContextLen, _queryDim]);
-
-        var queryFlat = gpuEngine.ReshapeGpu(_gpuQuery, [flatQueryLen, _queryDim]);
-        var contextFlat = gpuEngine.ReshapeGpu(_gpuContext, [flatContextLen, _contextDim]);
-
-        // Upload weights
-        var gpuQueryWeights = gpuEngine.UploadToGpu(_queryWeights, GpuTensorRole.Weight);
-        var gpuKeyWeights = gpuEngine.UploadToGpu(_keyWeights, GpuTensorRole.Weight);
-        var gpuValueWeights = gpuEngine.UploadToGpu(_valueWeights, GpuTensorRole.Weight);
-
-        // Compute weight gradients
-        var dQFlatT = gpuEngine.TransposeGpu(dQFlat);
-        var dKFlatT = gpuEngine.TransposeGpu(dKFlat);
-        var dVFlatT = gpuEngine.TransposeGpu(dVFlat);
-
-        var gpuDQueryWeights = gpuEngine.MatMulGpuTensors(dQFlatT, queryFlat);
-        var gpuDKeyWeights = gpuEngine.MatMulGpuTensors(dKFlatT, contextFlat);
-        var gpuDValueWeights = gpuEngine.MatMulGpuTensors(dVFlatT, contextFlat);
-
-        _queryWeightsGradient = gpuDQueryWeights.ToTensor();
-        _keyWeightsGradient = gpuDKeyWeights.ToTensor();
-        _valueWeightsGradient = gpuDValueWeights.ToTensor();
-
-        // Compute query input gradient: dQuery = dQ @ queryWeights.T
-        var queryWeightsT = gpuEngine.TransposeGpu(gpuQueryWeights);
-        var dQueryFlat = gpuEngine.MatMulGpuTensors(dQFlat, queryWeightsT);
-
-        // Reshape back to 3D: [B, queryLen, queryDim]
-        var dQuery = gpuEngine.ReshapeGpu(dQueryFlat, [batch, queryLen, _queryDim]);
-
-        // Restore original shape if needed
-        if (_originalQueryShape != null)
-        {
-            int origRank = _originalQueryShape.Length;
-            if (origRank == 2)
-            {
-                dQuery = gpuEngine.ReshapeGpu(dQuery, [queryLen, _queryDim]);
-            }
-            else if (origRank == 4)
-            {
-                int height = _originalQueryShape[2];
-                int width = _originalQueryShape[3];
-                dQuery = ReshapeNLCToNCHWGpu(gpuEngine, dQuery, batch, _queryDim, height, width);
-            }
-            else if (origRank > 3)
-            {
-                dQuery = gpuEngine.ReshapeGpu(dQuery, _originalQueryShape);
-            }
-        }
-
-        return dQuery;
-    }
-
     private Tensor<T> TransposeWeights(Tensor<T> weights)
     {
         // Use IEngine for GPU-accelerated 2D tensor transpose
@@ -789,7 +540,7 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">Array containing [query] or [query, context] GPU tensors.</param>
     /// <returns>GPU-resident output tensor with same shape as query.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.");
@@ -798,8 +549,8 @@ public class CrossAttentionLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
         // Handle single or dual input
-        IGpuTensor<T> query = inputs[0];
-        IGpuTensor<T> context = inputs.Length >= 2 ? inputs[1] : inputs[0];
+        Tensor<T> query = inputs[0];
+        Tensor<T> context = inputs.Length >= 2 ? inputs[1] : inputs[0];
 
         int[] queryShape = query.Shape.ToArray();
         int[] contextShape = context.Shape.ToArray();
@@ -904,8 +655,8 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         // Scaled dot-product attention
         // Use overload that returns attention weights during training for backward pass
         double scale = 1.0 / Math.Sqrt(_headDim);
-        IGpuTensor<T> attended;
-        IGpuTensor<T>? attentionWeightsGpu = null;
+        Tensor<T> attended;
+        Tensor<T>? attentionWeightsGpu = null;
 
         if (IsTrainingMode)
         {
@@ -948,10 +699,10 @@ public class CrossAttentionLayer<T> : LayerBase<T>
             _gpuContextLen = contextLen;
 
             // Also cache CPU tensors for CPU backward compatibility
-            _lastQuery = query.ToTensor();
-            _lastContext = context.ToTensor();
-            _lastAttentionScores = attentionWeightsGpu?.ToTensor();
-            _lastOutput = output.ToTensor();
+            _lastQuery = query;
+            _lastContext = context;
+            _lastAttentionScores = attentionWeightsGpu;
+            _lastOutput = output;
             _originalQueryShape = originalQueryShape;
         }
 
@@ -977,7 +728,7 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         return output;
     }
 
-    private static IGpuTensor<T> ReshapeNCHWToNLCGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> input)
+    private static Tensor<T> ReshapeNCHWToNLCGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> input)
     {
         int[] shape = input.Shape.ToArray();
         int batch = shape[0];
@@ -993,7 +744,7 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         return gpuEngine.ReshapeGpu(nhwc, new[] { batch, seqLen, channels });
     }
 
-    private static IGpuTensor<T> ReshapeNLCToNCHWGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> input, int batch, int channels, int height, int width)
+    private static Tensor<T> ReshapeNLCToNCHWGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> input, int batch, int channels, int height, int width)
     {
         // Reshape NLC to NHWC: [B, H*W, C] -> [B, H, W, C]
         var nhwc = gpuEngine.ReshapeGpu(input, new[] { batch, height, width, channels });
@@ -1006,11 +757,11 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_queryWeights.Data),
-            Vector<T>.FromMemory(_keyWeights.Data),
-            Vector<T>.FromMemory(_valueWeights.Data),
-            Vector<T>.FromMemory(_outputWeights.Data),
-            Vector<T>.FromMemory(_outputBias.Data));
+            new Vector<T>(_queryWeights.ToArray()),
+            new Vector<T>(_keyWeights.ToArray()),
+            new Vector<T>(_valueWeights.ToArray()),
+            new Vector<T>(_outputWeights.ToArray()),
+            new Vector<T>(_outputBias.ToArray()));
     }
 
     /// <inheritdoc/>
@@ -1049,11 +800,11 @@ public class CrossAttentionLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         return Vector<T>.Concatenate(
-            _queryWeightsGradient != null ? (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_queryWeights.Length),
-            _keyWeightsGradient != null ? (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_keyWeights.Length),
-            _valueWeightsGradient != null ? (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_valueWeights.Length),
-            _outputWeightsGradient != null ? (_outputWeightsGradient is not null ? Vector<T>.FromMemory(_outputWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputWeights.Length),
-            _outputBiasGradient != null ? (_outputBiasGradient is not null ? Vector<T>.FromMemory(_outputBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputBias.Length)
+            _queryWeightsGradient != null ? new Vector<T>(_queryWeightsGradient.ToArray()) : new Vector<T>(_queryWeights.Length),
+            _keyWeightsGradient != null ? new Vector<T>(_keyWeightsGradient.ToArray()) : new Vector<T>(_keyWeights.Length),
+            _valueWeightsGradient != null ? new Vector<T>(_valueWeightsGradient.ToArray()) : new Vector<T>(_valueWeights.Length),
+            _outputWeightsGradient != null ? new Vector<T>(_outputWeightsGradient.ToArray()) : new Vector<T>(_outputWeights.Length),
+            _outputBiasGradient != null ? new Vector<T>(_outputBiasGradient.ToArray()) : new Vector<T>(_outputBias.Length)
         );
     }
 
@@ -1088,46 +839,6 @@ public class CrossAttentionLayer<T> : LayerBase<T>
         _gpuV = null;
         _gpuAttnOutput = null;
         _gpuAttnWeights = null;
-    }
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation =>
-        _queryWeights != null && _keyWeights != null &&
-        _valueWeights != null && _outputWeights != null;
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Create symbolic input nodes for query and context
-        var queryInput = new Tensor<T>(new int[] { 1, InputShape[0], _queryDim });
-        var queryNode = Autodiff.TensorOperations<T>.Variable(queryInput, "query");
-        inputNodes.Add(queryNode);
-
-        var contextInput = new Tensor<T>(new int[] { 1, 77, _contextDim }); // Standard text encoder output length
-        var contextNode = Autodiff.TensorOperations<T>.Variable(contextInput, "context");
-        inputNodes.Add(contextNode);
-
-        // Create weight nodes
-        var wqNode = Autodiff.TensorOperations<T>.Constant(_queryWeights, "Wq");
-        var wkNode = Autodiff.TensorOperations<T>.Constant(_keyWeights, "Wk");
-        var wvNode = Autodiff.TensorOperations<T>.Constant(_valueWeights, "Wv");
-        var woNode = Autodiff.TensorOperations<T>.Constant(_outputWeights, "Wo");
-
-        // Apply cross-attention using multi-head attention with separate query/key sources
-        var output = Autodiff.TensorOperations<T>.MultiHeadAttention(
-            query: queryNode,
-            key: contextNode,
-            value: contextNode,
-            numHeads: _headCount,
-            wQ: wqNode,
-            wK: wkNode,
-            wV: wvNode,
-            wO: woNode);
-
-        return output;
     }
 }
 

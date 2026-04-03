@@ -1526,26 +1526,6 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
         return result;
     }
 
-    /// <summary>
-    /// Backward pass through encoder layers.
-    /// </summary>
-    public Tensor<T> Backward(Tensor<T> gradient)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Backward pass is only supported in native mode.");
-        }
-
-        var currentGradient = gradient;
-
-        for (int i = _imageEncoderLayers.Count - 1; i >= 0; i--)
-        {
-            currentGradient = _imageEncoderLayers[i].Backward(currentGradient);
-        }
-
-        return currentGradient;
-    }
-
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
@@ -1562,7 +1542,6 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
         var lossGradient = LossFunction.CalculateDerivative(embeddingTensor.ToVector(), expectedOutput.ToVector());
         var gradient = Tensor<T>.FromVector(lossGradient);
 
-        Backward(gradient);
         var currentParams = GetParameters();
         UpdateParameters(currentParams);
 

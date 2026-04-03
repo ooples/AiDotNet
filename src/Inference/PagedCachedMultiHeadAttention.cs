@@ -1,4 +1,4 @@
-using System.Buffers;
+﻿using System.Buffers;
 using AiDotNet.Enums;
 using AiDotNet.Inference.PagedAttention;
 using AiDotNet.Inference.Quantization;
@@ -732,21 +732,9 @@ internal class PagedCachedMultiHeadAttention<T> : LayerBase<T>
         _alibiLayer?.ResetState();
     }
 
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        throw new NotSupportedException($"{nameof(PagedCachedMultiHeadAttention<T>)} is intended for inference-time usage only.");
-    }
-
     public override void UpdateParameters(T learningRate)
     {
         throw new NotSupportedException($"{nameof(PagedCachedMultiHeadAttention<T>)} is intended for inference-time usage only.");
-    }
-
-    public override bool SupportsJitCompilation => false;
-
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException($"{nameof(PagedCachedMultiHeadAttention<T>)} does not support JIT compilation.");
     }
 
     internal override Dictionary<string, string> GetMetadata()

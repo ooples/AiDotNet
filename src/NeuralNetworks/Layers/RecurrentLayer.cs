@@ -1,3 +1,4 @@
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -5,6 +6,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Helpers;
 
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -45,7 +47,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class RecurrentLayer<T> : LayerBase<T>
+public partial class RecurrentLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Tensor storing the weight parameters for connections between inputs and hidden neurons.
@@ -55,7 +57,8 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// for one hidden neuron. These weights determine how each input feature influences each
     /// hidden neuron and are trainable parameters of the layer.
     /// </remarks>
-    private readonly int? _initSeed;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _inputWeights;
 
     /// <summary>
@@ -76,6 +79,8 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// weighted sum for the corresponding hidden neuron. Biases allow the network to shift the
     /// activation function, giving it more flexibility to fit the data.
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -99,7 +104,6 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// is null before the first forward pass or after a reset.
     /// </remarks>
     private Tensor<T>? _lastInput;
-    private Tensor<T>? _lastPreActivation;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
@@ -221,10 +225,9 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// The layer starts with carefully initialized weights to help training proceed smoothly.
     /// </para>
     /// </remarks>
-    public RecurrentLayer(int inputSize, int hiddenSize, IActivationFunction<T>? activationFunction = null, int? initSeed = null)
+    public RecurrentLayer(int inputSize, int hiddenSize, IActivationFunction<T>? activationFunction = null)
         : base([inputSize], [hiddenSize], activationFunction ?? new TanhActivation<T>())
     {
-        _initSeed = initSeed;
         _inputWeights = new Tensor<T>([hiddenSize, inputSize]);
         _hiddenWeights = new Tensor<T>([hiddenSize, hiddenSize]);
         _biases = new Tensor<T>([hiddenSize]);
@@ -308,9 +311,6 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// The layer saves all inputs, hidden states, and outputs for later use during training.
     /// </para>
     /// </remarks>
-#if !NETFRAMEWORK
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveOptimization)]
-#endif
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // Store original shape for any-rank tensor support
@@ -377,7 +377,6 @@ public class RecurrentLayer<T> : LayerBase<T>
         // Allocate output tensor (cannot rent — reshape at end creates new tensor,
         // leaving rented buffer unreturned and potentially reused with stale data)
         var output = new Tensor<T>([sequenceLength, batchSize, hiddenSize]);
-        var preActivations = new Tensor<T>([sequenceLength, batchSize, hiddenSize]);
         var hiddenState = new Tensor<T>([sequenceLength + 1, batchSize, hiddenSize]);
         hiddenState.Fill(NumOps.Zero);
 
@@ -404,9 +403,6 @@ public class RecurrentLayer<T> : LayerBase<T>
             var preActivation = Engine.TensorAdd(inputContribution, hiddenContribution);
             preActivation = Engine.TensorBroadcastAdd(preActivation, _biases); // Broadcasting biases across batch
 
-            // Cache pre-activation for backward pass derivative
-            Engine.TensorSetSliceAxis(preActivations, preActivation, 0, t);
-
             // Apply activation
             var newHidden = ApplyActivation(preActivation);
 
@@ -417,7 +413,6 @@ public class RecurrentLayer<T> : LayerBase<T>
 
         _lastHiddenState = hiddenState;
         _lastOutput = output;
-        if (IsTrainingMode) _lastPreActivation = preActivations;
 
         // Restore original batch dimensions for any-rank support
         if (_originalInputShape != null && _originalInputShape.Length > 3)
@@ -451,7 +446,7 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// <returns>GPU tensor output after RNN processing.</returns>
     /// <exception cref="ArgumentException">Thrown when no input tensor is provided.</exception>
     /// <exception cref="InvalidOperationException">Thrown when GPU backend is unavailable.</exception>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -558,7 +553,7 @@ public class RecurrentLayer<T> : LayerBase<T>
             newHBuffer.Dispose();
             currentHBuffer.Dispose();
 
-            var outputTensor = new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+            var outputTensor = GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
 
             // Cache for GPU-resident training
             if (IsTrainingMode)
@@ -580,361 +575,6 @@ public class RecurrentLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass of the recurrent layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the recurrent layer, which is used during training
-    /// to propagate error gradients back through the network. It implements backpropagation through time (BPTT)
-    /// by starting at the end of the sequence and working backward, accumulating gradients for the weights and biases.
-    /// For each time step, it calculates gradients with respect to the input, the hidden state, and the parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer should change to reduce errors.
-    ///
-    /// During the backward pass:
-    /// 1. The layer starts from the end of the sequence and works backward
-    /// 2. At each time step:
-    ///    - It receives error gradients from two sources: the layer above and the future time step
-    ///    - It calculates how each of its weights and biases should change
-    ///    - It calculates how the error should flow back to the previous layer and to the previous time step
-    ///
-    /// This is like figuring out how a mistake at the end of a sentence affects your understanding
-    /// of each word that came before it. The further back in time, the more complex these relationships become.
-    ///
-    /// This process, called "backpropagation through time," is what allows recurrent networks to learn from sequences.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using Backpropagation Through Time (BPTT).
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass using manual gradient calculations optimized for
-    /// recurrent neural networks. It performs backpropagation through time (BPTT), processing the
-    /// sequence in reverse order and accumulating gradients across time steps.
-    /// </para>
-    /// <para>
-    /// Autodiff Note: Implementing BPTT with automatic differentiation is complex due to temporal
-    /// dependencies and the need to accumulate gradients across time steps. The manual implementation
-    /// provides efficient and correct gradient calculations for recurrent layers.
-    /// </para>
-    /// </remarks>
-#if !NETFRAMEWORK
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveOptimization)]
-#endif
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastHiddenState == null || _lastOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Normalize outputGradient to 3D to match Forward's any-rank handling
-        var outGrad3D = outputGradient;
-        int origRank = _originalInputShape?.Length ?? 3;
-        if (outputGradient.Rank == 1)
-        {
-            // 1D gradient [hiddenSize] -> [1, 1, hiddenSize]
-            outGrad3D = outputGradient.Reshape([1, 1, outputGradient.Length]);
-        }
-        else if (outputGradient.Rank == 2)
-        {
-            // 2D gradient [seq, hidden] -> [seq, 1, hidden]
-            outGrad3D = outputGradient.Reshape([outputGradient.Shape[0], 1, outputGradient.Shape[1]]);
-        }
-        else if (_originalInputShape != null && origRank > 3)
-        {
-            // Higher-rank: collapse middle dims into batch
-            int flatBatch = 1;
-            for (int d = 1; d < origRank - 1; d++)
-                flatBatch *= _originalInputShape[d];
-            outGrad3D = outputGradient.Reshape([outputGradient.Shape[0], flatBatch, outputGradient.Shape[origRank - 1]]);
-        }
-
-        int sequenceLength = _lastInput.Shape[0];
-        int batchSize = _lastInput.Shape[1];
-        int inputSize = _lastInput.Shape[2];
-        int hiddenSize = _inputWeights.Shape[0];
-
-        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
-        var inputWeightsGrad = new Tensor<T>([hiddenSize, inputSize]);
-        var hiddenWeightsGrad = new Tensor<T>([hiddenSize, hiddenSize]);
-        var biasesGrad = new Tensor<T>([hiddenSize]);
-
-        var nextHiddenGradient = new Tensor<T>([batchSize, hiddenSize]);
-
-        // Transpose weights for gradient computation
-        var inputWeightsT = _inputWeights.Transpose([1, 0]); // [inputSize, hiddenSize]
-        var hiddenWeightsT = _hiddenWeights.Transpose([1, 0]); // [hiddenSize, hiddenSize]
-
-        for (int t = sequenceLength - 1; t >= 0; t--)
-        {
-            // VECTORIZED: Combine output gradient with hidden gradient from next timestep
-            var outputGradAtT = Engine.TensorSliceAxis(outGrad3D, 0, t); // [batchSize, hiddenSize]
-            var currentGradient = Engine.TensorAdd(outputGradAtT, nextHiddenGradient);
-
-            // VECTORIZED: Extract data for this timestep using tensor slicing
-            var inputAtT = Engine.TensorSliceAxis(_lastInput, 0, t); // [batchSize, inputSize]
-            var prevHiddenAtT = Engine.TensorSliceAxis(_lastHiddenState, 0, t); // [batchSize, hiddenSize]
-            var outputAtT = Engine.TensorSliceAxis(_lastOutput, 0, t); // [batchSize, hiddenSize]
-
-            // Compute activation derivative: dL/dz = dL/dh * f'(z)
-            // Use pre-activation values (not output) for correct derivative computation.
-            // f'(z) needs z, not f(z) — using f(z) gives f'(f(z)) which is wrong
-            // for non-involutory activations like SiLU, GELU, etc.
-            Tensor<T> preActivationGrad;
-            var preActAtT = _lastPreActivation != null
-                ? Engine.TensorSliceAxis(_lastPreActivation, 0, t)
-                : outputAtT; // fallback for legacy compatibility
-
-            if (VectorActivation != null)
-            {
-                var actDeriv = VectorActivation.Derivative(preActAtT);
-                preActivationGrad = Engine.TensorMultiply(currentGradient, actDeriv);
-            }
-            else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
-            {
-                var activation = ScalarActivation;
-                var activationDerivative = preActAtT.Transform((x, _) => activation.Derivative(x));
-                preActivationGrad = Engine.TensorMultiply(currentGradient, activationDerivative);
-            }
-            else
-            {
-                preActivationGrad = currentGradient;
-            }
-
-            // Accumulate weight gradients: dW_input = sum over batch of outer(grad, input)
-            // dW_input += grad^T @ input => [hiddenSize, batchSize] @ [batchSize, inputSize] = [hiddenSize, inputSize]
-            var gradT = preActivationGrad.Transpose([1, 0]); // [hiddenSize, batchSize]
-            var stepInputWeightsGrad = gradT.MatrixMultiply(inputAtT);
-            inputWeightsGrad = Engine.TensorAdd(inputWeightsGrad, stepInputWeightsGrad);
-
-            // dW_hidden += grad^T @ prevHidden => [hiddenSize, batchSize] @ [batchSize, hiddenSize] = [hiddenSize, hiddenSize]
-            var stepHiddenWeightsGrad = gradT.MatrixMultiply(prevHiddenAtT);
-            hiddenWeightsGrad = Engine.TensorAdd(hiddenWeightsGrad, stepHiddenWeightsGrad);
-
-            // dBias += sum over batch of grad => sum along axis 0
-            var stepBiasGrad = preActivationGrad.Sum([0]);
-            biasesGrad = Engine.TensorAdd(biasesGrad, stepBiasGrad);
-
-            // Compute input gradient: dL/dx = dL/dz @ W_input^T
-            // [batchSize, hiddenSize] @ [hiddenSize, inputSize] = [batchSize, inputSize]
-            var stepInputGrad = preActivationGrad.MatrixMultiply(inputWeightsT.Transpose([1, 0]));
-            // VECTORIZED: Store input gradient using tensor slice operation
-            Engine.TensorSetSliceAxis(inputGradient, stepInputGrad, 0, t);
-
-            // Compute hidden gradient for previous timestep: dL/dh_{t-1} = dL/dz @ W_hidden^T
-            // [batchSize, hiddenSize] @ [hiddenSize, hiddenSize] = [batchSize, hiddenSize]
-            nextHiddenGradient = preActivationGrad.MatrixMultiply(hiddenWeightsT.Transpose([1, 0]));
-        }
-
-        _inputWeightsGradient = inputWeightsGrad;
-        _hiddenWeightsGradient = hiddenWeightsGrad;
-        _biasesGradient = biasesGrad;
-
-        // Restore gradient to original input shape for any-rank support
-        if (_originalInputShape != null && _originalInputShape.Length != 3)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation with BPTT.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients through time.
-    /// It processes the sequence in reverse order, accumulating gradients for each time step.
-    /// This implementation uses the production-grade pattern with:
-    /// - Cached forward pass values for activation derivative computation
-    /// - Tensor.Transform for vectorized activation derivative
-    /// - Engine.TensorMultiply for GPU/CPU accelerated gradient multiplication
-    /// - Minimal autodiff graph for gradient routing
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastHiddenState == null || _lastOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Normalize outputGradient to 3D to match Forward's any-rank handling
-        var outGrad3D = outputGradient;
-        int origRank = _originalInputShape?.Length ?? 3;
-        if (outputGradient.Rank == 1)
-        {
-            // 1D gradient [hiddenSize] -> [1, 1, hiddenSize]
-            outGrad3D = outputGradient.Reshape([1, 1, outputGradient.Length]);
-        }
-        else if (outputGradient.Rank == 2)
-        {
-            // 2D gradient [seq, hidden] -> [seq, 1, hidden]
-            outGrad3D = outputGradient.Reshape([outputGradient.Shape[0], 1, outputGradient.Shape[1]]);
-        }
-        else if (_originalInputShape != null && origRank > 3)
-        {
-            // Higher-rank: collapse middle dims into batch
-            int flatBatch = 1;
-            for (int d = 1; d < origRank - 1; d++)
-                flatBatch *= _originalInputShape[d];
-            outGrad3D = outputGradient.Reshape([outputGradient.Shape[0], flatBatch, outputGradient.Shape[origRank - 1]]);
-        }
-
-        int sequenceLength = _lastInput.Shape[0];
-        int batchSize = _lastInput.Shape[1];
-        int inputSize = _lastInput.Shape[2];
-        int hiddenSize = _inputWeights.Shape[0];
-
-        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
-        var inputWeightsGrad = new Tensor<T>([hiddenSize, inputSize]);
-        var hiddenWeightsGrad = new Tensor<T>([hiddenSize, hiddenSize]);
-        var biasesGrad = new Tensor<T>([hiddenSize]);
-
-        var nextHiddenGradient = new Tensor<T>([batchSize, hiddenSize]);
-
-        // Process sequence in reverse (BPTT)
-        for (int t = sequenceLength - 1; t >= 0; t--)
-        {
-            // VECTORIZED: Extract data for this timestep using tensor slicing
-            var inputAtT = Engine.TensorSliceAxis(_lastInput, 0, t); // [batchSize, inputSize]
-            var hiddenAtT = Engine.TensorSliceAxis(_lastHiddenState, 0, t); // [batchSize, hiddenSize]
-            var outputAtT = Engine.TensorSliceAxis(_lastOutput, 0, t); // [batchSize, hiddenSize]
-            var outputGradAtT = Engine.TensorSliceAxis(outGrad3D, 0, t); // [batchSize, hiddenSize]
-            var gradAtT = Engine.TensorAdd(outputGradAtT, nextHiddenGradient);
-
-            // Production-grade: Compute activation derivative using cached output at time t
-            Tensor<T> preActivationGradient;
-            if (VectorActivation != null)
-            {
-                var actDeriv = VectorActivation.Derivative(outputAtT);
-                preActivationGradient = Engine.TensorMultiply(gradAtT, actDeriv);
-            }
-            else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
-            {
-                var activation = ScalarActivation;
-                var activationDerivative = outputAtT.Transform((x, _) => activation.Derivative(x));
-                preActivationGradient = Engine.TensorMultiply(gradAtT, activationDerivative);
-            }
-            else
-            {
-                preActivationGradient = gradAtT;
-            }
-
-            // Build minimal autodiff graph for linear part only (gradient routing)
-            var inputNode = Autodiff.TensorOperations<T>.Variable(inputAtT, "input", requiresGradient: true);
-            var hiddenNode = Autodiff.TensorOperations<T>.Variable(hiddenAtT, "hidden", requiresGradient: true);
-            var inputWeightsNode = Autodiff.TensorOperations<T>.Variable(_inputWeights, "input_weights", requiresGradient: true);
-            var hiddenWeightsNode = Autodiff.TensorOperations<T>.Variable(_hiddenWeights, "hidden_weights", requiresGradient: true);
-
-            // Forward pass for linear part only: preAct = input @ W_input^T + hidden @ W_hidden^T
-            // Biases are not included in autodiff graph - gradients computed manually below
-            var inputWeightsTransposed = Autodiff.TensorOperations<T>.Transpose(inputWeightsNode);
-            var hiddenWeightsTransposed = Autodiff.TensorOperations<T>.Transpose(hiddenWeightsNode);
-
-            var inputContribution = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, inputWeightsTransposed);
-            var hiddenContribution = Autodiff.TensorOperations<T>.MatrixMultiply(hiddenNode, hiddenWeightsTransposed);
-
-            var preActivation = Autodiff.TensorOperations<T>.Add(inputContribution, hiddenContribution);
-
-            // Set pre-activation gradient (activation derivative already applied)
-            preActivation.Gradient = preActivationGradient;
-
-            // Inline topological sort and backward pass
-            var visited = new HashSet<Autodiff.ComputationNode<T>>();
-            var topoOrder = new List<Autodiff.ComputationNode<T>>();
-            var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-            stack.Push((preActivation, false));
-
-            while (stack.Count > 0)
-            {
-                var (node, processed) = stack.Pop();
-                if (visited.Contains(node)) continue;
-
-                if (processed)
-                {
-                    visited.Add(node);
-                    topoOrder.Add(node);
-                }
-                else
-                {
-                    stack.Push((node, true));
-                    if (node.Parents != null)
-                    {
-                        foreach (var parent in node.Parents)
-                        {
-                            if (!visited.Contains(parent))
-                                stack.Push((parent, false));
-                        }
-                    }
-                }
-            }
-
-            for (int i = topoOrder.Count - 1; i >= 0; i--)
-            {
-                var node = topoOrder[i];
-                if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-                {
-                    node.BackwardFunction(node.Gradient);
-                }
-            }
-
-            // Accumulate gradients using Engine tensor operations
-            if (inputWeightsNode.Gradient != null)
-            {
-                inputWeightsGrad = Engine.TensorAdd(inputWeightsGrad, inputWeightsNode.Gradient);
-            }
-
-            if (hiddenWeightsNode.Gradient != null)
-            {
-                hiddenWeightsGrad = Engine.TensorAdd(hiddenWeightsGrad, hiddenWeightsNode.Gradient);
-            }
-
-            // Accumulate bias gradients manually: dL/db = sum over batch of preActivationGradient
-            // preActivationGradient shape: [batchSize, hiddenSize]
-            // Sum along batch axis (axis 0) to get [hiddenSize] gradient for biases
-            var stepBiasGrad = preActivationGradient.SumOverAxis(0);
-            biasesGrad = Engine.TensorAdd(biasesGrad, stepBiasGrad);
-
-            // VECTORIZED: Store input gradient using tensor slice operation
-            if (inputNode.Gradient != null)
-            {
-                Engine.TensorSetSliceAxis(inputGradient, inputNode.Gradient, 0, t);
-            }
-
-            if (hiddenNode.Gradient != null)
-            {
-                nextHiddenGradient = hiddenNode.Gradient;
-            }
-        }
-
-        _inputWeightsGradient = inputWeightsGrad;
-        _hiddenWeightsGradient = hiddenWeightsGrad;
-        _biasesGradient = biasesGrad;
-
-        // Restore gradient to original input shape for any-rank support
-        if (_originalInputShape != null && _originalInputShape.Length != 3)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
     /// Broadcasts biases across the batch dimension.
     /// </summary>
     private Tensor<T> BroadcastBiases(Tensor<T> biases, int batchSize)
@@ -952,33 +592,33 @@ public class RecurrentLayer<T> : LayerBase<T>
     private Tensor<T>? _biasesVelocity;
 
     #region GPU Training Fields
-    private IGpuTensor<T>? _gpuLastInput;
-    private IGpuTensor<T>? _gpuLastOutput;
+    private Tensor<T>? _gpuLastInput;
+    private Tensor<T>? _gpuLastOutput;
 
     // GPU weight buffers
-    private GpuTensor<T>? _gpuInputWeights;
-    private GpuTensor<T>? _gpuHiddenWeights;
-    private GpuTensor<T>? _gpuBiases;
+    private Tensor<T>? _gpuInputWeights;
+    private Tensor<T>? _gpuHiddenWeights;
+    private Tensor<T>? _gpuBiases;
 
     // GPU gradient buffers
-    private GpuTensor<T>? _gpuInputWeightsGradient;
-    private GpuTensor<T>? _gpuHiddenWeightsGradient;
-    private GpuTensor<T>? _gpuBiasesGradient;
+    private Tensor<T>? _gpuInputWeightsGradient;
+    private Tensor<T>? _gpuHiddenWeightsGradient;
+    private Tensor<T>? _gpuBiasesGradient;
 
     // GPU velocity buffers (SGD momentum)
-    private GpuTensor<T>? _gpuInputWeightsVelocity;
-    private GpuTensor<T>? _gpuHiddenWeightsVelocity;
-    private GpuTensor<T>? _gpuBiasesVelocity;
+    private Tensor<T>? _gpuInputWeightsVelocity;
+    private Tensor<T>? _gpuHiddenWeightsVelocity;
+    private Tensor<T>? _gpuBiasesVelocity;
 
     // GPU Adam first moment buffers
-    private GpuTensor<T>? _gpuInputWeightsM;
-    private GpuTensor<T>? _gpuHiddenWeightsM;
-    private GpuTensor<T>? _gpuBiasesM;
+    private Tensor<T>? _gpuInputWeightsM;
+    private Tensor<T>? _gpuHiddenWeightsM;
+    private Tensor<T>? _gpuBiasesM;
 
     // GPU Adam second moment buffers
-    private GpuTensor<T>? _gpuInputWeightsV;
-    private GpuTensor<T>? _gpuHiddenWeightsV;
-    private GpuTensor<T>? _gpuBiasesV;
+    private Tensor<T>? _gpuInputWeightsV;
+    private Tensor<T>? _gpuHiddenWeightsV;
+    private Tensor<T>? _gpuBiasesV;
     #endregion
 
     /// <summary>
@@ -1224,91 +864,9 @@ public class RecurrentLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastHiddenState = null;
         _lastOutput = null;
-        _lastPreActivation = null;
         _inputWeightsGradient = null;
         _hiddenWeightsGradient = null;
         _biasesGradient = null;
-    }
-
-    /// <summary>
-    /// Exports the recurrent layer's single time-step computation as a JIT-compilable computation graph.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the hidden state at one time step.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method exports a single RNN cell computation for JIT compilation.
-    /// The graph computes: h_t = activation(W_input @ x_t + W_hidden @ h_{t-1} + b)
-    /// using the standard vanilla RNN equation.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        int inputSize = _inputWeights.Shape[1];
-        int hiddenSize = _inputWeights.Shape[0];
-
-        // Create placeholders for single time-step inputs
-        // x_t shape: [batchSize, inputSize]
-        var inputPlaceholder = new Tensor<T>(new int[] { 1, inputSize });
-        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "x_t");
-
-        // h_{t-1} shape: [batchSize, hiddenSize]
-        var prevHiddenPlaceholder = new Tensor<T>(new int[] { 1, hiddenSize });
-        var prevHiddenNode = TensorOperations<T>.Variable(prevHiddenPlaceholder, "h_prev");
-
-        // Create weight and bias nodes (already Tensor<T>)
-        var inputWeightsNode = TensorOperations<T>.Variable(_inputWeights, "W_input");
-        var hiddenWeightsNode = TensorOperations<T>.Variable(_hiddenWeights, "W_hidden");
-        var biasesNode = TensorOperations<T>.Variable(_biases, "biases");
-
-        // Add inputs to the list
-        inputNodes.Add(inputNode);
-        inputNodes.Add(prevHiddenNode);
-        inputNodes.Add(inputWeightsNode);
-        inputNodes.Add(hiddenWeightsNode);
-        inputNodes.Add(biasesNode);
-
-        // Build RNN computation graph (single time step)
-        // h_t = activation(x_t @ W_input^T + h_{t-1} @ W_hidden^T + b)
-
-        // Step 1: x_t @ W_input^T
-        var inputWeightsT = TensorOperations<T>.Transpose(inputWeightsNode);
-        var inputContribution = TensorOperations<T>.MatrixMultiply(inputNode, inputWeightsT);
-
-        // Step 2: h_{t-1} @ W_hidden^T
-        var hiddenWeightsT = TensorOperations<T>.Transpose(hiddenWeightsNode);
-        var hiddenContribution = TensorOperations<T>.MatrixMultiply(prevHiddenNode, hiddenWeightsT);
-
-        // Step 3: Sum all contributions
-        var preActivation = TensorOperations<T>.Add(inputContribution, hiddenContribution);
-        preActivation = TensorOperations<T>.Add(preActivation, biasesNode);
-
-        // Step 4: Apply activation function
-        var h_t = ApplyActivationToGraph(preActivation);
-
-        return h_t;
-    }
-
-    /// <summary>
-    /// Gets whether this layer currently supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// True if the layer's activation function is supported for JIT compilation.
-    /// Supported activations: ReLU, Sigmoid, Tanh, Softmax.
-    /// </value>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            return ScalarActivation is ReLUActivation<T> ||
-                   ScalarActivation is SigmoidActivation<T> ||
-                   ScalarActivation is TanhActivation<T> ||
-                   VectorActivation is SoftmaxActivation<T> ||
-                   (ScalarActivation == null && VectorActivation == null);
-        }
     }
 
     /// <summary>
@@ -1323,100 +881,30 @@ public class RecurrentLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // PyTorch nn.RNN initialization: uniform(-k, k) where k = 1/sqrt(hidden_size)
-        // Reference: https://pytorch.org/docs/stable/generated/torch.nn.RNN.html
+        // VECTORIZED: Initialize weights and biases (Xavier/Glorot initialization)
         int hiddenSize = _inputWeights.Shape[0];
-        double k = 1.0 / Math.Sqrt(hiddenSize);
-        T twoK = NumOps.FromDouble(2.0 * k);
-        T half = NumOps.FromDouble(0.5);
-
         int inputSize = _inputWeights.Shape[1];
 
-        // Deterministic initialization when seed is provided (per PyTorch torch.manual_seed).
-        // Non-deterministic (secure) random occasionally produces pathological weights
-        // that collapse the network output to zero.
-        var rng = _initSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(_initSeed.Value)
-            : RandomHelper.CreateSecureRandom();
+        T inputScale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (hiddenSize + inputSize))));
+        T hiddenScale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (hiddenSize + hiddenSize))));
+        T half = NumOps.FromDouble(0.5);
 
-        // Input weights: uniform(-k, k) per PyTorch nn.RNN
-        var inputRandom = Tensor<T>.CreateRandom(rng, _inputWeights.Shape.ToArray());
+        // Generate random input weights: (random - 0.5) * scale
+        var inputRandom = Tensor<T>.CreateRandom(_inputWeights.Length, 1).Reshape(_inputWeights.Shape.ToArray());
         var inputHalf = new Tensor<T>(_inputWeights.Shape.ToArray());
         inputHalf.Fill(half);
         var inputCentered = Engine.TensorSubtract(inputRandom, inputHalf);
-        _inputWeights = Engine.TensorMultiplyScalar(inputCentered, twoK);
+        _inputWeights = Engine.TensorMultiplyScalar(inputCentered, inputScale);
 
-        // Hidden weights: orthogonal initialization (Saxe et al. 2014).
-        // Orthogonal init prevents gradient vanishing/exploding in RNNs by
-        // ensuring the hidden-to-hidden Jacobian has eigenvalues near 1.
-        // This is the recommended init for vanilla RNN hidden weights.
-        var hiddenRandom = Tensor<T>.CreateRandom(rng, _hiddenWeights.Shape.ToArray());
-        // QR decomposition for orthogonal matrix: Q from QR(random) is uniform over O(n)
-        // Simplified: normalize each row to unit length for approximate orthogonality
-        for (int row = 0; row < hiddenSize; row++)
-        {
-            double normSq = 0;
-            for (int col = 0; col < hiddenSize; col++)
-            {
-                double v = NumOps.ToDouble(hiddenRandom[row, col]) - 0.5;
-                normSq += v * v;
-                hiddenRandom[row, col] = NumOps.FromDouble(v);
-            }
-            double norm = Math.Sqrt(normSq);
-            if (norm > 1e-10)
-            {
-                for (int col = 0; col < hiddenSize; col++)
-                    hiddenRandom[row, col] = NumOps.FromDouble(NumOps.ToDouble(hiddenRandom[row, col]) / norm);
-            }
-        }
-        _hiddenWeights = hiddenRandom;
+        // Generate random hidden weights: (random - 0.5) * scale
+        var hiddenRandom = Tensor<T>.CreateRandom(_hiddenWeights.Length, 1).Reshape(_hiddenWeights.Shape.ToArray());
+        var hiddenHalf = new Tensor<T>(_hiddenWeights.Shape.ToArray());
+        hiddenHalf.Fill(half);
+        var hiddenCentered = Engine.TensorSubtract(hiddenRandom, hiddenHalf);
+        _hiddenWeights = Engine.TensorMultiplyScalar(hiddenCentered, hiddenScale);
 
-        // Biases: uniform(-k, k) per PyTorch
-        var biasRandom = Tensor<T>.CreateRandom(rng, _biases.Shape.ToArray());
-        var biasHalf = new Tensor<T>(_biases.Shape.ToArray());
-        biasHalf.Fill(half);
-        var biasCentered = Engine.TensorSubtract(biasRandom, biasHalf);
-        _biases = Engine.TensorMultiplyScalar(biasCentered, twoK);
-    }
-
-    /// <summary>
-    /// Performs the backward pass on GPU tensors.
-    /// </summary>
-    /// <param name="outputGradient">GPU tensor containing the gradient of the loss with respect to the output.</param>
-    /// <returns>GPU tensor containing the gradient of the loss with respect to the input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        // CPU fallback: download gradient, run Backward(), upload result
-        var outputGradCpu = outputGradient.ToTensor();
-        var inputGradCpu = Backward(outputGradCpu);
-
-        // Upload gradient buffers to GPU for UpdateParametersGpu
-        if (_inputWeightsGradient is not null)
-        {
-            _gpuInputWeightsGradient?.Dispose();
-            _gpuInputWeightsGradient = new GpuTensor<T>(backend, _inputWeightsGradient, GpuTensorRole.Gradient);
-        }
-
-        if (_hiddenWeightsGradient is not null)
-        {
-            _gpuHiddenWeightsGradient?.Dispose();
-            _gpuHiddenWeightsGradient = new GpuTensor<T>(backend, _hiddenWeightsGradient, GpuTensorRole.Gradient);
-        }
-
-        if (_biasesGradient is not null)
-        {
-            _gpuBiasesGradient?.Dispose();
-            _gpuBiasesGradient = new GpuTensor<T>(backend, _biasesGradient, GpuTensorRole.Gradient);
-        }
-
-        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
+        // Initialize biases to zero (standard practice per Elman 1990)
+        _biases.Fill(NumOps.Zero);
     }
 
     /// <summary>
@@ -1433,9 +921,9 @@ public class RecurrentLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         // Ensure GPU weight buffers exist
-        _gpuInputWeights ??= new GpuTensor<T>(backend, _inputWeights, GpuTensorRole.Weight);
-        _gpuHiddenWeights ??= new GpuTensor<T>(backend, _hiddenWeights, GpuTensorRole.Weight);
-        _gpuBiases ??= new GpuTensor<T>(backend, _biases, GpuTensorRole.Weight);
+        _gpuInputWeights ??= GpuTensorHelper.UploadToGpu<T>(backend, _inputWeights, GpuTensorRole.Weight);
+        _gpuHiddenWeights ??= GpuTensorHelper.UploadToGpu<T>(backend, _hiddenWeights, GpuTensorRole.Weight);
+        _gpuBiases ??= GpuTensorHelper.UploadToGpu<T>(backend, _biases, GpuTensorRole.Weight);
 
         // Ensure optimizer state exists
         EnsureRecurrentOptimizerState(config, backend);
@@ -1462,9 +950,9 @@ public class RecurrentLayer<T> : LayerBase<T>
         }
 
         // Download updated weights back to CPU tensors
-        _inputWeights = _gpuInputWeights.ToTensor();
-        _hiddenWeights = _gpuHiddenWeights.ToTensor();
-        _biases = _gpuBiases.ToTensor();
+        _inputWeights = _gpuInputWeights;
+        _hiddenWeights = _gpuHiddenWeights;
+        _biases = _gpuBiases;
 
         // Notify engine that tensor data has changed
         Engine.InvalidatePersistentTensor(_inputWeights);
@@ -1479,20 +967,20 @@ public class RecurrentLayer<T> : LayerBase<T>
         // Ensure velocity buffers for SGD momentum, NAG, LARS
         if (optimizerType == GpuOptimizerType.Sgd || optimizerType == GpuOptimizerType.Nag || optimizerType == GpuOptimizerType.Lars)
         {
-            _gpuInputWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_inputWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuHiddenWeightsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_hiddenWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBiasesVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuInputWeightsVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_inputWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuHiddenWeightsVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_hiddenWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBiasesVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
         }
 
         // Ensure Adam moment buffers
         if (optimizerType == GpuOptimizerType.Adam || optimizerType == GpuOptimizerType.AdamW)
         {
-            _gpuInputWeightsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_inputWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuInputWeightsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_inputWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuHiddenWeightsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_hiddenWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuHiddenWeightsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_hiddenWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBiasesM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBiasesV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuInputWeightsM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_inputWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuInputWeightsV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_inputWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuHiddenWeightsM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_hiddenWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuHiddenWeightsV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_hiddenWeights.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBiasesM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBiasesV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
         }
     }
 

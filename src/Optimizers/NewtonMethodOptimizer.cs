@@ -1,4 +1,6 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -447,5 +449,134 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
 
             _iteration = reader.ReadInt32();
         }
+    }
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        // If HVP is available (context has forward/loss functions), use Newton-CG
+        // which computes exact Hessian-vector products via the tape — O(n) per product
+        // instead of O(n²) for full Hessian materialization.
+        if (context.SupportsReevaluation)
+        {
+            NewtonCGStep(context);
+        }
+        else
+        {
+            // Fall back to approximate Newton via flat parameter vector
+            var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
+            context.SetFlatParameters(updated);
+        }
+    }
+
+    /// <summary>
+    /// Newton-CG step using exact Hessian-vector products from the gradient tape.
+    /// Solves H*d = -g using conjugate gradient, where H*v products are computed
+    /// via forward-over-reverse AD (O(n) per product, not O(n²) for full Hessian).
+    /// </summary>
+    private void NewtonCGStep(TapeStepContext<T> context)
+    {
+        var parameters = context.Parameters;
+        var gradients = context.Gradients;
+
+        // Negate gradient: we solve H*d = -g
+        var negGrad = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        foreach (var (param, grad) in gradients)
+            negGrad[param] = Engine.TensorNegate(grad);
+
+        // Conjugate gradient solve for H*d = -g
+        // Initialize: d=0, r=-g, p=r
+        var d = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        var r = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        var p = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+
+        foreach (var param in parameters)
+        {
+            d[param] = new Tensor<T>(param._shape);
+            if (negGrad.TryGetValue(param, out var ng))
+            {
+                r[param] = ng;
+                p[param] = ng;
+            }
+            else
+            {
+                r[param] = new Tensor<T>(param._shape);
+                p[param] = new Tensor<T>(param._shape);
+            }
+        }
+
+        // CG iterations (max 10 or until convergence)
+        T rDotR = ComputeDotProduct(r, r);
+        int maxIter = Math.Min(10, context.Parameters.Count * 2);
+
+        for (int iter = 0; iter < maxIter; iter++)
+        {
+            if (NumOps.LessThan(rDotR, NumOps.FromDouble(1e-10)))
+                break;
+
+            // Compute H*p via tape HVP
+            var hp = context.HessianVectorProduct(p);
+
+            // alpha = r'r / p'Hp
+            T pHp = ComputeDotProduct(p, hp);
+            if (NumOps.LessThanOrEquals(pHp, NumOps.Zero))
+                break; // Negative curvature — stop CG
+
+            T alpha = NumOps.Divide(rDotR, pHp);
+
+            // d = d + alpha * p
+            // r = r - alpha * Hp
+            foreach (var param in parameters)
+            {
+                if (d.TryGetValue(param, out var dVal) && p.TryGetValue(param, out var pVal))
+                    Engine.TensorAddInPlace(dVal, Engine.TensorMultiplyScalar(pVal, alpha));
+                if (r.TryGetValue(param, out var rVal) && hp.TryGetValue(param, out var hpVal))
+                    Engine.TensorSubtractInPlace(rVal, Engine.TensorMultiplyScalar(hpVal, alpha));
+            }
+
+            T newRDotR = ComputeDotProduct(r, r);
+            T beta = NumOps.Divide(newRDotR, rDotR);
+            rDotR = newRDotR;
+
+            // p = r + beta * p
+            foreach (var param in parameters)
+            {
+                if (r.TryGetValue(param, out var rVal) && p.TryGetValue(param, out var pVal))
+                {
+                    var newP = Engine.TensorAdd(rVal, Engine.TensorMultiplyScalar(pVal, beta));
+                    Engine.TensorCopy(newP, pVal);
+                }
+            }
+        }
+
+        // Apply update: param += lr * d
+        foreach (var param in parameters)
+        {
+            if (d.TryGetValue(param, out var dVal))
+            {
+                var scaledD = Engine.TensorMultiplyScalar(dVal, CurrentLearningRate);
+                Engine.TensorAddInPlace(param, scaledD);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Computes the global dot product across all parameter tensors.
+    /// </summary>
+    private T ComputeDotProduct(Dictionary<Tensor<T>, Tensor<T>> a, Dictionary<Tensor<T>, Tensor<T>> b)
+    {
+        T result = NumOps.Zero;
+        foreach (var (key, aVal) in a)
+        {
+            if (b.TryGetValue(key, out var bVal))
+            {
+                var product = Engine.TensorMultiply(aVal, bVal);
+                var allAxes = Enumerable.Range(0, product.Shape.Length).ToArray();
+                var sum = Engine.ReduceSum(product, allAxes, keepDims: false);
+                if (sum.Length > 0)
+                    result = NumOps.Add(result, sum[0]);
+            }
+        }
+        return result;
     }
 }

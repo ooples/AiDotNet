@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 2, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets whether auxiliary loss (attention sparsity regularization) should be used during training.
@@ -100,6 +100,8 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Queries represent what each position in the sequence is looking for in other positions.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _queryWeights;
 
     /// <summary>
@@ -132,6 +134,8 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// baseline activation level of the attention output.
     /// Shape: [embeddingDimension]
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _outputBias;
 
     /// <summary>
@@ -219,11 +223,11 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _outputBiasVelocity;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput2D;
-    private IGpuTensor<T>? _gpuQ;
-    private IGpuTensor<T>? _gpuK;
-    private IGpuTensor<T>? _gpuV;
-    private IGpuTensor<T>? _gpuAttentionWeights;
+    private Tensor<T>? _gpuInput2D;
+    private Tensor<T>? _gpuQ;
+    private Tensor<T>? _gpuK;
+    private Tensor<T>? _gpuV;
+    private Tensor<T>? _gpuAttentionWeights;
     private int _gpuBatchSize;
     private int _gpuSequenceLength;
     private int _gpuEmbeddingDimension;
@@ -607,7 +611,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// remain GPU-resident for maximum performance.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -624,7 +628,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int batchSize;
         int sequenceLength;
         int embeddingDimension;
-        IGpuTensor<T> input3D;
+        Tensor<T> input3D;
 
         if (rank == 2)
         {
@@ -680,8 +684,8 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // 2. Compute Scaled Dot-Product Attention
         // Use overload that returns attention weights during training for backward pass
         double scale = 1.0 / Math.Sqrt(_headDimension);
-        IGpuTensor<T> attnOutput4D;
-        IGpuTensor<T>? attentionWeightsGpu = null;
+        Tensor<T> attnOutput4D;
+        Tensor<T>? attentionWeightsGpu = null;
 
         if (IsTrainingMode)
         {
@@ -702,7 +706,7 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         var outputBiased = gpuEngine.AddBiasGpu(outputFlat, _outputBias);
 
         // 5. Apply activation if not identity
-        IGpuTensor<T> output;
+        Tensor<T> output;
         if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
         {
             var fusedType = MapActivationToFused();
@@ -728,9 +732,9 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _gpuEmbeddingDimension = embeddingDimension;
 
             // Also cache CPU tensors for fallback backward pass
-            _lastInput = input3D.ToTensor();
-            _lastAttentionScores = attentionWeightsGpu?.ToTensor();
-            _lastOutput = output.ToTensor();
+            _lastInput = input3D;
+            _lastAttentionScores = attentionWeightsGpu;
+            _lastOutput = output;
             _originalInputShape = inputShape;
         }
 
@@ -751,364 +755,6 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the self-attention layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the self-attention layer, which is used during training
-    /// to propagate error gradients back through the network. It calculates the gradients of the loss
-    /// with respect to the layer's parameters (query, key, and value weights, as well as output biases)
-    /// and with respect to the layer's input. The calculation involves complex tensor operations that
-    /// essentially reverse the computations done in the forward pass.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how the layer's parameters should change to reduce errors.
-    ///
-    /// During the backward pass:
-    /// 1. The layer receives error gradients indicating how the output should change
-    /// 2. It calculates how each of its internal components contributed to the error:
-    ///    - How the query weights should change
-    ///    - How the key weights should change
-    ///    - How the value weights should change
-    ///    - How the output biases should change
-    /// 3. It also calculates how the error should propagate back to the previous layer
-    ///
-    /// This involves complex matrix mathematics, but the basic idea is:
-    /// - Finding which attention patterns led to errors
-    /// - Adjusting the weights to improve these patterns
-    /// - Sending appropriate feedback to the previous layer
-    ///
-    /// The backward pass is what allows the self-attention mechanism to learn which relationships
-    /// in the sequence are important for the specific task.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Fall back to manual backward when vector activation is used, since autodiff
-        // doesn't properly handle vector activation derivatives or bias gradient propagation
-        bool canUseAutodiff = UseAutodiff && VectorActivation == null;
-        return canUseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _lastAttentionScores == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        Tensor<T> outputGrad3D = outputGradient;
-        Tensor<T> lastOutput3D = _lastOutput;
-        if (outputGradient.Shape.Length != 3)
-        {
-            outputGrad3D = outputGradient.Reshape(_lastInput.Shape.ToArray());
-        }
-        if (_lastOutput.Shape.Length != 3)
-        {
-            lastOutput3D = _lastOutput.Reshape(_lastInput.Shape.ToArray());
-        }
-
-        var activationGradient = ApplyActivationDerivative(lastOutput3D, outputGrad3D);
-
-        int batchSize = _lastInput.Shape[0];
-        int sequenceLength = _lastInput.Shape[1];
-        int embeddingDimension = _lastInput.Shape[2];
-
-        // Bias gradient: sum over batch and sequence
-        _outputBiasGradient = Engine.ReduceSum(activationGradient, new[] { 0, 1 }, keepDims: false);
-
-        // Recompute Q, K, V from input
-        var input2D = _lastInput.Reshape(batchSize * sequenceLength, embeddingDimension);
-        var Q_flat = Engine.TensorMatMul(input2D, _queryWeights);
-        var K_flat = Engine.TensorMatMul(input2D, _keyWeights);
-        var V_flat = Engine.TensorMatMul(input2D, _valueWeights);
-
-        var Q = Q_flat.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
-        var K = K_flat.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
-        var V = V_flat.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose(new[] { 0, 2, 1, 3 });
-
-        // Output gradient to 4D: [B, H, S, D]
-        var dOutput4D = activationGradient.Reshape(batchSize, sequenceLength, _headCount, _headDimension)
-            .Transpose(new[] { 0, 2, 1, 3 });
-
-        // Use Engine.ScaledDotProductAttentionBackward for efficient gradient computation
-        Engine.ScaledDotProductAttentionBackward(
-            dOutput4D,
-            Q,
-            K,
-            V,
-            _lastAttentionScores,
-            1.0 / Math.Sqrt(_headDimension),
-            out var dQ_4D,
-            out var dK_4D,
-            out var dV_4D);
-
-        // Reshape gradients from 4D to 2D for weight gradient computation
-        var dQ = dQ_4D.Transpose(new[] { 0, 2, 1, 3 }).Reshape(batchSize * sequenceLength, embeddingDimension);
-        var dK = dK_4D.Transpose(new[] { 0, 2, 1, 3 }).Reshape(batchSize * sequenceLength, embeddingDimension);
-        var dV = dV_4D.Transpose(new[] { 0, 2, 1, 3 }).Reshape(batchSize * sequenceLength, embeddingDimension);
-
-        // Weight gradients
-        var input2D_T = Engine.TensorTranspose(input2D);
-        _queryWeightsGradient = Engine.TensorMatMul(input2D_T, dQ);
-        _keyWeightsGradient = Engine.TensorMatMul(input2D_T, dK);
-        _valueWeightsGradient = Engine.TensorMatMul(input2D_T, dV);
-
-        // Input gradient
-        var dInputFromQ = Engine.TensorMatMul(dQ, Engine.TensorTranspose(_queryWeights));
-        var dInputFromK = Engine.TensorMatMul(dK, Engine.TensorTranspose(_keyWeights));
-        var dInputFromV = Engine.TensorMatMul(dV, Engine.TensorTranspose(_valueWeights));
-        var dInput2D = Engine.TensorAdd(Engine.TensorAdd(dInputFromQ, dInputFromK), dInputFromV);
-
-        var inputGradient = dInput2D.Reshape(batchSize, sequenceLength, embeddingDimension);
-        return _originalInputShape != null && _originalInputShape.Length != 3
-            ? inputGradient.Reshape(_originalInputShape)
-            : inputGradient;
-
-    }
-
-    /// <summary>
-    /// Performs the backward pass using GPU-resident tensors.
-    /// </summary>
-    /// <param name="outputGradient">GPU-resident gradient of the loss w.r.t. output.</param>
-    /// <returns>GPU-resident gradient of the loss w.r.t. input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        if (_gpuInput2D == null || _gpuQ == null || _gpuK == null || _gpuV == null || _gpuAttentionWeights == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
-
-        int batchSize = _gpuBatchSize;
-        int sequenceLength = _gpuSequenceLength;
-        int embeddingDimension = _gpuEmbeddingDimension;
-
-        // Reshape output gradient to 3D if needed
-        IGpuTensor<T> outputGrad3D = outputGradient;
-        if (outputGradient.Shape.Length != 3)
-        {
-            outputGrad3D = gpuEngine.ReshapeGpu(outputGradient, [batchSize, sequenceLength, embeddingDimension]);
-        }
-
-        // Apply activation derivative (if not identity)
-        IGpuTensor<T> activationGrad;
-        if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
-        {
-            // For now, use identity derivative since complex activation backward needs output tensor
-            activationGrad = outputGrad3D;
-        }
-        else
-        {
-            activationGrad = outputGrad3D;
-        }
-
-        // Bias gradient: sum over batch and sequence dimensions
-        var biasSumBatch = gpuEngine.SumAxisGpu(activationGrad, 0);
-        var biasSum = gpuEngine.SumAxisGpu(biasSumBatch, 0);
-        _outputBiasGradient = biasSum.ToTensor();
-
-        // Output gradient to 4D: [B, H, S, D]
-        var dOutput4DShaped = gpuEngine.ReshapeGpu(activationGrad, [batchSize, sequenceLength, _headCount, _headDimension]);
-        var dOutput4D = gpuEngine.PermuteGpu(dOutput4DShaped, [0, 2, 1, 3]);
-
-        // Use GPU ScaledDotProductAttentionBackward for efficient gradient computation
-        double scale = 1.0 / Math.Sqrt(_headDimension);
-        var (dQ_4D, dK_4D, dV_4D) = gpuEngine.ScaledDotProductAttentionBackwardGpu(
-            dOutput4D, _gpuQ, _gpuK, _gpuV, _gpuAttentionWeights, scale, isCausal: false);
-
-        // Reshape gradients from 4D to 2D for weight gradient computation
-        var dQ_transposed = gpuEngine.PermuteGpu(dQ_4D, [0, 2, 1, 3]);
-        var dK_transposed = gpuEngine.PermuteGpu(dK_4D, [0, 2, 1, 3]);
-        var dV_transposed = gpuEngine.PermuteGpu(dV_4D, [0, 2, 1, 3]);
-
-        var dQ = gpuEngine.ReshapeGpu(dQ_transposed, [batchSize * sequenceLength, embeddingDimension]);
-        var dK = gpuEngine.ReshapeGpu(dK_transposed, [batchSize * sequenceLength, embeddingDimension]);
-        var dV = gpuEngine.ReshapeGpu(dV_transposed, [batchSize * sequenceLength, embeddingDimension]);
-
-        // Weight gradients: input2D^T @ dQ/dK/dV
-        var input2D_T = gpuEngine.TransposeGpu(_gpuInput2D);
-        var dQueryWeights = gpuEngine.MatMulGpuTensors(input2D_T, dQ);
-        var dKeyWeights = gpuEngine.MatMulGpuTensors(input2D_T, dK);
-        var dValueWeights = gpuEngine.MatMulGpuTensors(input2D_T, dV);
-
-        // Download weight gradients to CPU (needed for UpdateParameters)
-        _queryWeightsGradient = dQueryWeights.ToTensor();
-        _keyWeightsGradient = dKeyWeights.ToTensor();
-        _valueWeightsGradient = dValueWeights.ToTensor();
-
-        // Input gradient: dQ @ Wq^T + dK @ Wk^T + dV @ Wv^T
-        var wqT = gpuEngine.UploadToGpu(Engine.TensorTranspose(_queryWeights), GpuTensorRole.Weight);
-        var wkT = gpuEngine.UploadToGpu(Engine.TensorTranspose(_keyWeights), GpuTensorRole.Weight);
-        var wvT = gpuEngine.UploadToGpu(Engine.TensorTranspose(_valueWeights), GpuTensorRole.Weight);
-
-        var dInputFromQ = gpuEngine.MatMulGpuTensors(dQ, wqT);
-        var dInputFromK = gpuEngine.MatMulGpuTensors(dK, wkT);
-        var dInputFromV = gpuEngine.MatMulGpuTensors(dV, wvT);
-
-        var dInput2D = gpuEngine.AddGpu(gpuEngine.AddGpu(dInputFromQ, dInputFromK), dInputFromV);
-
-        // Reshape back to original input shape
-        var inputGradient = gpuEngine.ReshapeGpu(dInput2D, [batchSize, sequenceLength, embeddingDimension]);
-
-        // Handle original input shape restoration
-        if (_originalInputShape != null && _originalInputShape.Length != 3)
-        {
-            inputGradient = gpuEngine.ReshapeGpu(inputGradient, _originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients by building a computation
-    /// graph that mirrors the forward pass operations. Similar to how PyTorch and other production
-    /// frameworks implement attention backward passes, this method:
-    /// 1. Projects input to Q, K, V using weight matrix multiplications
-    /// 2. Applies scaled dot-product attention
-    /// 3. Adds output bias
-    /// 4. Applies activation
-    /// 5. Propagates gradients backward through the entire graph
-    /// </para>
-    /// <para>
-    /// The computation graph enables automatic gradient computation for all parameters including
-    /// query, key, and value weights as well as output biases. Weight nodes are created as
-    /// Variable nodes with requiresGradient: true, and their gradients are extracted after
-    /// the backward pass completes. This is the production-grade approach used in modern
-    /// deep learning frameworks like PyTorch and TensorFlow.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _lastAttentionScores == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = _lastInput.Shape[0];
-
-        // Build computation graph mirroring the forward pass
-        // Step 1: Create input variable node with gradient tracking
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-
-        // Step 2: Create variable nodes for weight tensors with gradient tracking
-        // These are Variable (not Constant) so gradients flow through them
-        // Weights are already Tensor<T> - no conversion needed (production-ready pattern)
-        var wqNode = Autodiff.TensorOperations<T>.Variable(_queryWeights, "Wq", requiresGradient: true);
-        var wkNode = Autodiff.TensorOperations<T>.Variable(_keyWeights, "Wk", requiresGradient: true);
-        var wvNode = Autodiff.TensorOperations<T>.Variable(_valueWeights, "Wv", requiresGradient: true);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(_outputBias, "output_bias", requiresGradient: true);
-
-        // Step 3: Project input to Q, K, V
-        // Q = input @ Wq, K = input @ Wk, V = input @ Wv
-        var queryNode = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, wqNode);
-        var keyNode = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, wkNode);
-        var valueNode = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, wvNode);
-
-        // Step 4: Apply scaled dot-product attention
-        // This computes: softmax(Q @ K^T / sqrt(d_k)) @ V
-        var attentionOutput = Autodiff.TensorOperations<T>.ScaledDotProductAttention(queryNode, keyNode, valueNode);
-
-        // Step 5: Add output bias (broadcast across batch dimension)
-        var biasesBroadcast = BroadcastBias(biasNode.Value, batchSize);
-        var biasBroadcastNode = Autodiff.TensorOperations<T>.Variable(biasesBroadcast, "bias_broadcast", requiresGradient: false);
-        var biasedOutput = Autodiff.TensorOperations<T>.Add(attentionOutput, biasBroadcastNode);
-
-        // Step 6: Apply activation using the generic ApplyActivation that supports ALL 39 activations
-        // This follows the Open/Closed principle - no type checking needed
-        Autodiff.ComputationNode<T> outputNode;
-        if (ScalarActivation != null)
-        {
-            outputNode = Autodiff.TensorOperations<T>.ApplyActivation(biasedOutput, ScalarActivation);
-        }
-        else if (VectorActivation != null)
-        {
-            // Vector activations (like Softmax) applied to the output
-            var activatedTensor = VectorActivation.Activate(biasedOutput.Value);
-            outputNode = Autodiff.TensorOperations<T>.Variable(activatedTensor, "activated", requiresGradient: true);
-            // Connect parent for gradient flow
-            outputNode = Autodiff.TensorOperations<T>.Add(
-                biasedOutput,
-                Autodiff.TensorOperations<T>.Constant(new Tensor<T>(biasedOutput.Value.Shape.ToArray()), "zero"));
-        }
-        else
-        {
-            // Identity activation - pass through
-            outputNode = biasedOutput;
-        }
-
-        // Step 7: Set the output gradient for backward propagation
-        outputNode.Gradient = outputGradient;
-
-        // Step 8: Inline topological sort for backward pass (production-grade pattern)
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // Step 9: Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Step 10: Extract weight gradients directly as Tensor<T> (no conversion needed - production-ready pattern)
-        if (wqNode.Gradient != null)
-            _queryWeightsGradient = wqNode.Gradient;
-        if (wkNode.Gradient != null)
-            _keyWeightsGradient = wkNode.Gradient;
-        if (wvNode.Gradient != null)
-            _valueWeightsGradient = wvNode.Gradient;
-        if (biasNode.Gradient != null)
-            _outputBiasGradient = biasNode.Gradient;
-
-        // Step 11: Extract and return the input gradient
-        if (inputNode.Gradient == null)
-            throw new InvalidOperationException("Gradient computation failed in automatic differentiation.");
-
-        return inputNode.Gradient;
     }
 
     /// <summary>
@@ -1395,9 +1041,9 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null)
             return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
-            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
-            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)));
+            new Vector<T>(_queryWeightsGradient.ToArray()),
+            new Vector<T>(_keyWeightsGradient.ToArray()),
+            new Vector<T>(_valueWeightsGradient.ToArray()));
     }
 
     public override void ClearGradients()
@@ -1698,134 +1344,5 @@ public class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
         InitializeLayerWeights(tensor, tensor.Shape[0], tensor.Shape[1]);
-    }
-
-    /// <summary>
-    /// Exports the self-attention layer as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to which the input node will be added.</param>
-    /// <returns>The output computation node representing the self-attention operation.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a symbolic computation graph for JIT compilation:
-    /// 1. Creates a symbolic input node with shape [batch=1, sequenceLength, embeddingDimension]
-    /// 2. Creates constant nodes for Query, Key, Value projection weights
-    /// 3. Projects input to Q, K, V using matrix multiplication (self-attention: all from same input)
-    /// 4. Applies multi-head scaled dot-product attention mechanism
-    /// 5. Returns the attention output with residual connection and bias
-    /// </para>
-    /// <para><b>For Beginners:</b> This method builds a symbolic representation of self-attention for JIT.
-    ///
-    /// JIT compilation converts multi-head self-attention into optimized native code.
-    /// Self-attention allows each position in a sequence to attend to all positions, enabling
-    /// the model to capture long-range dependencies and relationships within the sequence.
-    ///
-    /// Multi-head attention uses multiple parallel attention mechanisms ("heads") that:
-    /// - Focus on different aspects of the input simultaneously
-    /// - Allow the model to capture diverse relationships (syntax, semantics, context)
-    /// - Improve the model's ability to understand complex patterns
-    ///
-    /// The symbolic graph allows the JIT compiler to:
-    /// - Optimize parallel matrix multiplications across heads
-    /// - Fuse attention score computation and softmax
-    /// - Generate efficient memory layouts for multi-head processing
-    /// - Optimize the split and concatenation operations for heads
-    ///
-    /// Self-attention is the core of Transformer architectures (BERT, GPT, Vision Transformers).
-    /// JIT compilation provides 5-10x speedup by optimizing these complex operations.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when layer parameters are not initialized.</exception>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured. Initialize the layer first.");
-
-        if (_queryWeights == null || _keyWeights == null || _valueWeights == null)
-            throw new InvalidOperationException("Layer projection weights not initialized. Train or initialize the model first.");
-
-        // Create symbolic input node (shape definition only, batch size adapts at runtime)
-        // SelfAttentionLayer expects input shape: [sequenceLength, embeddingDimension]
-        // For self-attention, we use: [batch, sequenceLength, embeddingDimension]
-        // But for simplicity in the 2D case, we flatten to [batch, sequenceLength * embeddingDimension]
-        // and reshape after projection
-        var symbolicInput = new Tensor<T>(new int[] { 1, _sequenceLength, _embeddingDimension });
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Create constant nodes for projection weights - weights are already Tensor<T>
-        var wqNode = TensorOperations<T>.Constant(_queryWeights, "Wq");
-        var wkNode = TensorOperations<T>.Constant(_keyWeights, "Wk");
-        var wvNode = TensorOperations<T>.Constant(_valueWeights, "Wv");
-
-        // Note: For multi-head attention, we would split the input and process each head separately.
-        // For simplicity in JIT compilation, we'll use single-head attention with the full embeddings.
-        // This matches the mathematical operation but doesn't explicitly show the multi-head structure.
-
-        // Flatten input for matrix multiplication: [batch, seq_len, embed_dim] -> [batch, seq_len * embed_dim]
-        // Then project to Q, K, V
-        // For now, we'll use a simplified 2D approach assuming the input is already properly shaped
-
-        // Apply scaled dot-product attention (self-attention: Q, K, V all from same input)
-        // Since we can't easily reshape in the computation graph for multi-head,
-        // we'll use the full attention as a single head (this is a simplification)
-        var output = TensorOperations<T>.ScaledDotProductAttention(inputNode, inputNode, inputNode);
-
-        // Note: In a full implementation, we would:
-        // 1. Reshape input to separate heads: [batch, seq, embed] -> [batch, heads, seq, head_dim]
-        // 2. Apply attention per head
-        // 3. Concatenate heads: [batch, heads, seq, head_dim] -> [batch, seq, embed]
-        // 4. Apply output projection
-        // This simplified version captures the core attention mechanism for JIT optimization.
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets whether this self-attention layer supports JIT compilation.
-    /// </summary>
-    /// <value>True if the layer parameters are initialized.</value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the layer can be JIT compiled. The layer supports JIT if:
-    /// - Query, Key, Value projection weights are initialized
-    /// - The layer has been properly configured with sequence length and embedding dimensions
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you if this layer can use JIT compilation for faster inference.
-    ///
-    /// The layer can be JIT compiled if:
-    /// - The layer has been initialized with projection weight matrices (query, key, value weights)
-    /// - The multi-head structure has been configured
-    ///
-    /// Self-attention layers are computationally expensive because each position attends to all
-    /// other positions in the sequence (O(n²) complexity). JIT compilation can provide significant
-    /// speedup (5-10x) by optimizing:
-    /// - Parallel matrix multiplications for projections
-    /// - Multi-head attention score computation across heads
-    /// - Softmax operations for attention weights
-    /// - Weighted sums of values across all heads
-    ///
-    /// This is especially critical for Transformers where self-attention is the bottleneck:
-    /// - BERT has 12-24 self-attention layers
-    /// - GPT-3 has 96 self-attention layers
-    /// - Vision Transformers process image patches as sequences
-    ///
-    /// JIT compilation makes these models practical for production use.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // Self-attention supports JIT if projection weight tensors are initialized
-            return _queryWeights != null && _keyWeights != null && _valueWeights != null &&
-                   _queryWeights.Shape.Length >= 2 && _queryWeights.Shape[0] > 0 &&
-                   _keyWeights.Shape.Length >= 2 && _keyWeights.Shape[0] > 0 &&
-                   _valueWeights.Shape.Length >= 2 && _valueWeights.Shape[0] > 0;
-        }
     }
 }

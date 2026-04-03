@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -475,7 +475,7 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape.ToArray());
+        var normalized = new Tensor<T>(image._shape);
         double[] means = [0.48145466, 0.4578275, 0.40821073];
         double[] stds = [0.26862954, 0.26130258, 0.27577711];
 
@@ -587,14 +587,7 @@ public class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ILayoutDe
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        var output = Predict(input);
-        LastLoss = LossFunction.CalculateLoss(output.ToVector(), expectedOutput.ToVector());
-
-        var gradient = Tensor<T>.FromVector(
-            LossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector()));
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-            gradient = Layers[i].Backward(gradient);
+        TrainWithTape(input, expectedOutput);
 
         UpdateParameters(CollectGradients());
         SetTrainingMode(false);

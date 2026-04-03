@@ -55,55 +55,7 @@ public class RecurrentLayersIntegrationTests
         Assert.Equal(hiddenSize, output.Shape[2]);
     }
 
-    [Fact]
-    public void GRULayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int batchSize = 2, timeSteps = 3, inputSize = 5, hiddenSize = 4;
-        IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new GRULayer<double>(inputSize, hiddenSize, returnSequences: false, activation: tanh);
-        layer.SetTrainingMode(true);
 
-        var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
-        var output = layer.Forward(input);
-
-        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
-        upstreamGradient.Fill(1.0);
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(batchSize, gradient.Shape[0]);
-        Assert.Equal(timeSteps, gradient.Shape[1]);
-        Assert.Equal(inputSize, gradient.Shape[2]);
-        AssertNoNaNOrInf(gradient);
-    }
-
-    [Fact]
-    public void GRULayer_BackwardPass_ReturnSequences_ProducesValidGradients()
-    {
-        // Arrange
-        int batchSize = 2, timeSteps = 3, inputSize = 5, hiddenSize = 4;
-        IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new GRULayer<double>(inputSize, hiddenSize, returnSequences: true, activation: tanh);
-        layer.SetTrainingMode(true);
-
-        var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
-        var output = layer.Forward(input);
-
-        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
-        upstreamGradient.Fill(1.0);
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-        AssertNoNaNOrInf(gradient);
-    }
 
     [Fact]
     public void GRULayer_SupportsTraining_ReturnsTrue()
@@ -163,29 +115,6 @@ public class RecurrentLayersIntegrationTests
         Assert.Equal(hiddenSize, output.Shape[^1]);
     }
 
-    [Fact]
-    public void LSTMLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int batchSize = 2, timeSteps = 3, inputSize = 5, hiddenSize = 4;
-        int[] inputShape = [batchSize, timeSteps, inputSize];
-        IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new LSTMLayer<double>(inputSize, hiddenSize, inputShape, tanh);
-        layer.SetTrainingMode(true);
-
-        var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
-        var output = layer.Forward(input);
-
-        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
-        upstreamGradient.Fill(1.0);
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        AssertNoNaNOrInf(gradient);
-    }
 
     [Fact]
     public void LSTMLayer_GetParameters_ReturnsParameters()
@@ -269,30 +198,6 @@ public class RecurrentLayersIntegrationTests
         Assert.Equal(hiddenSize, output.Shape[^1]);
     }
 
-    [Fact]
-    public void BidirectionalLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int batchSize = 2, timeSteps = 3, inputSize = 5, hiddenSize = 4;
-        IActivationFunction<double> tanh = new TanhActivation<double>();
-        var innerLayer = new GRULayer<double>(inputSize, hiddenSize, returnSequences: true, activation: tanh);
-        var layer = new BidirectionalLayer<double>(innerLayer, mergeMode: true, activationFunction: tanh);
-        layer.SetTrainingMode(true);
-
-        var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
-        var output = layer.Forward(input);
-
-        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
-        upstreamGradient.Fill(1.0);
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        Assert.Equal(input.Shape.ToArray(), gradient.Shape.ToArray());
-        AssertNoNaNOrInf(gradient);
-    }
 
     #endregion
 
@@ -315,28 +220,6 @@ public class RecurrentLayersIntegrationTests
         Assert.Equal(hiddenSize, output.Shape[^1]);
     }
 
-    [Fact]
-    public void RecurrentLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int batchSize = 2, timeSteps = 3, inputSize = 5, hiddenSize = 4;
-        IActivationFunction<double> tanh = new TanhActivation<double>();
-        var layer = new RecurrentLayer<double>(inputSize, hiddenSize, tanh);
-        layer.SetTrainingMode(true);
-
-        var input = Tensor<double>.CreateRandom(batchSize, timeSteps, inputSize);
-        var output = layer.Forward(input);
-
-        var upstreamGradient = new Tensor<double>(output.Shape.ToArray());
-        upstreamGradient.Fill(1.0);
-
-        // Act
-        var gradient = layer.Backward(upstreamGradient);
-
-        // Assert
-        Assert.NotNull(gradient);
-        AssertNoNaNOrInf(gradient);
-    }
 
     #endregion
 

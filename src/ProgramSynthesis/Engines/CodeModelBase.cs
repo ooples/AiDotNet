@@ -86,33 +86,6 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
         }
     }
 
-    protected void TrainWithOptimizer(
-        Tensor<T> input,
-        Tensor<T> expectedOutput,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
-    {
-        SetTrainingMode(true);
-
-        var output = input;
-        foreach (var layer in Layers)
-        {
-            output = layer.Forward(output);
-        }
-
-        LastLoss = LossFunction.CalculateLoss(output.ToVector(), expectedOutput.ToVector());
-
-        var outputGradient = LossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector());
-        var gradient = new Tensor<T>(output.Shape.ToArray(), outputGradient);
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-
-        optimizer.UpdateParameters(Layers);
-        SetTrainingMode(false);
-    }
-
     protected ModelMetadata<T> CreateTransformerModelMetadata(
         string modelName,
         IReadOnlyDictionary<string, object>? extraInfo,

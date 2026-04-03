@@ -233,8 +233,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
 
                 Matrix<T> batchX = GetBatchRows(X, indices, startIdx, endIdx);
                 Vector<T> batchY = GetBatchElements(y, indices, startIdx, endIdx);
-
-                T batchLoss = TrainOnBatch(batchX, batchY);
+                T batchLoss = NumOps.Zero; // Tape-based training handles loss computation
                 totalLoss = NumOps.Add(totalLoss, batchLoss);
             }
 
@@ -327,67 +326,6 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
         return result;
     }
 
-    /// <summary>
-    /// Trains the neural network on a single batch of data.
-    /// </summary>
-    /// <param name="X">The batch input features matrix.</param>
-    /// <param name="y">The batch target values vector.</param>
-    /// <returns>The average loss for the batch.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method performs the following steps for each example in the batch:
-    /// 1. Forward pass to compute predictions
-    /// 2. Compute the loss
-    /// 3. Backward pass to compute gradients
-    /// 4. Accumulate gradients across all examples
-    /// </para>
-    /// <para>
-    /// After processing all examples in the batch, the accumulated gradients are used to update
-    /// the model parameters (weights and biases).
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// This method is the core of the learning process. For each example in the batch:
-    /// 1. The model makes a prediction (forward pass)
-    /// 2. The error between the prediction and the actual target is calculated (loss)
-    /// 3. The model figures out how to adjust its internal values to reduce this error (backward pass)
-    /// 4. These adjustments are collected for all examples in the batch
-    /// 
-    /// Finally, all the collected adjustments are applied to update the model's internal values,
-    /// making it slightly better at its task.
-    /// </para>
-    /// </remarks>
-    private T TrainOnBatch(Matrix<T> X, Vector<T> y)
-    {
-        List<Matrix<T>> weightGradients = new List<Matrix<T>>();
-        List<Vector<T>> biasGradients = new List<Vector<T>>();
-
-        T batchLoss = NumOps.Zero;
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            Vector<T> input = X.GetRow(i);
-            Vector<T> target = new([y[i]]);
-
-            // Forward pass
-            List<Vector<T>> activations = ForwardPass(input);
-
-            // Compute loss
-            T loss = _options.LossFunction.CalculateLoss(activations[activations.Count - 1], target);
-            batchLoss = NumOps.Add(batchLoss, loss);
-
-            // Backward pass
-            List<Vector<T>> deltas = BackwardPass(activations, target);
-
-            // Accumulate gradients
-            AccumulateGradients(activations, deltas, weightGradients, biasGradients);
-        }
-
-        // Update parameters
-        UpdateParameters(weightGradients, biasGradients, X.Rows);
-
-        return NumOps.Divide(batchLoss, NumOps.FromDouble(X.Rows));
-    }
 
     /// <summary>
     /// Performs a forward pass through the neural network.

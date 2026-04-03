@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -54,7 +55,7 @@ namespace AiDotNet.NeuralNetworks;
 public class LiquidStateMachine<T> : NeuralNetworkBase<T>
 {
     private readonly LiquidStateMachineOptions _options;
-    // Readout uses per-layer UpdateParameters with _options.ReadoutLearningRate
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -250,9 +251,11 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         double spectralRadius = 0.9,
         double inputScaling = 1.0,
         double leakingRate = 0.3, // Jaeger & Haas (2004): leakingRate < 1 for temporal dynamics
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LiquidStateMachineOptions? options = null) : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new LiquidStateMachineOptions();
         Options = _options;
         _leakingRate = leakingRate;
@@ -466,41 +469,17 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (!IsTrainingMode)
-        {
-            SetTrainingMode(true);
-        }
-
-        // Forward pass with memory for backpropagation
+        SetTrainingMode(true);
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
-        Tensor<T> prediction = ForwardWithMemory(input);
-
-        // Calculate loss
-        var flattenedPredictions = prediction.ToVector();
-        var flattenedExpected = expectedOutput.ToVector();
-        LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
-
-        // Calculate output gradients
-        var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
-
-        // Backpropagate to get parameter gradients
-        Backpropagate(Tensor<T>.FromVector(outputGradients));
-
-        // Per Maass et al. 2002: only the readout layer is trained.
-        // Reservoir weights are fixed. Use configurable LR from options.
-        T readoutLr = NumOps.FromDouble(_options.ReadoutLearningRate);
-        foreach (var layer in Layers)
-        {
-            if (layer is ReservoirLayer<T>)
-                continue; // Skip fixed reservoir
-
-            if (layer.SupportsTraining && layer.ParameterCount > 0)
-            {
-                layer.UpdateParameters(readoutLr);
-                layer.ClearGradients();
-            }
-        }
+try
+{
+    TrainWithTape(input, expectedOutput, _optimizer);
+}
+finally
+{
+    SetTrainingMode(false);
+}
     }
 
     /// <summary>

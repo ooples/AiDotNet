@@ -356,50 +356,7 @@ public class SelfSupervisedLearningIntegrationTests
         }
     }
 
-    [Fact]
-    public void LinearProjector_Backward_ComputesGradients()
-    {
-        // Arrange
-        var projector = new LinearProjector<double>(inputDim: 32, outputDim: 64, seed: 42);
-        var input = CreateRandomTensor(4, 32, seed: 43);
 
-        // Forward pass
-        var output = projector.Project(input);
-
-        // Create gradient (simulating loss derivative)
-        var gradOutput = CreateRandomTensor(4, 64, seed: 44);
-
-        // Act
-        var gradInput = projector.Backward(gradOutput);
-
-        // Assert
-        Assert.Equal(4, gradInput.Shape[0]);
-        Assert.Equal(32, gradInput.Shape[1]);
-
-        var paramGrads = projector.GetParameterGradients();
-        Assert.True(HasNonZeroElements(paramGrads), "Parameter gradients should have non-zero elements");
-    }
-
-    [Fact]
-    public void LinearProjector_ClearGradients_ResetsGradients()
-    {
-        // Arrange
-        var projector = new LinearProjector<double>(inputDim: 32, outputDim: 64, seed: 42);
-        var input = CreateRandomTensor(4, 32, seed: 43);
-        var output = projector.Project(input);
-        var gradOutput = CreateRandomTensor(4, 64, seed: 44);
-        projector.Backward(gradOutput);
-
-        // Verify gradients exist
-        Assert.True(HasNonZeroElements(projector.GetParameterGradients()));
-
-        // Act
-        projector.ClearGradients();
-
-        // Assert - Gradients should be zeros after clearing
-        var clearedGrads = projector.GetParameterGradients();
-        Assert.False(HasNonZeroElements(clearedGrads), "Gradients should be zero after clearing");
-    }
 
     [Fact]
     public void LinearProjector_NoBias_HasFewerParameters()
@@ -465,46 +422,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.True(withBN.ParameterCount > withoutBN.ParameterCount);
     }
 
-    [Fact]
-    public void MLPProjector_Backward_ComputesGradients()
-    {
-        // Arrange
-        var projector = new MLPProjector<double>(inputDim: 32, hiddenDim: 64, outputDim: 16, seed: 42);
-        var input = CreateRandomTensor(4, 32, seed: 43);
 
-        // Forward pass
-        var output = projector.Project(input);
-
-        // Create gradient
-        var gradOutput = CreateRandomTensor(4, 16, seed: 44);
-
-        // Act
-        var gradInput = projector.Backward(gradOutput);
-
-        // Assert
-        Assert.Equal(4, gradInput.Shape[0]);
-        Assert.Equal(32, gradInput.Shape[1]);
-
-        var paramGrads = projector.GetParameterGradients();
-        Assert.True(HasNonZeroElements(paramGrads), "Parameter gradients should have non-zero elements");
-    }
-
-    [Fact]
-    public void MLPProjector_Reset_ClearsState()
-    {
-        // Arrange
-        var projector = new MLPProjector<double>(inputDim: 32, hiddenDim: 64, outputDim: 16, seed: 42);
-        var input = CreateRandomTensor(4, 32, seed: 43);
-        var output = projector.Project(input);
-        var gradOutput = CreateRandomTensor(4, 16, seed: 44);
-        projector.Backward(gradOutput);
-
-        // Act
-        projector.Reset();
-
-        // Assert - Calling backward without forward should throw
-        Assert.Throws<InvalidOperationException>(() => projector.Backward(gradOutput));
-    }
 
     [Fact]
     public void MLPProjector_SetTrainingMode_AffectsBatchNorm()

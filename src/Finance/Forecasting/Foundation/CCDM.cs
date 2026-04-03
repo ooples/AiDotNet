@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -228,18 +228,18 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
             // Score matching training: perturb target with noise at sigma level
             T sigmaT = _sigmas[t];
             T eps10 = NumOps.FromDouble(1e-10);
-            var noise = new Tensor<T>(target.Shape.ToArray());
+            var noise = new Tensor<T>(target._shape);
             for (int i = 0; i < target.Length; i++)
                 noise.Data.Span[i] = SampleStandardNormal(rand);
 
             // x_noisy = x_0 + sigma * eps
-            var noisyTarget = new Tensor<T>(target.Shape.ToArray());
+            var noisyTarget = new Tensor<T>(target._shape);
             for (int i = 0; i < target.Length; i++)
                 noisyTarget.Data.Span[i] = NumOps.Add(target[i], NumOps.Multiply(sigmaT, noise[i]));
 
             // Score target: -eps/sigma (the gradient of log p_sigma(x))
             T negSigmaInv = NumOps.Negate(NumOps.Divide(NumOps.One, NumOps.Add(sigmaT, eps10)));
-            var scoreTarget = new Tensor<T>(target.Shape.ToArray());
+            var scoreTarget = new Tensor<T>(target._shape);
             for (int i = 0; i < target.Length; i++)
                 scoreTarget.Data.Span[i] = NumOps.Multiply(negSigmaInv, noise[i]);
 
@@ -260,7 +260,6 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
             // Scale gradient by sigmaSquared to match the weighted loss objective
             for (int i = 0; i < gradient.Length; i++)
                 gradient[i] = NumOps.Multiply(sigmaSquared, gradient[i]);
-            BackwardNative(Tensor<T>.FromVector(gradient, predictedScore.Shape.ToArray()));
             _optimizer.UpdateParameters(Layers);
         }
         finally { SetTrainingMode(false); }
@@ -320,7 +319,7 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
 
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals) { T mse = NumOps.Zero; T mae = NumOps.Zero; int count = 0; for (int i = 0; i < predictions.Length && i < actuals.Length; i++) { var diff = NumOps.Subtract(predictions[i], actuals[i]); mse = NumOps.Add(mse, NumOps.Multiply(diff, diff)); mae = NumOps.Add(mae, NumOps.Abs(diff)); count++; } if (count > 0) { mse = NumOps.Divide(mse, NumOps.FromDouble(count)); mae = NumOps.Divide(mae, NumOps.FromDouble(count)); } return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) }; }
 
-    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input) { int batchSize = input.Rank > 1 ? input.Shape[0] : 1; int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length; var result = new Tensor<T>(input.Shape.ToArray()); for (int b = 0; b < batchSize; b++) { T mean = NumOps.Zero; for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) mean = NumOps.Add(mean, input[idx]); } mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen)); T variance = NumOps.Zero; for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) { var diff = NumOps.Subtract(input[idx], mean); variance = NumOps.Add(variance, NumOps.Multiply(diff, diff)); } } variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen)); T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5))); for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length && idx < result.Length) result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std); } } return result; }
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input) { int batchSize = input.Rank > 1 ? input.Shape[0] : 1; int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length; var result = new Tensor<T>(input._shape); for (int b = 0; b < batchSize; b++) { T mean = NumOps.Zero; for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) mean = NumOps.Add(mean, input[idx]); } mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen)); T variance = NumOps.Zero; for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) { var diff = NumOps.Subtract(input[idx], mean); variance = NumOps.Add(variance, NumOps.Multiply(diff, diff)); } } variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen)); T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5))); for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length && idx < result.Length) result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std); } } return result; }
 
     public override Dictionary<string, T> GetFinancialMetrics() { T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero; return new Dictionary<string, T> { ["ContextLength"] = NumOps.FromDouble(_contextLength), ["ForecastHorizon"] = NumOps.FromDouble(_forecastHorizon), ["SigmaMin"] = NumOps.FromDouble(_sigmaMin), ["SigmaMax"] = NumOps.FromDouble(_sigmaMax), ["LastLoss"] = lastLoss }; }
 
@@ -387,7 +386,6 @@ public class CCDM<T> : TimeSeriesFoundationModelBase<T>
         if (addedBatchDim && xt.Rank == 2 && xt.Shape[0] == 1) xt = xt.Reshape(new[] { xt.Shape[1] });
         return xt;
     }
-    private Tensor<T> BackwardNative(Tensor<T> gradOutput) { var current = gradOutput; bool addedBatchDim = false; if (current.Rank == 1) { current = current.Reshape(new[] { 1, current.Length }); addedBatchDim = true; } if (_outputProjection is not null) current = _outputProjection.Backward(current); for (int i = _denoisingLayers.Count - 1; i >= 0; i--) current = _denoisingLayers[i].Backward(current); if (_inputProjection is not null) current = _inputProjection.Backward(current); if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1) current = current.Reshape(new[] { current.Shape[1] }); return current; }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input) { if (OnnxSession == null) throw new InvalidOperationException("ONNX session is not initialized."); int batchSize = input.Rank > 1 ? input.Shape[0] : 1; int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length; int features = input.Rank > 2 ? input.Shape[2] : 1; var inputData = new float[batchSize * seqLen * features]; for (int i = 0; i < input.Length && i < inputData.Length; i++) inputData[i] = (float)NumOps.ToDouble(input[i]); var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features }); string inputName = OnnxSession.InputMetadata.Keys.FirstOrDefault() ?? "input"; var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, inputTensor) }; using var results = OnnxSession.Run(inputs); var outputTensor = results.First().AsTensor<float>(); var outputShape = outputTensor.Dimensions.ToArray(); var output = new Tensor<T>(outputShape); int totalElements = 1; foreach (var dim in outputShape) totalElements *= dim; for (int i = 0; i < totalElements && i < output.Length; i++) output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i)); return output; }
 

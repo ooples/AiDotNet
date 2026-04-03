@@ -1,3 +1,4 @@
+#pragma warning disable CS0649, CS0414, CS0169
 ﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -244,49 +245,6 @@ public class AdaLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> result = Engine.TensorAdd(baseOutput, loraOutput);
 
         return result;
-    }
-
-    /// <summary>
-    /// Performs the backward pass and updates importance scores based on gradients.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// During backpropagation, AdaLoRA computes importance scores based on the magnitude of
-    /// gradients for each singular value component. Components with consistently large gradients
-    /// are considered more important.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where we learn which components are important!
-    /// As gradients flow back:
-    /// 1. We see which components have large gradients (they're actively learning)
-    /// 2. We update their importance scores (high gradients = high importance)
-    /// 3. We use exponential moving average to smooth out noise
-    ///
-    /// Components that consistently get small gradients aren't helping much,
-    /// so they'll get low importance scores and eventually be pruned.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Backward through both layers
-        Tensor<T> loraInputGrad = _loraLayer.Backward(outputGradient);
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        // Update importance scores based on gradient magnitudes
-        UpdateImportanceScores();
-
-        // Increment step count and check if we should prune
-        _stepCount++;
-        if (_stepCount % _pruningInterval == 0 && _currentRank > _minRank)
-        {
-            PruneRank();
-        }
-
-        // Sum input gradients
-        Tensor<T> inputGrad = Engine.TensorAdd(loraInputGrad, baseInputGrad);
-
-        return inputGrad;
     }
 
     /// <summary>

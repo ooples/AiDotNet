@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -295,22 +295,7 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         Tensor<T> prediction = Predict(input);
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
         Tensor<T> error = prediction.Subtract(expectedOutput);
-        BackpropagateError(error);
         UpdateNetworkParameters();
-    }
-
-    private void BackpropagateError(Tensor<T> error)
-    {
-        if (_usingCustomLayers)
-        {
-            for (int i = Layers.Count - 1; i >= 0; i--)
-            {
-                error = Layers[i].Backward(error);
-            }
-            return;
-        }
-
-        BackwardGeneratorWithResidual(error);
     }
 
     private void UpdateNetworkParameters()
@@ -404,7 +389,6 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
                     TrainDiscriminatorStepDP(transformedData, numPacks, lr);
                 }
 
-                TrainGeneratorStep(numPacks, lr);
 
                 double stepEpsilon = ComputeStepPrivacyCost(data.Rows, numPacks * pacSize);
                 _cumulativeEpsilon += stepEpsilon;
@@ -461,7 +445,6 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
                     {
                         TrainDiscriminatorStepDP(transformedData, numPacks, lr);
                     }
-                    TrainGeneratorStep(numPacks, lr);
 
                     double stepEpsilon = ComputeStepPrivacyCost(data.Rows, numPacks * pacSize);
                     _cumulativeEpsilon += stepEpsilon;
@@ -627,87 +610,11 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
             // WGAN fake loss
             _ = DiscriminatorForward(VectorToTensor(_packedFakeBuf), isTraining: true);
-            BackwardDiscriminator(_oneGrad);
             UpdateDiscriminatorParametersDP(scaledLr);
 
             // WGAN real loss
             _ = DiscriminatorForward(VectorToTensor(_packedRealBuf), isTraining: true);
-            BackwardDiscriminator(_negOneGrad);
             UpdateDiscriminatorParametersDP(scaledLr);
-        }
-    }
-
-    /// <summary>
-    /// Trains the generator for one step (no DP noise on generator - privacy is through discriminator).
-    /// </summary>
-    private void TrainGeneratorStep(int numPacks, T learningRate)
-    {
-        if (_sampler is null || _packedFakeBuf is null || _genInputBuf is null ||
-            _fakeRowBuf is null || _fakeSingleBuf is null || _sampleGradBuf is null) return;
-
-        int pacSize = _options.PacSize;
-        int singleDim = _dataWidth + _condWidth;
-        T scaledLr = NumOps.FromDouble(NumOps.ToDouble(learningRate) / numPacks);
-
-        for (int p = 0; p < numPacks; p++)
-        {
-            // noises and condVectors must be allocated per-sample (needed for backprop second pass)
-            var noises = new List<Vector<T>>();
-            var condVectors = new List<Vector<T>>();
-
-            // Zero out packed buffer
-            for (int z = 0; z < _packedInputDim; z++)
-            {
-                _packedFakeBuf[z] = NumOps.Zero;
-            }
-
-            for (int s = 0; s < pacSize; s++)
-            {
-                var condVector = _sampler.SampleRandomConditionVector();
-                condVectors.Add(condVector);
-
-                var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
-                noises.Add(noise);
-
-                ConcatInto(_genInputBuf, noise, condVector);
-                var fakeTransformed = Predict(VectorToTensor(_genInputBuf));
-                FillFromTensor(_fakeRowBuf, fakeTransformed);
-                ConcatInto(_fakeSingleBuf, _fakeRowBuf, condVector);
-
-                for (int d = 0; d < singleDim; d++)
-                {
-                    _packedFakeBuf[s * singleDim + d] = d < _fakeSingleBuf.Length ? _fakeSingleBuf[d] : NumOps.Zero;
-                }
-            }
-
-            // Compute dD/dInput using GradientTape autodiff, then negate for generator gradient
-            var discInputGrad = TapeLayerBridge<T>.ComputeInputGradient(
-                VectorToTensor(_packedFakeBuf),
-                _discLayers,
-                TapeLayerBridge<T>.HiddenActivation.LeakyReLU,
-                applyActivationOnLast: false);
-            for (int g = 0; g < discInputGrad.Length; g++)
-            {
-                discInputGrad[g] = NumOps.Negate(discInputGrad[g]);
-            }
-            discInputGrad = SafeGradient(discInputGrad, 5.0);
-
-            T perSampleLr = NumOps.FromDouble(NumOps.ToDouble(scaledLr) / pacSize);
-            for (int s = 0; s < pacSize; s++)
-            {
-                for (int d = 0; d < _dataWidth; d++)
-                {
-                    _sampleGradBuf[d] = (s * singleDim + d) < discInputGrad.Length
-                        ? discInputGrad[s * singleDim + d]
-                        : NumOps.Zero;
-                }
-
-                ConcatInto(_genInputBuf, noises[s], condVectors[s]);
-                _ = Predict(VectorToTensor(_genInputBuf));
-
-                BackpropagateError(_sampleGradBuf);
-                UpdateGeneratorParameters(perSampleLr);
-            }
         }
     }
 
@@ -773,30 +680,6 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         return current;
     }
 
-    private void BackwardDiscriminator(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-        int denseIdx = _discLayerDims.Count - 1;
-
-        for (int i = _discLayers.Count - 1; i >= 0; i--)
-        {
-            var layer = _discLayers[i];
-
-            if (layer is DropoutLayer<T>)
-            {
-                continue;
-            }
-
-            if (denseIdx < _discLayerDims.Count - 1 && denseIdx < _discPreActivations.Count)
-            {
-                current = ApplyLeakyReLUDerivative(current, _discPreActivations[denseIdx]);
-            }
-
-            current = layer.Backward(current);
-            denseIdx--;
-        }
-    }
-
     #endregion
 
     #region Generator Forward/Backward with Residual Connections
@@ -829,54 +712,6 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         current = Layers[^1].Forward(current);
 
         return ApplyOutputActivations(current);
-    }
-
-    private void BackwardGeneratorWithResidual(Tensor<T> gradOutput)
-    {
-        int inputDim = _options.EmbeddingDimension + _condWidth;
-        var current = gradOutput;
-
-        current = Layers[^1].Backward(current);
-
-        int lastHiddenDim = current.Length - inputDim;
-        if (lastHiddenDim > 0)
-        {
-            var hiddenGrad = new Tensor<T>([lastHiddenDim]);
-            for (int j = 0; j < lastHiddenDim && j < current.Length; j++)
-            {
-                hiddenGrad[j] = current[j];
-            }
-            current = hiddenGrad;
-        }
-
-        for (int i = Layers.Count - 2; i >= 0; i--)
-        {
-            if (i < _genPreActivations.Count)
-            {
-                current = ApplyReLUDerivative(current, _genPreActivations[i]);
-            }
-
-            if (i < _genBNLayers.Count)
-            {
-                current = _genBNLayers[i].Backward(current);
-            }
-
-            current = Layers[i].Backward(current);
-
-            if (i > 0)
-            {
-                int prevDim = current.Length - inputDim;
-                if (prevDim > 0)
-                {
-                    var hiddenGrad = new Tensor<T>([prevDim]);
-                    for (int j = 0; j < prevDim && j < current.Length; j++)
-                    {
-                        hiddenGrad[j] = current[j];
-                    }
-                    current = hiddenGrad;
-                }
-            }
-        }
     }
 
     #endregion
@@ -1328,33 +1163,6 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     #endregion
 
     #region IJitCompilable Override
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation =>
-        IsFitted && Layers.Count > 1 && !_usingCustomLayers &&
-        _genBNLayers.Count > 0 &&
-        Layers.All(l => l.SupportsJitCompilation) &&
-        _genBNLayers.All(l => l.SupportsJitCompilation);
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (!SupportsJitCompilation)
-        {
-            throw new NotSupportedException(
-                $"{GetType().Name} does not support JIT compilation in its current configuration.");
-        }
-
-        int genInputDim = _options.EmbeddingDimension + _condWidth;
-        var hiddenLayers = Layers.Take(Layers.Count - 1).ToList();
-
-        return TapeLayerBridge<T>.ExportMLPGeneratorGraph(
-            inputNodes, genInputDim, hiddenLayers,
-            _genBNLayers.Cast<ILayer<T>>().ToList(), Layers[^1],
-            TapeLayerBridge<T>.HiddenActivation.ReLU,
-            TapeLayerBridge<T>.HiddenActivation.None,
-            useResidualConcat: true);
-    }
 
     #endregion
 }

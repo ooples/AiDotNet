@@ -1,4 +1,4 @@
-
+﻿
 
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -132,22 +132,6 @@ public class LogSoftmaxActivation<T> : ActivationFunctionBase<T>
 
         return jacobian;
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.LogSoftmax provides full forward and backward pass support.</value>
-    /// <remarks>
-    /// <para>
-    /// LogSoftmax supports JIT compilation with numerically stable gradient computation.
-    /// The backward pass efficiently computes gradients: gradient - softmax * sum(gradient).
-    /// </para>
-    /// <para>
-    /// Note: Currently implemented for 2D tensors (batch, features) along axis=-1.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

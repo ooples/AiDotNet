@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -145,22 +145,6 @@ public class ScaledTanhActivation<T> : ActivationFunctionBase<T>
         T scaledBeta = NumOps.Multiply(_beta, half);
         return NumOps.Multiply(scaledBeta, oneMinus);
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because gradient computation is fully implemented in TensorOperations.ScaledTanh.</value>
-    /// <remarks>
-    /// <para>
-    /// ScaledTanh supports JIT compilation because:
-    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - The gradient is (β / 2) * (1 - f(x)²)
-    /// - The steepness parameter β allows tuning network behavior
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

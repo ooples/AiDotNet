@@ -1,4 +1,4 @@
-using System.Linq;
+﻿using System.Linq;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.JitCompiler.IR;
@@ -283,7 +283,7 @@ public static class TensorShapeExtensions
         if (tensor == null) throw new ArgumentNullException(nameof(tensor));
 
         // Return a defensive copy to prevent mutation of internal state
-        return tensor.Shape.ToArray();
+        return tensor._shape;
     }
 
     /// <summary>

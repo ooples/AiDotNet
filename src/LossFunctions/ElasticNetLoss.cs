@@ -1,6 +1,7 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.LossFunctions;
 
@@ -177,7 +178,7 @@ public class ElasticNetLoss<T> : LossFunctionBase<T>
     /// <param name="predicted">The predicted GPU tensor from the model.</param>
     /// <param name="actual">The actual (target) GPU tensor.</param>
     /// <returns>A tuple containing the loss value and gradient tensor.</returns>
-    public override (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    public override (T Loss, Tensor<T> Gradient) CalculateLossAndGradientGpu(Tensor<T> predicted, Tensor<T> actual)
     {
         var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
         var backend = engine?.GetBackend();
@@ -187,7 +188,7 @@ public class ElasticNetLoss<T> : LossFunctionBase<T>
             return base.CalculateLossAndGradientGpu(predicted, actual);
         }
 
-        int size = predicted.ElementCount;
+        int size = predicted.Length;
         float l1Ratio = Convert.ToSingle(NumOps.ToDouble(_l1Ratio));
         float alpha = Convert.ToSingle(NumOps.ToDouble(_alpha));
         // Calculate l1Weight and l2Weight from l1Ratio and alpha
@@ -202,8 +203,24 @@ public class ElasticNetLoss<T> : LossFunctionBase<T>
         backend.ElasticNetBackward(predicted.Buffer, actual.Buffer, gradientBuffer, size, l1Weight, l2Weight);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape.ToArray(), GpuTensorRole.Gradient);
+        var gradientTensor = GpuTensorHelper.UploadToGpu<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // ElasticNet = l1Ratio * MAE + (1 - l1Ratio) * MSE
+        var diff = Engine.TensorSubtract(predicted, target);
+        var absDiff = Engine.TensorAbs(diff);
+        var squared = Engine.TensorMultiply(diff, diff);
+        var allAxes = Enumerable.Range(0, diff.Shape.Length).ToArray();
+        var mae = Engine.ReduceMean(absDiff, allAxes, keepDims: false);
+        var mse = Engine.ReduceMean(squared, allAxes, keepDims: false);
+        var scaledL1 = Engine.TensorMultiplyScalar(mae, _l1Ratio);
+        var oneMinusRatio = NumOps.Subtract(NumOps.One, _l1Ratio);
+        var scaledL2 = Engine.TensorMultiplyScalar(mse, oneMinusRatio);
+        return Engine.TensorAdd(scaledL1, scaledL2);
     }
 }

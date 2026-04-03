@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -106,9 +106,6 @@ public class DeltaFormerLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
 
     /// <summary>Gets the model dimension.</summary>
     public int ModelDimension => _modelDimension;
@@ -442,102 +439,6 @@ public class DeltaFormerLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var lastInput = _lastInput ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastOutput = _lastOutput ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastQuery = _lastQuery ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastKey = _lastKey ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastValue = _lastValue ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastGate = _lastGate ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastGateRaw = _lastGateRaw ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastMechanismOutput = _lastMechanismOutput ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = lastInput.Shape[0];
-        int seqLen = lastInput.Shape[1];
-
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        var activationGrad = ApplyActivationDerivative(lastOutput, grad3D);
-
-        // Initialize gradients
-        _queryWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _keyWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _valueWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputGateWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputGateBiasGradient = new Tensor<T>([_modelDimension]);
-        _outputProjectionWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
-
-        // Output projection backward
-        var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
-        var gatedFlat = Engine.TensorMultiply(lastMechanismOutput, lastGate)
-            .Reshape(batchSize * seqLen, _modelDimension);
-        _outputProjectionWeightsGradient = Engine.TensorMatMul(gatedFlat.Transpose([1, 0]), gradFlat);
-
-        var dGated = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
-            .Reshape(batchSize, seqLen, _modelDimension);
-
-        // Gate backward
-        var dMechanismOut = Engine.TensorMultiply(dGated, lastGate);
-        var dGateSigmoid = Engine.TensorMultiply(dGated, lastMechanismOutput);
-
-        // Sigmoid derivative: sigma(x) * (1 - sigma(x))
-        var sigDeriv = Engine.TensorMultiply(lastGate,
-            Engine.TensorSubtract(CreateOnesLike(lastGate), lastGate));
-        var dGateRaw = Engine.TensorMultiply(dGateSigmoid, sigDeriv);
-
-        var inputFlat = lastInput.Reshape(batchSize * seqLen, _modelDimension);
-        var dGateRawFlat = dGateRaw.Reshape(batchSize * seqLen, _modelDimension);
-        _outputGateWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dGateRawFlat);
-        _outputGateBiasGradient = Engine.ReduceSum(dGateRaw, new int[] { 0, 1 });
-
-        var dInputFromGate = Engine.TensorMatMul(dGateRawFlat, _outputGateWeights.Transpose([1, 0]));
-
-        // Mechanism backward (delta rule or attention)
-        Tensor<T> dQ, dK, dV;
-        if (_useDeltaRule)
-        {
-            DeltaRuleBackward(dMechanismOut, lastQuery, lastKey, lastValue, batchSize, seqLen,
-                out dQ, out dK, out dV);
-        }
-        else
-        {
-            AttentionBackward(dMechanismOut, lastQuery, lastKey, lastValue, batchSize, seqLen,
-                out dQ, out dK, out dV);
-        }
-
-        // Projection weight gradients
-        var dQFlat = dQ.Reshape(batchSize * seqLen, _modelDimension);
-        var dKFlat = dK.Reshape(batchSize * seqLen, _modelDimension);
-        var dVFlat = dV.Reshape(batchSize * seqLen, _modelDimension);
-
-        _queryWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dQFlat);
-        _keyWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dKFlat);
-        _valueWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dVFlat);
-
-        // Input gradient from all paths
-        var dInputTotal = Engine.TensorMatMul(dQFlat, _queryWeights.Transpose([1, 0]));
-        dInputTotal = Engine.TensorAdd(dInputTotal,
-            Engine.TensorMatMul(dKFlat, _keyWeights.Transpose([1, 0])));
-        dInputTotal = Engine.TensorAdd(dInputTotal,
-            Engine.TensorMatMul(dVFlat, _valueWeights.Transpose([1, 0])));
-        dInputTotal = Engine.TensorAdd(dInputTotal, dInputFromGate);
-
-        var dInput3D = dInputTotal.Reshape(batchSize, seqLen, _modelDimension);
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return dInput3D.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return dInput3D.Reshape(_originalInputShape);
-
-        return dInput3D;
-    }
-
     private void DeltaRuleBackward(
         Tensor<T> dOutput, Tensor<T> q, Tensor<T> k, Tensor<T> v,
         int batchSize, int seqLen,
@@ -761,13 +662,13 @@ public class DeltaFormerLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
-            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
-            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
-            _outputGateWeightsGradient is not null ? (_outputGateWeightsGradient is not null ? Vector<T>.FromMemory(_outputGateWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateWeights.Length),
-            _outputGateBiasGradient is not null ? (_outputGateBiasGradient is not null ? Vector<T>.FromMemory(_outputGateBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateBias.Length),
-            _outputProjectionWeightsGradient is not null ? (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionWeights.Length),
-            _outputProjectionBiasGradient is not null ? (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionBias.Length));
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
+            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
     }
 
     public override void ClearGradients()
@@ -801,28 +702,6 @@ public class DeltaFormerLayer<T> : LayerBase<T>
     }
 
     #endregion
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
-        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
-        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(outWeightsNode);
-        inputNodes.Add(outBiasNode);
-
-        var outT = TensorOperations<T>.Transpose(outWeightsNode);
-        var finalOutput = TensorOperations<T>.MatrixMultiply(xNode, outT);
-        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
-
-        return outputWithBias;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

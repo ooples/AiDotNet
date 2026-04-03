@@ -1,9 +1,10 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -45,7 +46,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
     private int[]? _lastInputShape;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
+    private Tensor<T>? _gpuInput;
     private int _gpuBatch;
     private int _gpuChannels;
     private int _gpuInputHeight;
@@ -200,7 +201,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
     /// pooling to any target output size.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -286,125 +287,7 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
             outputShape[shape.Length - 1] = _outputWidth;
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <summary>
-    /// Performs the GPU-resident backward pass of adaptive average pooling.
-    /// </summary>
-    /// <param name="outputGradient">The GPU tensor containing the gradient of the loss with respect to the output.</param>
-    /// <returns>The gradient of the loss with respect to the input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (_lastInputShape == null)
-            throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        // Calculate the effective pool size and stride for adaptive pooling
-        // For adaptive pooling: poolSize = ceil(inputSize / outputSize), stride = floor(inputSize / outputSize)
-        int poolSizeH = (int)Math.Ceiling((double)_gpuInputHeight / _outputHeight);
-        int poolSizeW = (int)Math.Ceiling((double)_gpuInputWidth / _outputWidth);
-        int strideH = (int)Math.Floor((double)_gpuInputHeight / _outputHeight);
-        int strideW = (int)Math.Floor((double)_gpuInputWidth / _outputWidth);
-
-        // Ensure minimum stride of 1
-        strideH = Math.Max(1, strideH);
-        strideW = Math.Max(1, strideW);
-
-        // Allocate gradient buffer for input
-        int inputSize = _gpuBatch * _gpuChannels * _gpuInputHeight * _gpuInputWidth;
-        var gradInputBuffer = backend.AllocateBuffer(inputSize);
-
-        // Use AvgPool2DBackward with calculated pool parameters
-        backend.AvgPool2DBackward(
-            outputGradient.Buffer,
-            gradInputBuffer,
-            _gpuBatch,
-            _gpuChannels,
-            _gpuInputHeight,
-            _gpuInputWidth,
-            _outputHeight,
-            _outputWidth,
-            poolSizeH,
-            poolSizeW,
-            strideH,
-            strideW,
-            0, 0,  // no padding
-            true); // count includes padding
-
-        // Build input gradient shape matching original input shape
-        return new GpuTensor<T>(backend, gradInputBuffer, _lastInputShape, GpuTensorRole.Gradient, ownsBuffer: true);
-    }
-
-    /// <summary>
-    /// Performs the backward pass of adaptive average pooling.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the output.</param>
-    /// <returns>The gradient of the loss with respect to the input.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput is null || _lastInputShape is null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        // Handle any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
-        int rank = _lastInputShape.Length;
-        int channels = _lastInputShape[rank - 3];
-        int inputHeight = _lastInputShape[rank - 2];
-        int inputWidth = _lastInputShape[rank - 1];
-
-        // Calculate total batch size (product of all dims except last 3)
-        int batchSize = 1;
-        for (int d = 0; d < rank - 3; d++)
-            batchSize *= _lastInputShape[d];
-
-        // Create input gradient tensor (same shape as input)
-        int inputSize = _lastInputShape.Aggregate(1, (a, b) => a * b);
-        var inputGradData = new T[inputSize];
-
-        // Distribute gradient back to input regions
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int oh = 0; oh < _outputHeight; oh++)
-                {
-                    for (int ow = 0; ow < _outputWidth; ow++)
-                    {
-                        // Calculate input region for this output cell
-                        int hStart = (int)Math.Floor((double)oh * inputHeight / _outputHeight);
-                        int hEnd = (int)Math.Ceiling((double)(oh + 1) * inputHeight / _outputHeight);
-                        int wStart = (int)Math.Floor((double)ow * inputWidth / _outputWidth);
-                        int wEnd = (int)Math.Ceiling((double)(ow + 1) * inputWidth / _outputWidth);
-
-                        int count = (hEnd - hStart) * (wEnd - wStart);
-
-                        int outputIndex = b * channels * _outputHeight * _outputWidth + c * _outputHeight * _outputWidth + oh * _outputWidth + ow;
-
-                        // The gradient from the average is distributed equally to all inputs
-                        T gradPerInput = NumOps.Divide(outputGradient.Data.Span[outputIndex], NumOps.FromDouble(count));
-
-                        for (int h = hStart; h < hEnd; h++)
-                        {
-                            for (int w = wStart; w < wEnd; w++)
-                            {
-                                int inputIndex = b * channels * inputHeight * inputWidth + c * inputHeight * inputWidth + h * inputWidth + w;
-                                inputGradData[inputIndex] = NumOps.Add(inputGradData[inputIndex], gradPerInput);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        return new Tensor<T>(_lastInputShape, new Vector<T>(inputGradData));
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -439,87 +322,5 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
         _gpuChannels = 0;
         _gpuInputHeight = 0;
         _gpuInputWidth = 0;
-    }
-
-    /// <summary>
-    /// Gets whether this layer supports JIT compilation.
-    /// </summary>
-    /// <remarks>
-    /// AdaptiveAveragePoolingLayer supports JIT compilation by computing the appropriate
-    /// pool size and stride to achieve the desired output dimensions, then using AvgPool2D.
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the AdaptiveAveragePoolingLayer.</returns>
-    /// <remarks>
-    /// <para>
-    /// Adaptive average pooling is implemented by calculating the appropriate pool size
-    /// and stride to achieve the target output dimensions. For global average pooling (1x1),
-    /// the pool size equals the entire input spatial dimensions.
-    /// </para>
-    /// <para>
-    /// For a given input size H_in and target output H_out:
-    /// - Pool size H = ceiling(H_in / H_out)
-    /// - Stride H = floor(H_in / H_out)
-    /// </para>
-    /// </remarks>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes));
-        }
-
-        if (InputShape is null || InputShape.Length < 3)
-        {
-            throw new InvalidOperationException("Layer input shape not configured or invalid.");
-        }
-
-        // Get input dimensions [channels, height, width]
-        int inputHeight = InputShape[1];
-        int inputWidth = InputShape[2];
-
-        // Create symbolic input node with batch dimension [1, C, H, W]
-        var symbolicInput = new Tensor<T>(new int[] { 1, InputShape[0], inputHeight, inputWidth });
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Calculate adaptive pooling parameters
-        // For adaptive avg pool: we need to compute pool_size and stride such that
-        // the output has the desired dimensions
-        //
-        // Standard formula from PyTorch/TensorFlow:
-        // For each dimension:
-        //   stride = floor(input_size / output_size)
-        //   kernel_size = input_size - (output_size - 1) * stride
-        //
-        // This ensures proper coverage of all input elements
-
-        int strideH = inputHeight / _outputHeight;
-        int strideW = inputWidth / _outputWidth;
-
-        int poolH = inputHeight - (_outputHeight - 1) * strideH;
-        int poolW = inputWidth - (_outputWidth - 1) * strideW;
-
-        // For global pooling (1x1 output), pool size equals input size
-        if (_outputHeight == 1 && _outputWidth == 1)
-        {
-            poolH = inputHeight;
-            poolW = inputWidth;
-            strideH = inputHeight;
-            strideW = inputWidth;
-        }
-
-        // Use AvgPool2D operation
-        var outputNode = Autodiff.TensorOperations<T>.AvgPool2D(
-            inputNode,
-            poolSize: new int[] { poolH, poolW },
-            strides: new int[] { strideH, strideW });
-
-        return outputNode;
     }
 }

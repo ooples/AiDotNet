@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
@@ -398,7 +398,7 @@ internal class SPPFBlock<T>
         int height = x.Shape[2];
         int width = x.Shape[3];
 
-        var output = new Tensor<T>(x.Shape.ToArray());
+        var output = new Tensor<T>(x._shape);
 
         for (int n = 0; n < batch; n++)
         {
@@ -489,7 +489,7 @@ internal class AttentionBlock<T>
 
         // Reshape and compute attention
         // For simplicity, compute spatial attention per batch
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
 
         for (int n = 0; n < batch; n++)
         {

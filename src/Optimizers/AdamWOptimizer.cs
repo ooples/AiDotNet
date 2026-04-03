@@ -1,5 +1,7 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Optimizers;
 
@@ -483,6 +485,84 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
 
         var afterAdamUpdate = (Vector<T>)Engine.Subtract(parameters, scaledAdamUpdate);
         return (Vector<T>)Engine.Subtract(afterAdamUpdate, scaledWeightDecay);
+    }
+
+    // Per-parameter AdamW state for tape-based training
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeM = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeV = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeVMax = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private int _tapeStep;
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        _tapeStep++;
+
+        T beta1 = NumOps.FromDouble(_options.Beta1);
+        T beta2 = NumOps.FromDouble(_options.Beta2);
+        T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
+        T oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+        T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _tapeStep));
+        T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _tapeStep));
+        T weightDecay = NumOps.FromDouble(_options.WeightDecay);
+
+        foreach (var param in context.Parameters)
+        {
+            if (!context.Gradients.TryGetValue(param, out var grad))
+                continue;
+
+            if (!_tapeM.TryGetValue(param, out var m))
+            {
+                m = new Tensor<T>(param._shape);
+                _tapeM[param] = m;
+            }
+            if (!_tapeV.TryGetValue(param, out var v))
+            {
+                v = new Tensor<T>(param._shape);
+                _tapeV[param] = v;
+            }
+
+            // m = beta1 * m + (1 - beta1) * grad
+            var mNew = Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1));
+            Engine.TensorCopy(mNew, m);
+
+            // v = beta2 * v + (1 - beta2) * grad^2
+            var vNew = Engine.TensorAdd(Engine.TensorMultiplyScalar(v, beta2), Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusBeta2));
+            Engine.TensorCopy(vNew, v);
+
+            // Bias-corrected estimates
+            var mHat = Engine.TensorDivideScalar(m, biasCorrection1);
+            var vHat = Engine.TensorDivideScalar(v, biasCorrection2);
+
+            // AMSGrad variant
+            Tensor<T> vHatEffective;
+            if (_options.UseAMSGrad)
+            {
+                if (!_tapeVMax.TryGetValue(param, out var vMax))
+                {
+                    vMax = new Tensor<T>(param._shape);
+                    _tapeVMax[param] = vMax;
+                }
+                var vMaxNew = Engine.TensorMax(vMax, vHat);
+                Engine.TensorCopy(vMaxNew, vMax);
+                vHatEffective = vMax;
+            }
+            else
+            {
+                vHatEffective = vHat;
+            }
+
+            // update = mHat / (sqrt(vHat) + epsilon)
+            var denom = Engine.TensorAddScalar(Engine.TensorSqrt(vHatEffective), epsilon);
+            var adamUpdate = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHat, denom), CurrentLearningRate);
+
+            // Decoupled weight decay: param -= lr * weightDecay * param
+            var decayTerm = Engine.TensorMultiplyScalar(param, NumOps.Multiply(CurrentLearningRate, weightDecay));
+
+            Engine.TensorSubtractInPlace(param, adamUpdate);
+            Engine.TensorSubtractInPlace(param, decayTerm);
+        }
     }
 
     /// <summary>

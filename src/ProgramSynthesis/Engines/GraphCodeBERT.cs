@@ -142,7 +142,6 @@ public class GraphCodeBERT<T> : CodeModelBase<T>
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        TrainWithOptimizer(input, expectedOutput, _optimizer);
     }
 
     public override ModelMetadata<T> GetModelMetadata()

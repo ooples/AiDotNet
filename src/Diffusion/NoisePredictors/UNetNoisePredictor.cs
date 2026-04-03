@@ -541,8 +541,9 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // Project time embedding
         var timeEmbed = ProjectTimeEmbedding(timeEmbedding);
 
-        // Forward pass
-        var output = ForwardUNet(noisySample, timeEmbed, conditioning);
+        // Forward pass — saves skip connections for backward
+        var (output, skips) = ForwardUNetWithSkips(noisySample, timeEmbed, conditioning);
+        SaveForwardState(skips, timeEmbed);
 
         _lastOutput = output;
         return output;
@@ -565,6 +566,72 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     /// <summary>
     /// Performs the forward pass through the U-Net architecture.
+    /// </summary>
+    /// <summary>
+    /// Forward pass returning skip connections for backward pass gradient routing.
+    /// </summary>
+    private (Tensor<T> output, List<Tensor<T>> skips) ForwardUNetWithSkips(Tensor<T> x, Tensor<T> timeEmbed, Tensor<T>? conditioning)
+    {
+        if (_inputConv == null || _outputConv == null)
+            throw new InvalidOperationException("Convolutional layers not initialized.");
+
+        x = _inputConv.Forward(x);
+        var skips = new List<Tensor<T>>(_encoderBlocks.Count);
+
+        for (int i = 0; i < _encoderBlocks.Count; i++)
+        {
+            var block = _encoderBlocks[i];
+            if (block.Downsample != null)
+            {
+                x = block.Downsample.Forward(x);
+            }
+            else
+            {
+                x = ApplyResBlock(block.ResBlock, x, timeEmbed);
+                if (block.AttentionBlock != null) x = block.AttentionBlock.Forward(x);
+                if (block.CrossAttentionBlock != null && conditioning != null)
+                    x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+                skips.Add(x);
+            }
+        }
+
+        for (int i = 0; i < _middleBlocks.Count; i++)
+        {
+            var block = _middleBlocks[i];
+            x = ApplyResBlock(block.ResBlock, x, timeEmbed);
+            if (block.AttentionBlock != null) x = block.AttentionBlock.Forward(x);
+            if (block.CrossAttentionBlock != null && conditioning != null)
+                x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+        }
+
+        var skipIdx = skips.Count - 1;
+        for (int i = 0; i < _decoderBlocks.Count; i++)
+        {
+            var block = _decoderBlocks[i];
+            if (block.Upsample != null)
+            {
+                x = block.Upsample.Forward(x);
+            }
+            else
+            {
+                if (skipIdx >= 0)
+                {
+                    x = ConcatenateChannels(x, skips[skipIdx]);
+                    skipIdx--;
+                }
+                x = ApplyResBlock(block.ResBlock, x, timeEmbed);
+                if (block.AttentionBlock != null) x = block.AttentionBlock.Forward(x);
+                if (block.CrossAttentionBlock != null && conditioning != null)
+                    x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+            }
+        }
+
+        x = _outputConv.Forward(x);
+        return (x, skips);
+    }
+
+    /// <summary>
+    /// Forward pass for inference (no skip storage needed).
     /// </summary>
     private Tensor<T> ForwardUNet(Tensor<T> x, Tensor<T> timeEmbed, Tensor<T>? conditioning)
     {
@@ -921,6 +988,155 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
         return Clone();
+    }
+
+    #endregion
+
+    #region Layer-Level Backpropagation
+
+    // Skip connections saved during forward for proper gradient splitting
+    private List<Tensor<T>>? _lastSkips;
+    private Tensor<T>? _lastTimeEmbed;
+
+    /// <summary>
+    /// Stores skip connections and time embedding during forward for backward pass.
+    /// Call this from PredictNoiseWithEmbedding during training.
+    /// </summary>
+    internal void SaveForwardState(List<Tensor<T>> skips, Tensor<T> timeEmbed)
+    {
+        _lastSkips = skips;
+        _lastTimeEmbed = timeEmbed;
+    }
+
+    private (Tensor<T> decoder, Tensor<T> skip) SplitChannels(Tensor<T> grad, int decoderChannels, int skipChannels)
+    {
+        // Split along axis 1 (channel dimension): grad [B, C_dec+C_skip, H, W]
+        int batch = grad.Shape[0];
+        int totalChannels = grad.Shape[1];
+        int height = grad.Shape.Length > 2 ? grad.Shape[2] : 1;
+        int width = grad.Shape.Length > 3 ? grad.Shape[3] : 1;
+        int spatialSize = height * width;
+
+        var decoderGrad = new Tensor<T>([batch, decoderChannels, height, width]);
+        var skipGrad = new Tensor<T>([batch, skipChannels, height, width]);
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < decoderChannels; c++)
+            {
+                int srcOffset = ((b * totalChannels) + c) * spatialSize;
+                int dstOffset = ((b * decoderChannels) + c) * spatialSize;
+                for (int s = 0; s < spatialSize; s++)
+                    decoderGrad[dstOffset + s] = grad[srcOffset + s];
+            }
+            for (int c = 0; c < skipChannels; c++)
+            {
+                int srcOffset = ((b * totalChannels) + decoderChannels + c) * spatialSize;
+                int dstOffset = ((b * skipChannels) + c) * spatialSize;
+                for (int s = 0; s < spatialSize; s++)
+                    skipGrad[dstOffset + s] = grad[srcOffset + s];
+            }
+        }
+
+        return (decoderGrad, skipGrad);
+    }
+
+    private int FindEncoderBlockForSkip(int skipIndex)
+    {
+        // Skip connections come from non-downsample encoder blocks in order
+        int skipCount = 0;
+        for (int i = 0; i < _encoderBlocks.Count; i++)
+        {
+            if (_encoderBlocks[i].Downsample == null)
+            {
+                if (skipCount == skipIndex)
+                    return i;
+                skipCount++;
+            }
+        }
+        return -1;
+    }
+
+    private Tensor<T>? AccumulateTimeEmbedGradients()
+    {
+        // Collect time embedding gradients from all DiffusionResBlocks
+        Tensor<T>? accumulated = null;
+        var numOps = NumOps;
+
+        void AccumulateFromBlock(ILayer<T>? layer)
+        {
+            if (layer is DiffusionResBlock<T> resBlock)
+            {
+                var timeGrad = resBlock.GetTimeEmbedGradient();
+                if (timeGrad is not null)
+                {
+                    if (accumulated is null)
+                    {
+                        accumulated = timeGrad;
+                    }
+                    else
+                    {
+                        for (int i = 0; i < accumulated.Length && i < timeGrad.Length; i++)
+                            accumulated[i] = numOps.Add(accumulated[i], timeGrad[i]);
+                    }
+                }
+            }
+        }
+
+        foreach (var block in _encoderBlocks) AccumulateFromBlock(block.ResBlock);
+        foreach (var block in _middleBlocks) AccumulateFromBlock(block.ResBlock);
+        foreach (var block in _decoderBlocks) AccumulateFromBlock(block.ResBlock);
+
+        return accumulated;
+    }
+
+    /// <inheritdoc />
+    protected override Vector<T> GetParameterGradients()
+    {
+        // Collect gradients in the same order as GetParameters
+        var layerGrads = new List<Vector<T>>();
+        int totalCount = 0;
+
+        CollectLayerGradients(layerGrads, ref totalCount, _inputConv);
+        CollectLayerGradients(layerGrads, ref totalCount, _timeEmbedMlp1);
+        CollectLayerGradients(layerGrads, ref totalCount, _timeEmbedMlp2);
+
+        for (int i = 0; i < _encoderBlocks.Count; i++)
+            CollectBlockGradients(layerGrads, ref totalCount, _encoderBlocks[i]);
+        for (int i = 0; i < _middleBlocks.Count; i++)
+            CollectBlockGradients(layerGrads, ref totalCount, _middleBlocks[i]);
+        for (int i = 0; i < _decoderBlocks.Count; i++)
+            CollectBlockGradients(layerGrads, ref totalCount, _decoderBlocks[i]);
+
+        CollectLayerGradients(layerGrads, ref totalCount, _outputConv);
+
+        var gradients = new Vector<T>(totalCount);
+        int idx = 0;
+        for (int v = 0; v < layerGrads.Count; v++)
+        {
+            var g = layerGrads[v];
+            for (int i = 0; i < g.Length; i++)
+                gradients[idx++] = g[i];
+        }
+
+        return gradients;
+    }
+
+    private static void CollectLayerGradients(List<Vector<T>> dest, ref int totalCount, ILayer<T>? layer)
+    {
+        if (layer == null) return;
+        var g = layer.GetParameterGradients();
+        dest.Add(g);
+        totalCount += g.Length;
+    }
+
+    private static void CollectBlockGradients(List<Vector<T>> dest, ref int totalCount, UNetBlock block)
+    {
+        CollectLayerGradients(dest, ref totalCount, block.ResBlock);
+        CollectLayerGradients(dest, ref totalCount, block.AttentionBlock);
+        CollectLayerGradients(dest, ref totalCount, block.CrossAttentionBlock);
+        CollectLayerGradients(dest, ref totalCount, block.Downsample);
+        CollectLayerGradients(dest, ref totalCount, block.Upsample);
     }
 
     #endregion

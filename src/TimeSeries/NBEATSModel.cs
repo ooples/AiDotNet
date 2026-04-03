@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -196,142 +196,6 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
             );
             _blocks.Add(block);
         }
-    }
-
-    /// <summary>
-    /// Performs the core training logic for the N-BEATS model.
-    /// </summary>
-    /// <param name="x">The input features matrix where each row is a historical window.</param>
-    /// <param name="y">The target values vector where each element is the corresponding forecast target.</param>
-    /// <remarks>
-    /// <para>
-    /// Training uses a simple gradient descent approach with mean squared error loss.
-    /// The model iterates through the training data for the specified number of epochs,
-    /// updating parameters to minimize prediction error.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where the model actually learns from your data.
-    ///
-    /// The training process:
-    /// 1. The model makes predictions on your training data
-    /// 2. It calculates how far off the predictions are (the error)
-    /// 3. It adjusts its internal parameters to reduce this error
-    /// 4. It repeats this process many times (epochs) until it learns the patterns
-    ///
-    /// Note: This is a simplified training implementation. A production version would
-    /// include more sophisticated optimization, regularization, and validation.
-    /// </para>
-    /// </remarks>
-    protected override void TrainCore(Matrix<T> x, Vector<T> y)
-    {
-        // Store training series BEFORE training loop for cancellation safety
-        _trainingSeries = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-            _trainingSeries[i] = y[i];
-        ModelParameters = new Vector<T>(1);
-        ModelParameters[0] = NumOps.FromDouble(y.Length);
-
-        int numSamples = x.Rows;
-        T learningRate = NumOps.FromDouble(_options.LearningRate);
-
-        for (int epoch = 0; epoch < _options.Epochs; epoch++)
-        {
-            TrainingCancellationToken.ThrowIfCancellationRequested();
-
-            T epochLoss = NumOps.Zero;
-
-            for (int batchStart = 0; batchStart < numSamples; batchStart += _options.BatchSize)
-            {
-                int batchEnd = Math.Min(batchStart + _options.BatchSize, numSamples);
-                int batchSize = batchEnd - batchStart;
-
-                // Scale learning rate by 1/batchSize so per-sample updates
-                // approximate mini-batch gradient averaging
-                T scaledLr = NumOps.Divide(learningRate, NumOps.FromDouble(batchSize));
-
-                for (int sampleIdx = batchStart; sampleIdx < batchEnd; sampleIdx++)
-                {
-                    if (sampleIdx % 50 == 0) TrainingCancellationToken.ThrowIfCancellationRequested();
-
-                    Vector<T> input = ExtractLookbackWindow(x, y, sampleIdx);
-
-                    // Forward pass through all blocks using doubly-residual architecture.
-                    // Each block.Forward() caches activations internally for its Backward() pass.
-                    // Block objects are independent, so their caches don't interfere.
-                    Vector<T> residual = input.Clone();
-                    T prediction = NumOps.Zero;
-
-                    for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
-                    {
-                        // Ensure residual matches lookback window length
-                        if (residual.Length != _options.LookbackWindow)
-                        {
-                            var padded = new Vector<T>(_options.LookbackWindow);
-                            for (int j = 0; j < Math.Min(residual.Length, _options.LookbackWindow); j++)
-                                padded[j] = residual[j];
-                            residual = padded;
-                        }
-                        var inputTensor = new Tensor<T>(new[] { _options.LookbackWindow }, residual);
-                        var outputTensor = _blocks[blockIdx].Forward(inputTensor);
-
-                        // Output layout: [backcast(lookbackWindow) | forecast(forecastHorizon)]
-                        var backcast = new Vector<T>(_options.LookbackWindow);
-                        for (int j = 0; j < _options.LookbackWindow; j++)
-                            backcast[j] = outputTensor[j];
-
-                        // Update residual (Engine.Subtract creates a new vector)
-                        residual = (Vector<T>)Engine.Subtract(residual, backcast);
-
-                        // Accumulate forecast (only first element for single-step prediction)
-                        prediction = NumOps.Add(prediction, outputTensor[_options.LookbackWindow]);
-                    }
-
-                    // MSE loss for this sample
-                    T error = NumOps.Subtract(prediction, y[sampleIdx]);
-                    epochLoss = NumOps.Add(epochLoss, NumOps.Multiply(error, error));
-
-                    // Loss gradient: dL/d_prediction = 2 * (prediction - target)
-                    T dLdPred = NumOps.Multiply(NumOps.FromDouble(2.0), error);
-
-                    // Backward pass through blocks in reverse order.
-                    // Propagates gradients through the doubly-residual architecture:
-                    //   residual_{i+1} = residual_i - backcast_i
-                    //   total_forecast = sum(forecast_i)
-                    var dLdResidual = new Vector<T>(_options.LookbackWindow);
-
-                    for (int blockIdx = _blocks.Count - 1; blockIdx >= 0; blockIdx--)
-                    {
-                        // Construct output gradient matching block output layout:
-                        //   [dL/d_backcast | dL/d_forecast]
-                        var outputGrad = new Tensor<T>(
-                            new[] { _options.LookbackWindow + _options.ForecastHorizon });
-
-                        // dL/d_backcast_i = -dL/d_residual_{i+1}
-                        // Chain rule: residual_{i+1} = residual_i - backcast_i
-                        //   => d_residual_{i+1}/d_backcast_i = -I
-                        for (int j = 0; j < _options.LookbackWindow; j++)
-                            outputGrad[j] = NumOps.Negate(dLdResidual[j]);
-
-                        // dL/d_forecast_i[0] = dL/d_prediction
-                        // Only the first forecast element contributes to the prediction
-                        outputGrad[_options.LookbackWindow] = dLdPred;
-
-                        // Backward: computes dL/dW and dL/db internally, returns dL/d_input
-                        var inputGrad = _blocks[blockIdx].Backward(outputGrad);
-
-                        // Propagate gradient through residual connection:
-                        // residual_i feeds into block_i (via Forward) AND into
-                        // residual_{i+1} = residual_i - backcast_i (identity path).
-                        // Total: dL/d_residual_i = dL/d_input + dL/d_residual_{i+1}
-                        for (int j = 0; j < _options.LookbackWindow; j++)
-                            dLdResidual[j] = NumOps.Add(inputGrad[j], dLdResidual[j]);
-
-                        // Apply stored parameter gradients
-                        _blocks[blockIdx].UpdateParameters(scaledLr);
-                    }
-                }
-            }
-        }
-
     }
 
     public override Vector<T> Predict(Matrix<T> input)
@@ -654,102 +518,6 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Gets whether this model supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Returns <c>true</c> when the model has been trained and has initialized blocks.
-    /// N-BEATS architecture can be represented as a computation graph with the doubly-residual
-    /// stacking pattern, enabling JIT compilation for optimized inference.
-    /// </value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> JIT (Just-In-Time) compilation converts the model's calculations
-    /// into optimized native code that runs much faster. N-BEATS can be JIT compiled because
-    /// its forward pass can be expressed as a series of matrix operations with residual connections.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => _blocks.Count > 0;
-
-    /// <summary>
-    /// Exports the N-BEATS model as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">A list to which input nodes will be added.</param>
-    /// <returns>The output computation node representing the forecast.</returns>
-    /// <remarks>
-    /// <para>
-    /// The computation graph represents the N-BEATS forward pass:
-    /// 1. For each block, compute backcast and forecast from the current residual
-    /// 2. Update residual: residual = residual - backcast
-    /// 3. Accumulate forecast: total_forecast = total_forecast + block_forecast
-    /// 4. Return the first element of the aggregated forecast
-    /// </para>
-    /// <para><b>For Beginners:</b> This converts the entire N-BEATS model into a computation graph
-    /// that can be optimized by the JIT compiler. The graph chains all blocks together with
-    /// their residual connections, allowing the JIT compiler to:
-    /// - Fuse operations across blocks
-    /// - Optimize memory usage
-    /// - Generate fast native code
-    ///
-    /// Expected speedup: 3-5x for inference after JIT compilation.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes), "Input nodes list cannot be null.");
-        }
-
-        if (_blocks.Count == 0)
-        {
-            throw new InvalidOperationException("Cannot export computation graph: Model blocks are not initialized.");
-        }
-
-        // Create input node (lookback window)
-        var inputShape = new int[] { _options.LookbackWindow };
-        var inputTensor = new Tensor<T>(inputShape);
-        var inputNode = TensorOperations<T>.Variable(inputTensor, "nbeats_input", requiresGradient: false);
-        inputNodes.Add(inputNode);
-
-        // Initialize residual as input
-        var residual = inputNode;
-
-        // Initialize aggregated forecast with zeros
-        var zeroData = new T[_options.ForecastHorizon];
-        var numOps = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < _options.ForecastHorizon; i++)
-        {
-            zeroData[i] = numOps.Zero;
-        }
-        var zeroTensor = new Tensor<T>(new[] { _options.ForecastHorizon }, new Vector<T>(zeroData));
-        var aggregatedForecast = TensorOperations<T>.Constant(zeroTensor, "initial_forecast");
-
-        // Process each block
-        for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
-        {
-            // Export block computation graph
-            var (backcast, forecast) = _blocks[blockIdx].ExportComputationGraph(residual);
-
-            // Update residual: residual = residual - backcast
-            residual = TensorOperations<T>.Subtract(residual, backcast);
-
-            // Accumulate forecast: aggregatedForecast = aggregatedForecast + forecast
-            aggregatedForecast = TensorOperations<T>.Add(aggregatedForecast, forecast);
-        }
-
-        // Extract first element of forecast (for single-step prediction)
-        // Create a slice tensor to extract the first element
-        var sliceData = new T[1];
-        sliceData[0] = numOps.One;
-        var sliceTensor = new Tensor<T>(new[] { 1, _options.ForecastHorizon }, new Vector<T>(CreateSliceWeights(0, _options.ForecastHorizon, numOps)));
-        var sliceNode = TensorOperations<T>.Constant(sliceTensor, "forecast_slice");
-
-        // output[0] = slice @ aggregatedForecast
-        var outputNode = TensorOperations<T>.MatrixVectorMultiply(sliceNode, aggregatedForecast);
-
-        return outputNode;
-    }
-
-    /// <summary>
     /// Creates slice weights for extracting a single element from a vector.
     /// </summary>
     private T[] CreateSliceWeights(int index, int length, INumericOperations<T> numOps)
@@ -775,7 +543,9 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         if (ModelParameters is not null && ModelParameters.Length > 0)
             clone.ModelParameters = new Vector<T>(ModelParameters);
         return clone;
-    }
+    
+
+}
 
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy() => Clone();
 }

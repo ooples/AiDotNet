@@ -1,9 +1,11 @@
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -38,11 +40,13 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "2, 4")]
-public class GroupNormalizationLayer<T> : LayerBase<T>
+public partial class GroupNormalizationLayer<T> : LayerBase<T>
 {
     private readonly T _epsilon;
     private readonly int _numGroups;
     private readonly int _numChannels;
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
+
     private Tensor<T> _gamma;
     private Tensor<T> _beta;
     private Tensor<T>? _lastInput;
@@ -54,27 +58,27 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
     #region GPU Training Fields
 
     // Cached GPU tensors for GPU-resident training
-    private IGpuTensor<T>? _gpuLastInput;
+    private Tensor<T>? _gpuLastInput;
 
     // GPU weight buffers
-    private GpuTensor<T>? _gpuGamma;
-    private GpuTensor<T>? _gpuBeta;
+    private Tensor<T>? _gpuGamma;
+    private Tensor<T>? _gpuBeta;
 
     // GPU gradient buffers
-    private IGpuTensor<T>? _gpuGammaGradient;
-    private IGpuTensor<T>? _gpuBetaGradient;
+    private Tensor<T>? _gpuGammaGradient;
+    private Tensor<T>? _gpuBetaGradient;
 
     // GPU optimizer state buffers (velocity/momentum)
-    private GpuTensor<T>? _gpuGammaVelocity;
-    private GpuTensor<T>? _gpuBetaVelocity;
+    private Tensor<T>? _gpuGammaVelocity;
+    private Tensor<T>? _gpuBetaVelocity;
 
     // GPU optimizer state buffers (first moment for Adam)
-    private GpuTensor<T>? _gpuGammaM;
-    private GpuTensor<T>? _gpuBetaM;
+    private Tensor<T>? _gpuGammaM;
+    private Tensor<T>? _gpuBetaM;
 
     // GPU optimizer state buffers (second moment for Adam)
-    private GpuTensor<T>? _gpuGammaV;
-    private GpuTensor<T>? _gpuBetaV;
+    private Tensor<T>? _gpuGammaV;
+    private Tensor<T>? _gpuBetaV;
 
     #endregion
 
@@ -103,9 +107,9 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
 
     public int NumGroups => _numGroups;
     public int NumChannels => _numChannels;
-    public Vector<T> GetGamma() => Vector<T>.FromMemory(_gamma.Data);
+    public Vector<T> GetGamma() => _gamma.ToVector();
     public Tensor<T> GetGammaTensor() => _gamma;
-    public Vector<T> GetBeta() => Vector<T>.FromMemory(_beta.Data);
+    public Vector<T> GetBeta() => _beta.ToVector();
     public Tensor<T> GetBetaTensor() => _beta;
     public T GetEpsilon() => _epsilon;
 
@@ -226,7 +230,7 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
     /// intermediate results to CPU. Uses native GroupNorm GPU kernel for maximum performance.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -322,7 +326,7 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
             _gpuLastInput = input;
 
             // Also download to CPU for backward compatibility with CPU backward pass
-            _lastInput = input.ToTensor();
+            _lastInput = input;
             _lastMean = new Tensor<T>(new[] { batch, _numGroups },
                 new Vector<T>(DirectGpuEngine.FromFloatArray<T>(backend.DownloadBuffer(meanBuffer))));
             _lastVariance = new Tensor<T>(new[] { batch, _numGroups },
@@ -335,7 +339,7 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         invVarBuffer.Dispose();
 
         // Create output tensor with correct shape
-        var result = new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        var result = GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
 
         // Restore original tensor rank
         if (_originalInputShape != null && _originalInputShape.Length > 4)
@@ -350,81 +354,16 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         return result;
     }
 
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastMean == null || _lastVariance == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Flatten gradient to 4D the same way forward flattened input
-        int rank = outputGradient.Shape.Length;
-        Tensor<T> grad4D;
-
-        if (rank == 3)
-        {
-            grad4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
-        }
-        else if (rank <= 4)
-        {
-            grad4D = outputGradient;
-        }
-        else
-        {
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 3; d++)
-                flatBatch *= outputGradient.Shape[d];
-            grad4D = outputGradient.Reshape(flatBatch, outputGradient.Shape[rank - 3], outputGradient.Shape[rank - 2], outputGradient.Shape[rank - 1]);
-        }
-
-        // Get input with batch dimension for backward pass
-        Tensor<T> input4D;
-        if (_lastInput.Shape.Length == 3)
-        {
-            input4D = _lastInput.Reshape(1, _lastInput.Shape[0], _lastInput.Shape[1], _lastInput.Shape[2]);
-        }
-        else if (_lastInput.Shape.Length <= 4)
-        {
-            input4D = _lastInput;
-        }
-        else
-        {
-            int flatBatch = 1;
-            for (int d = 0; d < _lastInput.Shape.Length - 3; d++)
-                flatBatch *= _lastInput.Shape[d];
-            input4D = _lastInput.Reshape(flatBatch, _lastInput.Shape[_lastInput.Shape.Length - 3], _lastInput.Shape[_lastInput.Shape.Length - 2], _lastInput.Shape[_lastInput.Shape.Length - 1]);
-        }
-
-        // Use Engine for GPU/CPU accelerated backward pass
-        var inputGradient = Engine.GroupNormBackward(
-            grad4D,
-            input4D,
-            _numGroups,
-            _gamma,
-            _lastMean,
-            _lastVariance,
-            NumOps.ToDouble(_epsilon),
-            out var gradGamma,
-            out var gradBeta);
-
-        _gammaGradient = gradGamma;
-        _betaGradient = gradBeta;
-
-        // Restore to original input shape
-        if (_originalInputShape != null && _originalInputShape.Length != inputGradient.Shape.Length)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-        return _addedBatchDimension
-            ? inputGradient.Reshape(inputGradient.Shape[1], inputGradient.Shape[2], inputGradient.Shape[3])
-            : inputGradient;
-    }
-
     public override void UpdateParameters(T learningRate)
     {
         if (_gammaGradient == null || _betaGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
-        _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+        // Update in-place to preserve GPU-registered tensor references
+        var updGamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
+        var updBeta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+        for (int i = 0; i < _gamma.Length; i++) _gamma[i] = updGamma[i];
+        for (int i = 0; i < _beta.Length; i++) _beta[i] = updBeta[i];
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_gamma);
@@ -433,7 +372,7 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameters()
     {
-        return Vector<T>.Concatenate(Vector<T>.FromMemory(_gamma.Data), Vector<T>.FromMemory(_beta.Data));
+        return Vector<T>.Concatenate(_gamma.ToVector(), _beta.ToVector());
     }
 
     public override void SetParameters(Vector<T> parameters)
@@ -457,7 +396,7 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_gammaGradient == null || _betaGradient == null) return new Vector<T>(ParameterCount);
-        return Vector<T>.Concatenate((_gammaGradient is not null ? Vector<T>.FromMemory(_gammaGradient.Data) : new Vector<T>(0)), (_betaGradient is not null ? Vector<T>.FromMemory(_betaGradient.Data) : new Vector<T>(0)));
+        return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
     }
 
     public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
@@ -470,88 +409,6 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         _gammaGradient = null;
         _betaGradient = null;
         _addedBatchDimension = false;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the GroupNormalization operation.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph representing the GroupNormalization layer.
-    /// The graph divides channels into groups and normalizes within each group,
-    /// then applies learned scale (gamma) and shift (beta) parameters per channel.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape is null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input node with batch dimension
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Create gamma and beta parameter nodes
-        var gammaNode = TensorOperations<T>.Constant(_gamma, "gamma");
-        var betaNode = TensorOperations<T>.Constant(_beta, "beta");
-
-        // Apply GroupNorm operation
-        var outputNode = TensorOperations<T>.GroupNorm(
-            inputNode,
-            _numGroups,
-            gammaNode,
-            betaNode,
-            NumOps.ToDouble(_epsilon));
-
-        return outputNode;
-    }
-
-    /// <summary>
-    /// GPU-resident backward pass for group normalization layer.
-    /// Computes gradients for gamma and beta parameters.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output (GPU tensor).</param>
-    /// <returns>The gradient of the loss with respect to the layer's input (GPU tensor).</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        if (_gpuLastInput == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        // Use CPU backward pass for gradient computation as fallback
-        var outputGradCpu = outputGradient.ToTensor();
-
-        // Clear existing gradients
-        _gammaGradient = null;
-        _betaGradient = null;
-
-        // Perform CPU backward to compute gradients
-        var inputGradCpu = Backward(outputGradCpu);
-
-        // Upload gradients to GPU
-        if (_gammaGradient != null)
-            _gpuGammaGradient = new GpuTensor<T>(backend, _gammaGradient, GpuTensorRole.Gradient);
-        if (_betaGradient != null)
-            _gpuBetaGradient = new GpuTensor<T>(backend, _betaGradient, GpuTensorRole.Gradient);
-
-        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
     }
 
     /// <summary>
@@ -572,8 +429,8 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
             throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
 
         // Ensure GPU weight tensors exist
-        _gpuGamma ??= new GpuTensor<T>(backend, _gamma, GpuTensorRole.Weight);
-        _gpuBeta ??= new GpuTensor<T>(backend, _beta, GpuTensorRole.Weight);
+        _gpuGamma ??= GpuTensorHelper.UploadToGpu<T>(backend, _gamma, GpuTensorRole.Weight);
+        _gpuBeta ??= GpuTensorHelper.UploadToGpu<T>(backend, _beta, GpuTensorRole.Weight);
 
         // Ensure optimizer state exists
         EnsureGroupNormOptimizerState(config, backend);
@@ -587,8 +444,8 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
         config.ApplyUpdate(backend, _gpuBeta.Buffer, _gpuBetaGradient.Buffer, betaState, _beta.Length);
 
         // Download updated weights to CPU for backward compatibility
-        _gamma = _gpuGamma.ToTensor();
-        _beta = _gpuBeta.ToTensor();
+        _gamma = _gpuGamma;
+        _beta = _gpuBeta;
 
         // Notify engine that tensor data has changed
         Engine.InvalidatePersistentTensor(_gamma);
@@ -607,16 +464,16 @@ public class GroupNormalizationLayer<T> : LayerBase<T>
             optimizerType == GpuOptimizerType.Nag ||
             optimizerType == GpuOptimizerType.Lars)
         {
-            _gpuGammaVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_gamma.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBetaVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_beta.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuGammaVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_gamma.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBetaVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_beta.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
         }
         else if (optimizerType == GpuOptimizerType.Adam || optimizerType == GpuOptimizerType.AdamW)
         {
             // Adam, AdamW need both M (first moment) and V (second moment)
-            _gpuGammaM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_gamma.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBetaM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_beta.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuGammaV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_gamma.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBetaV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_beta.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuGammaM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_gamma.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBetaM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_beta.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuGammaV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_gamma.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBetaV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_beta.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
         }
     }
 

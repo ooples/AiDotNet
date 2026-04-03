@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 128, 128", TestConstructorArgs = "128, 128, 2")]
-public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
+public class SpyNetLayer<T> : LayerBase<T>
 {
     #region Fields
 
@@ -105,6 +105,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                 1,  // stride
                 3); // padding
             _basicModules.Add(conv);
+            RegisterSubLayer(conv);
         }
     }
 
@@ -221,106 +222,6 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     #endregion
 
     #region Backward Pass
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Full backward pass through the spatial pyramid with proper gradient flow:
-    /// 1. Backprop through residual flow addition
-    /// 2. Backprop through each pyramid level's CNN module
-    /// 3. Backprop through concatenation to get gradients for warped image
-    /// 4. Backprop through GridSample warping using IEngine
-    /// 5. Accumulate gradients across pyramid levels
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        if (_lastInput1 == null || _lastInput2 == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        bool hasBatch = _lastInput1.Rank == 4;
-        int batch = hasBatch ? _lastInput1.Shape[0] : 1;
-
-        // Gradient w.r.t. final flow
-        var gradFlow = gradOutput;
-
-        // Initialize gradient accumulators for input frames
-        var gradInput1 = new Tensor<T>(_lastInput1.Shape.ToArray());
-        var gradInput2 = new Tensor<T>(_lastInput2.Shape.ToArray());
-
-        // Fine-to-coarse gradient propagation (reverse of forward)
-        for (int level = 0; level < _numLevels; level++)
-        {
-            // 1. Backprop through residual flow addition
-            // gradFlow already contains gradient w.r.t. output flow
-            // We need gradients w.r.t. input flow and residual
-
-            // 2. Backprop through CNN module
-            var moduleGrad = _basicModules[level].Backward(gradFlow);
-
-            // 3. Backprop through concatenation
-            // moduleInput was: [img1, warped2, flow]
-            // Split gradient back to these components
-            var (gradImg1Contrib, gradWarped2, gradFlowFromConcat) =
-                SplitConcatenationGradient(moduleGrad, _cachedPyramid1[level].Shape.ToArray(), hasBatch);
-
-            // 4. Backprop through GridSample warping using IEngine
-            if (_cachedGrids.Count > level && _cachedPyramid2.Count > level)
-            {
-                // Get gradient w.r.t. input image (img2) through GridSample
-                // GridSampleBackwardInput expects NHWC format: [batch, height, width, channels]
-                var img2Shape = _cachedPyramid2[level].Shape;
-                int img2C = hasBatch ? img2Shape[1] : img2Shape[0];
-                int img2H = hasBatch ? img2Shape[2] : img2Shape[1];
-                int img2W = hasBatch ? img2Shape[3] : img2Shape[2];
-                var inputShape4D = new[] { batch, img2H, img2W, img2C }; // NHWC
-
-                // Convert gradWarped2 from NCHW to NHWC for GridSampleBackwardInput
-                var gradWarped4D = hasBatch ? gradWarped2 : gradWarped2.Reshape(new[] { 1, gradWarped2.Shape[0], gradWarped2.Shape[1], gradWarped2.Shape[2] });
-                var gradWarped4DNHWC = gradWarped4D.Transpose(new[] { 0, 2, 3, 1 }); // NCHW → NHWC
-
-                var gradImg2FromWarp = _engine.GridSampleBackwardInput(
-                    gradWarped4DNHWC,
-                    _cachedGrids[level],
-                    inputShape4D);
-
-                // Get gradient w.r.t. grid (which depends on flow)
-                // GridSampleBackwardGrid also expects NHWC format
-                var img2_4DNHWC = hasBatch
-                    ? _cachedPyramid2[level].Transpose(new[] { 0, 2, 3, 1 })
-                    : _cachedPyramid2[level].Reshape(new[] { 1, _cachedPyramid2[level].Shape[0], _cachedPyramid2[level].Shape[1], _cachedPyramid2[level].Shape[2] })
-                        .Transpose(new[] { 0, 2, 3, 1 });
-                var gradGrid = _engine.GridSampleBackwardGrid(
-                    gradWarped4DNHWC,
-                    img2_4DNHWC,
-                    _cachedGrids[level]);
-
-                // Convert grid gradient back to flow gradient
-                var gradFlowFromWarp = ConvertGridGradientToFlowGradient(gradGrid, hasBatch);
-
-                // Accumulate flow gradient
-                gradFlow = AddTensors(gradFlowFromConcat, gradFlowFromWarp);
-
-                // Convert gradImg2FromWarp from NHWC [1,H,W,C] back to NCHW [C,H,W] or [B,C,H,W]
-                var gradImg2NCHW = gradImg2FromWarp.Transpose(new[] { 0, 3, 1, 2 });
-                if (!hasBatch)
-                    gradImg2NCHW = gradImg2NCHW.Reshape(new[] { gradImg2NCHW.Shape[1], gradImg2NCHW.Shape[2], gradImg2NCHW.Shape[3] });
-
-                // Accumulate image gradients (upsampled to full resolution later)
-                AccumulatePyramidGradient(gradInput2, gradImg2NCHW, level, hasBatch);
-            }
-
-            // Accumulate img1 gradients
-            AccumulatePyramidGradient(gradInput1, gradImg1Contrib, level, hasBatch);
-
-            // 5. Backprop through upsampling if not at coarsest level
-            if (level < _numLevels - 1)
-            {
-                gradFlow = DownsampleFlowGradient(gradFlow, hasBatch);
-            }
-        }
-
-        // Concatenate gradients for output (frame1, frame2)
-        return ConcatenateFrameGradients(gradInput1, gradInput2, hasBatch);
-    }
 
     private (Tensor<T> gradImg1, Tensor<T> gradWarped2, Tensor<T> gradFlow) SplitConcatenationGradient(
         Tensor<T> gradient, int[] imgShape, bool hasBatch)
@@ -1054,7 +955,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     public override bool SupportsTraining => true;
 
     // GPU Caches
-    private readonly Dictionary<(int batch, int height, int width), IGpuTensor<T>> _identityGridCache = new();
+    private readonly Dictionary<(int batch, int height, int width), Tensor<T>> _identityGridCache = new();
     private readonly Dictionary<(int batch, int channels, int height, int width), (IGpuBuffer idx1, IGpuBuffer idx2)> _sliceIndicesCache = new();
 
     /// <summary>
@@ -1063,7 +964,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0) throw new ArgumentException("SpyNetLayer requires an input tensor.");
         var input = inputs[0];
@@ -1091,8 +992,8 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
             if (IsTrainingMode)
             {
-                _lastInput1 = frame1.ToTensor();
-                _lastInput2 = frame2.ToTensor();
+                _lastInput1 = frame1;
+                _lastInput2 = frame2;
             }
 
             // Estimate Flow
@@ -1100,7 +1001,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
             if (IsTrainingMode)
             {
-                _lastFlow = flow.ToTensor();
+                _lastFlow = flow;
             }
 
             return flow;
@@ -1114,8 +1015,8 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         }
     }
 
-    private (IGpuTensor<T> frame1, IGpuTensor<T> frame2) SliceChannelsGpu(
-        IGpuTensor<T> input, int batch, int channels, int height, int width,
+    private (Tensor<T> frame1, Tensor<T> frame2) SliceChannelsGpu(
+        Tensor<T> input, int batch, int channels, int height, int width,
         DirectGpuTensorEngine engine, IDirectGpuBackend backend)
     {
         var key = (batch, channels, height, width);
@@ -1156,7 +1057,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         return (f1Reshaped, f2Reshaped);
     }
 
-    private IGpuTensor<T> EstimateFlowGpu(IGpuTensor<T> frame1, IGpuTensor<T> frame2, int batch, int height, int width,
+    private Tensor<T> EstimateFlowGpu(Tensor<T> frame1, Tensor<T> frame2, int batch, int height, int width,
         DirectGpuTensorEngine engine, IDirectGpuBackend backend)
     {
         var cleanup = new List<IDisposable>();
@@ -1234,8 +1135,8 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         }
     }
 
-    private (IGpuTensor<T> warped, IGpuTensor<T> grid) WarpImageWithGridGpu(
-        IGpuTensor<T> image, IGpuTensor<T> flow, DirectGpuTensorEngine engine, IDirectGpuBackend backend)
+    private (Tensor<T> warped, Tensor<T> grid) WarpImageWithGridGpu(
+        Tensor<T> image, Tensor<T> flow, DirectGpuTensorEngine engine, IDirectGpuBackend backend)
     {
         int batch = image.Shape[0];
         int height = image.Shape[2];
@@ -1258,7 +1159,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
                 }
             }
             using var buffer = backend.AllocateBuffer(gridData);
-            identityGrid = new GpuTensor<T>(backend, buffer, [batch, height, width, 2], GpuTensorRole.Constant, ownsBuffer: true);
+            identityGrid = GpuTensorHelper.UploadToGpu<T>(backend, buffer, [batch, height, width, 2], GpuTensorRole.Constant, ownsBuffer: true);
             _identityGridCache[gridKey] = identityGrid;
         }
 
@@ -1269,7 +1170,7 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         var scaleData = new float[] { scaleX, scaleY };
         using var scaleBuffer = backend.AllocateBuffer(scaleData);
-        var scaleTensor = new GpuTensor<T>(backend, scaleBuffer, [1, 1, 1, 2], GpuTensorRole.Constant, ownsBuffer: false);
+        var scaleTensor = GpuTensorHelper.UploadToGpu<T>(backend, scaleBuffer, [1, 1, 1, 2], GpuTensorRole.Constant, ownsBuffer: false);
 
         var scaledFlow = engine.BroadcastMultiplyRowGpu(flowPermuted, scaleTensor);
 
@@ -1283,9 +1184,9 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         return (warped, grid);
     }
 
-    private List<IGpuTensor<T>> BuildPyramidGpu(IGpuTensor<T> image, DirectGpuTensorEngine engine)
+    private List<Tensor<T>> BuildPyramidGpu(Tensor<T> image, DirectGpuTensorEngine engine)
     {
-        var pyramid = new List<IGpuTensor<T>> { image };
+        var pyramid = new List<Tensor<T>> { image };
         var current = image;
         for (int i = 1; i < _numLevels; i++)
         {
@@ -1317,21 +1218,6 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         base.Dispose(disposing);
     }
 
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // SpyNet supports JIT if all basic modules support JIT
-            foreach (var module in _basicModules)
-            {
-                if (!module.SupportsJitCompilation)
-                    return false;
-            }
-            return _basicModules.Count > 0;
-        }
-    }
-
     #endregion
 
     #region IChainableComputationGraph Implementation
@@ -1343,15 +1229,6 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// Gets the output shape for this layer (2 channels for optical flow: dx, dy).
     /// </summary>
     public new int[] GetOutputShape() => [2, _inputHeight, _inputWidth];
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null || inputNodes.Count == 0)
-            throw new ArgumentException("Input nodes cannot be null or empty.", nameof(inputNodes));
-
-        return BuildComputationGraph(inputNodes[0], "");
-    }
 
     /// <inheritdoc/>
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
@@ -1587,4 +1464,5 @@ public class SpyNetLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     }
 
     #endregion
+
 }

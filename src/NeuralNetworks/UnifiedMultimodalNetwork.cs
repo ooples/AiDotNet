@@ -69,7 +69,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     private readonly int _maxSequenceLength;
     private readonly int _numTransformerLayers;
     private readonly Random _random;
-    private readonly IOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
 
     // Modality-specific encoders
@@ -140,7 +140,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         int embeddingDimension = DEFAULT_EMBEDDING_DIM,
         int maxSequenceLength = DEFAULT_MAX_SEQ_LEN,
         int numTransformerLayers = DEFAULT_NUM_LAYERS,
-        IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         int? seed = null,
         UnifiedMultimodalNetworkOptions? options = null)
@@ -924,32 +924,15 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        var prediction = Predict(input);
-
-        // MSE loss (CategoricalCrossEntropy assumes softmax-normalized output)
-        var predVec = prediction.ToVector();
-        var targetVec = expectedOutput.ToVector();
-        double mse = 0;
-        for (int i = 0; i < predVec.Length; i++)
+        SetTrainingMode(true);
+        try
         {
-            double diff = Convert.ToDouble(predVec[i]) - Convert.ToDouble(targetVec[i]);
-            mse += diff * diff;
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
-        mse /= predVec.Length;
-        LastLoss = NumOps.FromDouble(mse);
-
-        // MSE gradient + backward through classification head
-        var gradData = new T[predVec.Length];
-        double scale = 2.0 / predVec.Length;
-        for (int i = 0; i < predVec.Length; i++)
-            gradData[i] = NumOps.FromDouble((Convert.ToDouble(predVec[i]) - Convert.ToDouble(targetVec[i])) * scale);
-
-        var grad = new Tensor<T>(prediction.Shape.ToArray(), new Vector<T>(gradData));
-        _classificationHead.Backward(grad);
-
-        // Update classification head via optimizer
-        if (_optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradOpt)
-            _classificationHead.UpdateParameters(NumOps.FromDouble(gradOpt.GetCurrentLearningRate()));
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>

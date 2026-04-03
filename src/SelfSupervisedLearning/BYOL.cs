@@ -98,63 +98,6 @@ public class BYOL<T> : SSLMethodBase<T>
         _augmentation = new SSLAugmentationPolicies<T>(_config.Seed);
     }
 
-    /// <inheritdoc />
-    protected override SSLStepResult<T> TrainStepCore(Tensor<T> batch, SSLAugmentationContext<T>? augmentationContext)
-    {
-        var batchSize = batch.Shape[0];
-
-        // Create two augmented views
-        var (view1, view2) = _augmentation.ApplyBYOL(batch);
-
-        // Online network forward pass for view 1
-        var h1Online = _encoder.ForwardWithMemory(view1);
-        var z1Online = _onlineProjector.Project(h1Online);
-        var p1 = _onlineProjector.Predict(z1Online);
-
-        // Online network forward pass for view 2
-        var h2Online = _encoder.ForwardWithMemory(view2);
-        var z2Online = _onlineProjector.Project(h2Online);
-        var p2 = _onlineProjector.Predict(z2Online);
-
-        // Target network forward pass (no gradients)
-        var h1Target = _targetEncoder.Encode(view1);
-        var z1Target = _targetProjector.Project(h1Target);
-        z1Target = StopGradient<T>.Detach(z1Target);
-
-        var h2Target = _targetEncoder.Encode(view2);
-        var z2Target = _targetProjector.Project(h2Target);
-        z2Target = StopGradient<T>.Detach(z2Target);
-
-        // Symmetric loss: online(view1) predicts target(view2) and vice versa
-        var loss = _loss.ComputeSymmetricLoss(p1, z2Target, p2, z1Target);
-
-        // Backward pass through online network - first path (p1 → z2Target)
-        var (_, gradP1) = _loss.ComputeLossWithGradients(p1, z2Target);
-        var gradZ1 = _onlineProjector.Backward(gradP1);
-        _encoder.Backpropagate(gradZ1);
-
-        // Backward pass through online network - second path (p2 → z1Target)
-        var (_, gradP2) = _loss.ComputeLossWithGradients(p2, z1Target);
-        var gradZ2 = _onlineProjector.Backward(gradP2);
-        _encoder.Backpropagate(gradZ2);
-
-        // Update online network parameters
-        var learningRate = NumOps.FromDouble(GetEffectiveLearningRate());
-        UpdateOnlineParameters(learningRate);
-
-        // Update target network with EMA
-        _targetEncoder.UpdateFromMainEncoder(_encoder);
-        UpdateTargetProjector();
-
-        // Create result
-        var result = CreateStepResult(loss);
-        result.NumPositivePairs = batchSize * 2; // Symmetric loss
-        result.NumNegativePairs = 0; // No negatives in BYOL
-        result.Metrics["momentum"] = NumOps.FromDouble(_targetEncoder.Momentum);
-
-        return result;
-    }
-
     private void UpdateOnlineParameters(T learningRate)
     {
         // Update encoder
@@ -242,5 +185,7 @@ public class BYOL<T> : SSLMethodBase<T>
         }
 
         target.SetParameters(new Vector<T>(targetParams));
-    }
+    
+
+}
 }

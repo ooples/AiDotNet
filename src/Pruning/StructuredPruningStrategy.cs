@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.ModelCompression;
@@ -417,7 +417,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
         if (weights.Rank != 4)
             throw new ArgumentException("Filter pruning requires 4D tensor [filters, channels, height, width]");
 
-        var dims = weights.Shape.ToArray();
+        var dims = weights._shape;
         int filters = dims[0];
         int channels = dims[1];
         int height = dims[2];
@@ -454,7 +454,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
         if (weights.Rank != 4)
             throw new ArgumentException("Channel pruning requires 4D tensor [filters, channels, height, width]");
 
-        var dims = weights.Shape.ToArray();
+        var dims = weights._shape;
         int filters = dims[0];
         int channels = dims[1];
         int height = dims[2];
@@ -787,21 +787,21 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
                     Values = nonZeroValues.ToArray(),
                     RowIndices = rowIndices.ToArray(),
                     ColumnIndices = columnIndices.ToArray(),
-                    OriginalShape = weights.Shape.ToArray().ToArray()
+                    OriginalShape = weights._shape.ToArray()
                 };
 
             case SparseFormat.CSR:
-                return ConvertToCSR(nonZeroValues, rowIndices, columnIndices, weights.Shape.ToArray());
+                return ConvertToCSR(nonZeroValues, rowIndices, columnIndices, weights._shape);
 
             case SparseFormat.CSC:
-                return ConvertToCSC(nonZeroValues, rowIndices, columnIndices, weights.Shape.ToArray());
+                return ConvertToCSC(nonZeroValues, rowIndices, columnIndices, weights._shape);
 
             case SparseFormat.Structured2to4:
                 return new SparseCompressionResult<T>
                 {
                     Format = SparseFormat.Structured2to4,
                     Values = nonZeroValues.ToArray(),
-                    OriginalShape = weights.Shape.ToArray().ToArray(),
+                    OriginalShape = weights._shape.ToArray(),
                     SparsityN = 2,
                     SparsityM = 4
                 };
@@ -867,7 +867,7 @@ public class StructuredPruningStrategy<T> : IPruningStrategy<T>
             SparsityMask = mask.ToArray(),
             SparsityN = n,
             SparsityM = m,
-            OriginalShape = weights.Shape.ToArray().ToArray()
+            OriginalShape = weights._shape.ToArray()
         };
     }
 

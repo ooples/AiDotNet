@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -787,8 +787,6 @@ namespace AiDotNet.AutoML
 
         public string[] FeatureNames { get; set; } = Array.Empty<string>();
 
-        public override bool SupportsJitCompilation => false;
-
         public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
 
         public DiffusionAutoMLModel(
@@ -849,7 +847,7 @@ namespace AiDotNet.AutoML
                 var newLatentVec = _scheduler.Step(noisePredVec, t, latentVec, eta);
 
                 // Convert back to tensor
-                var newLatent = new Tensor<T>(latent.Shape.ToArray());
+                var newLatent = new Tensor<T>(latent._shape);
                 var newLatentSpan = newLatent.AsWritableSpan();
                 for (int j = 0; j < newLatentVec.Length && j < newLatentSpan.Length; j++)
                     newLatentSpan[j] = newLatentVec[j];
@@ -870,7 +868,7 @@ namespace AiDotNet.AutoML
             int t = _random.Next(1, maxT + 1);
 
             // Sample noise and add to latent
-            var noise = SampleNoise(latent.Shape.ToArray());
+            var noise = SampleNoise(latent._shape);
             var noisyLatent = AddNoise(latent, noise, t);
 
             // Encode conditioning
@@ -1150,11 +1148,6 @@ namespace AiDotNet.AutoML
             SetParameters(Engine.Subtract(parameters, Engine.Multiply(gradients, learningRate)));
         }
 
-        public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-        {
-            throw new NotSupportedException("JIT compilation not supported for diffusion models");
-        }
-
         private Tensor<T> SampleNoise(int[] shape)
         {
             var tensor = new Tensor<T>(shape);
@@ -1184,7 +1177,7 @@ namespace AiDotNet.AutoML
             double alpha = 1.0 - t;
             double sigma = t;
 
-            var result = new Tensor<T>(latent.Shape.ToArray());
+            var result = new Tensor<T>(latent._shape);
             var resultSpan = result.AsWritableSpan();
             var latentSpan = latent.AsSpan();
             var noiseSpan = noise.AsSpan();

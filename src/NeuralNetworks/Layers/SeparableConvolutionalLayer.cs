@@ -1,8 +1,10 @@
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -35,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 8, 8, 1", TestConstructorArgs = "new[] { 1, 8, 8, 1 }, 2, 3, 1, 0, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class SeparableConvolutionalLayer<T> : LayerBase<T>
+public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// Kernels for the depthwise convolution operation.
@@ -50,6 +52,8 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// which makes the computation more efficient than standard convolution.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _depthwiseKernels;
 
     /// <summary>
@@ -80,6 +84,8 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// for the network to fit the data properly.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -277,33 +283,33 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _biasesVelocity;
 
     #region GPU Training Fields
-    private IGpuTensor<T>? _gpuLastInput;
-    private IGpuTensor<T>? _gpuLastOutput;
+    private Tensor<T>? _gpuLastInput;
+    private Tensor<T>? _gpuLastOutput;
 
     // GPU weight buffers
-    private GpuTensor<T>? _gpuDepthwiseKernels;
-    private GpuTensor<T>? _gpuPointwiseKernels;
-    private GpuTensor<T>? _gpuBiases;
+    private Tensor<T>? _gpuDepthwiseKernels;
+    private Tensor<T>? _gpuPointwiseKernels;
+    private Tensor<T>? _gpuBiases;
 
     // GPU gradient buffers
-    private GpuTensor<T>? _gpuDepthwiseKernelsGradient;
-    private GpuTensor<T>? _gpuPointwiseKernelsGradient;
-    private GpuTensor<T>? _gpuBiasesGradient;
+    private Tensor<T>? _gpuDepthwiseKernelsGradient;
+    private Tensor<T>? _gpuPointwiseKernelsGradient;
+    private Tensor<T>? _gpuBiasesGradient;
 
     // GPU velocity buffers (SGD momentum)
-    private GpuTensor<T>? _gpuDepthwiseKernelsVelocity;
-    private GpuTensor<T>? _gpuPointwiseKernelsVelocity;
-    private GpuTensor<T>? _gpuBiasesVelocityGpu;
+    private Tensor<T>? _gpuDepthwiseKernelsVelocity;
+    private Tensor<T>? _gpuPointwiseKernelsVelocity;
+    private Tensor<T>? _gpuBiasesVelocityGpu;
 
     // GPU Adam first moment buffers
-    private GpuTensor<T>? _gpuDepthwiseKernelsM;
-    private GpuTensor<T>? _gpuPointwiseKernelsM;
-    private GpuTensor<T>? _gpuBiasesM;
+    private Tensor<T>? _gpuDepthwiseKernelsM;
+    private Tensor<T>? _gpuPointwiseKernelsM;
+    private Tensor<T>? _gpuBiasesM;
 
     // GPU Adam second moment buffers
-    private GpuTensor<T>? _gpuDepthwiseKernelsV;
-    private GpuTensor<T>? _gpuPointwiseKernelsV;
-    private GpuTensor<T>? _gpuBiasesV;
+    private Tensor<T>? _gpuDepthwiseKernelsV;
+    private Tensor<T>? _gpuPointwiseKernelsV;
+    private Tensor<T>? _gpuBiasesV;
     #endregion
 
     /// <summary>
@@ -336,8 +342,8 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
         if (_depthwiseKernelsGradient == null || _pointwiseKernelsGradient == null || _biasesGradient == null)
             return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            Vector<T>.Concatenate((_depthwiseKernelsGradient is not null ? Vector<T>.FromMemory(_depthwiseKernelsGradient.Data) : new Vector<T>(0)), (_pointwiseKernelsGradient is not null ? Vector<T>.FromMemory(_pointwiseKernelsGradient.Data) : new Vector<T>(0))),
-            (_biasesGradient is not null ? Vector<T>.FromMemory(_biasesGradient.Data) : new Vector<T>(0)));
+            Vector<T>.Concatenate(new Vector<T>(_depthwiseKernelsGradient.ToArray()), new Vector<T>(_pointwiseKernelsGradient.ToArray())),
+            new Vector<T>(_biasesGradient.ToArray()));
     }
 
     public override void ClearGradients()
@@ -638,210 +644,6 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass of the separable convolutional layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the separable convolutional layer, which is used during training to propagate
-    /// error gradients back through the network. It computes gradients for both depthwise and pointwise kernels, as well as biases,
-    /// and returns the gradient with respect to the input for further backpropagation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's inputs
-    /// and parameters should change to reduce errors.
-    ///
-    /// The backward pass:
-    /// 1. Starts with gradients (error signals) from the next layer
-    /// 2. Computes how to adjust the layer's parameters (kernels and biases)
-    /// 3. Calculates how to adjust the input that was received
-    ///
-    /// This happens in reverse order compared to the forward pass:
-    /// - First backpropagates through the pointwise convolution
-    /// - Then backpropagates through the depthwise convolution
-    ///
-    /// The calculated gradients are stored for later use when updating the parameters,
-    /// and the input gradient is returned to continue the backpropagation process.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Apply activation derivative
-        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
-
-        // Convert gradients from NHWC to NCHW for Engine operations
-        var deltaNCHW = delta.Transpose([0, 3, 1, 2]);
-        var inputNCHW = _lastInput.Transpose([0, 3, 1, 2]);
-
-        var strideArr = new int[] { _stride, _stride };
-        var paddingArr = new int[] { _padding, _padding };
-
-        // Convert kernels to NCHW format for backward computation
-        var depthwiseKernelNCHW = ConvertDepthwiseKernelToNCHW(_depthwiseKernels);
-        var pointwiseKernelNCHW = ConvertPointwiseKernelToNCHW(_pointwiseKernels);
-
-        // Recompute depthwise output (needed for pointwise backward)
-        var depthwiseOutputNCHW = Engine.DepthwiseConv2D(inputNCHW, depthwiseKernelNCHW, strideArr, paddingArr);
-
-        // Calculate bias gradient: sum over batch, height, width (axes 0, 2, 3 in NCHW)
-        _biasesGradient = Engine.ReduceSum(deltaNCHW, new[] { 0, 2, 3 }, keepDims: false);
-
-        // Calculate pointwise kernel gradient (1x1 conv backward)
-        var pointwiseKernelGradNCHW = Engine.Conv2DBackwardKernel(deltaNCHW, depthwiseOutputNCHW, pointwiseKernelNCHW.Shape.ToArray(), new int[] { 1, 1 }, new int[] { 0, 0 }, new int[] { 1, 1 });
-        _pointwiseKernelsGradient = ConvertPointwiseKernelFromNCHW(pointwiseKernelGradNCHW);
-
-        // Calculate depthwise output gradient (backward through pointwise)
-        var depthwiseGradNCHW = Engine.Conv2DBackwardInput(deltaNCHW, pointwiseKernelNCHW, depthwiseOutputNCHW.Shape.ToArray(), new int[] { 1, 1 }, new int[] { 0, 0 }, new int[] { 1, 1 });
-
-        // Calculate depthwise kernel gradient
-        var depthwiseKernelGradNCHW = Engine.DepthwiseConv2DBackwardKernel(depthwiseGradNCHW, inputNCHW, depthwiseKernelNCHW.Shape.ToArray(), strideArr, paddingArr);
-        _depthwiseKernelsGradient = ConvertDepthwiseKernelFromNCHW(depthwiseKernelGradNCHW);
-
-        // Calculate input gradient (backward through depthwise)
-        var inputGradientNCHW = Engine.DepthwiseConv2DBackwardInput(depthwiseGradNCHW, depthwiseKernelNCHW, inputNCHW.Shape.ToArray(), strideArr, paddingArr);
-
-        // Convert input gradient from NCHW back to NHWC
-        return inputGradientNCHW.Transpose([0, 2, 3, 1]);
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// Production-grade pattern: Uses cached _lastOutput for activation derivative computation,
-    /// Engine.TensorMultiply for GPU/CPU acceleration, and minimal autodiff graph.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Production-grade: Compute activation derivative using cached output
-        Tensor<T> preActivationGradient;
-        if (VectorActivation != null)
-        {
-            var actDeriv = VectorActivation.Derivative(_lastOutput);
-            preActivationGradient = Engine.TensorMultiply(outputGradient, actDeriv);
-        }
-        else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
-        {
-            var activation = ScalarActivation;
-            var activationDerivative = _lastOutput.Transform((x, _) => activation.Derivative(x));
-            preActivationGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
-        }
-        else
-        {
-            preActivationGradient = outputGradient;
-        }
-
-        // Convert from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W] using Tensor.Transpose
-        var inputNCHW = _lastInput.Transpose([0, 3, 1, 2]);
-        var preActivationGradientNCHW = preActivationGradient.Transpose([0, 3, 1, 2]);
-
-        // Convert kernels to NCHW format (kernel format requires specialized conversion)
-        var depthwiseKernelNCHW = ConvertDepthwiseKernelToNCHW(_depthwiseKernels);
-        var pointwiseKernelNCHW = ConvertPointwiseKernelToNCHW(_pointwiseKernels);
-
-        // Create computation nodes
-        var inputNode = Autodiff.TensorOperations<T>.Variable(inputNCHW, "input", requiresGradient: true);
-        var depthwiseKernelNode = Autodiff.TensorOperations<T>.Variable(depthwiseKernelNCHW, "depthwise_kernel", requiresGradient: true);
-        var pointwiseKernelNode = Autodiff.TensorOperations<T>.Variable(pointwiseKernelNCHW, "pointwise_kernel", requiresGradient: true);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(_biases, "bias", requiresGradient: true);
-
-        // Build minimal autodiff graph for linear operations (activation derivative already applied)
-        // Step 1: Depthwise convolution (no bias)
-        var depthwiseOutput = Autodiff.TensorOperations<T>.DepthwiseConv2D(
-            inputNode,
-            depthwiseKernelNode,
-            bias: null,
-            stride: new int[] { _stride, _stride },
-            padding: new int[] { _padding, _padding });
-
-        // Step 2: Pointwise convolution (1x1 conv with bias)
-        var preActivationNode = Autodiff.TensorOperations<T>.Conv2D(
-            depthwiseOutput,
-            pointwiseKernelNode,
-            biasNode,
-            stride: new int[] { 1, 1 },
-            padding: new int[] { 0, 0 });
-
-        // Set gradient on pre-activation node (activation derivative already applied)
-        preActivationNode.Gradient = preActivationGradientNCHW;
-
-        // Inline topological sort and backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((preActivationNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract gradients with format conversions for kernels
-        if (depthwiseKernelNode.Gradient != null)
-            _depthwiseKernelsGradient = ConvertDepthwiseKernelFromNCHW(depthwiseKernelNode.Gradient);
-
-        if (pointwiseKernelNode.Gradient != null)
-            _pointwiseKernelsGradient = ConvertPointwiseKernelFromNCHW(pointwiseKernelNode.Gradient);
-
-        if (biasNode.Gradient != null)
-            _biasesGradient = biasNode.Gradient;
-
-        // Convert input gradient from NCHW back to NHWC using Transpose
-        var inputGradientNCHW = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-        return inputGradientNCHW.Transpose([0, 2, 3, 1]);
-    }
-
-    /// <summary>
     /// Converts depthwise kernel from [inputDepth, kernelSize, kernelSize, 1] to [inputDepth, 1, kernelSize, kernelSize] format.
     /// </summary>
     private Tensor<T> ConvertDepthwiseKernelToNCHW(Tensor<T> kernel) =>
@@ -974,8 +776,8 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(Vector<T>.FromMemory(_depthwiseKernels.Data), Vector<T>.FromMemory(_pointwiseKernels.Data)),
-            Vector<T>.FromMemory(_biases.Data));
+            Vector<T>.Concatenate(_depthwiseKernels.ToVector(), _pointwiseKernels.ToVector()),
+            _biases.ToVector());
     }
 
     /// <summary>
@@ -1109,7 +911,7 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// <item>Activation is fused into the pointwise convolution when possible</item>
     /// </list>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -1134,12 +936,12 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
         bool addedBatchDimension = false;
 
         // Reshape input to 4D [B, C, H, W] for convolution
-        IGpuTensor<T> input4D;
+        Tensor<T> input4D;
         if (rank == 3)
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]
             addedBatchDimension = true;
-            input4D = input.CreateView(0, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+            input4D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
         }
         else if (rank == 4)
         {
@@ -1154,7 +956,7 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
             {
                 flatBatch *= input.Shape[d];
             }
-            input4D = input.CreateView(0, [flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
+            input4D = input.Reshape([flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
         // Validate input channels
@@ -1216,150 +1018,19 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
             outputShape[originalInputShape.Length - 3] = _outputDepth;
             outputShape[originalInputShape.Length - 2] = result.Shape[2];
             outputShape[originalInputShape.Length - 1] = result.Shape[3];
-            return result.CreateView(0, outputShape);
+            return result.Reshape(outputShape);
         }
 
         if (addedBatchDimension)
         {
             // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
-            return result.CreateView(0, [_outputDepth, result.Shape[2], result.Shape[3]]);
+            return result.Reshape([_outputDepth, result.Shape[2], result.Shape[3]]);
         }
 
         return result;
     }
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> when kernels are initialized and activation function supports JIT.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// Separable convolutional layers support JIT compilation using DepthwiseConv2D and Conv2D
-    /// operations from TensorOperations. The layer performs depthwise convolution followed by
-    /// pointwise (1x1) convolution.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation =>
-        _depthwiseKernels != null && _pointwiseKernels != null && _biases != null &&
-        CanActivationBeJitted();
-
-    /// <summary>
-    /// Exports the separable convolutional layer's forward pass as a JIT-compilable computation graph.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the separable convolution output.</returns>
-    /// <remarks>
-    /// <para>
-    /// The separable convolution computation graph implements:
-    /// 1. Depthwise convolution: Applies separate filters to each input channel
-    /// 2. Pointwise convolution: 1x1 convolution to combine channels
-    /// 3. Activation function
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates an optimized version of the separable convolution.
-    /// It's more efficient than standard convolution by splitting the operation into two steps.
-    /// </para>
-    /// </remarks>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (_depthwiseKernels == null || _pointwiseKernels == null || _biases == null)
-            throw new InvalidOperationException("Kernels and biases not initialized.");
-
-        if (InputShape == null || InputShape.Length < 4)
-            throw new InvalidOperationException("Layer input shape not configured. Expected [batch, height, width, channels].");
-
-        // Validate activation can be JIT compiled
-        if (!CanActivationBeJitted())
-        {
-            var activationType = (ScalarActivation?.GetType() ?? VectorActivation?.GetType())?.Name ?? "Unknown";
-            throw new NotSupportedException(
-                $"Activation function '{activationType}' is not supported for JIT compilation. " +
-                "Supported activations: ReLU, Sigmoid, Tanh, Softmax, Identity");
-        }
-
-        // Create symbolic input node in NHWC format [batch, height, width, channels]
-        var symbolicInput = new Tensor<T>(new int[] { 1, InputShape[1], InputShape[2], InputShape[3] });
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "separable_input");
-        inputNodes.Add(inputNode);
-
-        // Convert depthwise kernels from [inputDepth, kernelSize, kernelSize, 1] to [inputDepth, 1, kernelSize, kernelSize]
-        var depthwiseKernelNCHW = ConvertDepthwiseKernelToNCHW(_depthwiseKernels);
-        var depthwiseKernelNode = Autodiff.TensorOperations<T>.Constant(depthwiseKernelNCHW, "depthwise_kernel");
-
-        // Convert pointwise kernels from [inputDepth, 1, 1, outputDepth] to [outputDepth, inputDepth, 1, 1]
-        var pointwiseKernelNCHW = ConvertPointwiseKernelToNCHW(_pointwiseKernels);
-        var pointwiseKernelNode = Autodiff.TensorOperations<T>.Constant(pointwiseKernelNCHW, "pointwise_kernel");
-
-        // Bias is already a Tensor<T>
-        var biasNode = Autodiff.TensorOperations<T>.Constant(_biases, "bias");
-
-        // Step 1: Depthwise convolution (no bias)
-        var depthwiseOutput = Autodiff.TensorOperations<T>.DepthwiseConv2D(
-            inputNode,
-            depthwiseKernelNode,
-            bias: null,
-            stride: new int[] { _stride, _stride },
-            padding: new int[] { _padding, _padding });
-
-        // Step 2: Pointwise convolution (1x1 conv with bias)
-        var pointwiseOutput = Autodiff.TensorOperations<T>.Conv2D(
-            depthwiseOutput,
-            pointwiseKernelNode,
-            biasNode,
-            stride: new int[] { 1, 1 },
-            padding: new int[] { 0, 0 });
-
-        // Step 3: Apply activation function using base class helper
-        var output = ApplyActivationToGraph(pointwiseOutput);
-
-        return output;
-    }
-
     #region GPU Training Methods
-
-    /// <summary>
-    /// Performs the backward pass on GPU tensors.
-    /// </summary>
-    /// <param name="outputGradient">GPU tensor containing the gradient of the loss with respect to the output.</param>
-    /// <returns>GPU tensor containing the gradient of the loss with respect to the input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        // CPU fallback: download gradient, run Backward(), upload result
-        var outputGradCpu = outputGradient.ToTensor();
-        var inputGradCpu = Backward(outputGradCpu);
-
-        // Upload gradient buffers to GPU for UpdateParametersGpu
-        if (_depthwiseKernelsGradient is not null)
-        {
-            _gpuDepthwiseKernelsGradient?.Dispose();
-            _gpuDepthwiseKernelsGradient = new GpuTensor<T>(backend, _depthwiseKernelsGradient, GpuTensorRole.Gradient);
-        }
-
-        if (_pointwiseKernelsGradient is not null)
-        {
-            _gpuPointwiseKernelsGradient?.Dispose();
-            _gpuPointwiseKernelsGradient = new GpuTensor<T>(backend, _pointwiseKernelsGradient, GpuTensorRole.Gradient);
-        }
-
-        if (_biasesGradient is not null)
-        {
-            _gpuBiasesGradient?.Dispose();
-            _gpuBiasesGradient = new GpuTensor<T>(backend, _biasesGradient, GpuTensorRole.Gradient);
-        }
-
-        return new GpuTensor<T>(backend, inputGradCpu, GpuTensorRole.Gradient);
-    }
 
     /// <summary>
     /// Updates parameters on GPU using the configured optimizer.
@@ -1375,9 +1046,9 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         // Ensure GPU weight buffers exist
-        _gpuDepthwiseKernels ??= new GpuTensor<T>(backend, _depthwiseKernels, GpuTensorRole.Weight);
-        _gpuPointwiseKernels ??= new GpuTensor<T>(backend, _pointwiseKernels, GpuTensorRole.Weight);
-        _gpuBiases ??= new GpuTensor<T>(backend, _biases, GpuTensorRole.Weight);
+        _gpuDepthwiseKernels ??= GpuTensorHelper.UploadToGpu<T>(backend, _depthwiseKernels, GpuTensorRole.Weight);
+        _gpuPointwiseKernels ??= GpuTensorHelper.UploadToGpu<T>(backend, _pointwiseKernels, GpuTensorRole.Weight);
+        _gpuBiases ??= GpuTensorHelper.UploadToGpu<T>(backend, _biases, GpuTensorRole.Weight);
 
         // Ensure optimizer state exists
         EnsureSeparableConvOptimizerState(config, backend);
@@ -1404,9 +1075,9 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
         }
 
         // Download updated weights back to CPU tensors
-        _depthwiseKernels = _gpuDepthwiseKernels.ToTensor();
-        _pointwiseKernels = _gpuPointwiseKernels.ToTensor();
-        _biases = _gpuBiases.ToTensor();
+        _depthwiseKernels = _gpuDepthwiseKernels;
+        _pointwiseKernels = _gpuPointwiseKernels;
+        _biases = _gpuBiases;
 
         // Notify engine that tensor data has changed
         Engine.InvalidatePersistentTensor(_depthwiseKernels);
@@ -1421,20 +1092,20 @@ public class SeparableConvolutionalLayer<T> : LayerBase<T>
         // Ensure velocity buffers for SGD momentum, NAG, LARS
         if (optimizerType == GpuOptimizerType.Sgd || optimizerType == GpuOptimizerType.Nag || optimizerType == GpuOptimizerType.Lars)
         {
-            _gpuDepthwiseKernelsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_depthwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuPointwiseKernelsVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_pointwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBiasesVelocityGpu ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuDepthwiseKernelsVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_depthwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuPointwiseKernelsVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_pointwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBiasesVelocityGpu ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
         }
 
         // Ensure Adam moment buffers
         if (optimizerType == GpuOptimizerType.Adam || optimizerType == GpuOptimizerType.AdamW)
         {
-            _gpuDepthwiseKernelsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_depthwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuDepthwiseKernelsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_depthwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuPointwiseKernelsM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_pointwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuPointwiseKernelsV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_pointwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBiasesM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBiasesV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuDepthwiseKernelsM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_depthwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuDepthwiseKernelsV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_depthwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuPointwiseKernelsM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_pointwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuPointwiseKernelsV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_pointwiseKernels.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBiasesM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBiasesV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([_biases.Length], NumOps.Zero), GpuTensorRole.OptimizerState);
         }
     }
 

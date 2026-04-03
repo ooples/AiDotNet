@@ -1,4 +1,4 @@
-using AiDotNet.Extensions;
+﻿using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -389,7 +389,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
         T scalingFactor = NumOps.FromDouble(Alpha);
         decompressed = decompressed.Multiply(scalingFactor);
 
-        Tensor<T> moraOutput = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> moraOutput = new Tensor<T>(baseOutput._shape);
         int idx = 0;
         for (int i = 0; i < batchSize; i++)
         {
@@ -400,55 +400,13 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
             }
         }
 
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> result = new Tensor<T>(baseOutput._shape);
         for (int i = 0; i < baseOutput.Length; i++)
         {
             result[i] = NumOps.Add(baseOutput[i], moraOutput[i]);
         }
 
         return result;
-    }
-
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastCompressed == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass");
-        }
-
-        int batchSize = _lastInput.Shape[0];
-        int dimension = _lastInput.Shape.Length > 1 ? _lastInput.Shape[1] : _lastInput.Length;
-
-        Matrix<T> gradMatrix = new Matrix<T>(batchSize, dimension);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < dimension; j++)
-            {
-                gradMatrix[i, j] = outputGradient[i * dimension + j];
-            }
-        }
-
-        T scalingFactor = NumOps.FromDouble(Alpha);
-        Matrix<T> gradTransformed = gradMatrix.Multiply(_decompressionMatrix.Transpose()).Multiply(scalingFactor);
-        _matrixMGradient = _lastCompressed.Transpose().Multiply(gradTransformed);
-        Matrix<T> gradCompressed = gradTransformed.Multiply(_matrixM.Transpose());
-        Matrix<T> moraInputGradient = gradCompressed.Multiply(_compressionMatrix.Transpose());
-
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        Tensor<T> inputGrad = new Tensor<T>(_lastInput.Shape.ToArray());
-        int idx = 0;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < dimension; j++)
-            {
-                T moraGrad = moraInputGradient[i, j];
-                inputGrad[idx] = NumOps.Add(baseInputGrad[idx], moraGrad);
-                idx++;
-            }
-        }
-
-        return inputGrad;
     }
 
     public override void UpdateParameters(T learningRate)

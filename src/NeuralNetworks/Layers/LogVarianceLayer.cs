@@ -1,9 +1,10 @@
-using System;
+﻿using System;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -243,7 +244,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">Input GPU tensors (uses first input).</param>
     /// <returns>GPU-resident output tensor with log-variance values.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -277,7 +278,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
         // This avoids the need for broadcast subtraction
 
         // Track all allocated resources for exception safety
-        IGpuTensor<T>? permutedInput = null;
+        Tensor<T>? permutedInput = null;
         IGpuBuffer? sumBuffer = null;
         IGpuBuffer? meanBuffer = null;
         IGpuBuffer? xSquaredBuffer = null;
@@ -292,7 +293,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
         try
         {
             // If axis is not last, permute to move it to the last position
-            IGpuTensor<T> processedInput = input;
+            Tensor<T> processedInput = input;
             bool needsPermute = Axis != inputRank - 1;
 
             if (needsPermute)
@@ -306,7 +307,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
                 processedInput = permutedInput;
             }
 
-            int outerSize = processedInput.ElementCount / axisSize;
+            int outerSize = processedInput.Length / axisSize;
 
             // Step 1: Compute mean = sum(x) / n
             sumBuffer = backend.AllocateBuffer(outerSize);
@@ -316,7 +317,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
             backend.Scale(sumBuffer, meanBuffer, scale, outerSize);
 
             // Step 2: Compute x^2 element-wise
-            int totalSize = processedInput.ElementCount;
+            int totalSize = processedInput.Length;
             xSquaredBuffer = backend.AllocateBuffer(totalSize);
             backend.Multiply(processedInput.Buffer, processedInput.Buffer, xSquaredBuffer, totalSize);
 
@@ -363,7 +364,7 @@ public class LogVarianceLayer<T> : LayerBase<T>
             }
 
             // Create result before cleanup (outputBuffer ownership transfers)
-            var result = new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+            var result = GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
             outputBuffer = null; // Prevent disposal in finally block since ownership transferred
 
             return result;
@@ -383,255 +384,6 @@ public class LogVarianceLayer<T> : LayerBase<T>
             variancePlusEpsilonBuffer?.Dispose();
             outputBuffer?.Dispose(); // Only disposed on exception (null on success)
         }
-    }
-
-    /// <summary>
-    /// GPU-accelerated backward pass for the log-variance layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>GPU-resident gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// The gradient for log(variance + epsilon) is computed as:
-    /// d(loss)/d(input) = outputGradient * (2 * (input - mean) / (axis_size * (variance + epsilon)))
-    /// </para>
-    /// </remarks>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        // We need the cached values from forward pass
-        if (_lastInput == null || _lastOutput == null || _meanValues == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int[] inputShape = _lastInput.Shape.ToArray();
-        int inputRank = inputShape.Length;
-        int axisSize = inputShape[Axis];
-        int totalSize = _lastInput.Length;
-
-        // Compute outer and inner sizes for the reduction axis
-        int outerSize = 1;
-        for (int i = 0; i < Axis; i++)
-            outerSize *= inputShape[i];
-        int innerSize = 1;
-        for (int i = Axis + 1; i < inputRank; i++)
-            innerSize *= inputShape[i];
-
-        int outputSize = _lastOutput.Length;
-        const float epsilon = 1e-8f;
-
-        // Upload data to GPU
-        float[] inputData = DirectGpuEngine.ToFloatArray(_lastInput.Data.ToArray());
-        float[] outputData = DirectGpuEngine.ToFloatArray(_lastOutput.Data.ToArray());
-        float[] meanData = DirectGpuEngine.ToFloatArray(_meanValues.Data.ToArray());
-        float[] gradOutputData = backend.DownloadBuffer(outputGradient.Buffer);
-
-        var inputBuffer = backend.AllocateBuffer(inputData);
-        var logVarianceBuffer = backend.AllocateBuffer(outputData);
-        var meanBuffer = backend.AllocateBuffer(meanData);
-        var gradOutputBuffer = backend.AllocateBuffer(gradOutputData);
-
-        // Compute variance = exp(log_variance)
-        var varianceBuffer = backend.AllocateBuffer(outputSize);
-        backend.Exp(logVarianceBuffer, varianceBuffer, outputSize);
-
-        // Add epsilon: variance_plus_eps = variance + epsilon
-        var epsilonBuffer = backend.AllocateBuffer(outputSize);
-        backend.Fill(epsilonBuffer, epsilon, outputSize);
-        var variancePlusEpsBuffer = backend.AllocateBuffer(outputSize);
-        backend.Add(varianceBuffer, epsilonBuffer, variancePlusEpsBuffer, outputSize);
-
-        // Compute 2 / (axis_size * (variance + epsilon))
-        var scaleBuffer = backend.AllocateBuffer(outputSize);
-        float invAxisSize = 2.0f / axisSize;
-        backend.Scale(variancePlusEpsBuffer, scaleBuffer, 1.0f, outputSize);
-        backend.Reciprocal(scaleBuffer, scaleBuffer, outputSize);
-        backend.Scale(scaleBuffer, scaleBuffer, invAxisSize, outputSize);
-
-        // Multiply by output gradient: gradScale = gradOutput * scale
-        var gradScaleBuffer = backend.AllocateBuffer(outputSize);
-        backend.Multiply(gradOutputBuffer, scaleBuffer, gradScaleBuffer, outputSize);
-
-        // Now we need to compute (input - mean) and broadcast gradScale
-        // This requires broadcasting gradScale from [outer, inner] to [outer, axisSize, inner]
-        // and broadcast mean from [outer, 1, inner] to [outer, axisSize, inner]
-        // Then compute gradInput = gradScale * (input - mean)
-
-        var gradInputBuffer = backend.AllocateBuffer(totalSize);
-
-        // Do the computation using CPU with parallel for efficiency
-        var gradScaleData = backend.DownloadBuffer(gradScaleBuffer);
-        var meanBroadcast = backend.DownloadBuffer(meanBuffer);
-
-        var gradInputData = new float[totalSize];
-        System.Threading.Tasks.Parallel.For(0, outerSize, outer =>
-        {
-            for (int axis = 0; axis < axisSize; axis++)
-            {
-                for (int inner = 0; inner < innerSize; inner++)
-                {
-                    int inputIdx = outer * axisSize * innerSize + axis * innerSize + inner;
-                    int outputIdx = outer * innerSize + inner;
-
-                    float x = inputData[inputIdx];
-                    float mean = meanBroadcast[outputIdx];
-                    float scale = gradScaleData[outputIdx];
-
-                    gradInputData[inputIdx] = (x - mean) * scale;
-                }
-            }
-        });
-
-        // Upload result to GPU
-        var resultBuffer = backend.AllocateBuffer(gradInputData);
-
-        // Cleanup intermediate buffers
-        inputBuffer.Dispose();
-        logVarianceBuffer.Dispose();
-        meanBuffer.Dispose();
-        gradOutputBuffer.Dispose();
-        varianceBuffer.Dispose();
-        epsilonBuffer.Dispose();
-        variancePlusEpsBuffer.Dispose();
-        scaleBuffer.Dispose();
-        gradScaleBuffer.Dispose();
-        gradInputBuffer.Dispose();
-
-        return new GpuTensor<T>(backend, resultBuffer, inputShape, GpuTensorRole.Gradient, ownsBuffer: true);
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the log-variance layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the log-variance layer, which is used during training to propagate
-    /// error gradients backward through the network. It calculates how changes in the output affect the input,
-    /// taking into account the derivatives of the logarithm and variance calculations.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how changes in the output
-    /// would affect the input.
-    ///
-    /// During the backward pass:
-    /// - The layer receives information about how its output affected the overall error
-    /// - It calculates how each input value contributed to that error
-    /// - This information is passed backward to earlier layers
-    ///
-    /// The mathematics here are complex but involve the chain rule from calculus:
-    /// - For the log function: the derivative is 1/x
-    /// - For variance: it involves how each value's difference from the mean contributed
-    ///
-    /// This process is part of how neural networks learn from their mistakes.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _meanValues == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Compute variance from log variance: variance = exp(log_variance)
-        var varianceData = _lastOutput.ToArray();
-        for (int i = 0; i < varianceData.Length; i++)
-        {
-            varianceData[i] = NumOps.Exp(varianceData[i]);
-        }
-        var variance = new Tensor<T>(_lastOutput.Shape.ToArray(), new Vector<T>(varianceData));
-
-        // Use Engine operation for backward pass
-        return Engine.ReduceLogVarianceBackward(outputGradient, _lastInput, _meanValues, variance, [Axis]);
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation via the ReduceLogVariance operation to compute gradients.
-    /// The operation handles the full forward and backward pass for log-variance computation.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Create computation node for input
-        var inputNode = Autodiff.TensorOperations<T>.Variable(
-            _lastInput,
-            "input",
-            requiresGradient: true);
-
-        // Apply ReduceLogVariance operation
-        var outputNode = Autodiff.TensorOperations<T>.ReduceLogVariance(
-            inputNode,
-            axis: Axis,
-            epsilon: 1e-8);
-
-        // Set the output gradient
-        outputNode.Gradient = outputGradient;
-
-        // Production-grade: Inline topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-                continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                foreach (var parent in node.Parents)
-                {
-                    if (!visited.Contains(parent))
-                        stack.Push((parent, false));
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Return input gradient
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>
@@ -712,21 +464,4 @@ public class LogVarianceLayer<T> : LayerBase<T>
         _lastOutput = null;
         _meanValues = null;
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return TensorOperations<T>.ReduceLogVariance(inputNode, axis: Axis);
-    }
-
-    public override bool SupportsJitCompilation => true;
 }

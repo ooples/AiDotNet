@@ -84,64 +84,6 @@ public class DINO<T> : TeacherStudentSSL<T>
         NumLocalCrops = dinoConfig.NumLocalCrops ?? 0;
     }
 
-    /// <inheritdoc />
-    protected override SSLStepResult<T> TrainStepCore(Tensor<T> batch, SSLAugmentationContext<T>? augmentationContext)
-    {
-        var batchSize = batch.Shape[0];
-
-        // Create augmented views
-        var (globalViews, localViews) = CreateMultiCropViews(batch);
-
-        // Teacher forward pass (global views only)
-        var teacherOutputs = new List<Tensor<T>>();
-        foreach (var view in globalViews)
-        {
-            teacherOutputs.Add(ForwardTeacher(view));
-        }
-
-        // Student forward pass (all views)
-        var studentOutputs = new List<Tensor<T>>();
-        foreach (var view in globalViews)
-        {
-            studentOutputs.Add(ForwardStudent(view));
-        }
-        foreach (var view in localViews)
-        {
-            studentOutputs.Add(ForwardStudent(view));
-        }
-
-        // Compute DINO loss
-        var loss = _loss.ComputeMultiCropLoss(studentOutputs, teacherOutputs);
-
-        // Backward pass through student - accumulate gradients from all student/teacher pairs
-        for (int s = 0; s < studentOutputs.Count; s++)
-        {
-            for (int t = 0; t < teacherOutputs.Count; t++)
-            {
-                var (_, gradStudent) = _loss.ComputeLossWithGradients(
-                    studentOutputs[s], teacherOutputs[t]);
-
-                var projector = _projector ?? throw new InvalidOperationException("Projector has not been initialized.");
-                var gradH = projector.Backward(gradStudent);
-                _encoder.Backpropagate(gradH);
-            }
-        }
-
-        // Update networks
-        var learningRate = NumOps.FromDouble(GetEffectiveLearningRate());
-        UpdateStudent(learningRate);
-        UpdateTeacher();
-
-        // Create result
-        var result = CreateStepResult(loss);
-        result.NumPositivePairs = batchSize * (NumGlobalCrops + NumLocalCrops);
-        result.NumNegativePairs = 0;
-        result.Metrics["momentum"] = NumOps.FromDouble(TeacherEncoder.Momentum);
-        result.Metrics["center_norm"] = Centering.CenterNorm();
-
-        return result;
-    }
-
     /// <summary>
     /// Creates a DINO instance with default configuration.
     /// </summary>
@@ -174,5 +116,7 @@ public class DINO<T> : TeacherStudentSSL<T>
         var teacherEncoder = new MomentumEncoder<T>(encoderCopy, 0.996);
 
         return new DINO<T>(encoder, teacherEncoder, studentProjector, teacherProjector, outputDim);
-    }
+    
+
+}
 }

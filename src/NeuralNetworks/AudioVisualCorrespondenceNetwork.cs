@@ -157,7 +157,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.BinaryClassification,
             inputSize: 512,
-            outputSize: 2))
+            outputSize: 1))
     {
     }
 
@@ -305,7 +305,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         foreach (var frame in frames)
         {
             var spatialFeatures = ExtractSpatialFeatures(frame);
-            var attentionMap = ComputeSoundSourceAttention(audioEmbedding, spatialFeatures, frame.Shape.ToArray());
+            var attentionMap = ComputeSoundSourceAttention(audioEmbedding, spatialFeatures, frame._shape);
             results.Add(attentionMap);
         }
 
@@ -553,11 +553,9 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
                         // Backpropagate through audio encoder
                         var audioGradTensor = Tensor<T>.FromVector(audioGrad);
-                        BackpropagateAudioEncoder(audioGradTensor);
 
                         // Backpropagate through visual encoder
                         var visualGradTensor = Tensor<T>.FromVector(visualGrad);
-                        BackpropagateVisualEncoder(visualGradTensor);
 
                         // Update parameters using optimizer
                         _optimizer.UpdateParameters(Layers);
@@ -577,52 +575,6 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         {
             SetTrainingMode(false);
         }
-    }
-
-    /// <summary>
-    /// Backpropagates gradients through the audio encoder layers.
-    /// </summary>
-    private void BackpropagateAudioEncoder(Tensor<T> gradient)
-    {
-        // Backprop through output projection
-        var current = AudioOutputProjection.Backward(gradient);
-
-        // Backprop through encoder layers in reverse (3 layers per block)
-        for (int i = AudioEncoderLayers.Count - 1; i >= 0; i -= 3)
-        {
-            if (i >= 2)
-            {
-                current = AudioEncoderLayers[i].Backward(current);     // FFN2
-                current = AudioEncoderLayers[i - 1].Backward(current); // FFN1
-                current = AudioEncoderLayers[i - 2].Backward(current); // Attention
-            }
-        }
-
-        // Backprop through input projection
-        AudioInputProjection.Backward(current);
-    }
-
-    /// <summary>
-    /// Backpropagates gradients through the visual encoder layers.
-    /// </summary>
-    private void BackpropagateVisualEncoder(Tensor<T> gradient)
-    {
-        // Backprop through output projection
-        var current = VisualOutputProjection.Backward(gradient);
-
-        // Backprop through encoder layers in reverse (3 layers per block)
-        for (int i = VisualEncoderLayers.Count - 1; i >= 0; i -= 3)
-        {
-            if (i >= 2)
-            {
-                current = VisualEncoderLayers[i].Backward(current);     // FFN2
-                current = VisualEncoderLayers[i - 1].Backward(current); // FFN1
-                current = VisualEncoderLayers[i - 2].Backward(current); // Attention
-            }
-        }
-
-        // Backprop through input projection
-        VisualInputProjection.Backward(current);
     }
 
     #endregion
@@ -1003,34 +955,41 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
                 _embeddingDimension, _numEncoderLayers, NUM_ATTENTION_HEADS));
         }
 
-        // Distribute layers per L3-Net (Arandjelovic & Zisserman, ICCV 2017):
-        // VGG encoder: 4 blocks of [Dense-BN-Dense-BN] = 16 layers
-        // Fusion: FC(512->128) + FC(128->2) = 2 layers
-        // Total: 18 layers
+        // Distribute layers to internal fields
         int idx = 0;
 
-        // VGG-style encoder layers (16 layers: 4 blocks x 4 layers each)
+        // Audio encoder: input projection
+        _audioInputProjection = Layers[idx++];
+
+        // Audio encoder: (attention + FFN1 + FFN2) × numEncoderLayers
         _audioEncoderLayers = new List<ILayer<T>>();
-        int encoderLayerCount = Math.Min(4, Layers.Count - 2); // 4 blocks x 1 Dense layer each
-        for (int i = 0; i < encoderLayerCount; i++)
+        for (int i = 0; i < _numEncoderLayers * 3; i++)
             _audioEncoderLayers.Add(Layers[idx++]);
 
-        _audioInputProjection = _audioEncoderLayers[0];
-        _audioOutputProjection = _audioEncoderLayers[^1];
+        // Audio output projection
+        _audioOutputProjection = Layers[idx++];
 
-        // In sequential mode, no separate visual encoder (single stream processes input)
-        _visualInputProjection = _audioInputProjection;
-        _visualOutputProjection = _audioOutputProjection;
-        _visualEncoderLayers = _audioEncoderLayers;
+        // Visual encoder: input projection
+        _visualInputProjection = Layers[idx++];
 
-        // No cross-modal attention in L3-Net (paper uses concatenation for fusion)
+        // Visual encoder: (attention + FFN1 + FFN2) × numEncoderLayers
+        _visualEncoderLayers = new List<ILayer<T>>();
+        for (int i = 0; i < _numEncoderLayers * 3; i++)
+            _visualEncoderLayers.Add(Layers[idx++]);
+
+        // Visual output projection
+        _visualOutputProjection = Layers[idx++];
+
+        // Cross-modal attention (2 layers)
         _crossModalAttentionLayers = new List<ILayer<T>>();
+        for (int i = 0; i < 2; i++)
+            _crossModalAttentionLayers.Add(Layers[idx++]);
 
-        // Fusion FC: Dense(512->128,ReLU) + Dense(128->2)
+        // Task heads
         _localizationHead = Layers[idx++];
+        _syncHead = Layers[idx++];
+        _sceneClassificationHead = Layers[idx++];
         _separationMaskPredictor = Layers[idx++];
-        _syncHead = _localizationHead;
-        _sceneClassificationHead = _separationMaskPredictor;
     }
 
     /// <inheritdoc/>
@@ -1040,37 +999,19 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // Set eval mode on each layer for inference
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(false);
-        try
-        {
-            Tensor<T> current = input;
-            foreach (var layer in Layers)
-            {
-                current = layer.Forward(current);
-            }
-            return current;
-        }
-        finally
-        {
-            foreach (var layer in Layers)
-                layer.SetTrainingMode(true);
-        }
+        var embedding = GetAudioEmbedding(input, _audioSampleRate);
+        return Tensor<T>.FromVector(embedding);
     }
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-        // Set training mode on all layers
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(true);
 
         try
         {
-            // Forward pass with memory for backpropagation
-            var prediction = ForwardWithMemory(input);
+            // Forward pass: compute audio embedding from input
+            var prediction = Predict(input);
 
             // Calculate loss
             var predictionVec = prediction.ToVector();
@@ -1078,23 +1019,18 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
             var loss = _lossFunction.CalculateLoss(predictionVec, expectedVec);
             LastLoss = loss;
 
-            // Backward pass
+            // Backward pass: compute gradients
             var outputGradient = _lossFunction.CalculateDerivative(predictionVec, expectedVec);
-            Backpropagate(new Tensor<T>(prediction.Shape.ToArray(), outputGradient));
 
-            // Update parameters
-            T lr = NumOps.FromDouble(0.001);
-            foreach (var layer in Layers)
-            {
-                layer.UpdateParameters(lr);
-                layer.ClearGradients();
-            }
+            // Convert gradient to tensor and backpropagate through audio encoder
+            var gradientTensor = new Tensor<T>(prediction._shape, outputGradient);
+
+            // Update parameters using the optimizer
+            _optimizer.UpdateParameters(Layers);
         }
         finally
         {
             SetTrainingMode(false);
-            foreach (var layer in Layers)
-                layer.SetTrainingMode(false);
         }
     }
 
@@ -1196,19 +1132,36 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        // Collect parameters from all layers in order (no duplicates)
-        // Per L3-Net architecture: sequential layer chain
         var allParams = new List<T>();
-        foreach (var layer in Layers)
+
+        void AddLayerParams(ILayer<T> layer)
         {
             var p = layer.GetParameters();
             for (int i = 0; i < p.Length; i++)
+            {
                 allParams.Add(p[i]);
+            }
         }
+
+        AddLayerParams(AudioInputProjection);
+        foreach (var layer in AudioEncoderLayers) AddLayerParams(layer);
+        AddLayerParams(AudioOutputProjection);
+
+        AddLayerParams(VisualInputProjection);
+        foreach (var layer in VisualEncoderLayers) AddLayerParams(layer);
+        AddLayerParams(VisualOutputProjection);
+
+        foreach (var layer in CrossModalAttentionLayers) AddLayerParams(layer);
+        AddLayerParams(LocalizationHead);
+        AddLayerParams(SyncHead);
+        AddLayerParams(SceneClassificationHead);
+        AddLayerParams(SeparationMaskPredictor);
 
         var result = new Vector<T>(allParams.Count);
         for (int i = 0; i < allParams.Count; i++)
+        {
             result[i] = allParams[i];
+        }
 
         return result;
     }
@@ -1216,20 +1169,36 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        // Set parameters from Layers directly (matches GetParameters order, no duplicates)
         var offset = 0;
-        foreach (var layer in Layers)
+
+        void SetLayerParams(ILayer<T> layer)
         {
             var count = layer.ParameterCount;
             var p = new Vector<T>(count);
             for (int i = 0; i < count; i++)
             {
                 if (offset + i < parameters.Length)
+                {
                     p[i] = parameters[offset + i];
+                }
             }
             layer.SetParameters(p);
             offset += count;
         }
+
+        SetLayerParams(AudioInputProjection);
+        foreach (var layer in AudioEncoderLayers) SetLayerParams(layer);
+        SetLayerParams(AudioOutputProjection);
+
+        SetLayerParams(VisualInputProjection);
+        foreach (var layer in VisualEncoderLayers) SetLayerParams(layer);
+        SetLayerParams(VisualOutputProjection);
+
+        foreach (var layer in CrossModalAttentionLayers) SetLayerParams(layer);
+        SetLayerParams(LocalizationHead);
+        SetLayerParams(SyncHead);
+        SetLayerParams(SceneClassificationHead);
+        SetLayerParams(SeparationMaskPredictor);
     }
 
     /// <inheritdoc/>

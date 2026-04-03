@@ -1,8 +1,9 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Models;
 
 namespace AiDotNet.Diffusion.VAE;
@@ -123,9 +124,9 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         // std = exp(0.5 * logVariance)
 
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
-        var epsilon = SampleNoise(mean.Shape.ToArray(), rng);
+        var epsilon = SampleNoise(mean._shape, rng);
 
-        var result = new Tensor<T>(mean.Shape.ToArray());
+        var result = new Tensor<T>(mean._shape);
         var meanSpan = mean.AsSpan();
         var logVarSpan = logVariance.AsSpan();
         var epsilonSpan = epsilon.AsSpan();
@@ -190,7 +191,8 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     /// <inheritdoc />
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
-        // For VAE, prediction is encode->decode (reconstruction)
+        // Suppress tape recording during inference
+        using var _ = new NoGradScope<T>();
         var latent = Encode(input, sampleMode: false);
         return Decode(latent);
     }
@@ -464,36 +466,20 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
             throw new ArgumentNullException(nameof(target));
 
         var effectiveLossFunction = lossFunction ?? LossFunction;
-        var parameters = GetParameters();
-        var gradients = new Vector<T>(parameters.Length);
 
-        // Autodiff via GradientTape — build computation graph, compute loss, backprop
+        // Primary path: layer-level backpropagation for exact gradients.
+        // Forward through encoder/decoder layers, compute loss gradient,
+        // then backpropagate through the layer chain.
         try
         {
-            using var tape = new GradientTape<T>();
+            var predicted = Predict(input);
 
-            var inputNode = TensorOperations<T>.Variable(input, "vae_input", requiresGradient: false);
-            var outputNode = ExportComputationGraph([inputNode]);
+            var lossGrad = effectiveLossFunction.CalculateDerivative(
+                predicted.ToVector(), target.ToVector());
+            var lossGradTensor = new Tensor<T>(predicted._shape, lossGrad);
 
-            var targetNode = TensorOperations<T>.Variable(target, "vae_target", requiresGradient: false);
-            var diffNode = TensorOperations<T>.Subtract(outputNode, targetNode);
-            var squaredNode = TensorOperations<T>.ElementwiseMultiply(diffNode, diffNode);
-            var lossNode = TensorOperations<T>.Mean(squaredNode);
 
-            var gradientDict = tape.Gradient(lossNode);
-
-            int offset = 0;
-            foreach (var kvp in gradientDict)
-            {
-                if (kvp.Key.RequiresGradient && kvp.Value is not null)
-                {
-                    var grad = kvp.Value;
-                    int copyLen = Math.Min(grad.Length, parameters.Length - offset);
-                    for (int i = 0; i < copyLen; i++)
-                        gradients[offset + i] = grad[i];
-                    offset += copyLen;
-                }
-            }
+            var gradients = GetParameterGradients();
 
             bool hasValidGradients = false;
             for (int i = 0; i < Math.Min(gradients.Length, 100); i++)
@@ -510,11 +496,13 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         }
         catch (Exception ex)
         {
-            // Fall through to SPSA when autodiff graph construction fails
-            System.Diagnostics.Trace.TraceWarning($"VAE autodiff gradient failed, falling back to SPSA: {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning(
+                $"VAE layer backpropagation failed, falling back to SPSA: {ex.Message}");
         }
 
         // Fallback: SPSA (6 forward passes total vs 2N for finite differences)
+        var parameters = GetParameters();
+        var gradients_spsa = new Vector<T>(parameters.Length);
         var epsilon = NumOps.FromDouble(1e-3);
         var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
         var rng = RandomGenerator;
@@ -534,13 +522,65 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
 
             var lossDiff = NumOps.Subtract(lossPlus, lossMinus);
             var scaledDelta = Engine.Multiply(delta, twoEpsilon);
-            gradients = Engine.Add(gradients, Engine.Divide(
+            gradients_spsa = Engine.Add(gradients_spsa, Engine.Divide(
                 Engine.Fill(parameters.Length, lossDiff), scaledDelta));
         }
 
-        gradients = Engine.Multiply(gradients, NumOps.FromDouble(1.0 / 3.0));
+        gradients_spsa = Engine.Multiply(gradients_spsa, NumOps.FromDouble(1.0 / 3.0));
         SetParameters(parameters);
-        return gradients;
+        return gradients_spsa;
+    }
+
+    /// <summary>
+    /// Runs the VAE forward pass (encode + decode) without suppressing tape recording.
+    /// Used for tape-based training where the forward ops must be recorded.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <returns>The reconstructed output.</returns>
+    protected virtual Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        var latent = Encode(input, sampleMode: false);
+        return Decode(latent);
+    }
+
+    /// <summary>
+    /// Computes gradients using the Tensors GradientTape for automatic differentiation.
+    /// This is the preferred training path — gradients are computed by recording all
+    /// engine ops during the forward pass and then running reverse-mode AD.
+    /// </summary>
+    /// <param name="input">The input tensor.</param>
+    /// <param name="target">The target tensor for loss computation.</param>
+    /// <param name="trainableParams">The trainable parameter tensors to compute gradients for.</param>
+    /// <returns>Dictionary mapping each parameter tensor to its gradient.</returns>
+    public Dictionary<Tensor<T>, Tensor<T>> ComputeGradientsWithTape(
+        Tensor<T> input,
+        Tensor<T> target,
+        Tensor<T>[] trainableParams)
+    {
+        using var tape = new GradientTape<T>();
+
+        // Forward pass (recorded by the engine)
+        var predicted = ForwardForTraining(input);
+
+        // Compute MSE loss using tape-recorded engine ops
+        var diff = Engine.TensorSubtract(predicted, target);
+        var squared = Engine.TensorMultiply(diff, diff);
+        // ReduceMean with all axes produces a scalar tensor that the tape can differentiate
+        var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+        var loss = Engine.ReduceMean(squared, allAxes, keepDims: false);
+
+        // Reverse-mode AD: compute gradients for all trainable parameters
+        return tape.ComputeGradients(loss, trainableParams);
+    }
+
+    /// <summary>
+    /// Extracts accumulated parameter gradients from all layers after backpropagation.
+    /// </summary>
+    protected virtual Vector<T> GetParameterGradients()
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement GetParameterGradients. " +
+            "Override this method to extract layer-level gradients.");
     }
 
     /// <inheritdoc />

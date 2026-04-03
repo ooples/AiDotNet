@@ -83,4 +83,21 @@ public class QuantumLoss<T> : LossFunctionBase<T>
 
         return gradient;
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Quantum fidelity loss on interleaved complex representation [re0, im0, re1, im1, ...].
+    /// Computes MSE between predicted and target quantum state vectors, which is a valid
+    /// differentiable proxy for 1-fidelity with identical gradient direction at convergence.
+    /// True fidelity (1 - |inner_product|) requires complex ops not yet available in IEngine.
+    /// </remarks>
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // MSE on interleaved complex representation: mean((pred - target)^2)
+        // Equivalent to squared Frobenius norm of state difference, a valid quantum loss.
+        var diff = Engine.TensorSubtract(predicted, target);
+        var sq = Engine.TensorMultiply(diff, diff);
+        var allAxes = Enumerable.Range(0, sq.Shape.Length).ToArray();
+        return Engine.ReduceMean(sq, allAxes, keepDims: false);
+    }
 }

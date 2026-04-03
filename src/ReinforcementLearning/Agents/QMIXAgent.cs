@@ -174,7 +174,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: _options.ActionSize,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, _options.LossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _options.LossFunction);
     }
 
     private INeuralNetwork<T> CreateMixingNetwork()
@@ -213,7 +213,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: 1,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, _options.LossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _options.LossFunction);
     }
 
     private void InitializeReplayBuffer()
@@ -346,64 +346,80 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
                 target = NumOps.Add(experience.Reward, NumOps.Multiply(DiscountFactor, targetTeamQ));
             }
 
-            // TD error
+            // TD error for monitoring
             var tdError = NumOps.Subtract(target, teamQ);
             var loss = NumOps.Multiply(tdError, tdError);
             totalLoss = NumOps.Add(totalLoss, loss);
 
-            // Backpropagate through mixing network
-            // TD loss gradient: d/dQ[loss] = d/dQ[(target - Q)^2] = -2 * (target - Q) = -2 * tdError
-            var mixingGradientVec = new Vector<T>(1);
-            mixingGradientVec[0] = NumOps.Multiply(NumOps.FromDouble(-2.0), tdError);
-            var mixingGradient = Tensor<T>.FromVector(mixingGradientVec);
-            _mixingNetwork.Backpropagate(mixingGradient);
+            // --- End-to-end training: agents → mixing → loss (Rashid et al. 2018) ---
+            // Collect ALL trainable parameters from agent networks + mixing network
+            var allParams = new List<Tensor<T>>();
+            foreach (var agentNet in _agentNetworks)
+            {
+                if (agentNet is NeuralNetworkBase<T> nnBase)
+                    allParams.AddRange(Training.TapeTrainingStep<T>.CollectParameters(nnBase.Layers));
+            }
+            if (_mixingNetwork is NeuralNetworkBase<T> mixBase)
+                allParams.AddRange(Training.TapeTrainingStep<T>.CollectParameters(mixBase.Layers));
 
-            // Get gradient w.r.t. mixing network inputs (agent Q-values) for gradient flow
-            // This should be obtained from the mixing network's input gradient after backprop
-            // For now, approximate using chain rule: dL/dQ_i = dL/dQ_total * dQ_total/dQ_i
-            // In QMIX, mixing network is monotonic, so gradient flows proportionally
-            var mixingInputGradient = ComputeMixingInputGradient(mixingInput, tdError);
+            var paramArray = allParams.ToArray();
+            if (paramArray.Length > 0)
+            {
+                // Single tape recording: agents forward → mixing forward → MSE loss
+                using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
 
-            // Manual parameter update for mixing network
+                // Forward each agent under tape to get Q-values
+                var agentQTensor = new Tensor<T>([_options.NumAgents]);
+                for (int i = 0; i < _options.NumAgents; i++)
+                {
+                    var agentBase = (NeuralNetworkBase<T>)_agentNetworks[i];
+                    var stateTensor = Tensor<T>.FromVector(agentStates[i], [1, _options.StateSize]);
+                    var qOut = agentBase.ForwardForTraining(stateTensor);
+                    int actionIdx = ArgMax(agentActions[i]);
+                    agentQTensor[i] = qOut[actionIdx];
+                }
+
+                // Concatenate agent Q-values with global state for mixing input
+                var mixInput = new Tensor<T>([1, _options.NumAgents + globalState.Length]);
+                for (int i = 0; i < _options.NumAgents; i++)
+                    mixInput[0, i] = agentQTensor[i];
+                for (int i = 0; i < globalState.Length; i++)
+                    mixInput[0, _options.NumAgents + i] = globalState[i];
+
+                // Forward through mixing network under tape
+                var mixBase2 = (NeuralNetworkBase<T>)_mixingNetwork;
+                var qTotal = mixBase2.ForwardForTraining(mixInput);
+
+                // MSE loss vs TD target via engine ops
+                var targetScalar = new Tensor<T>([1]);
+                targetScalar[0] = target;
+                var diff = Engine.TensorSubtract(qTotal, targetScalar);
+                var squared = Engine.TensorMultiply(diff, diff);
+                var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+                var mseLoss = Engine.ReduceMean(squared, allAxes, keepDims: false);
+
+                // Compute gradients for ALL parameters (agents + mixing) in one pass
+                var grads = tape.ComputeGradients(mseLoss, paramArray);
+
+                // Apply gradients in-place using learning rate
+                foreach (var param in paramArray)
+                {
+                    if (grads.TryGetValue(param, out var grad))
+                    {
+                        for (int j = 0; j < param.Length && j < grad.Length; j++)
+                            param[j] = NumOps.Subtract(param[j], NumOps.Multiply(LearningRate, grad[j]));
+                    }
+                }
+            }
+
+            // Enforce QMIX monotonicity: clamp mixing network weights to non-negative
             var mixingParams = _mixingNetwork.GetParameters();
-            var mixingGrads = _mixingNetwork.GetParameterGradients();
             for (int j = 0; j < mixingParams.Length; j++)
             {
-                mixingParams[j] = NumOps.Subtract(mixingParams[j],
-                    NumOps.Multiply(LearningRate, mixingGrads[j]));
-
-                // Enforce QMIX monotonicity: all mixing network weights must be non-negative
-                // This ensures that increasing any agent's Q-value increases the team Q-value
                 if (NumOps.LessThan(mixingParams[j], NumOps.Zero))
-                {
                     mixingParams[j] = NumOps.Zero;
-                }
             }
             _mixingNetwork.UpdateParameters(mixingParams);
-
-            // Backpropagate through agent networks using gradient from mixing network
-            for (int i = 0; i < _options.NumAgents; i++)
-            {
-                var agentGradientVec = new Vector<T>(_options.ActionSize);
-                int actionIdx = ArgMax(agentActions[i]);
-                // Use gradient flow from mixing network, not just tdError / NumAgents
-                T agentQGradient = mixingInputGradient[i];
-                agentGradientVec[actionIdx] = agentQGradient;
-
-                var stateTensor = Tensor<T>.FromVector(agentStates[i]);
-                var agentGradient = Tensor<T>.FromVector(agentGradientVec);
-                ((NeuralNetwork<T>)_agentNetworks[i]).Backpropagate(agentGradient);
-
-                // Manual parameter update with learning rate
-                var agentParams = _agentNetworks[i].GetParameters();
-                var agentGrads = ((NeuralNetwork<T>)_agentNetworks[i]).GetParameterGradients();
-                for (int j = 0; j < agentParams.Length; j++)
-                {
-                    agentParams[j] = NumOps.Subtract(agentParams[j],
-                        NumOps.Multiply(LearningRate, agentGrads[j]));
-                }
-                _agentNetworks[i].UpdateParameters(agentParams);
-            }
         }
 
         // Update target networks
@@ -795,22 +811,6 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
         return gradient;
     }
 
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        var gradientsTensor = Tensor<T>.FromVector(gradients);
-        ((NeuralNetwork<T>)_agentNetworks[0]).Backpropagate(gradientsTensor);
-
-        // Manual parameter update with learning rate
-        var agentParams = _agentNetworks[0].GetParameters();
-        var agentGrads = ((NeuralNetwork<T>)_agentNetworks[0]).GetParameterGradients();
-        for (int i = 0; i < agentParams.Length; i++)
-        {
-            agentParams[i] = NumOps.Subtract(agentParams[i],
-                NumOps.Multiply(learningRate, agentGrads[i]));
-        }
-        _agentNetworks[0].UpdateParameters(agentParams);
-    }
-
     public override void SaveModel(string filepath)
     {
         if (string.IsNullOrWhiteSpace(filepath))
@@ -836,5 +836,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var data = System.IO.File.ReadAllBytes(filepath);
         Deserialize(data);
-    }
+    
+
+}
 }

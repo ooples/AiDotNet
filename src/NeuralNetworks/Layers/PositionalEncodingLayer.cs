@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -95,7 +95,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// can learn correctly.
     /// </para>
     /// </remarks>
-    public override bool SupportsTraining => true;
+    public override bool SupportsTraining => false; // Precomputed constants, no trainable parameters
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PositionalEncodingLayer{T}"/> class with the specified maximum sequence length and embedding size.
@@ -368,168 +368,6 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass of the positional encoding layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the positional encoding layer. Since the layer
-    /// simply adds fixed positional encodings to the input, the gradient flows through unchanged.
-    /// The gradient of the addition operation with respect to the input is just the gradient of
-    /// the output.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method handles how gradients flow backward through this layer.
-    /// 
-    /// During the backward pass:
-    /// - The layer receives gradients indicating how the output should change
-    /// - Since this layer just adds fixed positional encodings to the input,
-    ///   any change in the output should directly affect the input in the same way
-    /// - So the gradients are passed back unchanged
-    /// 
-    /// This makes sense because:
-    /// - The derivative of (x + constant) with respect to x is 1
-    /// - So the gradient flows through addition operations unchanged
-    /// - The positional encodings are constants that don't change during training
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. For positional encoding,
-    /// the operation is: output = input + positionalEncodings (constant).
-    /// The gradient flows through unchanged since d(x + c)/dx = 1.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        // Handle 1D gradient by treating it as [1, embed]
-        bool was1D = outputGradient.Shape.Length == 1;
-        Tensor<T> workingGradient = outputGradient;
-
-        if (was1D)
-        {
-            // Reshape [embed] -> [1, embed]
-            workingGradient = outputGradient.Reshape([1, outputGradient.Shape[0]]);
-        }
-
-        // Create a placeholder input tensor matching the working gradient shape
-        var inputTensor = new Tensor<T>(workingGradient.Shape.ToArray());
-
-        // Create computation nodes
-        var inputNode = Autodiff.TensorOperations<T>.Variable(inputTensor, "input", requiresGradient: true);
-
-        // Handle any rank >= 2: [..., seq, embed]
-        int rank = workingGradient.Shape.Length;
-        var sequenceLength = workingGradient.Shape[rank - 2];
-        var slicedEncodings = encodings.Slice(0, 0, sequenceLength, embeddingSize);
-
-        // For autodiff graph, we need encodings to match gradient shape
-        // Broadcast encodings to match the input shape
-        Tensor<T> encodingsForGraph;
-        if (rank == 2)
-        {
-            encodingsForGraph = slicedEncodings;
-        }
-        else
-        {
-            // Create broadcast shape: [1, 1, ..., 1, seq, embed] with (rank-2) leading 1s
-            var broadcastShape = new int[rank];
-            for (int d = 0; d < rank - 2; d++)
-                broadcastShape[d] = 1;
-            broadcastShape[rank - 2] = sequenceLength;
-            broadcastShape[rank - 1] = embeddingSize;
-
-            encodingsForGraph = Tensor<T>.CreateDefault(outputGradient.Shape.ToArray(), NumOps.Zero).BroadcastAdd(
-                slicedEncodings.Reshape(broadcastShape));
-        }
-        var encodingsNode = Autodiff.TensorOperations<T>.Constant(encodingsForGraph, "positional_encodings");
-
-        // Forward: output = input + positional_encodings
-        var outputNode = Autodiff.TensorOperations<T>.Add(inputNode, encodingsNode);
-
-        // Set the output gradient
-        outputNode.Gradient = outputGradient;
-
-        // Production-grade: Inline topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract and return the input gradient
-        if (inputNode.Gradient == null)
-            throw new InvalidOperationException("Gradient computation failed in automatic differentiation.");
-
-        var resultGradient = inputNode.Gradient;
-
-        // If output gradient was 1D, reshape result back to 1D
-        if (was1D)
-        {
-            resultGradient = resultGradient.Reshape([resultGradient.Shape[resultGradient.Shape.Length - 1]]);
-        }
-
-        return resultGradient;
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        // The gradient flows through unchanged
-        return outputGradient;
-    }
-
-    /// <summary>
     /// Updates the parameters of the positional encoding layer using the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
@@ -604,24 +442,6 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         // The encodings are fixed and don't change during training
     }
 
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // PositionalEncodingLayer adds fixed positional encodings to input
-        return TensorOperations<T>.Add(inputNode, TensorOperations<T>.Constant(encodings, "positional_encodings"));
-    }
-
-    public override bool SupportsJitCompilation => true;
-
     /// <summary>
     /// Gets whether this layer supports GPU execution.
     /// </summary>
@@ -632,7 +452,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">GPU-resident input tensors (uses first input).</param>
     /// <returns>GPU-resident output tensor with positional encodings added.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -646,7 +466,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
 
         // Handle 1D input by treating as [1, embed]
         bool was1D = rank == 1;
-        IGpuTensor<T> workingInput = input;
+        Tensor<T> workingInput = input;
 
         if (was1D)
         {
@@ -717,7 +537,7 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         // Upload encodings to GPU
         var gpuEncodings = gpuEngine.UploadToGpu(slicedEncodings, GpuTensorRole.Activation);
 
-        IGpuTensor<T> result;
+        Tensor<T> result;
         if (rank == 2)
         {
             // Direct add for 2D input
@@ -753,19 +573,5 @@ public class PositionalEncodingLayer<T> : LayerBase<T>
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Computes the gradient of the loss with respect to the input on the GPU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The same output gradient, unchanged.</returns>
-    /// <remarks>
-    /// Since positional encodings are constants, the gradient flows through unchanged.
-    /// The derivative of (x + constant) with respect to x is 1.
-    /// </remarks>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        return outputGradient;
     }
 }

@@ -1,9 +1,8 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
-using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.NeuralNetworks.Tabular;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Oblivious Decision Tree (ODT) for NODE architecture.
@@ -25,7 +24,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class ObliviousDecisionTree<T> : LayerBase<T>
+public class ObliviousDecisionTreeLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
     private readonly int _depth;
@@ -58,9 +57,6 @@ public class ObliviousDecisionTree<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc/>
     public override int ParameterCount =>
         _depth * _inputDim +      // feature selection weights
         _depth +                   // thresholds
@@ -73,7 +69,7 @@ public class ObliviousDecisionTree<T> : LayerBase<T>
     /// <param name="depth">Tree depth (number of split levels).</param>
     /// <param name="outputDim">Output dimension per leaf.</param>
     /// <param name="initScale">Initialization scale.</param>
-    public ObliviousDecisionTree(int inputDim, int depth = 6, int outputDim = 1, double initScale = 0.01)
+    public ObliviousDecisionTreeLayer(int inputDim, int depth = 6, int outputDim = 1, double initScale = 0.01)
         : base([inputDim], [outputDim])
     {
         if (inputDim <= 0)
@@ -269,45 +265,6 @@ public class ObliviousDecisionTree<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Backward pass through the oblivious decision tree.
-    /// </summary>
-    /// <param name="gradient">Gradient with respect to output [batchSize, outputDim].</param>
-    /// <returns>Gradient with respect to input [batchSize, inputDim].</returns>
-    public override Tensor<T> Backward(Tensor<T> gradient)
-    {
-        if (_inputCache == null || _leafProbabilitiesCache == null)
-        {
-            throw new InvalidOperationException("Forward must be called before backward");
-        }
-
-        int batchSize = _inputCache.Shape[0];
-        var inputGrad = new Tensor<T>([batchSize, _inputDim]);
-
-        // Reset gradients using Engine
-        Engine.TensorFill(_featureSelectionGrad, NumOps.Zero);
-        Engine.TensorFill(_thresholdsGrad, NumOps.Zero);
-        Engine.TensorFill(_leafValuesGrad, NumOps.Zero);
-
-        // Gradient for leaf values
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int leaf = 0; leaf < _numLeaves; leaf++)
-            {
-                var leafProb = _leafProbabilitiesCache[b * _numLeaves + leaf];
-                for (int o = 0; o < _outputDim; o++)
-                {
-                    _leafValuesGrad[leaf * _outputDim + o] = NumOps.Add(
-                        _leafValuesGrad[leaf * _outputDim + o],
-                        NumOps.Multiply(leafProb, gradient[b * _outputDim + o]));
-                }
-            }
-        }
-
-        // Simplified input gradient (full implementation would backprop through soft selections)
-        return inputGrad;
-    }
-
-    /// <summary>
     /// Gets feature importance based on selection weights.
     /// </summary>
     public Vector<T> GetFeatureImportance()
@@ -381,26 +338,5 @@ public class ObliviousDecisionTree<T> : LayerBase<T>
         for (int i = 0; i < _leafValues.Length; i++)
             result[offset++] = _leafValues[i];
         return result;
-    }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Export feature selection weights and thresholds as constants
-        var featureWeightsNode = TensorOperations<T>.Constant(_featureSelectionWeights, "featureSelectionWeights");
-        var thresholdsNode = TensorOperations<T>.Constant(_thresholds, "thresholds");
-        var leafValuesNode = TensorOperations<T>.Constant(_leafValues, "leafValues");
-
-        // Feature selection: softmax over weights determines which feature each split uses
-        var featureSelection = TensorOperations<T>.MatrixMultiply(inputNode, TensorOperations<T>.Transpose(featureWeightsNode));
-
-        return featureSelection;
     }
 }

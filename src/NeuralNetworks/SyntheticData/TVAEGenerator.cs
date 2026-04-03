@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -306,19 +306,7 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
         Tensor<T> prediction = Predict(input);
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
         Tensor<T> error = prediction.Subtract(expectedOutput);
-        BackpropagateError(error);
         UpdateNetworkParameters();
-    }
-
-    /// <summary>
-    /// Backpropagates the error through the encoder layers.
-    /// </summary>
-    private void BackpropagateError(Tensor<T> error)
-    {
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            error = Layers[i].Backward(error);
-        }
     }
 
     /// <summary>
@@ -512,7 +500,7 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     private (Tensor<T> Mean, Tensor<T> LogVar) SplitEncoderOutput(Tensor<T> encoderOutput)
     {
         int latentDim = _options.LatentDimension;
-        int[] halfShape = DeriveShapeWithLastDim(encoderOutput.Shape.ToArray(), latentDim);
+        int[] halfShape = DeriveShapeWithLastDim(encoderOutput._shape, latentDim);
         var mean = new Tensor<T>(halfShape);
         var logVar = new Tensor<T>(halfShape);
 
@@ -535,7 +523,7 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     private Tensor<T> Reparameterize(Tensor<T> mean, Tensor<T> logVar)
     {
         var z = new Tensor<T>(mean.Shape.ToArray());
-        _lastEpsilon = new Tensor<T>(mean.Shape.ToArray());
+        _lastEpsilon = new Tensor<T>(mean._shape);
 
         for (int i = 0; i < mean.Length; i++)
         {
@@ -591,10 +579,8 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
             outputGrad = SafeGradient(outputGrad, 5.0);
 
             // Backward through decoder -> returns gradient w.r.t. z
-            var zGrad = BackwardDecoder(outputGrad);
 
             // Backward through reparameterization and encoder
-            BackwardEncoder(zGrad, mean, logVar);
 
             // Per-sample parameter update
             UpdateAllParameters(scaledLearningRate);
@@ -669,103 +655,6 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     #endregion
 
     #region Backward Passes
-
-    /// <summary>
-    /// Backward pass through the decoder, returning the gradient w.r.t. the decoder input (z).
-    /// </summary>
-    private Tensor<T> BackwardDecoder(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-        for (int i = _decoderLayers.Count - 1; i >= 0; i--)
-        {
-            current = _decoderLayers[i].Backward(current);
-        }
-        return current;
-    }
-
-    /// <summary>
-    /// Backward pass through reparameterization and encoder.
-    /// Properly chains gradients through z = mean + exp(0.5 * logvar) * epsilon,
-    /// then combines both mean and logvar path gradients for the shared encoder layers.
-    /// </summary>
-    private void BackwardEncoder(Tensor<T> zGrad, Tensor<T> mean, Tensor<T> logVar)
-    {
-        // Through reparameterization: z = mean + exp(0.5 * logvar) * epsilon
-        //
-        // Reconstruction gradient through reparameterization:
-        //   dL/d(mean)_recon   = dL/dz * 1
-        //   dL/d(logvar)_recon = dL/dz * epsilon * 0.5 * exp(0.5 * logvar)
-        //
-        // KL divergence gradient: KL = -0.5 * sum(1 + logvar - mean^2 - exp(logvar))
-        //   dKL/d(mean)   = mean
-        //   dKL/d(logvar) = 0.5 * (exp(logvar) - 1)
-
-        var meanGrad = new Tensor<T>(mean.Shape.ToArray());
-        var logVarGrad = new Tensor<T>(logVar.Shape.ToArray());
-
-        for (int i = 0; i < mean.Length; i++)
-        {
-            double m = NumOps.ToDouble(mean[i]);
-            double lv = NumOps.ToDouble(logVar[i]);
-            double dz = i < zGrad.Length ? NumOps.ToDouble(zGrad[i]) : 0;
-            double eps = _lastEpsilon is not null && i < _lastEpsilon.Length
-                ? NumOps.ToDouble(_lastEpsilon[i])
-                : 0;
-
-            // Reconstruction + KL gradient for mean
-            double dMean = dz + m;
-
-            // Reconstruction + KL gradient for logvar
-            double dLogVar = dz * eps * 0.5 * Math.Exp(0.5 * lv) + 0.5 * (Math.Exp(lv) - 1.0);
-
-            meanGrad[i] = NumOps.FromDouble(dMean);
-            logVarGrad[i] = NumOps.FromDouble(dLogVar);
-        }
-
-        if (_usingCustomLayers)
-        {
-            // Custom layers: backward through separate mean/logvar heads, then sum
-            Tensor<T> gradFromMean = _meanLayer is not null ? _meanLayer.Backward(meanGrad) : meanGrad;
-            Tensor<T> gradFromLogVar = _logVarLayer is not null ? _logVarLayer.Backward(logVarGrad) : logVarGrad;
-
-            // Sum gradients from both paths
-            var encoderOutGrad = new Tensor<T>(gradFromMean.Shape.ToArray());
-            for (int i = 0; i < encoderOutGrad.Length; i++)
-            {
-                double gm = i < gradFromMean.Length ? NumOps.ToDouble(gradFromMean[i]) : 0;
-                double gl = i < gradFromLogVar.Length ? NumOps.ToDouble(gradFromLogVar[i]) : 0;
-                encoderOutGrad[i] = NumOps.FromDouble(gm + gl);
-            }
-
-            // Backward through shared encoder layers
-            var current = encoderOutGrad;
-            for (int i = Layers.Count - 1; i >= 0; i--)
-            {
-                current = Layers[i].Backward(current);
-            }
-        }
-        else
-        {
-            // Default layers: combine mean and logvar gradients into 2*latentDim gradient
-            int latentDim = _options.LatentDimension;
-            int[] encGradShape = _lastEncoderOutput is not null
-                ? (int[])_lastEncoderOutput.Shape.ToArray().Clone()
-                : DeriveShapeWithLastDim(mean.Shape.ToArray(), 2 * latentDim);
-            var combinedGrad = new Tensor<T>(encGradShape);
-            for (int i = 0; i < latentDim; i++)
-            {
-                combinedGrad[i] = meanGrad[i];
-                combinedGrad[latentDim + i] = logVarGrad[i];
-            }
-
-            // Backward through encoder layers
-            var current = combinedGrad;
-            for (int i = Layers.Count - 1; i >= 0; i--)
-            {
-                current = Layers[i].Backward(current);
-            }
-        }
-    }
 
     private void UpdateAllParameters(T learningRate)
     {
@@ -1086,11 +975,6 @@ public class TVAEGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerator
     #endregion
 
     #region IJitCompilable Override
-
-    /// <summary>
-    /// TVAE uses separate encoder/decoder networks with reparameterization trick which cannot be represented as a single computation graph.
-    /// </summary>
-    public override bool SupportsJitCompilation => false;
 
     #endregion
 

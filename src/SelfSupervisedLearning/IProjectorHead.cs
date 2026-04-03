@@ -64,7 +64,7 @@ public interface IProjectorHead<T>
     /// </summary>
     /// <param name="gradients">The gradients from the loss with respect to projector output.</param>
     /// <returns>The gradients with respect to projector input (for encoder backprop).</returns>
-    Tensor<T> Backward(Tensor<T> gradients);
+    // Backward removed — tape-based autodiff handles projector gradients.
 
     /// <summary>
     /// Gets all trainable parameters of the projector.

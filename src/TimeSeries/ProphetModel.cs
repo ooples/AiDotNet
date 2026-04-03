@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -1313,112 +1313,6 @@ public class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
 
         // Create a new instance with the copied options
         return new ProphetModel<T, TInput, TOutput>(newOptions);
-    }
-
-    /// <summary>
-    /// Gets whether this model supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Returns <c>true</c> when the model has been trained with valid components.
-    /// ProphetModel can be JIT compiled using precomputed Fourier basis matrices
-    /// for seasonality and average holiday/changepoint effects.
-    /// </value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> JIT compilation optimizes the Prophet model's calculations
-    /// by precomputing the Fourier basis for seasonality and averaging holiday effects.
-    /// This provides faster inference while maintaining good accuracy.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => base.SupportsJitCompilation;
-
-    /// <summary>
-    /// Exports the ProphetModel as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">A list to which input nodes will be added.</param>
-    /// <returns>The output computation node representing the forecast.</returns>
-    /// <remarks>
-    /// <para>
-    /// The computation graph represents the Prophet prediction formula:
-    /// prediction = trend + seasonal_fourier + avg_holiday + changepoint_effect + regressor_effect
-    /// </para>
-    /// <para>
-    /// Seasonality is computed using precomputed Fourier basis matrices, allowing efficient
-    /// matrix operations. Holiday effects are averaged for JIT approximation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This converts the Prophet model into an optimized computation graph.
-    /// The graph represents:
-    /// 1. Base trend value
-    /// 2. Fourier series for seasonal patterns (sin/cos combinations)
-    /// 3. Average holiday effects
-    /// 4. Changepoint adjustments
-    /// 5. Regressor contributions
-    ///
-    /// Expected speedup: 2-4x for inference after JIT compilation.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes), "Input nodes list cannot be null.");
-        }
-
-        if (!IsTrained)
-        {
-            throw new InvalidOperationException("Cannot export computation graph: Model must be trained first.");
-        }
-
-        // Create input node for time index (normalized)
-        var timeShape = new int[] { 1 };
-        var timeTensor = new Tensor<T>(timeShape);
-        var timeNode = TensorOperations<T>.Variable(timeTensor, "time_index", requiresGradient: false);
-        inputNodes.Add(timeNode);
-
-        // Start with trend
-        var trendTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { _trend }));
-        var resultNode = TensorOperations<T>.Constant(trendTensor, "trend");
-
-        // Add Fourier-based seasonal component
-        // For JIT, we precompute the Fourier basis for a normalized time value
-        var seasonalValue = ComputeAverageSeasonalEffect();
-        var seasonalTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { seasonalValue }));
-        var seasonalNode = TensorOperations<T>.Constant(seasonalTensor, "seasonal_effect");
-        resultNode = TensorOperations<T>.Add(resultNode, seasonalNode);
-
-        // Add average holiday effect
-        if (_holidayComponents != null && _holidayComponents.Length > 0)
-        {
-            var avgHolidayValue = ComputeAverageHolidayEffect();
-            var holidayTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { avgHolidayValue }));
-            var holidayNode = TensorOperations<T>.Constant(holidayTensor, "holiday_effect");
-            resultNode = TensorOperations<T>.Add(resultNode, holidayNode);
-        }
-
-        // Add changepoint effect
-        var changepointValue = ComputeAverageChangepointEffect();
-        var changepointTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { changepointValue }));
-        var changepointNode = TensorOperations<T>.Constant(changepointTensor, "changepoint_effect");
-        resultNode = TensorOperations<T>.Add(resultNode, changepointNode);
-
-        // Add regressor effects if present
-        if (_regressors != null && _regressors.Length > 0)
-        {
-            // Create input node for regressor values
-            var regressorShape = new int[] { _regressors.Length };
-            var regressorTensor = new Tensor<T>(regressorShape);
-            var regressorInputNode = TensorOperations<T>.Variable(regressorTensor, "regressor_input", requiresGradient: false);
-            inputNodes.Add(regressorInputNode);
-
-            // Create regressor weights tensor
-            var regressorWeightsTensor = new Tensor<T>(new[] { 1, _regressors.Length }, new Vector<T>(_regressors));
-            var regressorWeightsNode = TensorOperations<T>.Constant(regressorWeightsTensor, "regressor_weights");
-
-            // regressor_effect = weights @ regressor_values
-            var regressorEffectNode = TensorOperations<T>.MatrixMultiply(regressorWeightsNode, regressorInputNode);
-            resultNode = TensorOperations<T>.Add(resultNode, regressorEffectNode);
-        }
-
-        return resultNode;
     }
 
     /// <summary>

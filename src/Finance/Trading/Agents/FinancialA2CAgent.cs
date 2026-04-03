@@ -104,8 +104,8 @@ public class FinancialA2CAgent<T> : TradingAgentBase<T>
         EnsureDefaultLayers(actorArchitecture, options.StateSize, options.ActionSize);
         EnsureDefaultLayers(criticArchitecture, options.StateSize, 1);
 
-        _actor = new NeuralNetwork<T>(actorArchitecture, TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
-        _critic = new NeuralNetwork<T>(criticArchitecture, TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        _actor = new NeuralNetwork<T>(actorArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
+        _critic = new NeuralNetwork<T>(criticArchitecture, lossFunction: TradingOptions.LossFunction ?? new MeanSquaredErrorLoss<T>());
         ReplayBuffer = new ReplayBuffer<T>(options.ReplayBufferSize, options.Seed);
     }
 

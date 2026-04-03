@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -346,7 +346,7 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = _onnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -370,7 +370,7 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
 
     private Tensor<T> Softmax(Tensor<T> logits)
     {
-        var result = new Tensor<T>(logits.Shape.ToArray());
+        var result = new Tensor<T>(logits._shape);
         double maxVal = double.MinValue;
 
         for (int i = 0; i < logits.Length; i++)
@@ -405,21 +405,15 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
     {
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode.");
-
-        var prediction = Predict(input);
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
-
-        var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-
-        var currentGradient = outputGradientTensor;
-        for (int i = Layers.Count - 1; i >= 0; i--)
+        SetTrainingMode(true);
+        try
         {
-            currentGradient = Layers[i].Backward(currentGradient);
+            TrainWithTape(input, expectedOutput);
         }
-
-        _optimizer?.UpdateParameters(Layers);
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     #endregion

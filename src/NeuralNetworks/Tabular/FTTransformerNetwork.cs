@@ -178,16 +178,7 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
         LastLoss = _lossFunction.CalculateLoss(predVector, expectedVector);
         var gradientVector = _lossFunction.CalculateDerivative(predVector, expectedVector);
         var error = Tensor<T>.FromVector(gradientVector);
-        BackpropagateError(error);
         UpdateNetworkParameters();
-    }
-
-    private void BackpropagateError(Tensor<T> error)
-    {
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            error = Layers[i].Backward(error);
-        }
     }
 
     private void UpdateNetworkParameters()

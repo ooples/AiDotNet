@@ -1,10 +1,11 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu; // For IGpuBuffer
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -42,7 +43,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Graph)]
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "8, 3", TestConstructorArgs = "3, 6, 3, 8, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var s = new int[8, 3]; for (int i = 0; i < 8; i++) for (int j = 0; j < 3; j++) s[i, j] = (i * 2 + j + 1) % 8; ((AiDotNet.NeuralNetworks.Layers.SpiralConvLayer<double>)layer).SetSpiralIndices(s);")]
-public class SpiralConvLayer<T> : LayerBase<T>
+public partial class SpiralConvLayer<T> : LayerBase<T>
 {
     #region Properties
 
@@ -91,16 +92,10 @@ public class SpiralConvLayer<T> : LayerBase<T>
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value><c>true</c> if weights are initialized and activation can be JIT compiled.</value>
-    public override bool SupportsJitCompilation => _weights != null && _biases != null && CanActivationBeJitted();
-
     #endregion
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0) throw new ArgumentException("SpiralConvLayer requires an input tensor.");
         var input = inputs[0];
@@ -136,7 +131,7 @@ public class SpiralConvLayer<T> : LayerBase<T>
         var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
 
         // Helper for single batch processing
-        IGpuTensor<T> ProcessBatchItem(IGpuTensor<T> batchInput)
+        Tensor<T> ProcessBatchItem(Tensor<T> batchInput)
         {
             // batchInput: [V, C]
             // Gather: [V*S, C]
@@ -150,7 +145,7 @@ public class SpiralConvLayer<T> : LayerBase<T>
             // TensorBroadcastMultiply needs two tensors.
             // Or use element-wise multiply if we can replicate mask.
             // Let's assume we can wrap buffer.
-            using var maskTensor = new GpuTensor<T>(backend, _spiralMaskGpu!, [numGather, 1], GpuTensorRole.Constant, ownsBuffer: false);
+            using var maskTensor = GpuTensorHelper.UploadToGpu<T>(backend, _spiralMaskGpu!, [numGather, 1], GpuTensorRole.Constant, ownsBuffer: false);
 
             // Broadcast multiply: gatheredRaw * mask
             var gatheredMasked = gpuEngine.BroadcastMultiplyColumnGpu(gatheredRaw, maskTensor);
@@ -174,10 +169,10 @@ public class SpiralConvLayer<T> : LayerBase<T>
             return output;
         }
 
-        IGpuTensor<T> result;
+        Tensor<T> result;
         if (hasBatch)
         {
-            var outputs = new IGpuTensor<T>[batchSize];
+            var outputs = new Tensor<T>[batchSize];
             for (int b = 0; b < batchSize; b++)
             {
                 // Slice input [B, V, C] -> [V, C]
@@ -280,7 +275,7 @@ public class SpiralConvLayer<T> : LayerBase<T>
             int numGather = totalVertices * SpiralLength;
             var gatheredRaw = gpuEngine.GatherGpu(flatInput, indicesBuffer, numGather, inputChannels);
 
-            using var maskTensor = new GpuTensor<T>(backend, maskBuffer, [numGather, 1], GpuTensorRole.Constant, ownsBuffer: false);
+            using var maskTensor = GpuTensorHelper.UploadToGpu<T>(backend, maskBuffer, [numGather, 1], GpuTensorRole.Constant, ownsBuffer: false);
             var gatheredMasked = gpuEngine.BroadcastMultiplyColumnGpu(gatheredRaw, maskTensor);
             gatheredRaw.Dispose();
 
@@ -299,14 +294,14 @@ public class SpiralConvLayer<T> : LayerBase<T>
 
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
+            _lastInput = input;
             // We might need gathered features for backward pass?
             // The CPU Backward uses _gatheredFeatures.
             // We should cache it if possible, or recompute.
             // Recomputing is safer for now to avoid complexity of downloading.
             // But optimal is caching.
             // For now, just cache output/input.
-            _lastOutput = result.ToTensor();
+            _lastOutput = result;
         }
 
         return result;
@@ -364,11 +359,15 @@ public class SpiralConvLayer<T> : LayerBase<T>
     /// <summary>
     /// Learnable weights [OutputChannels, InputChannels * SpiralLength].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
     /// Learnable bias values [OutputChannels].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -526,11 +525,14 @@ public class SpiralConvLayer<T> : LayerBase<T>
             NumOps.FromDouble(fanIn)));
 
         // Initialize weights in [-scale, scale] range
-        _weights = Engine.TensorRandomUniformRange<T>(_weights.Shape.ToArray(), NumOps.Negate(scale), scale);
+        _weights = Engine.TensorRandomUniformRange<T>(_weights._shape, NumOps.Negate(scale), scale);
 
         // Initialize biases to zero
-        _biases = new Tensor<T>(_biases.Shape.ToArray());
+        _biases = new Tensor<T>(_biases._shape);
         Engine.TensorFill(_biases, NumOps.Zero);
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     #endregion
@@ -824,71 +826,6 @@ public class SpiralConvLayer<T> : LayerBase<T>
     #region Backward Pass
 
     /// <summary>
-    /// Performs the backward pass to compute gradients.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of loss with respect to output.</param>
-    /// <returns>Gradient of loss with respect to input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when Forward has not been called.</exception>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of loss with respect to output.</param>
-    /// <returns>Gradient of loss with respect to input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastPreActivation == null || _lastOutput == null || _gatheredFeatures == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        if (_spiralIndices == null)
-            throw new InvalidOperationException("Spiral indices not set.");
-
-        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
-
-        bool hasBatch = _lastInput.Rank == 3;
-        int numVertices = hasBatch ? _lastInput.Shape[1] : _lastInput.Shape[0];
-
-        var transposedDelta = Engine.TensorTranspose(delta);
-        _weightsGradient = Engine.TensorMatMul(transposedDelta, _gatheredFeatures);
-        _biasesGradient = Engine.ReduceSum(delta, [0], keepDims: false);
-
-        var gatheredGrad = Engine.TensorMatMul(delta, _weights);
-
-        var inputGrad = ScatterSpiralGradients(gatheredGrad, numVertices);
-
-        if (hasBatch)
-        {
-            int batchSize = _lastInput.Shape[0];
-            inputGrad = inputGrad.Reshape(batchSize, numVertices, InputChannels);
-        }
-
-        return inputGrad;
-    }
-
-    /// <summary>
-    /// Backward pass using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of loss with respect to output.</param>
-    /// <returns>Gradient of loss with respect to input.</returns>
-    /// <remarks>
-    /// <para>
-    /// Currently routes to manual implementation. Full autodiff integration pending
-    /// the addition of spiral-specific operations to the computation graph.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        // TODO: Implement proper autodiff when spiral graph operations are available
-        return BackwardManual(outputGradient);
-    }
-
-    /// <summary>
     /// Scatters gradients back to input vertices according to spiral indices using vectorized operations.
     /// </summary>
     /// <param name="gatheredGrad">Gradients for gathered features [numVertices, InputChannels * SpiralLength].</param>
@@ -976,8 +913,8 @@ public class SpiralConvLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_weights.Data),
-            Vector<T>.FromMemory(_biases.Data));
+            new Vector<T>(_weights.ToArray()),
+            new Vector<T>(_biases.ToArray()));
     }
 
     /// <summary>
@@ -1163,39 +1100,6 @@ public class SpiralConvLayer<T> : LayerBase<T>
     #endregion
 
     #region JIT Compilation
-
-    /// <summary>
-    /// Exports the layer as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input nodes.</param>
-    /// <returns>The output computation node.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when layer is not initialized.</exception>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (_weights == null || _biases == null)
-            throw new InvalidOperationException("Layer weights not initialized.");
-
-        var symbolicInput = new Tensor<T>(InputShape);
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "spiral_conv_input");
-        inputNodes.Add(inputNode);
-
-        var weightNode = TensorOperations<T>.Constant(_weights, "spiral_conv_weights");
-        var biasNode = TensorOperations<T>.Constant(_biases, "spiral_conv_bias");
-
-        var transposedWeights = TensorOperations<T>.Transpose(weightNode);
-        var matmulNode = TensorOperations<T>.MatrixMultiply(inputNode, transposedWeights);
-        var biasedNode = TensorOperations<T>.Add(matmulNode, biasNode);
-
-        var activatedOutput = ApplyActivationToGraph(biasedNode);
-        return activatedOutput;
-    }
 
     #endregion
 }

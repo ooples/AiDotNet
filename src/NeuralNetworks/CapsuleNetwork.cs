@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -55,7 +55,6 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// Stores the last capsule outputs for reconstruction loss computation.
     /// </summary>
     private Tensor<T>? _lastCapsuleOutputs;
-    private Tensor<T>? _lastExpectedOutput;
 
     /// <summary>
     /// Stores the last input for reconstruction loss computation.
@@ -413,11 +412,9 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     {
         // Store input for reconstruction loss
         _lastInput = input;
-        _lastExpectedOutput = expectedOutput;
 
-        // Forward pass in training mode (sets IsTrainingMode so layers cache state for backward)
-        SetTrainingMode(true);
-        var prediction = ForwardWithMemory(input);
+        // Forward pass
+        var prediction = Predict(input);
         _lastCapsuleOutputs = prediction;
 
         // Calculate margin loss (primary loss)
@@ -436,19 +433,19 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         var totalLoss = NumOps.Add(marginLoss, auxiliaryLoss);
         LastLoss = totalLoss;
 
-        // Backward pass (sets parameter gradients on each layer)
-        CalculateGradient();
+        // Backward pass — accumulates gradients in each layer
 
-        // Update parameters using SGD with configurable learning rate
-        T lr = NumOps.FromDouble(_options.LearningRate);
+        // Update parameters using per-layer gradient descent
+        const double defaultLearningRate = 0.001;
+        T lr = NumOps.FromDouble(defaultLearningRate);
         foreach (var layer in Layers)
         {
-            layer.UpdateParameters(lr);
-            layer.ClearGradients();
+            if (layer.SupportsTraining)
+            {
+                layer.UpdateParameters(lr);
+                layer.ClearGradients();
+            }
         }
-
-        // Restore inference mode after training step
-        SetTrainingMode(false);
     }
 
     /// <summary>
@@ -508,61 +505,6 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         _lossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader) ?? new MarginLoss<T>();
-    }
-
-    /// <summary>
-    /// Calculates the gradient of the loss with respect to the network parameters.
-    /// </summary>
-    /// <param name="loss">The scalar loss value.</param>
-    /// <returns>A vector containing the gradients for all network parameters.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method performs a backward pass through the network, computing gradients for each layer.
-    /// It starts from the output layer and moves backwards, accumulating gradients along the way.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like tracing back through the network to see how each part contributed to the final result.
-    /// 
-    /// Imagine you're trying to improve a recipe:
-    /// - You start with how the final dish turned out (the loss)
-    /// - You work backwards through each step of the recipe
-    /// - At each step, you figure out how changing that step would affect the final result
-    /// - You collect all these potential changes (gradients) to know how to improve the recipe
-    /// 
-    /// In a neural network, this process helps determine how to adjust each parameter to reduce the loss.
-    /// </para>
-    /// </remarks>
-    private void CalculateGradient()
-    {
-        if (_lastCapsuleOutputs == null || _lastInput == null || _lastExpectedOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before gradient computation.");
-
-        // Compute dL/dPrediction — the gradient of the margin loss w.r.t. the network output
-        var lossDerivative = _lossFunction.CalculateDerivative(
-            _lastCapsuleOutputs.ToVector(), _lastExpectedOutput!.ToVector());
-
-        // Add auxiliary loss gradient when enabled (reconstruction loss = MSE)
-        // d(reconstruction)/d(capsuleOutput) = 2*(capsuleOutput - input) / N, weighted by AuxiliaryLossWeight
-        if (UseAuxiliaryLoss)
-        {
-            int minLength = Math.Min(_lastCapsuleOutputs.Length, _lastInput.Length);
-            T scale = NumOps.Multiply(AuxiliaryLossWeight, NumOps.FromDouble(2.0 / minLength));
-            for (int i = 0; i < Math.Min(lossDerivative.Length, minLength); i++)
-            {
-                T auxGrad = NumOps.Multiply(
-                    NumOps.Subtract(_lastCapsuleOutputs[i], _lastInput[i]), scale);
-                lossDerivative[i] = NumOps.Add(lossDerivative[i], auxGrad);
-            }
-        }
-
-        Tensor<T> currentGradient = new Tensor<T>(
-            _lastCapsuleOutputs.Shape.ToArray(),
-            lossDerivative);
-
-        // Backward pass through all layers (propagates gradient and sets parameter gradients)
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            currentGradient = Layers[i].Backward(currentGradient);
-        }
     }
 
     /// <summary>
@@ -646,7 +588,7 @@ public class CapsuleNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Flatten original input for comparison
         // Validate the input can be flattened before attempting reshape
         int expectedLength = 1;
-        foreach (int dim in input.Shape.ToArray())
+        foreach (int dim in input._shape)
         {
             expectedLength *= dim;
         }

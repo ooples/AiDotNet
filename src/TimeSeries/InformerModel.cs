@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors;
@@ -342,6 +342,35 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
                 predictions[i] = PredictSingle(input.GetRow(i));
         }
         return predictions;
+    }
+
+    /// <summary>
+    /// Uses the Informer's built-in autodiff gradient computation instead of SPSA.
+    /// </summary>
+    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    {
+        int lookback = _options.LookbackWindow;
+
+        var inputVec = input.Rows >= lookback
+            ? new Vector<T>(lookback)
+            : new Vector<T>(input.Rows);
+        int vecLen = inputVec.Length;
+        for (int i = 0; i < vecLen; i++)
+            inputVec[i] = input[Math.Max(0, input.Rows - vecLen + i), 0];
+
+        T targetVal = target.Length > 0 ? target[0] : _numOps.Zero;
+
+        ResetGradientAccumulators();
+        var (gradients, _) = ComputeGradients(inputVec, targetVal);
+        AccumulateGradients(gradients);
+
+        // Extract gradients matching GetParameters order
+        var g = new List<T>();
+        foreach (var kvp in _gradientAccumulators)
+        {
+            for (int i = 0; i < kvp.Value.Length; i++) g.Add(kvp.Value[i]);
+        }
+        return new Vector<T>(g.ToArray());
     }
 
     private void ResetGradientAccumulators()
@@ -871,7 +900,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
     private void WriteTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (int dim in tensor.Shape.ToArray())
+        foreach (int dim in tensor._shape)
             writer.Write(dim);
         writer.Write(tensor.Length);
         for (int i = 0; i < tensor.Length; i++)
@@ -930,44 +959,8 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
         _layerNorm1Gamma.Length * 2 + _layerNorm2Gamma.Length * 2;
 
     public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
     public override void ResetState() { }
     public override void UpdateParameters(T learningRate) { }
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
-    {
-        // Input node
-        var input = TensorOperations<T>.Variable(
-            new Tensor<T>(new[] { _embeddingDim }), "enc_input", requiresGradient: false);
-        nodes.Add(input);
-
-        // Q/K/V/Output projection weights
-        var wQ = TensorOperations<T>.Constant(_queryProj.Clone(), "enc_wQ");
-        var wK = TensorOperations<T>.Constant(_keyProj.Clone(), "enc_wK");
-        var wV = TensorOperations<T>.Constant(_valueProj.Clone(), "enc_wV");
-        var wO = TensorOperations<T>.Constant(_outputProj.Clone(), "enc_wO");
-
-        // Self-attention: Q = W_q @ input, K = W_k @ input, V = W_v @ input
-        var q = TensorOperations<T>.MatrixVectorMultiply(wQ, input);
-        var k = TensorOperations<T>.MatrixVectorMultiply(wK, input);
-        var v = TensorOperations<T>.MatrixVectorMultiply(wV, input);
-
-        // Single-step self-attention: softmax([score]) = [1.0], output = W_out @ V
-        var attnOut = TensorOperations<T>.MatrixVectorMultiply(wO, v);
-
-        // Residual + LayerNorm 1
-        var residual1 = TensorOperations<T>.Add(input, attnOut);
-        var norm1 = TransformerGraphHelper<T>.LayerNormGraph(
-            residual1, _layerNorm1Gamma, _layerNorm1Beta, "enc_ln1");
-
-        // Feed-forward network: GELU(W1 @ x + b1) then W2 @ h + b2
-        var ffnOut = TransformerGraphHelper<T>.FeedForwardGraph(
-            norm1, _ffn1, _ffn1Bias, _ffn2, _ffn2Bias, "enc_ffn");
-
-        // Residual + LayerNorm 2
-        var residual2 = TensorOperations<T>.Add(norm1, ffnOut);
-        return TransformerGraphHelper<T>.LayerNormGraph(
-            residual2, _layerNorm2Gamma, _layerNorm2Beta, "enc_ln2");
-    }
 
     public override Vector<T> GetParameters()
     {
@@ -977,7 +970,6 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
         return new Vector<T>(p.ToArray());
     }
     public override Tensor<T> Forward(Tensor<T> input) { var seq = new List<Tensor<T>> { input }; var result = Forward(seq); return result.Count > 0 ? result[result.Count - 1] : input; }
-    public override Tensor<T> Backward(Tensor<T> outputGradient) { var dSeq = new List<Tensor<T>> { outputGradient }; var result = Backward(dSeq); return result.Count > 0 ? result[result.Count - 1] : outputGradient; }
 
     public InformerEncoderLayerTensor(int embeddingDim, int numHeads, int sparsityFactor, double dropoutRate, int seed = 42)
         : base(new[] { embeddingDim }, new[] { embeddingDim })
@@ -1313,34 +1305,8 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     public override int ParameterCount => _convWeights.Length + _convBias.Length;
 
     public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
     public override void ResetState() { }
     public override void UpdateParameters(T learningRate) { }
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
-    {
-        // Input node
-        var input = TensorOperations<T>.Variable(
-            new Tensor<T>(new[] { _embeddingDim }), "distill_input", requiresGradient: false);
-        nodes.Add(input);
-
-        // For single-step: 1D conv with kernel size 3 uses only center weight (no neighbors)
-        // Extract center kernel weights as a diagonal-like projection
-        var centerWeights = new Tensor<T>(new[] { _embeddingDim, _embeddingDim });
-        for (int d = 0; d < _embeddingDim; d++)
-            centerWeights[d, d] = _convWeights[d * 3 + 1]; // center kernel (k=0 → index 1)
-        var wConv = TensorOperations<T>.Constant(centerWeights, "distill_conv_w");
-        var bConv = TensorOperations<T>.Constant(_convBias.Clone(), "distill_conv_b");
-
-        // Conv: W @ input + bias
-        var conv = TensorOperations<T>.Add(
-            TensorOperations<T>.MatrixVectorMultiply(wConv, input), bConv);
-
-        // ELU activation
-        var activated = TensorOperations<T>.ELU(conv);
-
-        // Max pooling over single element is identity
-        return activated;
-    }
     public override Vector<T> GetParameters()
     {
         var p = new List<T>();
@@ -1349,7 +1315,6 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         return new Vector<T>(p.ToArray());
     }
     public override Tensor<T> Forward(Tensor<T> input) { var seq = new List<Tensor<T>> { input }; var result = Forward(seq); return result.Count > 0 ? result[result.Count - 1] : input; }
-    public override Tensor<T> Backward(Tensor<T> outputGradient) { var dSeq = new List<Tensor<T>> { outputGradient }; var result = Backward(dSeq); return result.Count > 0 ? result[result.Count - 1] : outputGradient; }
 
     public DistillingConvTensor(int embeddingDim, int inputSeqLen, int distillingFactor, int seed = 42)
         : base(new[] { embeddingDim }, new[] { embeddingDim })
@@ -1592,37 +1557,8 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     private List<Tensor<T>>? _lastEncoderOutput;
 
     public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
     public override void ResetState() { _lastEncoderOutput = null; }
     public override void UpdateParameters(T learningRate) { }
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
-    {
-        // Input node (decoder input)
-        var input = TensorOperations<T>.Variable(
-            new Tensor<T>(new[] { _embeddingDim }), "dec_input", requiresGradient: false);
-        nodes.Add(input);
-
-        // Self-attention block
-        var selfAttnOut = TransformerGraphHelper<T>.SelfAttentionGraph(
-            input, _selfQueryProj, _selfKeyProj, _selfValueProj, _selfOutputProj, "dec_self");
-        var residual1 = TensorOperations<T>.Add(input, selfAttnOut);
-        var norm1 = TransformerGraphHelper<T>.LayerNormGraph(
-            residual1, _layerNorm1Gamma, _layerNorm1Beta, "dec_ln1");
-
-        // Cross-attention block (for single-step JIT, encoder output approximated as self)
-        var crossAttnOut = TransformerGraphHelper<T>.SelfAttentionGraph(
-            norm1, _crossQueryProj, _crossKeyProj, _crossValueProj, _crossOutputProj, "dec_cross");
-        var residual2 = TensorOperations<T>.Add(norm1, crossAttnOut);
-        var norm2 = TransformerGraphHelper<T>.LayerNormGraph(
-            residual2, _layerNorm2Gamma, _layerNorm2Beta, "dec_ln2");
-
-        // FFN block
-        var ffnOut = TransformerGraphHelper<T>.FeedForwardGraph(
-            norm2, _ffn1, _ffn1Bias, _ffn2, _ffn2Bias, "dec_ffn");
-        var residual3 = TensorOperations<T>.Add(norm2, ffnOut);
-        return TransformerGraphHelper<T>.LayerNormGraph(
-            residual3, _layerNorm3Gamma, _layerNorm3Beta, "dec_ln3");
-    }
     public override Vector<T> GetParameters()
     {
         var p = new List<T>();
@@ -1648,13 +1584,6 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
             return Forward(inputs[0]);
         }
         return Forward(inputs[0]);
-    }
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var dSeq = new List<Tensor<T>> { outputGradient };
-        var enc = _lastEncoderOutput ?? dSeq;
-        var (dInput, _) = Backward(dSeq, enc);
-        return dInput.Count > 0 ? dInput[dInput.Count - 1] : outputGradient;
     }
 
     public InformerDecoderLayerTensor(int embeddingDim, int numHeads, int sparsityFactor, double dropoutRate, int seed = 42)

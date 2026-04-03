@@ -1086,31 +1086,6 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         return features;
     }
 
-    /// <summary>
-    /// Backward pass through perceiver and gated cross-attention layers.
-    /// </summary>
-    public Tensor<T> Backward(Tensor<T> gradient)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Backward pass is only supported in native mode.");
-        }
-
-        var currentGradient = gradient;
-
-        for (int i = _gatedCrossAttentionLayers.Count - 1; i >= 0; i--)
-        {
-            currentGradient = _gatedCrossAttentionLayers[i].Backward(currentGradient);
-        }
-
-        for (int i = _perceiverLayers.Count - 1; i >= 0; i--)
-        {
-            currentGradient = _perceiverLayers[i].Backward(currentGradient);
-        }
-
-        return currentGradient;
-    }
-
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
@@ -1122,7 +1097,6 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         var lossGradient = LossFunction.CalculateDerivative(perceiverFeatures.ToVector(), expectedOutput.ToVector());
         var gradient = Tensor<T>.FromVector(lossGradient);
 
-        Backward(gradient);
         var currentParams = GetParameters();
         UpdateParameters(currentParams);
 

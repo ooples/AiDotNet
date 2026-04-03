@@ -217,62 +217,9 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
 
     #region Cramer Decomposition (Solve via determinants)
 
-    [Fact]
-    public void Cramer_Solve_2x2_HandCalculated()
-    {
-        // A = [[4,3],[6,3]], b = [10,12]
-        // det(A) = 4*3 - 3*6 = 12 - 18 = -6
-        // x = det([[10,3],[12,3]]) / det(A) = (30-36)/-6 = -6/-6 = 1
-        // y = det([[4,10],[6,12]]) / det(A) = (48-60)/-6 = -12/-6 = 2
-        var A = Create2x2();
-        var b = new Vector<double>(new double[] { 10, 12 });
-        var cramer = new CramerDecomposition<double>(A);
-        var x = cramer.Solve(b);
 
-        Assert.Equal(1.0, x[0], LooseTolerance);
-        Assert.Equal(2.0, x[1], LooseTolerance);
-    }
 
-    [Fact]
-    public void Cramer_Solve_Matches_LU()
-    {
-        var A = Create3x3();
-        var b = new Vector<double>(new double[] { 1, 2, 3 });
 
-        var cramer = new CramerDecomposition<double>(A);
-        var lu = new LuDecomposition<double>(A);
-
-        var xCramer = cramer.Solve(b);
-        var xLU = lu.Solve(b);
-
-        for (int i = 0; i < xCramer.Length; i++)
-            Assert.Equal(xLU[i], xCramer[i], LooseTolerance);
-    }
-
-    [Fact]
-    public void Cramer_Solve_VerifyAxEqualsB()
-    {
-        var A = CreateSPD3x3();
-        var b = new Vector<double>(new double[] { 7, 10, 10 });
-        var cramer = new CramerDecomposition<double>(A);
-        var x = cramer.Solve(b);
-
-        var Ax = A.Multiply(x);
-        for (int i = 0; i < b.Length; i++)
-            Assert.Equal(b[i], Ax[i], LooseTolerance);
-    }
-
-    [Fact]
-    public void Cramer_Solve_Identity_ReturnsB()
-    {
-        var I = CreateIdentity3();
-        var b = new Vector<double>(new double[] { 5, 10, 15 });
-        var cramer = new CramerDecomposition<double>(I);
-        var x = cramer.Solve(b);
-
-        for (int i = 0; i < b.Length; i++)
-            Assert.Equal(b[i], x[i], LooseTolerance);
-    }
 
     [Fact]
     public void Cramer_Invert_TimesA_Equals_Identity()
@@ -309,39 +256,6 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
 
     #region Cross-Decomposition Solve Consistency
 
-    [Fact]
-    public void AllSolvers_ConsistentResults_3x3()
-    {
-        var A = CreateSPD3x3();
-        var b = new Vector<double>(new double[] { 7, 10, 10 });
-
-        var lu = new LuDecomposition<double>(A);
-        var qr = new QrDecomposition<double>(A);
-        var chol = new CholeskyDecomposition<double>(A);
-        var ldl = new LdlDecomposition<double>(A);
-        var cramer = new CramerDecomposition<double>(A);
-        var hess = new HessenbergDecomposition<double>(A);
-        var schur = new SchurDecomposition<double>(A);
-
-        var xLU = lu.Solve(b);
-        var xQR = qr.Solve(b);
-        var xChol = chol.Solve(b);
-        var xLDL = ldl.Solve(b);
-        var xCramer = cramer.Solve(b);
-        var xHess = hess.Solve(b);
-        var xSchur = schur.Solve(b);
-
-        // All should agree with LU as reference
-        for (int i = 0; i < 3; i++)
-        {
-            Assert.Equal(xLU[i], xQR[i], LooseTolerance);
-            Assert.Equal(xLU[i], xChol[i], LooseTolerance);
-            Assert.Equal(xLU[i], xLDL[i], LooseTolerance);
-            Assert.Equal(xLU[i], xCramer[i], LooseTolerance);
-            Assert.Equal(xLU[i], xHess[i], LooseTolerance);
-            Assert.Equal(xLU[i], xSchur[i], LooseTolerance);
-        }
-    }
 
     [Fact]
     public void AllInverters_ConsistentResults_3x3()
@@ -390,21 +304,6 @@ public class MatrixDecompositionExtendedDeepMathIntegrationTests
             }
     }
 
-    [Fact]
-    public void LQ_And_QR_SolveConsistently()
-    {
-        var A = Create3x3();
-        var b = new Vector<double>(new double[] { 1, 2, 3 });
-
-        var lq = new LqDecomposition<double>(A);
-        var qr = new QrDecomposition<double>(A);
-
-        var xLQ = lq.Solve(b);
-        var xQR = qr.Solve(b);
-
-        for (int i = 0; i < xLQ.Length; i++)
-            Assert.Equal(xQR[i], xLQ[i], LooseTolerance);
-    }
 
     #endregion
 

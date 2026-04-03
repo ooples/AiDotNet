@@ -1,8 +1,9 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -48,7 +49,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
     private Tensor<T>? _lastOutput;
 
     // GPU-resident cached tensors for GPU training pipeline
-    private IGpuTensor<T>? _lastOutputGpu;
+    private Tensor<T>? _lastOutputGpu;
     private int[]? _lastInputSizesGpu;
 
     /// <summary>
@@ -84,7 +85,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
     public override bool SupportsGpuTraining => true;
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length < 2)
         {
@@ -102,7 +103,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
         int rank = inputs[0].Shape.Length;
         int axis = _axis < 0 ? rank + _axis : _axis;
 
-        IGpuTensor<T>[] processedInputs = inputs;
+        Tensor<T>[] processedInputs = inputs;
         bool needsPermute = axis != rank - 1;
         int[]? permutation = null;
         int[]? invPermutation = null;
@@ -120,7 +121,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
 
             for (int i = 0; i < rank; i++) invPermutation[permutation[i]] = i;
 
-            processedInputs = new IGpuTensor<T>[inputs.Length];
+            processedInputs = new Tensor<T>[inputs.Length];
             for (int i = 0; i < inputs.Length; i++)
             {
                 processedInputs[i] = gpuEngine.PermuteGpu(inputs[i], permutation);
@@ -175,7 +176,7 @@ public class ConcatenateLayer<T> : LayerBase<T>
             permutedOutputShape[axis] = totalAxisDim;
         }
 
-        IGpuTensor<T> result = new GpuTensor<T>(backend, outputBuffer, permutedOutputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        Tensor<T> result = GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, permutedOutputShape, GpuTensorRole.Activation, ownsBuffer: true);
 
         // 6. Inverse Permute if needed
         if (needsPermute)
@@ -202,61 +203,20 @@ public class ConcatenateLayer<T> : LayerBase<T>
             _lastInputSizesGpu = new int[inputs.Length];
             for (int i = 0; i < inputs.Length; i++)
             {
-                _lastInputs[i] = inputs[i].ToTensor();
+                _lastInputs[i] = inputs[i];
                 _lastInputSizesGpu[i] = inputs[i].Shape[axis];
             }
-            _lastOutput = result.ToTensor();
+            _lastOutput = result;
             _lastOutputGpu = result;
         }
 
         return result;
     }
 
-    /// <inheritdoc/>
-
-    /// <summary>
-    /// Performs GPU-resident backward pass for the concatenate layer.
-    /// Splits the gradient along the concatenation axis.
-    /// </summary>
-    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
-    /// <returns>GPU-resident gradient to pass to the first input (per interface).</returns>
-    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        if (_lastOutputGpu == null || _lastInputSizesGpu == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
-
-        // Apply activation backward if needed
-        IGpuTensor<T> gradientWithActivation;
-        var fusedOp = MapActivationToFused();
-        if (fusedOp != FusedActivationType.None)
-        {
-            gradientWithActivation = ComputeActivationBackwardGpu(gpuEngine, outputGradient, _lastOutputGpu, fusedOp);
-        }
-        else
-        {
-            gradientWithActivation = outputGradient;
-        }
-
-        // Split gradient along the concatenation axis
-        // Return only the first input's gradient (per interface contract)
-        int rank = gradientWithActivation.Shape.Length;
-        int axis = _axis < 0 ? rank + _axis : _axis;
-
-        // Slice for the first input
-        int firstInputSize = _lastInputSizesGpu[0];
-        var firstGradient = gpuEngine.SliceGpu(gradientWithActivation, axis, 0, firstInputSize);
-
-        return firstGradient;
-    }
-
     /// <summary>
     /// Computes the activation backward gradient on GPU.
     /// </summary>
-    private IGpuTensor<T> ComputeActivationBackwardGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> gradOutput, IGpuTensor<T> output, FusedActivationType activationType)
+    private Tensor<T> ComputeActivationBackwardGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> gradOutput, Tensor<T> output, FusedActivationType activationType)
     {
         return activationType switch
         {
@@ -464,126 +424,6 @@ public class ConcatenateLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass of the concatenate layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the concatenate layer, which is used during training to propagate
-    /// error gradients back through the network. It splits the output gradient along the concatenation axis and
-    /// distributes the pieces to the corresponding input gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method routes the error gradients back to the correct inputs during training.
-    ///
-    /// During the backward pass:
-    /// 1. The layer receives error gradients from the next layer
-    /// 2. If an activation function was used, its derivative is applied
-    /// 3. The gradient is split along the same axis used for concatenation
-    /// 4. Each piece of the gradient is sent back to the corresponding input
-    ///
-    /// For example, if you joined three tensors of widths 10, 20, and 15:
-    /// - The incoming gradient would have width 45
-    /// - This method would split it into pieces of width 10, 20, and 15
-    /// - Each piece would be sent back to its original source
-    ///
-    /// This is how the training signal flows backward through the network,
-    /// allowing each connected layer to learn from the error.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInputs == null || _lastOutput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        if (ScalarActivation != null)
-        {
-            // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
-            var activationDerivative = ScalarActivation.Derivative(_lastOutput);
-            outputGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
-        }
-        else if (VectorActivation != null)
-        {
-            // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
-            outputGradient = Engine.TensorMultiply(outputGradient, VectorActivation.Derivative(_lastOutput));
-        }
-
-        var inputGradients = new Tensor<T>[_lastInputs.Length];
-        int startIndex = 0;
-
-        for (int i = 0; i < _lastInputs.Length; i++)
-        {
-            int length = _lastInputs[i].Shape[_axis];
-            int endIndex = startIndex + length;
-            inputGradients[i] = outputGradient.Slice(_axis, startIndex, endIndex);
-            startIndex = endIndex;
-        }
-
-        return Tensor<T>.Stack(inputGradients);
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes gradients using the same computation as BackwardManual to ensure
-    /// identical results. Both paths slice the output gradient along the concatenation axis
-    /// and stack the resulting gradients.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInputs == null || _lastOutput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        // Use the same computation as BackwardManual to ensure identical results
-        if (ScalarActivation != null)
-        {
-            // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
-            var activationDerivative = ScalarActivation.Derivative(_lastOutput);
-            outputGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
-        }
-        else if (VectorActivation != null)
-        {
-            // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
-            outputGradient = Engine.TensorMultiply(outputGradient, VectorActivation.Derivative(_lastOutput));
-        }
-
-        var inputGradients = new Tensor<T>[_lastInputs.Length];
-        int startIndex = 0;
-
-        for (int i = 0; i < _lastInputs.Length; i++)
-        {
-            int length = _lastInputs[i].Shape[_axis];
-            int endIndex = startIndex + length;
-            inputGradients[i] = outputGradient.Slice(_axis, startIndex, endIndex);
-            startIndex = endIndex;
-        }
-
-        return Tensor<T>.Stack(inputGradients);
-    }
-
-    /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
@@ -687,28 +527,4 @@ public class ConcatenateLayer<T> : LayerBase<T>
         _lastOutputGpu = null;
         _lastInputSizesGpu = null;
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // ConcatenateLayer expects multiple inputs - create symbolic input
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // If multiple inputs are provided, concatenate them using TensorOperations.Concat()
-        if (inputNodes.Count > 1)
-        {
-            return TensorOperations<T>.Concat(inputNodes, axis: _axis);
-        }
-
-        return inputNode;
-    }
-
-    public override bool SupportsJitCompilation => true;
 }

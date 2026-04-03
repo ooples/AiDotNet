@@ -283,22 +283,9 @@ public class SAINTNetwork<T> : NeuralNetworkBase<T>
         Tensor<T> error = prediction.Subtract(expectedOutput);
 
         // Backpropagate error through network
-        BackpropagateError(error);
 
         // Update network parameters
         UpdateNetworkParameters();
-    }
-
-    /// <summary>
-    /// Backpropagates the error through the network layers.
-    /// </summary>
-    /// <param name="error">The error tensor to backpropagate.</param>
-    private void BackpropagateError(Tensor<T> error)
-    {
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            error = Layers[i].Backward(error);
-        }
     }
 
     /// <summary>

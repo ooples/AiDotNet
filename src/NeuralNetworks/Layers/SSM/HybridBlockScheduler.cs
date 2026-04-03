@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
@@ -260,55 +260,6 @@ public class HybridBlockScheduler<T> : LayerBase<T>
         return result.Reshape(_originalInputShape);
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastNormedInputs == null ||
-            _lastBlockOutputs == null || _lastResiduals == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int rank = outputGradient.Shape.Length;
-        int batchSize = _lastInput.Shape[0];
-        int seqLen = _lastInput.Shape[1];
-
-        var grad = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, seqLen, _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        // Apply activation derivative
-        grad = ApplyActivationDerivative(_lastOutput!, grad);
-
-        _normGammaGradients = new Tensor<T>[_blocks.Length];
-        _normBetaGradients = new Tensor<T>[_blocks.Length];
-
-        // Backward through blocks in reverse order
-        for (int i = _blocks.Length - 1; i >= 0; i--)
-        {
-            // Residual: grad flows directly + through block
-            var blockGrad = _blocks[i].Backward(grad);
-
-            // Backward through RMSNorm
-            var normGrad = BackwardRMSNorm(blockGrad, _lastResiduals[i], _normGammas[i],
-                batchSize, seqLen, out var dGamma, out var dBeta);
-
-            _normGammaGradients[i] = dGamma;
-            _normBetaGradients[i] = dBeta;
-
-            // Residual gradient: add norm gradient to direct gradient
-            grad = Engine.TensorAdd(grad, normGrad);
-        }
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return grad.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return grad.Reshape(_originalInputShape);
-
-        return grad;
-    }
-
     private Tensor<T> ApplyRMSNorm(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta,
         int batchSize, int seqLen)
     {
@@ -491,75 +442,6 @@ public class HybridBlockScheduler<T> : LayerBase<T>
 
         foreach (var block in _blocks)
             block.ResetState();
-    }
-
-    /// <summary>
-    /// Gets whether this layer supports JIT compilation for optimized inference.
-    /// </summary>
-    /// <value>
-    /// True if all sub-blocks support JIT compilation. The scheduler chains the computation
-    /// graphs of its sub-blocks with residual connections and normalization.
-    /// </value>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            foreach (var block in _blocks)
-            {
-                if (!block.SupportsJitCompilation)
-                    return false;
-            }
-            return true;
-        }
-    }
-
-    /// <summary>
-    /// Exports the computation graph by chaining sub-block graphs with residual connections.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The exported graph chains each sub-block's computation graph sequentially,
-    /// applying pre-norm and residual connections between blocks. This mirrors the
-    /// forward pass structure: for each block, apply norm -> sub-block -> add residual.
-    /// </para>
-    /// <para>
-    /// JIT-compilable hybrid models like PyTorch's torch.compile support this pattern,
-    /// enabling fused kernels across the entire block schedule.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Input placeholder: [1, modelDim] (single timestep)
-        var inputPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
-        var currentNode = TensorOperations<T>.Variable(inputPlaceholder, "hybrid_input");
-        inputNodes.Add(currentNode);
-
-        // Chain each sub-block's computation graph with residual connections
-        for (int i = 0; i < _blocks.Length; i++)
-        {
-            // Add norm parameters as variable nodes
-            var gammaNode = TensorOperations<T>.Variable(_normGammas[i], $"norm_gamma_{i}");
-            inputNodes.Add(gammaNode);
-
-            // Residual = current (save for later)
-            var residualNode = currentNode;
-
-            // Simplified norm: scale by gamma (symbolic approximation of RMSNorm)
-            var normedNode = TensorOperations<T>.ElementwiseMultiply(currentNode, gammaNode);
-
-            // Chain sub-block's graph
-            var blockInputs = new List<ComputationNode<T>> { normedNode };
-            var blockOutput = _blocks[i].ExportComputationGraph(blockInputs);
-            inputNodes.AddRange(blockInputs.GetRange(1, blockInputs.Count - 1));
-
-            // Residual connection: output = residual + block_output
-            currentNode = TensorOperations<T>.Add(residualNode, blockOutput);
-        }
-
-        return currentNode;
     }
 
     internal override Dictionary<string, string> GetMetadata()

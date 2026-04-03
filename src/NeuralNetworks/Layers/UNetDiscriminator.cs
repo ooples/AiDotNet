@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
@@ -54,7 +54,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "8, 8, 3, 8, 2")]
-public class UNetDiscriminator<T> : LayerBase<T>, IChainableComputationGraph<T>
+public class UNetDiscriminator<T> : LayerBase<T>
 {
     #region Fields
 
@@ -124,28 +124,6 @@ public class UNetDiscriminator<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// Gets a value indicating whether this layer supports GPU execution.
     /// </summary>
     protected override bool SupportsGpuExecution => false;
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            if (!_convFirst.SupportsJitCompilation) return false;
-            if (!_convLast.SupportsJitCompilation) return false;
-
-            foreach (var block in _encoderBlocks)
-            {
-                if (!block.SupportsJitCompilation) return false;
-            }
-
-            foreach (var block in _decoderBlocks)
-            {
-                if (!block.SupportsJitCompilation) return false;
-            }
-
-            return true;
-        }
-    }
 
     #endregion
 
@@ -247,6 +225,11 @@ public class UNetDiscriminator<T> : LayerBase<T>, IChainableComputationGraph<T>
             stride: 1,
             padding: 1,
             activationFunction: null);
+
+        RegisterSubLayer(_convFirst);
+        RegisterSubLayer(_convLast);
+        foreach (var block in _encoderBlocks) RegisterSubLayer(block);
+        foreach (var block in _decoderBlocks) RegisterSubLayer(block);
     }
 
     #endregion
@@ -286,43 +269,6 @@ public class UNetDiscriminator<T> : LayerBase<T>, IChainableComputationGraph<T>
     #endregion
 
     #region Backward Pass
-
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _skipConnections == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var grad = outputGradient;
-
-        // Backward through final conv
-        grad = _convLast.Backward(grad);
-
-        // Backward through decoder
-        var skipGrads = new Tensor<T>[_numBlocks];
-        for (int i = _numBlocks - 1; i >= 0; i--)
-        {
-            var (mainGrad, skipGrad) = _decoderBlocks[i].BackwardWithSkip(grad);
-            grad = mainGrad;
-            skipGrads[_numBlocks - 1 - i] = skipGrad;
-        }
-
-        // Backward through encoder (combine with skip gradients)
-        // Skip gradients are at the encoder INPUT resolution (stored before encoder processes),
-        // so we must first backward through the encoder (giving gradient at input resolution),
-        // then add the skip gradient (both now at the same resolution).
-        for (int i = _numBlocks - 1; i >= 0; i--)
-        {
-            grad = _encoderBlocks[i].Backward(grad);
-            grad = AddTensors(grad, skipGrads[i]);
-        }
-
-        // Backward through initial conv activation and conv
-        grad = BackwardLeakyReLU(_convFirst.Forward(_lastInput), grad);
-        grad = _convFirst.Backward(grad);
-
-        return grad;
-    }
 
     #endregion
 
@@ -448,22 +394,6 @@ public class UNetDiscriminator<T> : LayerBase<T>, IChainableComputationGraph<T>
     #region JIT Compilation
 
     /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape is null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return BuildComputationGraph(inputNode, "");
-    }
-
-    /// <inheritdoc />
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
     {
         // Initial conv + LeakyReLU
@@ -503,6 +433,7 @@ public class UNetDiscriminator<T> : LayerBase<T>, IChainableComputationGraph<T>
     }
 
     #endregion
+
 }
 
 #region Helper Blocks
@@ -510,7 +441,7 @@ public class UNetDiscriminator<T> : LayerBase<T>, IChainableComputationGraph<T>
 /// <summary>
 /// Convolutional block for U-Net encoder with optional downsampling.
 /// </summary>
-internal class UNetConvBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
+internal class UNetConvBlock<T> : LayerBase<T>
 {
     private readonly ConvolutionalLayer<T> _conv1;
     private readonly ConvolutionalLayer<T> _conv2;
@@ -554,12 +485,12 @@ internal class UNetConvBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
             stride: 1,
             padding: 1,
             activationFunction: null);
+
+        RegisterSubLayer(_conv1);
+        RegisterSubLayer(_conv2);
     }
 
     public override bool SupportsTraining => true;
-
-    public override bool SupportsJitCompilation =>
-        _conv1.SupportsJitCompilation && _conv2.SupportsJitCompilation;
 
     public override Tensor<T> Forward(Tensor<T> input)
     {
@@ -574,22 +505,6 @@ internal class UNetConvBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         var output = ApplyLeakyReLU(_conv2RawOutput);
 
         return output;
-    }
-
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _conv1Output == null || _conv1RawOutput == null || _conv2RawOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Backward through LeakyReLU after conv2 (use cached raw output)
-        var grad = BackwardLeakyReLU(_conv2RawOutput, outputGradient);
-        grad = _conv2.Backward(grad);
-
-        // Backward through LeakyReLU after conv1 (use cached raw output)
-        grad = BackwardLeakyReLU(_conv1RawOutput, grad);
-        grad = _conv1.Backward(grad);
-
-        return grad;
     }
 
     private Tensor<T> ApplyLeakyReLU(Tensor<T> input)
@@ -647,14 +562,6 @@ internal class UNetConvBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         _conv2.ResetState();
     }
 
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-        return BuildComputationGraph(inputNode, "");
-    }
-
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
     {
         var biases1 = _conv1.GetBiases();
@@ -677,12 +584,13 @@ internal class UNetConvBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         return x;
     }
+
 }
 
 /// <summary>
 /// Upsampling block for U-Net decoder with skip connection concatenation.
 /// </summary>
-internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
+internal class UNetUpBlock<T> : LayerBase<T>
 {
     private readonly UpsamplingLayer<T> _upsample;
     private readonly ConvolutionalLayer<T> _conv1;
@@ -732,12 +640,13 @@ internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
             stride: 1,
             padding: 1,
             activationFunction: null);
+
+        RegisterSubLayer(_upsample);
+        RegisterSubLayer(_conv1);
+        RegisterSubLayer(_conv2);
     }
 
     public override bool SupportsTraining => true;
-
-    public override bool SupportsJitCompilation =>
-        _upsample.SupportsJitCompilation && _conv1.SupportsJitCompilation && _conv2.SupportsJitCompilation;
 
     public override Tensor<T> Forward(Tensor<T> input)
     {
@@ -777,12 +686,6 @@ internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         return x;
     }
 
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var (mainGrad, _) = BackwardWithSkip(outputGradient);
-        return mainGrad;
-    }
-
     public (Tensor<T> mainGrad, Tensor<T> skipGrad) BackwardWithSkip(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _upsampledInput == null || _conv1Output == null)
@@ -790,11 +693,9 @@ internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         // Backward through conv2 + LeakyReLU
         var grad = BackwardLeakyReLU(_conv2.Forward(_conv1Output), outputGradient);
-        grad = _conv2.Backward(grad);
 
         // Backward through conv1 + LeakyReLU
         grad = BackwardLeakyReLU(_conv1.Forward(_concatenated ?? _upsampledInput), grad);
-        grad = _conv1.Backward(grad);
 
         Tensor<T> skipGrad;
         Tensor<T> upsampleGrad;
@@ -814,9 +715,8 @@ internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
             skipGrad = new Tensor<T>(_lastSkip?.Shape.ToArray() ?? new[] { 1 });
         }
 
-        // Backward through upsample
-        var inputGrad = _upsample.Backward(upsampleGrad);
-
+        // Backward removed — tape handles gradients
+        var inputGrad = new Tensor<T>(_lastInput?.Shape.ToArray() ?? new[] { 1 });
         return (inputGrad, skipGrad);
     }
 
@@ -930,14 +830,6 @@ internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
         _conv2.ResetState();
     }
 
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-        return BuildComputationGraph(inputNode, null, "");
-    }
-
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
     {
         return BuildComputationGraph(inputNode, null, namePrefix);
@@ -976,6 +868,7 @@ internal class UNetUpBlock<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         return x;
     }
+
 }
 
 #endregion

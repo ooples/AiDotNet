@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -185,7 +185,7 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> activationAdaptationOutput = _activationAdaptation.Forward(input);
 
         // Sum all outputs: base + weight_adaptation + activation_adaptation
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> result = new Tensor<T>(baseOutput._shape);
         for (int i = 0; i < baseOutput.Length; i++)
         {
             T sum = NumOps.Add(baseOutput[i], weightAdaptationOutput[i]);
@@ -193,52 +193,6 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through both adaptations and the base layer.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass propagates gradients through all three components:
-    /// - Weight adaptation LoRA (always)
-    /// - Activation adaptation LoRA (always)
-    /// - Base layer (only if not frozen)
-    /// </para>
-    /// <para><b>For Beginners:</b> During learning, this figures out how to improve all adaptations:
-    /// - Updates weight adaptation (how should weights change?)
-    /// - Updates activation adaptation (how should outputs be transformed?)
-    /// - Updates base layer if not frozen (how should original weights change?)
-    ///
-    /// The gradients from all three paths are combined to tell earlier layers how to improve.
-    /// This allows the model to learn complex adaptations that work together.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Backward through weight adaptation LoRA
-        Tensor<T> weightLoraInputGrad = _loraLayer.Backward(outputGradient);
-
-        // Backward through activation adaptation LoRA
-        Tensor<T> activationLoraInputGrad = _activationAdaptation.Backward(outputGradient);
-
-        // Backward through base layer
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        // Sum all input gradients
-        Tensor<T> inputGrad = new Tensor<T>(weightLoraInputGrad.Shape.ToArray());
-        for (int i = 0; i < weightLoraInputGrad.Length; i++)
-        {
-            T sum = NumOps.Add(weightLoraInputGrad[i], activationLoraInputGrad[i]);
-            inputGrad[i] = NumOps.Add(sum, baseInputGrad[i]);
-        }
-
-        // Update parameter gradients vector
-        UpdateParameterGradientsFromLayers();
-
-        return inputGrad;
     }
 
     /// <summary>

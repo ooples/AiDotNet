@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -124,9 +124,6 @@ public class TransNormerLLMLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Gets the model dimension.
@@ -465,179 +462,6 @@ public class TransNormerLLMLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null ||
-            _lastQuery == null || _lastKey == null || _lastValue == null ||
-            _lastQueryNormed == null || _lastKeyNormed == null ||
-            _lastQueryRmsInv == null || _lastKeyRmsInv == null ||
-            _lastAttnRaw == null || _lastAttnNormed == null || _lastAttnRmsInv == null ||
-            _lastGate == null || _lastGateRaw == null || _lastStates == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = _lastInput.Shape[0];
-        int seqLen = _lastInput.Shape[1];
-
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        var activationGrad = ApplyActivationDerivative(_lastOutput, grad3D);
-
-        // Initialize gradients
-        _queryWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _keyWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _valueWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _queryNormScaleGradient = new Tensor<T>([_numHeads, _headDimension]);
-        _keyNormScaleGradient = new Tensor<T>([_numHeads, _headDimension]);
-        _gammasGradient = new Tensor<T>([_numHeads]);
-        _outputNormScaleGradient = new Tensor<T>([_numHeads, _headDimension]);
-        _outputGateWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputGateBiasGradient = new Tensor<T>([_modelDimension]);
-        _outputProjectionWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
-
-        // Step 7 backward: output projection
-        var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
-        var gatedOutput = Engine.TensorMultiply(_lastGate, _lastAttnNormed);
-        var gatedFlat = gatedOutput.Reshape(batchSize * seqLen, _modelDimension);
-        _outputProjectionWeightsGradient = Engine.TensorMatMul(gatedFlat.Transpose([1, 0]), gradFlat);
-
-        var dGated = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
-            .Reshape(batchSize, seqLen, _modelDimension);
-
-        // Step 6 backward: gating
-        var dAttnNormed = Engine.TensorMultiply(dGated, _lastGate);
-        var dGateSwish = Engine.TensorMultiply(dGated, _lastAttnNormed);
-
-        // Swish derivative
-        var dGateRaw = Engine.TensorMultiply(dGateSwish, ComputeSiLUDerivative(_lastGateRaw));
-
-        var inputFlat = _lastInput.Reshape(batchSize * seqLen, _modelDimension);
-        var dGateRawFlat = dGateRaw.Reshape(batchSize * seqLen, _modelDimension);
-        _outputGateWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dGateRawFlat);
-        _outputGateBiasGradient = Engine.ReduceSum(dGateRaw, new int[] { 0, 1 });
-        var dInputFromGate = Engine.TensorMatMul(dGateRawFlat, _outputGateWeights.Transpose([1, 0]));
-
-        // Step 5 backward: RMSNorm on attention output
-        var dAttnRaw = RMSNormBackward(
-            dAttnNormed, _lastAttnRaw, _outputNormScale, _lastAttnRmsInv,
-            _outputNormScaleGradient, batchSize, seqLen);
-
-        // Step 4 backward: lightning attention recurrence
-        var dQNormed = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dKNormed = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        var dState = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-
-        for (int t = seqLen - 1; t >= 0; t--)
-        {
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    int dimStart = hi * _headDimension;
-                    T gamma = _gammas[hi];
-
-                    // Output: o_di = sum_dj S[di,dj] * q[dj]
-                    // dS[di,dj] += dO[di] * q[dj]
-                    // dQ[dj] += sum_di dO[di] * S[di,dj]
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T dO = dAttnRaw[new[] { bi, t, flatDi }];
-
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            int flatDj = dimStart + dj;
-                            T qVal = _lastQueryNormed[new[] { bi, t, flatDj }];
-                            T sVal = _lastStates[new[] { bi, t + 1, hi, di, dj }];
-
-                            dState[new[] { bi, hi, di, dj }] = NumOps.Add(
-                                dState[new[] { bi, hi, di, dj }],
-                                NumOps.Multiply(dO, qVal));
-
-                            dQNormed[new[] { bi, t, flatDj }] = NumOps.Add(
-                                dQNormed[new[] { bi, t, flatDj }],
-                                NumOps.Multiply(dO, sVal));
-                        }
-                    }
-
-                    // State update: S = gamma * S_prev + k * v^T
-                    // dS_prev += gamma * dS
-                    // dGamma += sum_{di,dj} dS[di,dj] * S_prev[di,dj]
-                    // dK[di] += sum_dj dS[di,dj] * v[dj]
-                    // dV[dj] += sum_di dS[di,dj] * k[di]
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            int flatDj = dimStart + dj;
-                            T dS = dState[new[] { bi, hi, di, dj }];
-                            T prevS = _lastStates[new[] { bi, t, hi, di, dj }];
-
-                            (_gammasGradient ?? throw new InvalidOperationException("_gammasGradient has not been initialized."))[hi] = NumOps.Add(
-                                _gammasGradient[hi],
-                                NumOps.Multiply(dS, prevS));
-
-                            T kVal = _lastKeyNormed[new[] { bi, t, flatDi }];
-                            T vVal = _lastValue[new[] { bi, t, flatDj }];
-
-                            dKNormed[new[] { bi, t, flatDi }] = NumOps.Add(
-                                dKNormed[new[] { bi, t, flatDi }],
-                                NumOps.Multiply(dS, vVal));
-
-                            dV[new[] { bi, t, flatDj }] = NumOps.Add(
-                                dV[new[] { bi, t, flatDj }],
-                                NumOps.Multiply(dS, kVal));
-
-                            // Propagate dState to previous timestep
-                            dState[new[] { bi, hi, di, dj }] = NumOps.Multiply(gamma, dS);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Step 2 backward: RMSNorm on Q and K
-        var dQ = RMSNormBackward(
-            dQNormed, _lastQuery, _queryNormScale, _lastQueryRmsInv,
-            _queryNormScaleGradient, batchSize, seqLen);
-        var dK = RMSNormBackward(
-            dKNormed, _lastKey, _keyNormScale, _lastKeyRmsInv,
-            _keyNormScaleGradient, batchSize, seqLen);
-
-        // Step 1 backward: projection weight gradients
-        var dQFlat = dQ.Reshape(batchSize * seqLen, _modelDimension);
-        var dKFlat = dK.Reshape(batchSize * seqLen, _modelDimension);
-        var dVFlat = dV.Reshape(batchSize * seqLen, _modelDimension);
-
-        _queryWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dQFlat);
-        _keyWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dKFlat);
-        _valueWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dVFlat);
-
-        // Input gradients from all paths
-        var dInput = Engine.TensorAdd(dInputFromGate,
-            Engine.TensorMatMul(dQFlat, _queryWeights.Transpose([1, 0])));
-        dInput = Engine.TensorAdd(dInput,
-            Engine.TensorMatMul(dKFlat, _keyWeights.Transpose([1, 0])));
-        dInput = Engine.TensorAdd(dInput,
-            Engine.TensorMatMul(dVFlat, _valueWeights.Transpose([1, 0])));
-
-        var dInput3D = dInput.Reshape(batchSize, seqLen, _modelDimension);
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return dInput3D.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return dInput3D.Reshape(_originalInputShape);
-
-        return dInput3D;
-    }
-
     /// <summary>
     /// Backward pass through RMSNorm.
     /// </summary>
@@ -774,17 +598,17 @@ public class TransNormerLLMLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
-            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
-            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
-            (_queryNormScaleGradient is not null ? Vector<T>.FromMemory(_queryNormScaleGradient.Data) : new Vector<T>(0)),
-            (_keyNormScaleGradient is not null ? Vector<T>.FromMemory(_keyNormScaleGradient.Data) : new Vector<T>(0)),
-            (_gammasGradient is not null ? Vector<T>.FromMemory(_gammasGradient.Data) : new Vector<T>(0)),
-            _outputNormScaleGradient is not null ? (_outputNormScaleGradient is not null ? Vector<T>.FromMemory(_outputNormScaleGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputNormScale.Length),
-            _outputGateWeightsGradient is not null ? (_outputGateWeightsGradient is not null ? Vector<T>.FromMemory(_outputGateWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateWeights.Length),
-            _outputGateBiasGradient is not null ? (_outputGateBiasGradient is not null ? Vector<T>.FromMemory(_outputGateBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateBias.Length),
-            _outputProjectionWeightsGradient is not null ? (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionWeights.Length),
-            _outputProjectionBiasGradient is not null ? (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionBias.Length));
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_queryNormScaleGradient!.ToArray()),
+            new Vector<T>(_keyNormScaleGradient!.ToArray()),
+            new Vector<T>(_gammasGradient!.ToArray()),
+            new Vector<T>(_outputNormScaleGradient?.ToArray() ?? new T[_outputNormScale.Length]),
+            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
+            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
     }
 
     public override void ClearGradients()
@@ -827,28 +651,6 @@ public class TransNormerLLMLayer<T> : LayerBase<T>
     }
 
     #endregion
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
-        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
-        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(outWeightsNode);
-        inputNodes.Add(outBiasNode);
-
-        var outT = TensorOperations<T>.Transpose(outWeightsNode);
-        var finalOutput = TensorOperations<T>.MatrixMultiply(xNode, outT);
-        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
-
-        return outputWithBias;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

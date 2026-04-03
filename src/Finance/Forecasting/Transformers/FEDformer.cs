@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -554,7 +554,6 @@ public class FEDformer<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
 
         var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        Backward(Tensor<T>.FromVector(outputGradient, prediction.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -843,27 +842,6 @@ public class FEDformer<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from the loss function.</param>
-    /// <returns>Gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation calculates how each parameter contributed to
-    /// the error, allowing the optimizer to adjust them appropriately.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var gradient = outputGradient;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-        return gradient;
-    }
-
-    /// <summary>
     /// Forecasts using native layers.
     /// </summary>
     /// <remarks>
@@ -896,7 +874,7 @@ public class FEDformer<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -932,7 +910,7 @@ public class FEDformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ApplyRevIN(Tensor<T> input, bool normalize)
     {
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         T epsilon = NumOps.FromDouble(1e-5);
 
         if (normalize)
@@ -1034,7 +1012,7 @@ public class FEDformer<T> : ForecastingModelBase<T>
         Array.Copy(input.Data.ToArray(), shiftAmount, newData, 0, input.Length - shiftAmount);
         Array.Copy(predictions.Data.ToArray(), 0, newData, input.Length - shiftAmount, shiftAmount);
 
-        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(newData));
+        return new Tensor<T>(input._shape, new Vector<T>(newData));
     }
 
     /// <summary>

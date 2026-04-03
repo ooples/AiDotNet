@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -520,7 +520,6 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = _lossFunction.CalculateLoss(logits.ToVector(), targetTokens.ToVector());
 
             var gradient = _lossFunction.CalculateDerivative(logits.ToVector(), targetTokens.ToVector());
-            Backward(Tensor<T>.FromVector(gradient, logits.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -848,56 +847,6 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
         return current;
     }
 
-    /// <summary>
-    /// Performs the backward pass through Chronos.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the loss function.</param>
-    /// <returns>Gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation updates all model weights
-    /// to better predict the correct tokens.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        // Add batch dimension if gradient is 1D (layers expect at least 2D [batch, features])
-        bool addedBatchDim = false;
-        if (current.Rank == 1)
-        {
-            current = current.Reshape(new[] { 1, current.Length });
-            addedBatchDim = true;
-        }
-
-        // LM head backward
-        if (_lmHead is not null)
-            current = _lmHead.Backward(current);
-
-        // Final norm backward
-        if (_finalNorm is not null)
-            current = _finalNorm.Backward(current);
-
-        // Transformer layers backward (reverse order)
-        for (int i = _transformerLayers.Count - 1; i >= 0; i--)
-        {
-            current = _transformerLayers[i].Backward(current);
-        }
-
-        // Token embedding backward
-        if (_tokenEmbedding is not null)
-            current = _tokenEmbedding.Backward(current);
-
-        // Remove batch dimension if we added it
-        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-        {
-            current = current.Reshape(new[] { current.Shape[1] });
-        }
-
-        return current;
-    }
-
     #endregion
 
     #region Inference Methods
@@ -936,7 +885,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1195,7 +1144,7 @@ public class Chronos<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
-        var newInput = new Tensor<T>(input.Shape.ToArray());
+        var newInput = new Tensor<T>(input._shape);
 
         // Clamp stepsUsed to prevent negative indices
         int clampedSteps = Math.Min(stepsUsed, _contextLength);

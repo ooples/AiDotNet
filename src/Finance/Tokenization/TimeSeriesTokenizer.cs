@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using AiDotNet.Enums;
 
@@ -190,7 +190,7 @@ public class TimeSeriesTokenizer<T>
 
         int len = series.Length;
         if (len == 0)
-            return (new Tensor<T>(series.Shape.ToArray()), NumOps.Zero, NumOps.One);
+            return (new Tensor<T>(series._shape), NumOps.Zero, NumOps.One);
 
         T mean = NumOps.Zero;
         for (int i = 0; i < len; i++)
@@ -206,7 +206,7 @@ public class TimeSeriesTokenizer<T>
         variance = NumOps.Divide(variance, NumOps.FromDouble(len));
         T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
 
-        var normalized = new Tensor<T>(series.Shape.ToArray());
+        var normalized = new Tensor<T>(series._shape);
         for (int i = 0; i < len; i++)
             normalized.Data.Span[i] = NumOps.Divide(NumOps.Subtract(series[i], mean), std);
 
@@ -224,7 +224,7 @@ public class TimeSeriesTokenizer<T>
     {
         Guard.NotNull(prediction);
 
-        var result = new Tensor<T>(prediction.Shape.ToArray());
+        var result = new Tensor<T>(prediction._shape);
         for (int i = 0; i < prediction.Length; i++)
             result.Data.Span[i] = NumOps.Add(NumOps.Multiply(prediction[i], std), mean);
 

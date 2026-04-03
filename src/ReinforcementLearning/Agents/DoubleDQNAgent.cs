@@ -148,7 +148,7 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture, _options.LossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _options.LossFunction);
     }
 
     /// <inheritdoc/>
@@ -190,58 +190,51 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         var batch = _replayBuffer.Sample(_options.BatchSize);
-        T totalLoss = NumOps.Zero;
+        int stateSize = _options.StateSize;
+        int actionSize = _options.ActionSize;
 
-        foreach (var experience in batch)
+        // Build batched state tensor
+        var batchStates = new Tensor<T>([batch.Count, stateSize]);
+        for (int i = 0; i < batch.Count; i++)
+            for (int j = 0; j < stateSize; j++)
+                batchStates[i, j] = batch[i].State[j];
+
+        // Compute Double DQN targets outside tape
+        var currentQBatch = _qNetwork.Predict(batchStates);
+        var targetQBatch = new Tensor<T>([batch.Count, actionSize]);
+
+        for (int i = 0; i < batch.Count; i++)
         {
-            // Double DQN: Use online network to SELECT action, target network to EVALUATE
-            T target;
-            if (experience.Done)
+            for (int a = 0; a < actionSize; a++)
+                targetQBatch[i, a] = currentQBatch[i * actionSize + a];
+
+            int actionIndex = ArgMax(batch[i].Action);
+            T tdTarget;
+            if (batch[i].Done)
             {
-                target = experience.Reward;
+                tdTarget = batch[i].Reward;
             }
             else
             {
-                // Key difference from DQN: Use online network to select best action
-                var nextStateTensor = Tensor<T>.FromVector(experience.NextState);
-                var nextQValuesOnlineTensor = _qNetwork.Predict(nextStateTensor);
-                var nextQValuesOnline = nextQValuesOnlineTensor.ToVector();
-                int bestActionIndex = ArgMax(nextQValuesOnline);
+                // Double DQN: online network SELECTS action, target network EVALUATES it
+                var nextState = new Tensor<T>([1, stateSize]);
+                for (int j = 0; j < stateSize; j++)
+                    nextState[0, j] = batch[i].NextState[j];
 
-                // Use target network to evaluate that action
-                var nextQValuesTargetTensor = _targetNetwork.Predict(nextStateTensor);
-                var nextQValuesTarget = nextQValuesTargetTensor.ToVector();
-                var selectedQ = nextQValuesTarget[bestActionIndex];
+                var nextQOnline = _qNetwork.Predict(nextState).ToVector();
+                int bestAction = ArgMax(nextQOnline);
 
-                target = NumOps.Add(experience.Reward,
-                    NumOps.Multiply(DiscountFactor, selectedQ));
+                var nextQTarget = _targetNetwork.Predict(nextState).ToVector();
+                tdTarget = NumOps.Add(batch[i].Reward,
+                    NumOps.Multiply(DiscountFactor, nextQTarget[bestAction]));
             }
 
-            var stateTensor = Tensor<T>.FromVector(experience.State);
-            var currentQValuesTensor = _qNetwork.Predict(stateTensor);
-            var currentQValues = currentQValuesTensor.ToVector();
-            int actionIndex = ArgMax(experience.Action);
-
-            var targetQValues = currentQValues.Clone();
-            targetQValues[actionIndex] = target;
-
-            var loss = LossFunction.CalculateLoss(currentQValues, targetQValues);
-            totalLoss = NumOps.Add(totalLoss, loss);
-
-            var outputGradients = LossFunction.CalculateDerivative(currentQValues, targetQValues);
-            var gradientsTensor = Tensor<T>.FromVector(outputGradients);
-            _qNetwork.Backpropagate(gradientsTensor);
-
-            // Extract parameter gradients from network layers (not output-space gradients)
-            var parameterGradients = _qNetwork.GetParameterGradients();
-            var parameters = _qNetwork.GetParameters();
-
-            // Vectorized SGD
-            parameters = (Vector<T>)Engine.Subtract(parameters, Engine.Multiply(parameterGradients, LearningRate));
-            _qNetwork.UpdateParameters(parameters);
+            targetQBatch[i, actionIndex] = tdTarget;
         }
 
-        var avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(_options.BatchSize));
+        // Single batched training step
+        _qNetwork.Train(batchStates, targetQBatch);
+        var avgLoss = _qNetwork.GetLastLoss();
         LossHistory.Add(avgLoss);
 
         if (_steps % _options.TargetUpdateFrequency == 0)
@@ -372,7 +365,6 @@ public class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         var gradient = loss.CalculateDerivative(output, target);
 
         var gradientTensor = Tensor<T>.FromVector(gradient);
-        _qNetwork.Backpropagate(gradientTensor);
 
         return gradient;
     }

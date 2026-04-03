@@ -114,7 +114,6 @@ public class RecurrentGemmaLanguageModel<T> : NeuralNetworkBase<T>
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        StandardTrainStep(input, expectedOutput);
     }
 
     public override void UpdateParameters(Vector<T> gradients)

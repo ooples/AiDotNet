@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -481,7 +481,6 @@ public class TimeLLM<T> : ForecastingModelBase<T>
 
             // Backward pass
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -755,29 +754,6 @@ public class TimeLLM<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass for gradient computation.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of the loss with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The backward pass computes gradients only for
-    /// the reprogramming and projection layers. The simulated LLM layers are
-    /// also trainable in native mode (unlike the real frozen LLM in ONNX mode).
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var current = outputGradient;
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            current = Layers[i].Backward(current);
-        }
-
-        return current;
-    }
-
-    /// <summary>
     /// Performs ONNX-based inference for forecasting.
     /// </summary>
     /// <param name="input">Input tensor with historical data.</param>
@@ -800,7 +776,7 @@ public class TimeLLM<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -917,7 +893,7 @@ public class TimeLLM<T> : ForecastingModelBase<T>
         int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
         int steps = Math.Min(stepsUsed, contextLen);
 
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
 
         int predSteps = predictions.Shape.Length > 1 ? predictions.Shape[1] : predictions.Length / Math.Max(1, batchSize);
         int predFeatures = predictions.Shape.Length > 2 ? predictions.Shape[2] : 1;

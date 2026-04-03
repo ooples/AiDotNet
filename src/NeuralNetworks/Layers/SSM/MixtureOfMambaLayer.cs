@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -124,9 +124,6 @@ public class MixtureOfMambaLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
 
     /// <summary>Gets the model dimension.</summary>
     public int ModelDimension => _modelDimension;
@@ -481,226 +478,6 @@ public class MixtureOfMambaLayer<T> : LayerBase<T>
         }
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var lastInput = _lastInput ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastOutput = _lastOutput ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastRouterWeightsResult = _lastRouterWeightsResult ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastTopKIndices = _lastTopKIndices ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastExpertOutputs = _lastExpertOutputs ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastGate = _lastGate ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastGateRaw = _lastGateRaw ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastMoEOutput = _lastMoEOutput ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastExpertStates = _lastExpertStates ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = lastInput.Shape[0];
-        int seqLen = lastInput.Shape[1];
-        int totalTokens = batchSize * seqLen;
-
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        var activationGrad = ApplyActivationDerivative(lastOutput, grad3D);
-
-        // Initialize all gradients
-        _routerWeightsGradient = new Tensor<T>([_modelDimension, _numExperts]);
-        _routerBiasGradient = new Tensor<T>([_numExperts]);
-        _expertAGradient = new Tensor<T>([_numExperts, _stateDimension]);
-        _expertBGradient = new Tensor<T>([_numExperts, _stateDimension, _modelDimension]);
-        _expertCGradient = new Tensor<T>([_numExperts, _modelDimension, _stateDimension]);
-        _expertDGradient = new Tensor<T>([_numExperts, _modelDimension]);
-        _outputGateWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputGateBiasGradient = new Tensor<T>([_modelDimension]);
-        _outputProjectionWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
-
-        // Output projection backward
-        var gradFlat = activationGrad.Reshape(totalTokens, _modelDimension);
-        var gatedFlat = Engine.TensorMultiply(lastMoEOutput, lastGate)
-            .Reshape(totalTokens, _modelDimension);
-        _outputProjectionWeightsGradient = Engine.TensorMatMul(gatedFlat.Transpose([1, 0]), gradFlat);
-
-        var dGated = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
-            .Reshape(batchSize, seqLen, _modelDimension);
-
-        // Gate backward (Swish)
-        var dMoEOutput = Engine.TensorMultiply(dGated, lastGate);
-        var dGateSwish = Engine.TensorMultiply(dGated, lastMoEOutput);
-        var dGateRaw = Engine.TensorMultiply(dGateSwish, ComputeSiLUDerivative(lastGateRaw));
-
-        var inputFlat = lastInput.Reshape(totalTokens, _modelDimension);
-        var dGateRawFlat = dGateRaw.Reshape(totalTokens, _modelDimension);
-        _outputGateWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dGateRawFlat);
-        _outputGateBiasGradient = Engine.ReduceSum(dGateRaw, new int[] { 0, 1 });
-        var dInputFromGate = Engine.TensorMatMul(dGateRawFlat, _outputGateWeights.Transpose([1, 0]));
-
-        // MoE combination backward
-        var dExpertOutputs = new Tensor<T>(new[] { totalTokens, _topK, _modelDimension });
-        var dRouterWeights = new Tensor<T>(new[] { totalTokens, _numExperts });
-
-        for (int tokenIdx = 0; tokenIdx < totalTokens; tokenIdx++)
-        {
-            int bi = tokenIdx / seqLen;
-            int t = tokenIdx % seqLen;
-
-            for (int ki = 0; ki < _topK; ki++)
-            {
-                int expertIdx = lastTopKIndices[tokenIdx, ki];
-                T weight = lastRouterWeightsResult[new[] { tokenIdx, expertIdx }];
-
-                for (int di = 0; di < _modelDimension; di++)
-                {
-                    T dMoE = dMoEOutput[new[] { bi, t, di }];
-                    T expertOut = lastExpertOutputs[new[] { tokenIdx, ki, di }];
-
-                    // dExpertOutput = weight * dMoE
-                    dExpertOutputs[new[] { tokenIdx, ki, di }] = NumOps.Multiply(weight, dMoE);
-
-                    // dWeight = expertOutput * dMoE
-                    dRouterWeights[new[] { tokenIdx, expertIdx }] = NumOps.Add(
-                        dRouterWeights[new[] { tokenIdx, expertIdx }],
-                        NumOps.Multiply(expertOut, dMoE));
-                }
-            }
-        }
-
-        // Expert SSM backward
-        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            // Per-expert state gradient: dH[expert, t, stateDim]
-            var dH = new T[_numExperts, _stateDimension];
-
-            for (int t = seqLen - 1; t >= 0; t--)
-            {
-                int tokenIdx = bi * seqLen + t;
-
-                for (int ki = 0; ki < _topK; ki++)
-                {
-                    int expertIdx = lastTopKIndices[tokenIdx, ki];
-
-                    // y = C * h + D * x, backward
-                    for (int di = 0; di < _modelDimension; di++)
-                    {
-                        T dY = dExpertOutputs[new[] { tokenIdx, ki, di }];
-
-                        // dD
-                        T xVal = lastInput[new[] { bi, t, di }];
-                        _expertDGradient[new[] { expertIdx, di }] = NumOps.Add(
-                            _expertDGradient[new[] { expertIdx, di }],
-                            NumOps.Multiply(dY, xVal));
-
-                        // dInput from D*x
-                        dInput[new[] { bi, t, di }] = NumOps.Add(
-                            dInput[new[] { bi, t, di }],
-                            NumOps.Multiply(dY, _expertD[new[] { expertIdx, di }]));
-
-                        // dC and dH from C * h
-                        for (int si = 0; si < _stateDimension; si++)
-                        {
-                            T hVal = lastExpertStates[new[] { bi, expertIdx, t + 1, si }];
-                            _expertCGradient[new[] { expertIdx, di, si }] = NumOps.Add(
-                                _expertCGradient[new[] { expertIdx, di, si }],
-                                NumOps.Multiply(dY, hVal));
-
-                            dH[expertIdx, si] = NumOps.Add(dH[expertIdx, si],
-                                NumOps.Multiply(dY, _expertC[new[] { expertIdx, di, si }]));
-                        }
-                    }
-
-                    // h_t = exp(A) * h_{t-1} + B * x, backward
-                    for (int si = 0; si < _stateDimension; si++)
-                    {
-                        T dHVal = dH[expertIdx, si];
-                        T aVal = NumOps.Exp(_expertA[new[] { expertIdx, si }]);
-                        T prevH = t > 0
-                            ? lastExpertStates[new[] { bi, expertIdx, t, si }]
-                            : NumOps.Zero;
-
-                        // dA: d/dA[exp(A) * h_{t-1}] = exp(A) * h_{t-1} * dH
-                        _expertAGradient[new[] { expertIdx, si }] = NumOps.Add(
-                            _expertAGradient[new[] { expertIdx, si }],
-                            NumOps.Multiply(NumOps.Multiply(aVal, prevH), dHVal));
-
-                        // dB and dInput from B * x
-                        for (int di = 0; di < _modelDimension; di++)
-                        {
-                            T xVal = lastInput[new[] { bi, t, di }];
-                            _expertBGradient[new[] { expertIdx, si, di }] = NumOps.Add(
-                                _expertBGradient[new[] { expertIdx, si, di }],
-                                NumOps.Multiply(dHVal, xVal));
-
-                            dInput[new[] { bi, t, di }] = NumOps.Add(
-                                dInput[new[] { bi, t, di }],
-                                NumOps.Multiply(dHVal, _expertB[new[] { expertIdx, si, di }]));
-                        }
-
-                        // Propagate dH to previous timestep: dH_{t-1} += exp(A) * dH_t
-                        dH[expertIdx, si] = NumOps.Multiply(aVal, dHVal);
-                    }
-                }
-            }
-        }
-
-        // Router backward (simplified: gradient through softmax top-K)
-        // We approximate by passing gradient through the softmax for selected experts
-        for (int tokenIdx = 0; tokenIdx < totalTokens; tokenIdx++)
-        {
-            // Softmax backward for router
-            T sumWD = NumOps.Zero;
-            for (int ki = 0; ki < _topK; ki++)
-            {
-                int expertIdx = lastTopKIndices[tokenIdx, ki];
-                T w = lastRouterWeightsResult[new[] { tokenIdx, expertIdx }];
-                T dW = dRouterWeights[new[] { tokenIdx, expertIdx }];
-                sumWD = NumOps.Add(sumWD, NumOps.Multiply(w, dW));
-            }
-
-            for (int ki = 0; ki < _topK; ki++)
-            {
-                int expertIdx = lastTopKIndices[tokenIdx, ki];
-                T w = lastRouterWeightsResult[new[] { tokenIdx, expertIdx }];
-                T dW = dRouterWeights[new[] { tokenIdx, expertIdx }];
-                T dLogit = NumOps.Multiply(w, NumOps.Subtract(dW, sumWD));
-
-                // Router weight gradient
-                for (int di = 0; di < _modelDimension; di++)
-                {
-                    T xVal = inputFlat[new[] { tokenIdx, di }];
-                    _routerWeightsGradient[new[] { di, expertIdx }] = NumOps.Add(
-                        _routerWeightsGradient[new[] { di, expertIdx }],
-                        NumOps.Multiply(xVal, dLogit));
-
-                    // dInput from router
-                    int bi = tokenIdx / seqLen;
-                    int t = tokenIdx % seqLen;
-                    dInput[new[] { bi, t, di }] = NumOps.Add(
-                        dInput[new[] { bi, t, di }],
-                        NumOps.Multiply(_routerWeights[new[] { di, expertIdx }], dLogit));
-                }
-
-                _routerBiasGradient[expertIdx] = NumOps.Add(
-                    _routerBiasGradient[expertIdx], dLogit);
-            }
-        }
-
-        // Add gate input gradient
-        var dInputFlat = dInput.Reshape(totalTokens, _modelDimension);
-        dInputFlat = Engine.TensorAdd(dInputFlat, dInputFromGate);
-        dInput = dInputFlat.Reshape(batchSize, seqLen, _modelDimension);
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return dInput.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return dInput.Reshape(_originalInputShape);
-
-        return dInput;
-    }
-
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
@@ -767,16 +544,16 @@ public class MixtureOfMambaLayer<T> : LayerBase<T>
     {
         if (_routerWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_routerWeightsGradient is not null ? Vector<T>.FromMemory(_routerWeightsGradient.Data) : new Vector<T>(0)),
-            (_routerBiasGradient is not null ? Vector<T>.FromMemory(_routerBiasGradient.Data) : new Vector<T>(0)),
-            (_expertAGradient is not null ? Vector<T>.FromMemory(_expertAGradient.Data) : new Vector<T>(0)),
-            (_expertBGradient is not null ? Vector<T>.FromMemory(_expertBGradient.Data) : new Vector<T>(0)),
-            (_expertCGradient is not null ? Vector<T>.FromMemory(_expertCGradient.Data) : new Vector<T>(0)),
-            (_expertDGradient is not null ? Vector<T>.FromMemory(_expertDGradient.Data) : new Vector<T>(0)),
-            _outputGateWeightsGradient is not null ? (_outputGateWeightsGradient is not null ? Vector<T>.FromMemory(_outputGateWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateWeights.Length),
-            _outputGateBiasGradient is not null ? (_outputGateBiasGradient is not null ? Vector<T>.FromMemory(_outputGateBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateBias.Length),
-            _outputProjectionWeightsGradient is not null ? (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionWeights.Length),
-            _outputProjectionBiasGradient is not null ? (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionBias.Length));
+            new Vector<T>(_routerWeightsGradient!.ToArray()),
+            new Vector<T>(_routerBiasGradient!.ToArray()),
+            new Vector<T>(_expertAGradient!.ToArray()),
+            new Vector<T>(_expertBGradient!.ToArray()),
+            new Vector<T>(_expertCGradient!.ToArray()),
+            new Vector<T>(_expertDGradient!.ToArray()),
+            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
+            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
     }
 
     public override void ClearGradients()
@@ -813,28 +590,6 @@ public class MixtureOfMambaLayer<T> : LayerBase<T>
     }
 
     #endregion
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
-        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
-        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(outWeightsNode);
-        inputNodes.Add(outBiasNode);
-
-        var outT = TensorOperations<T>.Transpose(outWeightsNode);
-        var finalOutput = TensorOperations<T>.MatrixMultiply(xNode, outT);
-        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
-
-        return outputWithBias;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

@@ -1,9 +1,11 @@
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -38,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "1, 1, 2, 3, 4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class SubpixelConvolutionalLayer<T> : LayerBase<T>
+public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The number of channels in the input tensor.
@@ -141,6 +143,8 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// are used to store information that helps create the higher resolution output.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _kernels;
 
     /// <summary>
@@ -162,6 +166,8 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// across the entire feature map.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -294,10 +300,10 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _biasMomentum;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuConvOutput;
-    private IGpuTensor<T>? _gpuShuffled;
-    private IGpuTensor<T>? _gpuActivationOutput;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuConvOutput;
+    private Tensor<T>? _gpuShuffled;
+    private Tensor<T>? _gpuActivationOutput;
     private bool _gpuAddedBatch;
     private int _gpuBatch;
     private int _gpuHeight;
@@ -307,22 +313,22 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     #region GPU Weight Storage Fields
 
     // GPU weight tensors for GPU-resident training
-    private GpuTensor<T>? _gpuKernels;
-    private GpuTensor<T>? _gpuBiases;
+    private Tensor<T>? _gpuKernels;
+    private Tensor<T>? _gpuBiases;
 
     // GPU gradient tensors from BackwardGpu
-    private GpuTensor<T>? _gpuKernelGradient;
-    private GpuTensor<T>? _gpuBiasGradient;
+    private Tensor<T>? _gpuKernelGradient;
+    private Tensor<T>? _gpuBiasGradient;
 
     // Optimizer state tensors for SGD/NAG/LARS (velocity)
-    private GpuTensor<T>? _gpuKernelVelocity;
-    private GpuTensor<T>? _gpuBiasVelocity;
+    private Tensor<T>? _gpuKernelVelocity;
+    private Tensor<T>? _gpuBiasVelocity;
 
     // Optimizer state tensors for Adam/AdamW/LAMB (M and V)
-    private GpuTensor<T>? _gpuKernelM;
-    private GpuTensor<T>? _gpuKernelV;
-    private GpuTensor<T>? _gpuBiasM;
-    private GpuTensor<T>? _gpuBiasV;
+    private Tensor<T>? _gpuKernelM;
+    private Tensor<T>? _gpuKernelV;
+    private Tensor<T>? _gpuBiasM;
+    private Tensor<T>? _gpuBiasV;
 
     #endregion
 
@@ -658,7 +664,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// <remarks>
     /// All computations stay on GPU: Conv2D → PixelShuffle (reshape+permute+reshape) → Activation.
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -671,7 +677,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         var shape = input.Shape.ToArray();
 
         // Ensure 4D [B, C, H, W] format
-        IGpuTensor<T> input4D;
+        Tensor<T> input4D;
         bool addedBatch = false;
         if (shape.Length == 3)
         {
@@ -712,7 +718,7 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
 
         // Step 3: Apply activation
         var fusedActivation = GetFusedActivationType();
-        IGpuTensor<T> result;
+        Tensor<T> result;
         if (fusedActivation != FusedActivationType.None)
         {
             result = gpuEngine.ActivationGpu(shuffled, fusedActivation);
@@ -743,283 +749,6 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Performs the GPU-resident backward pass of the subpixel convolutional layer.
-    /// </summary>
-    /// <param name="outputGradient">The GPU tensor containing the gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (_gpuInput == null || _gpuConvOutput == null || _gpuShuffled == null)
-            throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");
-
-        var gpuEngine = Engine as DirectGpuTensorEngine;
-        if (gpuEngine == null)
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-
-        int r = _upscaleFactor;
-        int outChannels = _outputDepth;
-        int outHeight = _gpuHeight * r;
-        int outWidth = _gpuWidth * r;
-
-        // Ensure output gradient has batch dimension
-        IGpuTensor<T> gradWithBatch = outputGradient;
-        if (outputGradient.Shape.Length == 3)
-        {
-            gradWithBatch = gpuEngine.ReshapeGpu<T>(outputGradient, new[] { 1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2] });
-        }
-
-        // Step 1: Backprop through activation
-        IGpuTensor<T> activationGrad;
-        if (_gpuActivationType != FusedActivationType.None && _gpuActivationOutput != null)
-        {
-            activationGrad = _gpuActivationType switch
-            {
-                FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(gradWithBatch, _gpuActivationOutput),
-                FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(gradWithBatch, _gpuActivationOutput),
-                FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(gradWithBatch, _gpuActivationOutput),
-                FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(gradWithBatch, _gpuActivationOutput),
-                FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(gradWithBatch, _gpuActivationOutput),
-                _ => gradWithBatch
-            };
-        }
-        else
-        {
-            activationGrad = gradWithBatch;
-        }
-
-        // Step 2: Backprop through PixelShuffle (reverse: reshape + inverse permute + reshape)
-        // Forward was: [B, C*r², H, W] → [B, C, r, r, H, W] → permute [0,1,4,2,5,3] → [B, C, H, r, W, r] → [B, C, H*r, W*r]
-        // Backward: [B, C, H*r, W*r] → [B, C, H, r, W, r] → inverse permute [0,1,3,4,2,5] → [B, C, r, r, H, W] → [B, C*r², H, W]
-        int numOutChannels = _outputDepth * r * r;
-        var gradReshaped1 = gpuEngine.ReshapeGpu<T>(activationGrad, new[] { _gpuBatch, outChannels, _gpuHeight, r, _gpuWidth, r });
-        var gradPermuted = gpuEngine.PermuteGpu<T>(gradReshaped1, new[] { 0, 1, 3, 5, 2, 4 }); // [B, C, r, r, H, W]
-        var convOutputGrad = gpuEngine.ReshapeGpu<T>(gradPermuted, new[] { _gpuBatch, numOutChannels, _gpuHeight, _gpuWidth });
-
-        // Step 3: Backprop through Conv2D
-        int padSize = _kernelSize / 2;
-
-        // Compute bias gradient: sum over batch and spatial dimensions (axes 0, 2, 3)
-        var biasGradTemp = gpuEngine.SumAxisGpu<T>(convOutputGrad, 0); // [C, H, W]
-        var biasGradTemp2 = gpuEngine.SumAxisGpu<T>(biasGradTemp, 1); // [C, W]
-        var biasGradGpuTemp = gpuEngine.SumAxisGpu<T>(biasGradTemp2, 1); // [C]
-        _biasGradients = biasGradGpuTemp.ToTensor();
-
-        // Compute kernel gradient
-        var kernelGradGpuTemp = gpuEngine.Conv2DBackwardKernelGpu<T>(
-            convOutputGrad,
-            _gpuInput,
-            _kernels.Shape.ToArray(),
-            new[] { 1, 1 },  // stride
-            new[] { padSize, padSize },  // padding
-            new[] { 1, 1 }); // dilation
-        _kernelGradients = kernelGradGpuTemp.ToTensor();
-
-        // Store gradients as GPU tensors for UpdateParametersGpu
-        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
-        _gpuKernelGradient = new GpuTensor<T>(backend, _kernelGradients, GpuTensorRole.Gradient);
-        _gpuBiasGradient = new GpuTensor<T>(backend, _biasGradients, GpuTensorRole.Gradient);
-
-        // Compute input gradient
-        var inputGrad = gpuEngine.Conv2DBackwardInputGpu<T>(
-            convOutputGrad,
-            _kernels,
-            _gpuInput.Shape.ToArray(),
-            new[] { 1, 1 },  // stride
-            new[] { padSize, padSize },  // padding
-            new[] { 1, 1 }); // dilation
-
-        // Remove batch dimension if it was added
-        if (_gpuAddedBatch)
-        {
-            inputGrad = gpuEngine.ReshapeGpu<T>(inputGrad, new[] { inputGrad.Shape[1], inputGrad.Shape[2], inputGrad.Shape[3] });
-        }
-
-        return inputGrad;
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the subpixel convolutional layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when trying to perform a backward pass before a forward pass.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the subpixel convolutional layer, which is used during training to
-    /// propagate error gradients back through the network. It calculates gradients for the input and for all trainable
-    /// parameters (kernels and biases).
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
-    /// and parameters should change to reduce errors.
-    ///
-    /// During the backward pass, we reverse the steps from the forward pass:
-    ///
-    /// 1. First, calculate how the activation function affects the gradient
-    ///
-    /// 2. Reverse the pixel shuffling:
-    ///    - Convert the gradient from high resolution back to the lower resolution with more channels
-    ///    - This helps determine how each output channel contributed to the errors
-    ///
-    /// 3. Calculate three types of gradients:
-    ///    - How the input should change (inputGradient)
-    ///    - How the kernels should change (kernelGradients)
-    ///    - How the biases should change (biasGradients)
-    ///
-    /// These gradients tell the network how to adjust its parameters during the update step
-    /// to improve its performance on the next forward pass.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when trying to perform a backward pass before a forward pass.</exception>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Handle any-rank gradient input by reshaping to 4D to match _lastOutput
-        Tensor<T> gradient4D;
-        int gradRank = outputGradient.Shape.Length;
-        if (gradRank == 3)
-        {
-            // 3D gradient [C, H, W] -> 4D [1, C, H, W]
-            gradient4D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]);
-        }
-        else if (gradRank == 4)
-        {
-            gradient4D = outputGradient;
-        }
-        else
-        {
-            // Higher-rank: flatten leading dimensions
-            int flatBatch = 1;
-            for (int d = 0; d < gradRank - 3; d++)
-                flatBatch *= outputGradient.Shape[d];
-            gradient4D = outputGradient.Reshape(flatBatch, outputGradient.Shape[gradRank - 3],
-                outputGradient.Shape[gradRank - 2], outputGradient.Shape[gradRank - 1]);
-        }
-
-        // Apply activation derivative (both _lastOutput and gradient4D are in NCHW format)
-        var delta = ApplyActivationDerivativeFromOutput(_lastOutput, gradient4D);
-
-        int padSize = _kernelSize / 2;
-        var strideArr = new int[] { 1, 1 };
-        var paddingArr = new int[] { padSize, padSize };
-        var dilationArr = new int[] { 1, 1 };
-
-        // Reverse pixel shuffle using Engine
-        int numOutChannels = _outputDepth * _upscaleFactor * _upscaleFactor;
-        var convGradShape = new int[] { _lastInput.Shape[0], numOutChannels, _lastInput.Shape[2], _lastInput.Shape[3] };
-        var convOutputGradientNCHW = Engine.PixelShuffleBackward(delta, convGradShape, _upscaleFactor);
-
-        // Calculate bias gradient: sum over batch, height, width (axes 0, 2, 3 in NCHW)
-        _biasGradients = Engine.ReduceSum(convOutputGradientNCHW, new[] { 0, 2, 3 }, keepDims: false);
-
-        // Calculate kernel gradient using Engine
-        _kernelGradients = Engine.Conv2DBackwardKernel(convOutputGradientNCHW, _lastInput, _kernels.Shape.ToArray(), strideArr, paddingArr, dilationArr);
-
-        // Calculate input gradient using Engine (NCHW format)
-        var inputGradient = Engine.Conv2DBackwardInput(convOutputGradientNCHW, _kernels, _lastInput.Shape.ToArray(), strideArr, paddingArr, dilationArr);
-
-        // Restore original input shape for higher-rank tensors
-        if (_originalInputShape != null && _originalInputShape.Length > 4)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        if (_addedBatchDimension && _originalInputShape != null)
-        {
-            // 3D input [C, H, W] should produce 3D gradient [C, H, W]
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. Currently, subpixel convolution operations
-    /// are not yet available in TensorOperations, so this method falls back to the manual implementation.
-    /// </para>
-    /// <para>
-    /// Once subpixel convolution operations are added to TensorOperations, this method will provide:
-    /// - Automatic gradient computation through the computation graph
-    /// - Verification of manual gradient implementations
-    /// - Support for rapid prototyping with custom modifications
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Convert input to computation node
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-
-        // Apply pixel shuffle operation
-        var outputNode = Autodiff.TensorOperations<T>.PixelShuffle(inputNode, _upscaleFactor);
-
-        // Set gradient on output node
-        outputNode.Gradient = outputGradient;
-
-        // Inline topological sort and backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
     /// <summary>
@@ -1222,13 +951,13 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        return Vector<T>.Concatenate(Vector<T>.FromMemory(_kernels.Data), Vector<T>.FromMemory(_biases.Data));
+        return Vector<T>.Concatenate(new Vector<T>(_kernels.ToArray()), new Vector<T>(_biases.ToArray()));
     }
 
     public override Vector<T> GetParameterGradients()
     {
-        var kGrad = _kernelGradients != null ? Vector<T>.FromMemory(_kernelGradients.Data) : new Vector<T>(_kernels.Length);
-        var bGrad = _biasGradients != null ? Vector<T>.FromMemory(_biasGradients.Data) : new Vector<T>(_biases.Length);
+        var kGrad = _kernelGradients != null ? new Vector<T>(_kernelGradients.ToArray()) : new Vector<T>(_kernels.Length);
+        var bGrad = _biasGradients != null ? new Vector<T>(_biasGradients.ToArray()) : new Vector<T>(_biases.Length);
         return Vector<T>.Concatenate(kGrad, bGrad);
     }
 
@@ -1251,87 +980,6 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         Engine.InvalidatePersistentTensor(_biases);
     }
 
-    /// <summary>
-    /// Exports this layer's computation as a differentiable computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to which input variable nodes should be added.</param>
-    /// <returns>The output computation node representing this layer's operation.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when weights/biases are not initialized or activation is not supported.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph representation of the subpixel convolution operation.
-    /// Subpixel convolution combines convolution with pixel shuffling (depth-to-space rearrangement).
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates an optimized version for faster inference.
-    ///
-    /// For subpixel convolutional layers:
-    /// - Creates placeholders for input, convolution kernels, and biases
-    /// - Applies convolution operation
-    /// - Applies pixel shuffle (depth-to-space) rearrangement
-    /// - Applies activation function
-    /// - Returns a computation graph for efficient execution
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (_kernels == null || _biases == null)
-            throw new InvalidOperationException("Layer weights not initialized. Call Initialize() or train the layer first.");
-
-        if (!CanActivationBeJitted())
-        {
-            var activationType = ScalarActivation?.GetType().Name ?? VectorActivation?.GetType().Name ?? "unknown";
-            throw new NotSupportedException(
-                $"Activation function '{activationType}' is not supported for JIT compilation yet. " +
-                "Supported activations: ReLU, Sigmoid, Tanh, Softmax");
-        }
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input node with batch dimension
-        // Input shape: [batch, height, width, channels] (NHWC format)
-        var symbolicInput = new Tensor<T>(new int[] { 1, InputShape[0], InputShape[1], InputShape[2] });
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "subpixel_input");
-        inputNodes.Add(inputNode);
-
-        // Create constant nodes for kernels and biases (biases is already a Tensor<T>)
-        var kernelNode = TensorOperations<T>.Constant(_kernels, "subpixel_kernels");
-        var biasNode = TensorOperations<T>.Constant(_biases, "subpixel_biases");
-
-        // Step 1: Apply 2D convolution
-        // Conv2D expects NCHW format, so we may need to transpose if our layer uses NHWC
-        // For simplicity, we assume the input is compatible with Conv2D operation
-        var convOutput = TensorOperations<T>.Conv2D(inputNode, kernelNode, stride: new[] { 1, 1 }, padding: new[] { _kernelSize / 2, _kernelSize / 2 });
-
-        // Step 2: Add bias (broadcast across spatial dimensions)
-        var withBias = TensorOperations<T>.Add(convOutput, biasNode);
-
-        // Step 3: Apply PixelShuffle (depth-to-space) for upscaling
-        var shuffled = TensorOperations<T>.PixelShuffle(withBias, _upscaleFactor);
-
-        // Step 4: Apply activation function using base class helper
-        var output = ApplyActivationToGraph(shuffled);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>True, as all required operations (Conv2D, PixelShuffle) are available.</value>
-    /// <remarks>
-    /// <para>
-    /// Subpixel convolutional layers support JIT compilation using Conv2D and PixelShuffle
-    /// operations from TensorOperations. The layer requires both convolution and pixel shuffling
-    /// operations which are available in the computation graph.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
     #region GPU Parameter Updates
 
     /// <summary>
@@ -1349,8 +997,8 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
             throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
 
         // Ensure GPU weight tensors exist
-        _gpuKernels ??= new GpuTensor<T>(backend, _kernels, GpuTensorRole.Weight);
-        _gpuBiases ??= new GpuTensor<T>(backend, _biases, GpuTensorRole.Bias);
+        _gpuKernels ??= GpuTensorHelper.UploadToGpu<T>(backend, _kernels, GpuTensorRole.Weight);
+        _gpuBiases ??= GpuTensorHelper.UploadToGpu<T>(backend, _biases, GpuTensorRole.Bias);
 
         // Ensure optimizer state buffers exist
         EnsureSubpixelOptimizerState(backend, config.OptimizerType);
@@ -1360,8 +1008,8 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
         config.ApplyUpdate(backend, _gpuBiases.Buffer, _gpuBiasGradient.Buffer, BuildSubpixelOptimizerState("biases"), _biases.Length);
 
         // Sync back to CPU tensors for compatibility
-        _kernels = _gpuKernels.ToTensor();
-        _biases = _gpuBiases.ToTensor();
+        _kernels = _gpuKernels;
+        _biases = _gpuBiases;
     }
 
     /// <summary>
@@ -1378,25 +1026,25 @@ public class SubpixelConvolutionalLayer<T> : LayerBase<T>
             case GpuOptimizerType.Nag:
             case GpuOptimizerType.Lars:
                 // Velocity buffers
-                _gpuKernelVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([kernelSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuKernelVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([kernelSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
 
             case GpuOptimizerType.Adam:
             case GpuOptimizerType.AdamW:
             case GpuOptimizerType.Lamb:
                 // M and V buffers for Adam-family
-                _gpuKernelM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([kernelSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuKernelV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([kernelSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuKernelM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([kernelSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuKernelV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([kernelSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
 
             case GpuOptimizerType.RmsProp:
             case GpuOptimizerType.Adagrad:
                 // Squared average buffers (reuse velocity fields)
-                _gpuKernelVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([kernelSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuKernelVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([kernelSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
         }
     }

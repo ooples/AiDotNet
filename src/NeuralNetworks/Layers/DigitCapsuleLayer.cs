@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Routing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, UsesSurrogateGradient = true, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 10, 4, 3")]
-public class DigitCapsuleLayer<T> : LayerBase<T>
+public partial class DigitCapsuleLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The weight tensor connecting input capsules to output capsules.
@@ -52,6 +52,8 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     /// - During training, these weights are adjusted to make better predictions
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
@@ -328,7 +330,9 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         var scaled = Engine.TensorMultiplyScalar(shifted, scale);
 
         // Copy to weights tensor - reshape maintains the same underlying data
-        _weights = scaled.Reshape(_weights.Shape.ToArray());
+        _weights = scaled.Reshape(_weights._shape);
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
     }
 
     /// <summary>
@@ -514,7 +518,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     /// DynamicRoutingGpu for the routing iterations, keeping all data on GPU.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -532,7 +536,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
 
         // Determine batch size and reshape to [B, I, D_in] for capsule processing
         int batchSize;
-        IGpuTensor<T> input3D;
+        Tensor<T> input3D;
 
         if (rank == 1)
         {
@@ -593,7 +597,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         // Cache input on CPU for backward pass (training mode only)
         if (IsTrainingMode)
         {
-            _lastInput = input3D.ToTensor();
+            _lastInput = input3D;
         }
 
         // Compute predictions on GPU: [B, I, D_in] -> [B, I, C, D_out]
@@ -607,8 +611,8 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         // Cache output and couplings on CPU for backward pass (training mode only)
         if (IsTrainingMode)
         {
-            _lastOutput = routedOutput.ToTensor();
-            _lastCouplings = couplings.ToTensor();
+            _lastOutput = routedOutput;
+            _lastCouplings = couplings;
         }
 
         // Dispose intermediate tensors
@@ -626,290 +630,6 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         }
 
         return flattenedOutput;
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the digit capsule layer to compute gradients.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass (backpropagation) of the digit capsule layer. It computes
-    /// the gradients of the loss with respect to the layer's weights and inputs, which are used to update
-    /// the weights during training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where the layer learns from its mistakes during training.
-    /// 
-    /// The backward pass:
-    /// 1. Receives information about how the network's prediction was wrong
-    /// 2. Calculates how each weight contributed to this error
-    /// 3. Determines how to adjust the weights to reduce the error next time
-    /// 4. Passes error information back to previous layers
-    /// 
-    /// It's like figuring out which ingredients in a recipe need to be adjusted after tasting
-    /// the finished dish, then sharing that feedback with those who prepared the ingredients.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _lastCouplings == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = _lastInput.Shape[0];
-
-        Tensor<T> outputGradient3D = outputGradient;
-        if (outputGradient.Shape.Length == 1)
-        {
-            outputGradient3D = outputGradient.Reshape([1, _numClasses, _outputCapsuleDimension]);
-        }
-        else if (outputGradient.Shape.Length == 2)
-        {
-            outputGradient3D = outputGradient.Reshape([batchSize, _numClasses, _outputCapsuleDimension]);
-        }
-
-        // Squash backward with proper Jacobian-vector product using cached pre-squash values.
-        // Flatten to [batch*numClasses, outputCapsuleDim] for per-capsule Jacobian.
-        int totalOutputCapsules = batchSize * _numClasses;
-        Tensor<T> activationGradient;
-
-        if (_lastPreSquash is not null && VectorActivation is not null)
-        {
-            var flatGrad = outputGradient3D.Reshape([totalOutputCapsules, _outputCapsuleDimension]);
-            var jacobians = VectorActivation.Derivative(_lastPreSquash);
-
-            if (jacobians.Shape.Length == 3 && jacobians.Shape[1] == _outputCapsuleDimension)
-            {
-                // Jacobian @ gradient per capsule via BatchMatMul
-                var gradCol = flatGrad.Reshape([totalOutputCapsules, _outputCapsuleDimension, 1]);
-                var resultCol = Engine.BatchMatMul(jacobians, gradCol);
-                activationGradient = resultCol.Reshape([batchSize, _numClasses, _outputCapsuleDimension]);
-            }
-            else
-            {
-                activationGradient = Engine.TensorMultiply(jacobians, flatGrad)
-                    .Reshape([batchSize, _numClasses, _outputCapsuleDimension]);
-            }
-        }
-        else
-        {
-            activationGradient = outputGradient3D;
-        }
-
-        _weightsGradient = new Tensor<T>(_weights.Shape.ToArray());
-        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
-
-        var softmaxActivation = new SoftmaxActivation<T>();
-        var routingWeights = softmaxActivation.Activate(_lastCouplings);
-        var routingWeightsGradient = softmaxActivation.Derivative(_lastCouplings);
-
-        // Tensorized prediction gradients: [B, I, C, outDim]
-        var predGrad = TensorAllocator.Rent<T>([batchSize, _inputCapsules, _numClasses, _outputCapsuleDimension]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < _inputCapsules; i++)
-            {
-                for (int j = 0; j < _numClasses; j++)
-                {
-                    var routingWeight = routingWeights[b, i, j];
-                    for (int l = 0; l < _outputCapsuleDimension; l++)
-                    {
-                        predGrad[b, i, j, l] = NumOps.Multiply(activationGradient[b, j, l], routingWeight);
-                    }
-                }
-            }
-        }
-
-        // Weight gradients: sum over batch of outer(inputCapsule, predGrad)
-        for (int i = 0; i < _inputCapsules; i++)
-        {
-            for (int j = 0; j < _numClasses; j++)
-            {
-                for (int b = 0; b < batchSize; b++)
-                {
-                    for (int k = 0; k < _inputCapsuleDimension; k++)
-                    {
-                        for (int l = 0; l < _outputCapsuleDimension; l++)
-                        {
-                            // dW[i,j,k,l] += input[b,i,k] * predGrad[b,i,j,l]
-                            _weightsGradient[i, j, k, l] = NumOps.Add(
-                                _weightsGradient[i, j, k, l],
-                                NumOps.Multiply(_lastInput[b, i, k], predGrad[b, i, j, l]));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Input gradient accumulation
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < _inputCapsules; i++)
-            {
-                var gradVec = new Tensor<T>([_inputCapsuleDimension, 1]);
-                for (int j = 0; j < _numClasses; j++)
-                {
-                    var weightsMat = _weights.SubTensor(i, j);
-                    var pg = predGrad.SubTensor(b, i, j).Reshape([_outputCapsuleDimension, 1]);
-                    gradVec = Engine.TensorAdd(gradVec, Engine.TensorMatMul(weightsMat, pg));
-
-                    // coupling gradient contribution
-                    var outputCapsule = _lastOutput.SubTensor(b, j);
-                    var actGradCapsule = activationGradient.SubTensor(b, j);
-                    T dot = NumOps.Zero;
-                    for (int l = 0; l < _outputCapsuleDimension; l++)
-                    {
-                        dot = NumOps.Add(dot, NumOps.Multiply(outputCapsule[l], actGradCapsule[l]));
-                    }
-                    dot = NumOps.Multiply(dot, routingWeightsGradient[b, i, j]);
-                    var couplingVec = new Tensor<T>([_outputCapsuleDimension, 1]);
-                    couplingVec.Fill(dot);
-                    gradVec = Engine.TensorAdd(gradVec, Engine.TensorMatMul(weightsMat, couplingVec));
-                }
-
-                for (int k = 0; k < _inputCapsuleDimension; k++)
-                {
-                    inputGradient[b, i, k] = gradVec[k, 0];
-                }
-            }
-        }
-
-        // Restore gradient to original input shape for any-rank support
-        if (_originalInputShape != null && _originalInputShape.Length != 3)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation with unrolled routing.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // 1. Create variables
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-        var weightsNode = Autodiff.TensorOperations<T>.Variable(_weights, "weights", requiresGradient: true);
-
-        int batchSize = _lastInput.Shape[0];
-        int inputCapsules = _inputCapsules;
-        int numClasses = _numClasses;
-        int inputDim = _inputCapsuleDimension;
-        int outputDim = _outputCapsuleDimension;
-
-        // 2. Compute Predictions: input @ weights
-        // Input: [B, I, D_in] -> Reshape to [B, I, 1, D_in] to broadcast over C
-        var inputReshaped = Autodiff.TensorOperations<T>.Reshape(inputNode, batchSize, inputCapsules, 1, 1, inputDim);
-
-        // Weights: [I, C, D_in, D_out] -> Reshape to [1, I, C, D_in, D_out] to broadcast over B
-        var weightsReshaped = Autodiff.TensorOperations<T>.Reshape(weightsNode, 1, inputCapsules, numClasses, inputDim, outputDim);
-
-        // Result: [B, I, C, 1, D_out] (Batched MatMul handles broadcasting [B, I, 1] vs [1, I, C])
-        var predictionsRaw = Autodiff.TensorOperations<T>.MatrixMultiply(inputReshaped, weightsReshaped);
-
-        // Reshape to [B, I, C, D_out]
-        var predictions = Autodiff.TensorOperations<T>.Reshape(predictionsRaw, batchSize, inputCapsules, numClasses, outputDim);
-
-        // 3. Dynamic Routing
-        // Initialize couplings to zero [B, I, C]
-        var couplingsTensor = new Tensor<T>(new int[] { batchSize, inputCapsules, numClasses });
-        couplingsTensor.Fill(NumOps.Zero);
-        var couplings = Autodiff.TensorOperations<T>.Constant(couplingsTensor, "couplings");
-
-        Autodiff.ComputationNode<T> output = predictions; // Placeholder
-
-        for (int iter = 0; iter < _routingIterations; iter++)
-        {
-            // Softmax over classes (axis 2) -> [B, I, C]
-            var routingWeights = Autodiff.TensorOperations<T>.Softmax(couplings, axis: 2);
-
-            // Reshape routing weights to [B, I, C, 1] for broadcasting
-            var routingWeightsBroad = Autodiff.TensorOperations<T>.Reshape(routingWeights, batchSize, inputCapsules, numClasses, 1);
-
-            // Weighted predictions: predictions * routing
-            var weightedPredictions = Autodiff.TensorOperations<T>.ElementwiseMultiply(predictions, routingWeightsBroad);
-
-            // Sum over input capsules (axis 1) -> [B, C, D_out]
-            var weightedSum = Autodiff.TensorOperations<T>.Sum(weightedPredictions, new int[] { 1 }, keepDims: false);
-
-            // Squash activation
-            // v = ||s||^2 / (1 + ||s||^2) * s / ||s||
-            // ||s||^2 = sum(s^2, axis=-1)
-            var s2 = Autodiff.TensorOperations<T>.Square(weightedSum);
-            var normSq = Autodiff.TensorOperations<T>.Sum(s2, new int[] { 2 }, keepDims: true); // [B, C, 1]
-            var norm = Autodiff.TensorOperations<T>.Sqrt(normSq);
-
-            var one = Autodiff.TensorOperations<T>.Constant(Tensor<T>.CreateDefault(new int[] { 1 }, NumOps.One));
-            var scale = Autodiff.TensorOperations<T>.Divide(normSq, Autodiff.TensorOperations<T>.Add(one, normSq));
-            var unitVec = Autodiff.TensorOperations<T>.Divide(weightedSum, norm);
-
-            // output = scale * unitVec
-            output = Autodiff.TensorOperations<T>.ElementwiseMultiply(scale, unitVec);
-
-            // Update couplings (agreement)
-            if (iter < _routingIterations - 1)
-            {
-                // Agreement = predictions . output
-                // predictions [B, I, C, D], output [B, C, D] -> reshape output to [B, 1, C, D]
-                var outputBroad = Autodiff.TensorOperations<T>.Reshape(output, batchSize, 1, numClasses, outputDim);
-
-                // Elementwise multiply -> [B, I, C, D]
-                var agreementRaw = Autodiff.TensorOperations<T>.ElementwiseMultiply(predictions, outputBroad);
-
-                // Sum over D (axis 3) -> [B, I, C]
-                var agreement = Autodiff.TensorOperations<T>.Sum(agreementRaw, new int[] { 3 }, keepDims: false);
-
-                couplings = Autodiff.TensorOperations<T>.Add(couplings, agreement);
-            }
-        }
-
-        // 4. Set Gradient
-        Tensor<T> outputGradient3D = outputGradient;
-        if (outputGradient.Shape.Length == 1)
-        {
-            outputGradient3D = outputGradient.Reshape([1, numClasses, outputDim]);
-        }
-        else if (outputGradient.Shape.Length == 2)
-        {
-            outputGradient3D = outputGradient.Reshape([batchSize, numClasses, outputDim]);
-        }
-
-        output.Gradient = outputGradient3D;
-
-        // 5. Backward
-        output.Backward();
-
-        // 6. Store Gradients
-        _weightsGradient = weightsNode.Gradient;
-
-        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-
-        // Restore gradient to original input shape for any-rank support
-        if (_originalInputShape != null && _originalInputShape.Length != 3)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
     }
 
 
@@ -970,7 +690,7 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Use ToArray() for production-grade parameter extraction
-        return Vector<T>.FromMemory(_weights.Data);
+        return new Vector<T>(_weights.ToArray());
     }
 
     /// <summary>
@@ -1003,7 +723,18 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
     {
         if (_weightsGradient == null)
             return new Vector<T>(_weights.Length);
-        return (_weightsGradient is not null ? Vector<T>.FromMemory(_weightsGradient.Data) : new Vector<T>(0));
+        return new Vector<T>(_weightsGradient.ToArray());
+    }
+
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["InputCapsules"] = _inputCapsules.ToString();
+        metadata["InputCapsuleDimension"] = _inputCapsuleDimension.ToString();
+        metadata["NumClasses"] = _numClasses.ToString();
+        metadata["OutputCapsuleDimension"] = _outputCapsuleDimension.ToString();
+        metadata["RoutingIterations"] = _routingIterations.ToString();
+        return metadata;
     }
 
     public override void ClearGradients()
@@ -1053,77 +784,4 @@ public class DigitCapsuleLayer<T> : LayerBase<T>
         _lastCouplings = null;
         _weightsGradient = null;
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var input = inputNodes[0];
-
-        // Create weight tensor as constant node [inputCapsules, numClasses, inputCapsuleDimension, outputCapsuleDimension]
-        var weightsTensor = new Tensor<T>(
-            new[] { _inputCapsules, _numClasses, _inputCapsuleDimension, _outputCapsuleDimension },
-            Vector<T>.FromMemory(_weights.Data));
-        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "DigitCapsWeights");
-
-        // Transform input capsules to predictions for each class
-        // For each input capsule i and class j: predictions[i,j] = input[i] @ weights[i,j]
-        var predictions = TensorOperations<T>.MatrixMultiply(input, weightsNode);
-
-        // Initialize coupling coefficients to zero using Fill
-        var couplingsTensor = new Tensor<T>(new[] { _inputCapsules, _numClasses });
-        couplingsTensor.Fill(NumOps.Zero);
-        var couplings = TensorOperations<T>.Constant(couplingsTensor, "InitialCouplings");
-
-        ComputationNode<T> output = predictions;
-
-        // Unroll routing iterations
-        for (int iter = 0; iter < _routingIterations; iter++)
-        {
-            // Apply softmax to couplings along numClasses dimension
-            var routingWeights = TensorOperations<T>.Softmax(couplings, axis: 1);
-
-            // Weighted sum for each class: output[j] = sum_i(routingWeights[i,j] * predictions[i,j])
-            var weighted = TensorOperations<T>.ElementwiseMultiply(predictions, routingWeights);
-            var weightedSum = TensorOperations<T>.Sum(weighted, [0]); // Sum over inputCapsules
-
-            // Apply squash activation: v = ||s||^2 / (1 + ||s||^2) * s / ||s||
-            var squaredNorm = TensorOperations<T>.Sum(TensorOperations<T>.Square(weightedSum), [1]);
-            var oneTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.One }));
-            var oneNode = TensorOperations<T>.Constant(oneTensor, "One");
-            var normPlusOne = TensorOperations<T>.Add(squaredNorm, oneNode);
-            var scaleFactor = TensorOperations<T>.Divide(squaredNorm, normPlusOne);
-            var norm = TensorOperations<T>.Sqrt(squaredNorm);
-            var normalizedVec = TensorOperations<T>.Divide(weightedSum, norm);
-            output = TensorOperations<T>.ElementwiseMultiply(normalizedVec, scaleFactor);
-
-            // Update couplings if not last iteration
-            if (iter < _routingIterations - 1)
-            {
-                // Agreement: dot product between predictions and output for each input capsule/class pair
-                var agreement = TensorOperations<T>.Sum(
-                    TensorOperations<T>.ElementwiseMultiply(predictions, output), [2]);
-                couplings = TensorOperations<T>.Add(couplings, agreement);
-            }
-        }
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> because DigitCapsuleLayer uses dynamic routing with a fixed number of iterations
-    /// that can be unrolled into a static computation graph.
-    /// </value>
-    public override bool SupportsJitCompilation => true;
-
 }

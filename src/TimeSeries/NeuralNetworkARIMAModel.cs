@@ -1,4 +1,4 @@
-global using AiDotNet.ActivationFunctions;
+﻿global using AiDotNet.ActivationFunctions;
 global using AiDotNet.NeuralNetworks;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -987,87 +987,6 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
 
         // Return a new instance with the copied options
         return new NeuralNetworkARIMAModel<T>(optionsCopy);
-    }
-
-    /// <summary>
-    /// Gets whether this model supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Returns <c>true</c> when the model has valid AR/MA parameters.
-    /// JIT compilation combines ARIMA linear terms with average neural network contribution.
-    /// </value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This hybrid model can be JIT compiled by:
-    /// 1. Representing ARIMA as a linear combination (weights @ lags)
-    /// 2. Adding the average neural network contribution
-    /// The approximation is suitable for inference speedup.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => _arParameters != null && _arParameters.Length > 0;
-
-    /// <summary>
-    /// Exports the Neural Network ARIMA model as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">A list to which input nodes will be added.</param>
-    /// <returns>The output computation node representing the forecast.</returns>
-    /// <remarks>
-    /// <para>
-    /// The computation graph represents:
-    /// forecast = AR_weights @ lags + MA_weights @ residuals + avg_nn_contribution
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes), "Input nodes list cannot be null.");
-        }
-
-        if (_arParameters == null || _arParameters.Length == 0)
-        {
-            throw new InvalidOperationException("Cannot export computation graph: Model has not been trained.");
-        }
-
-        // Create input node for lag values (AR terms)
-        var lagInputShape = new int[] { _nnarimaOptions.AROrder };
-        var lagInputTensor = new Tensor<T>(lagInputShape);
-        var lagInputNode = TensorOperations<T>.Variable(lagInputTensor, "lag_input", requiresGradient: false);
-        inputNodes.Add(lagInputNode);
-
-        // Create AR weights tensor
-        var arWeightsData = new T[_arParameters.Length];
-        for (int i = 0; i < _arParameters.Length; i++)
-        {
-            arWeightsData[i] = _arParameters[i];
-        }
-        var arWeightsTensor = new Tensor<T>(new[] { 1, _arParameters.Length }, new Vector<T>(arWeightsData));
-        var arWeightsNode = TensorOperations<T>.Constant(arWeightsTensor, "ar_weights");
-
-        // AR contribution = weights @ lags
-        var resultNode = TensorOperations<T>.MatrixVectorMultiply(arWeightsNode, lagInputNode);
-
-        // Add constant for average MA contribution (approximation)
-        if (_maParameters != null && _maParameters.Length > 0)
-        {
-            T avgMaContribution = NumOps.Zero;
-            for (int i = 0; i < _maParameters.Length; i++)
-            {
-                // Approximate MA contribution assuming small residuals
-                avgMaContribution = NumOps.Add(avgMaContribution, NumOps.Multiply(_maParameters[i], NumOps.FromDouble(0.01)));
-            }
-            var maTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { avgMaContribution }));
-            var maNode = TensorOperations<T>.Constant(maTensor, "ma_contribution");
-            resultNode = TensorOperations<T>.Add(resultNode, maNode);
-        }
-
-        // Add average neural network contribution (estimated during training)
-        // This is an approximation - the actual NN output varies with input
-        T avgNnContribution = ComputeAverageNNContribution();
-        var nnTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { avgNnContribution }));
-        var nnNode = TensorOperations<T>.Constant(nnTensor, "nn_contribution");
-        resultNode = TensorOperations<T>.Add(resultNode, nnNode);
-
-        return resultNode;
     }
 
     /// <summary>

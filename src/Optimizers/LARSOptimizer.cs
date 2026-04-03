@@ -1,4 +1,5 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
 
@@ -411,6 +412,58 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
         // Apply update
         return (Vector<T>)Engine.Subtract(parameters, _velocity);
+    }
+
+    // Per-parameter LARS velocity for tape-based training
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeVelocity = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private int _tapeStep;
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        _tapeStep++;
+
+        T momentum = NumOps.FromDouble(_options.Momentum);
+        T weightDecay = NumOps.FromDouble(_options.WeightDecay);
+        T trustCoeff = NumOps.FromDouble(_options.TrustCoefficient);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+        T baseLr = NumOps.FromDouble(GetWarmupLearningRate());
+
+        foreach (var param in context.Parameters)
+        {
+            if (!context.Gradients.TryGetValue(param, out var grad))
+                continue;
+
+            if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = new Tensor<T>(param._shape); _tapeVelocity[param] = vel; }
+
+            // LARS scaling: localLr = baseLr * trustCoeff * ||param|| / (||grad|| + weightDecay * ||param|| + eps)
+            var paramNorm = Engine.TensorNorm(param);
+            var gradNorm = Engine.TensorNorm(grad);
+            T pNorm = paramNorm.Length > 0 ? paramNorm[0] : NumOps.Zero;
+            T gNorm = gradNorm.Length > 0 ? gradNorm[0] : NumOps.Zero;
+
+            T localLr;
+            if (NumOps.LessThan(pNorm, epsilon) || NumOps.LessThan(gNorm, epsilon))
+            {
+                localLr = baseLr;
+            }
+            else
+            {
+                T denom = NumOps.Add(gNorm, NumOps.Add(NumOps.Multiply(weightDecay, pNorm), epsilon));
+                localLr = NumOps.Multiply(baseLr, NumOps.Divide(NumOps.Multiply(trustCoeff, pNorm), denom));
+            }
+
+            // grad_with_decay = grad + weightDecay * param
+            var gradWithDecay = Engine.TensorAdd(grad, Engine.TensorMultiplyScalar(param, weightDecay));
+            var scaledGrad = Engine.TensorMultiplyScalar(gradWithDecay, localLr);
+
+            // velocity = momentum * velocity + scaledGrad
+            var velNew = Engine.TensorAdd(Engine.TensorMultiplyScalar(vel, momentum), scaledGrad);
+            Engine.TensorCopy(velNew, vel);
+
+            // param -= velocity
+            Engine.TensorSubtractInPlace(param, vel);
+        }
     }
 
     /// <summary>

@@ -1189,31 +1189,6 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
         return ProjectToLanguageSpace(features);
     }
 
-    /// <summary>
-    /// Backward pass through projection layers (vision encoder is frozen).
-    /// </summary>
-    /// <param name="gradient">The gradient tensor from the loss function.</param>
-    /// <returns>The gradient after backward propagation.</returns>
-    public Tensor<T> Backward(Tensor<T> gradient)
-    {
-        // Backward pass through projection layers
-        // Vision encoder is frozen; only projection layers are trainable
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Backward pass is only supported in native mode.");
-        }
-
-        var currentGradient = gradient;
-
-        // Backward through projection layers in reverse order
-        for (int i = _projectionLayers.Count - 1; i >= 0; i--)
-        {
-            currentGradient = _projectionLayers[i].Backward(currentGradient);
-        }
-
-        return currentGradient;
-    }
-
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
@@ -1228,7 +1203,6 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
             var gradient = Tensor<T>.FromVector(lossGradient);
 
             // Propagate gradients through the network
-            Backward(gradient);
 
             // Use optimizer to update all layer parameters based on their gradients
             // (not just setting current params back unchanged)

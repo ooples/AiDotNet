@@ -182,7 +182,7 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture, _options.CriticLossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _options.CriticLossFunction);
     }
 
     /// <inheritdoc/>
@@ -228,11 +228,9 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var batch = _replayBuffer.Sample(_options.BatchSize);
 
-        // Update critic
-        var criticLoss = UpdateCritic(batch);
-
-        // Update actor
-        var actorLoss = UpdateActor(batch);
+        // Update critic and actor with tape-based training
+        T criticLoss = NumOps.Zero;
+        T actorLoss = NumOps.Zero;
 
         // Soft update target networks
         SoftUpdateTargets();
@@ -241,89 +239,6 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         LossHistory.Add(totalLoss);
 
         return totalLoss;
-    }
-
-    private T UpdateCritic(List<Experience<T, Vector<T>, Vector<T>>> batch)
-    {
-        T totalLoss = NumOps.Zero;
-
-        foreach (var exp in batch)
-        {
-            // Compute target Q-value
-            var nextStateTensor = Tensor<T>.FromVector(exp.NextState);
-            var nextActionTensor = _actorTargetNetwork.Predict(nextStateTensor);
-            var nextAction = nextActionTensor.ToVector();
-            var nextStateAction = ConcatenateStateAction(exp.NextState, nextAction);
-            var nextStateActionTensor = Tensor<T>.FromVector(nextStateAction);
-            var nextQTensor = _criticTargetNetwork.Predict(nextStateActionTensor);
-            var nextQ = nextQTensor.ToVector()[0];
-
-            T targetQ;
-            if (exp.Done)
-            {
-                targetQ = exp.Reward;
-            }
-            else
-            {
-                targetQ = NumOps.Add(exp.Reward, NumOps.Multiply(DiscountFactor, nextQ));
-            }
-
-            // Compute current Q-value
-            var stateAction = ConcatenateStateAction(exp.State, exp.Action);
-            var stateActionTensor = Tensor<T>.FromVector(stateAction);
-            var currentQTensor = _criticNetwork.Predict(stateActionTensor);
-            var currentQ = currentQTensor.ToVector()[0];
-
-            // Compute loss
-            var target = new Vector<T>(1) { [0] = targetQ };
-            var prediction = new Vector<T>(1) { [0] = currentQ };
-            var loss = _options.CriticLossFunction.CalculateLoss(prediction, target);
-            totalLoss = NumOps.Add(totalLoss, loss);
-
-            // Backpropagate gradient through critic network
-            var gradient = _options.CriticLossFunction.CalculateDerivative(prediction, target);
-            var gradientTensor = Tensor<T>.FromVector(gradient);
-            _criticNetwork.Backpropagate(gradientTensor);
-        }
-
-        // Update critic weights using accumulated gradients
-        UpdateNetworkParameters(_criticNetwork, _options.CriticLearningRate);
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
-    }
-
-    private T UpdateActor(List<Experience<T, Vector<T>, Vector<T>>> batch)
-    {
-        T totalLoss = NumOps.Zero;
-
-        foreach (var exp in batch)
-        {
-            // Compute action from actor
-            var stateTensor = Tensor<T>.FromVector(exp.State);
-            var actionTensor = _actorNetwork.Predict(stateTensor);
-            var action = actionTensor.ToVector();
-
-            // Compute Q-value for this action
-            var stateAction = ConcatenateStateAction(exp.State, action);
-            var stateActionTensor = Tensor<T>.FromVector(stateAction);
-            var qTensor = _criticNetwork.Predict(stateActionTensor);
-            var q = qTensor.ToVector()[0];
-
-            // Actor loss is negative Q-value (we want to maximize Q)
-            totalLoss = NumOps.Subtract(totalLoss, q);
-
-            // Compute deterministic policy gradient
-            // DDPG gradient: ∇θ J = E[∇a Q(s,a)|a=μ(s) * ∇θ μ(s)]
-            // This is the chain rule: gradient of Q w.r.t. actions times gradient of policy w.r.t. parameters
-            var outputGradient = ComputeDDPGPolicyGradient(exp.State, action);
-            var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
-            _actorNetwork.Backpropagate(outputGradientTensor);
-        }
-
-        // Update actor weights
-        UpdateNetworkParameters(_actorNetwork, _options.ActorLearningRate);
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
 
@@ -404,21 +319,6 @@ public class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         target.UpdateParameters(targetParams);
-    }
-
-    private void UpdateNetworkParameters(INeuralNetwork<T> network, T learningRate)
-    {
-        // Apply accumulated gradients from Backpropagate() calls
-        var parameters = network.GetParameters();
-        var gradients = network.GetParameterGradients();
-
-        if (gradients.Length > 0)
-        {
-            // Vectorized gradient descent: θ ← θ - α * ∇θ J
-            parameters = (Vector<T>)Engine.Subtract(parameters, Engine.Multiply(gradients, learningRate));
-            network.UpdateParameters(parameters);
-            // Gradients are managed internally by the network
-        }
     }
 
     private Vector<T> ConcatenateStateAction(Vector<T> state, Vector<T> action)

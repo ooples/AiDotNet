@@ -1,6 +1,8 @@
-using AiDotNet.Engines;
+﻿using AiDotNet.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Optimizers;
 
@@ -271,6 +273,34 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
         var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
 
         return updatedParams;
+    }
+
+    // Per-parameter squared gradient cache for tape-based training
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeSqGrad = new(TensorReferenceComparer<Tensor<T>>.Instance);
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        T decay = NumOps.FromDouble(_options.Decay);
+        T oneMinusDecay = NumOps.FromDouble(1 - _options.Decay);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+
+        foreach (var param in context.Parameters)
+        {
+            if (!context.Gradients.TryGetValue(param, out var grad))
+                continue;
+
+            if (!_tapeSqGrad.TryGetValue(param, out var sqGrad)) { sqGrad = new Tensor<T>(param._shape); _tapeSqGrad[param] = sqGrad; }
+
+            // sqGrad = decay * sqGrad + (1 - decay) * grad^2
+            var sqGradNew = Engine.TensorAdd(Engine.TensorMultiplyScalar(sqGrad, decay), Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusDecay));
+            Engine.TensorCopy(sqGradNew, sqGrad);
+
+            // param -= lr * grad / (sqrt(sqGrad) + epsilon)
+            var denom = Engine.TensorAddScalar(Engine.TensorSqrt(sqGrad), epsilon);
+            var update = Engine.TensorMultiplyScalar(Engine.TensorDivide(grad, denom), CurrentLearningRate);
+            Engine.TensorSubtractInPlace(param, update);
+        }
     }
 
     /// <summary>

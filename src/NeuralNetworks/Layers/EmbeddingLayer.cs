@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -55,7 +55,7 @@ public enum EmbeddingInputMode
 [LayerCategory(LayerCategory.Embedding)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "100, 16")]
-public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmbedding<T>
+public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmbedding<T>
 {
     /// <summary>
     /// The embedding tensor that stores vector representations for each token in the vocabulary.
@@ -87,6 +87,8 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
     /// During training, these values are adjusted to make similar tokens have similar vectors.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Embeddings)]
+
     private Tensor<T> _embeddingTensor;
 
     /// <summary>
@@ -100,7 +102,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
     private bool? _autoDetectedContinuous;
 
     // GPU-resident cached tensors for GPU training pipeline
-    private IGpuTensor<T>? _lastInputGpu;
+    private Tensor<T>? _lastInputGpu;
     private int[]? _lastInputGpuShape;
     private Tensor<int>? _lastIndicesForGpu;
 
@@ -535,7 +537,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
     /// making it much faster for large vocabularies and batch sizes.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -549,7 +551,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
 
         // Download input to CPU to convert to integer indices
         // (Indices are typically small, so this is acceptable)
-        var inputTensor = input.ToTensor();
+        var inputTensor = input;
 
         // Store for potential backward pass (only in training mode)
         if (IsTrainingMode)
@@ -660,80 +662,6 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
         return false;
     }
 
-    /// <summary>
-    /// Performs the backward pass of the embedding layer, computing gradients for the embedding matrix.
-    /// </summary>
-    /// <param name="outputGradient">The gradient tensor from the next layer. Shape: [sequenceLength, batchSize, embeddingDimension].</param>
-    /// <returns>A zero-filled tensor with the same shape as the input, as gradients don't flow back to indices.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass (backpropagation) of the embedding layer. It computes
-    /// the gradients for the embedding matrix by accumulating the gradients from the output for each
-    /// token index that was used in the forward pass. Since the input to the embedding layer is
-    /// indices rather than computed values, no meaningful gradients can be computed for the input.
-    /// Therefore, this method returns a zero-filled tensor with the same shape as the input.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where the embedding layer learns from its mistakes during training.
-    ///
-    /// During the backward pass:
-    /// 1. For each token in the input sequence:
-    ///    - Look up which embedding was used (based on the token ID)
-    ///    - Add the corresponding gradient to that specific embedding
-    /// 2. Return a dummy gradient for the input (since we can't backpropagate through token IDs)
-    ///
-    /// For example, if token ID 5 appears three times in different positions:
-    /// - All three gradient contributions will be added together for embedding #5
-    /// - This accumulates learning from all occurrences of that token
-    ///
-    /// This is different from most layers because:
-    /// - We only update the embeddings that were actually used in this batch
-    /// - We don't pass meaningful gradients back to the input (the token IDs themselves don't change)
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInputWasContinuous)
-        {
-            return BackwardContinuous(outputGradient);
-        }
-
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int vocabSize = _embeddingTensor.Shape[0];
-        int embeddingDim = _embeddingTensor.Shape[1];
-        int totalIndices = _lastInput.Length;
-
-        // Flatten input indices to 1D
-        var flatIndices = new Tensor<int>([totalIndices]);
-        for (int i = 0; i < totalIndices; i++)
-        {
-            flatIndices[i] = Convert.ToInt32(NumOps.ToDouble(_lastInput.Data.Span[i]));
-        }
-
-        // Flatten outputGradient: [..., embeddingDim] -> [totalIndices, embeddingDim]
-        var flatGradOutput = outputGradient.Reshape([totalIndices, embeddingDim]);
-
-        // Use Engine scatter-add operation for gradient accumulation
-        _embeddingGradient = Engine.TensorEmbeddingLookupBackward<T, int>(flatGradOutput, flatIndices, vocabSize, embeddingDim);
-
-        // We don't compute input gradients for embedding layer (indices are not differentiable)
-        return new Tensor<T>(_originalInputShape);
-    }
-
     private Tensor<T> BackwardContinuous(Tensor<T> outputGradient)
     {
         if (_lastInput == null || _projectionWeights == null)
@@ -756,134 +684,6 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
 
         _embeddingGradient = null;
         return inputGrad2D.Reshape(_originalInputShape);
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients.
-    /// It builds a computation graph with EmbeddingLookup operation which handles
-    /// the scatter-add gradient accumulation during the backward pass.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // 1. Create variables
-        // Input indices do not require gradients
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "indices", requiresGradient: false);
-        // Embeddings require gradients
-        var embeddingNode = Autodiff.TensorOperations<T>.Variable(_embeddingTensor, "embeddings", requiresGradient: true);
-
-        // 2. Build graph
-        var output = Autodiff.TensorOperations<T>.EmbeddingLookup(embeddingNode, inputNode);
-
-        // 3. Set gradient
-        output.Gradient = outputGradient;
-
-        // 4. Topo sort and backward pass
-        output.Backward();
-
-        // 5. Extract gradient
-        _embeddingGradient = embeddingNode.Gradient;
-
-        // Return zero gradient for input (indices are not differentiable)
-        return new Tensor<T>(_lastInput.Shape.ToArray());
-    }
-
-    /// <summary>
-    /// Performs GPU-resident backward pass for the embedding layer.
-    /// Computes gradients for embeddings or projection weights entirely on GPU.
-    /// </summary>
-    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
-    /// <returns>GPU-resident gradient to pass to the previous layer (zero for discrete embeddings).</returns>
-    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        int embeddingDim = _embeddingTensor.Shape[1];
-        int vocabSize = _embeddingTensor.Shape[0];
-
-        if (_lastInputWasContinuous)
-        {
-            // Continuous input mode: linear projection backward
-            if (_lastInputGpu == null || _projectionWeights == null || _lastInputGpuShape == null)
-                throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu (continuous mode).");
-
-            int inputFeatures = _projectionWeights.Shape[0];
-            int totalSamples = _lastInputGpu.Shape[0];
-
-            // Reshape gradient to 2D: [totalSamples, embeddingDim]
-            IGpuTensor<T> grad2D;
-            if (outputGradient.Shape.Length != 2)
-            {
-                grad2D = gpuEngine.ReshapeGpu(outputGradient, [totalSamples, embeddingDim]);
-            }
-            else
-            {
-                grad2D = outputGradient;
-            }
-
-            // Compute projection weight gradient: dW = input^T @ grad2D
-            // _lastInputGpu shape: [totalSamples, inputFeatures]
-            var inputTransposed = gpuEngine.TransposeGpu<T>(_lastInputGpu);
-            var projectionGradGpu = gpuEngine.MatMulGpuTensors<T>(inputTransposed, grad2D);
-            _projectionWeightsGradient = projectionGradGpu.ToTensor();
-
-            // Compute input gradient: dInput = grad2D @ projectionWeights^T
-            var weightsGpu = gpuEngine.UploadToGpu(_projectionWeights, GpuTensorRole.Weight);
-            var weightsTransposed = gpuEngine.TransposeGpu<T>(weightsGpu);
-            var inputGrad2D = gpuEngine.MatMulGpuTensors<T>(grad2D, weightsTransposed);
-
-            // Clear embedding gradient (not used in continuous mode)
-            _embeddingGradient = null;
-
-            // Reshape to original input shape if needed
-            if (_lastInputGpuShape.Length != 2)
-            {
-                return gpuEngine.ReshapeGpu(inputGrad2D, _lastInputGpuShape);
-            }
-
-            return inputGrad2D;
-        }
-        else
-        {
-            // Discrete embedding mode: scatter-add gradient to embedding table
-            if (_lastIndicesForGpu == null || _lastInputGpuShape == null)
-                throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu (embedding mode).");
-
-            int numIndices = _lastIndicesForGpu.Length;
-
-            // Flatten gradient to 2D: [numIndices, embeddingDim]
-            IGpuTensor<T> flatGrad;
-            if (outputGradient.ElementCount != numIndices * embeddingDim)
-            {
-                flatGrad = gpuEngine.ReshapeGpu(outputGradient, [numIndices, embeddingDim]);
-            }
-            else
-            {
-                flatGrad = outputGradient.CreateView(0, [numIndices, embeddingDim]);
-            }
-
-            // Use GPU scatter-add for embedding gradient computation
-            var embeddingGradGpu = gpuEngine.EmbeddingBackwardGpu<T>(flatGrad, _lastIndicesForGpu, vocabSize, embeddingDim);
-
-            // Store gradient for UpdateParameters
-            _embeddingGradient = embeddingGradGpu.ToTensor();
-
-            // For discrete embeddings, input gradient is zero (indices not differentiable)
-            // Return a zero-filled GPU tensor with the original input shape
-            var zeroGrad = gpuEngine.ZerosGpu<T>(_lastInputGpuShape);
-            return zeroGrad;
-        }
     }
 
     /// <summary>
@@ -966,13 +766,13 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
     public override Vector<T> GetParameters()
     {
         // Use ToArray() for production-grade parameter extraction
-        var embeddingParams = Vector<T>.FromMemory(_embeddingTensor.Data);
+        var embeddingParams = new Vector<T>(_embeddingTensor.ToArray());
         if (_projectionWeights == null)
         {
             return embeddingParams;
         }
 
-        var projectionParams = Vector<T>.FromMemory(_projectionWeights.Data);
+        var projectionParams = new Vector<T>(_projectionWeights.ToArray());
         return Vector<T>.Concatenate(embeddingParams, projectionParams);
     }
 
@@ -1216,7 +1016,7 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
         {
             // Return zeros for embedding params + actual projection gradients
             var embZeros = new Vector<T>(embeddingParamCount);
-            var projGrad = (_projectionWeightsGradient is not null ? Vector<T>.FromMemory(_projectionWeightsGradient.Data) : new Vector<T>(0));
+            var projGrad = new Vector<T>(_projectionWeightsGradient.ToArray());
             return Vector<T>.Concatenate(embZeros, projGrad);
         }
 
@@ -1225,10 +1025,10 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
             return new Vector<T>(ParameterCount);
 
         // Discrete embedding mode: return embedding gradients (+ projection if present)
-        var embGrad = (_embeddingGradient is not null ? Vector<T>.FromMemory(_embeddingGradient.Data) : new Vector<T>(0));
+        var embGrad = new Vector<T>(_embeddingGradient.ToArray());
         if (_projectionWeightsGradient == null || _projectionWeights == null)
             return embGrad;
-        return Vector<T>.Concatenate(embGrad, (_projectionWeightsGradient is not null ? Vector<T>.FromMemory(_projectionWeightsGradient.Data) : new Vector<T>(0)));
+        return Vector<T>.Concatenate(embGrad, new Vector<T>(_projectionWeightsGradient.ToArray()));
     }
 
     public override void ClearGradients()
@@ -1252,52 +1052,5 @@ public class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ITokenEmb
         _lastInputGpu = null;
         _lastInputGpuShape = null;
         _lastIndicesForGpu = null;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c> because embedding lookup can be JIT compiled.
-    /// </value>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Exports the embedding layer's forward pass as a JIT-compilable computation graph.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the embedded vectors.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph for the embedding lookup operation.
-    /// The graph uses the embedding matrix as a constant and performs an EmbeddingLookup operation
-    /// based on the input indices.
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates an optimized version of the embedding lookup.
-    ///
-    /// The computation graph:
-    /// - Takes input indices (token IDs)
-    /// - Looks up corresponding rows in the embedding matrix
-    /// - Returns the embedding vectors for each token
-    ///
-    /// This is JIT compiled for faster inference.
-    /// </para>
-    /// </remarks>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Create placeholder for input indices
-        // Input shape for embeddings: [batchSize, sequenceLength] or [batchSize, 1]
-        var inputPlaceholder = new Tensor<T>(new int[] { 1, 1 });
-        var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, "input_indices");
-        inputNodes.Add(inputNode);
-
-        // Create constant node for embedding tensor [vocab_size, embedding_dim]
-        var embeddingNode = Autodiff.TensorOperations<T>.Constant(_embeddingTensor, "embeddings");
-
-        // Use EmbeddingLookup operation which supports gradients
-        return Autodiff.TensorOperations<T>.EmbeddingLookup(embeddingNode, inputNode);
     }
 }

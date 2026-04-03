@@ -65,5 +65,13 @@ public class RootMeanSquaredErrorLoss<T> : LossFunctionBase<T>
         return diff.Divide(NumOps.Multiply(rmse, n));
     }
 
-
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        var diff = Engine.TensorSubtract(predicted, target);
+        var squared = Engine.TensorMultiply(diff, diff);
+        var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+        var mse = Engine.ReduceMean(squared, allAxes, keepDims: false);
+        return Engine.TensorSqrt(mse);
+    }
 }

@@ -236,8 +236,10 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
         protected override void InitializeLayers()
         {
-            // DeepONet doesn't use traditional layers
-            // Its computation is done via branch and trunk networks
+            ClearLayers();
+            // Register branch and trunk network layers for proper parameter management
+            Layers.AddRange(_branchNet.Layers);
+            Layers.AddRange(_trunkNet.Layers);
         }
 
         private static NeuralNetworkArchitecture<T> EnsureOutputSize(
@@ -606,7 +608,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
                         // Backpropagation: compute gradients for both branch and trunk networks
                         var outputGradientVector = lossFunction.CalculateDerivative(predictions.ToVector(), targets.ToVector());
-                        var outputGradient = new Tensor<T>(predictions.Shape.ToArray(), outputGradientVector);
+                        var outputGradient = new Tensor<T>(predictions._shape, outputGradientVector);
 
                         // Gradient for branch network: grad_branch = (grad_output)^T * trunk_output
                         var branchGradient = Engine.TensorMatMul(Engine.TensorTranspose(outputGradient), trunkOutput2D);
@@ -614,8 +616,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                         var trunkGradient = Engine.TensorMatMul(outputGradient, branchOutput2D);
 
                         // Backpropagate through both networks
-                        _branchNet.Backpropagate(branchGradient);
-                        _trunkNet.Backpropagate(trunkGradient);
 
                         // Update parameters using optimizer
                         _optimizer.UpdateParameters(_branchNet.Layers);
@@ -836,50 +836,14 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             }
 
             SetTrainingMode(true);
-
-            // Step 1: Forward pass - prepare inputs and compute predictions
-            var branchInput = new Tensor<T>(new int[] { batchSize, _numSensors });
-            var trunkInput = new Tensor<T>(new int[] { batchSize, trunkInputSize });
-            for (int i = 0; i < batchSize; i++)
+            try
             {
-                for (int j = 0; j < _numSensors; j++)
-                {
-                    branchInput[i, j] = input[i, j];
-                }
-                for (int j = 0; j < trunkInputSize; j++)
-                {
-                    trunkInput[i, j] = input[i, _numSensors + j];
-                }
+                TrainWithTape(input, expectedOutput);
             }
-
-            var branchOutput = _branchNet.ForwardWithMemory(branchInput);
-            var trunkOutput = _trunkNet.ForwardWithMemory(trunkInput);
-
-            var branchOutput2D = branchOutput.Rank == 2 ? branchOutput : branchOutput.Reshape(batchSize, _p);
-            var trunkOutput2D = trunkOutput.Rank == 2 ? trunkOutput : trunkOutput.Reshape(batchSize, _p);
-            var product = Engine.TensorMultiply(branchOutput2D, trunkOutput2D);
-            var predictions = Engine.ReduceSum(product, new[] { 1 }, keepDims: true);
-
-            // Step 2: Calculate loss
-            var lossFunction = LossFunction ?? new MeanSquaredErrorLoss<T>();
-            LastLoss = lossFunction.CalculateLoss(predictions.ToVector(), expectedOutputTensor.ToVector());
-
-            // Step 3: Backward pass - compute gradients for both networks
-            var outputGradientVector = lossFunction.CalculateDerivative(predictions.ToVector(), expectedOutputTensor.ToVector());
-            var outputGradient = new Tensor<T>(predictions.Shape.ToArray(), outputGradientVector);
-            var outputGradientExpanded = Engine.TensorRepeatElements(outputGradient, _p, axis: 1);
-
-            var branchGradient = Engine.TensorMultiply(outputGradientExpanded, trunkOutput2D);
-            var trunkGradient = Engine.TensorMultiply(outputGradientExpanded, branchOutput2D);
-
-            _branchNet.Backpropagate(branchGradient);
-            _trunkNet.Backpropagate(trunkGradient);
-
-            // Step 4: Update parameters
-            _optimizer.UpdateParameters(_branchNet.Layers);
-            _optimizer.UpdateParameters(_trunkNet.Layers);
-
-            SetTrainingMode(false);
+            finally
+            {
+                SetTrainingMode(false);
+            }
         }
 
         /// <summary>
@@ -970,7 +934,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         public override int ParameterCount => _branchNet.GetParameterCount() + _trunkNet.GetParameterCount();
 
         public override bool SupportsTraining => true;
-        public override bool SupportsJitCompilation => false;
     }
 }
 

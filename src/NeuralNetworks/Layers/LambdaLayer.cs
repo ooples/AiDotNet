@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 
@@ -286,83 +286,6 @@ public class LambdaLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <summary>
-    /// Performs the backward pass of the lambda layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when Forward has not been called before Backward or when no backward function is provided.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the lambda layer, which is used during training to propagate
-    /// error gradients back through the network. It applies the derivative of the activation function to the
-    /// output gradient, then applies the user-defined backward function to compute the gradient with respect to
-    /// the input.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
-    /// should change to reduce errors.
-    /// 
-    /// During the backward pass:
-    /// 1. The layer receives information about how its output contributed to errors
-    /// 2. If an activation function was used, its effect is accounted for
-    /// 3. Your custom backward function calculates how the input should change
-    /// 
-    /// This method will throw an error if:
-    /// - The Forward method hasn't been called first
-    /// - No backward function was provided when creating the layer
-    /// 
-    /// Writing a correct backward function requires understanding of calculus and
-    /// how gradients flow through neural networks.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        Tensor<T> gradient = ApplyActivationDerivative(outputGradient, _lastOutput);
-
-        if (_backwardFunction != null)
-        {
-            gradient = _backwardFunction(_lastInput, gradient);
-        }
-        else
-        {
-            throw new InvalidOperationException("Backward function not provided for this Lambda layer.");
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. Specialized operations
-    /// are not yet available in TensorOperations, so this falls back to the manual implementation.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        // TODO: Specialized operation not yet available in TensorOperations
-        return BackwardManual(outputGradient);
-    }
-
 
     /// <summary>
     /// Update parameters is a no-op for the lambda layer since it typically doesn't have trainable parameters.
@@ -441,49 +364,5 @@ public class LambdaLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastOutput = null;
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
-
-        // Check if we have a traceable expression
-        if (_traceableExpression == null)
-        {
-            throw new NotSupportedException(
-                "LambdaLayer with opaque functions does not support JIT compilation. " +
-                "Use the constructor that accepts a traceable expression (Func<ComputationNode<T>, ComputationNode<T>>) " +
-                "to enable JIT compilation.");
-        }
-
-        // Apply the traceable expression to build the computation graph
-        var input = inputNodes[0];
-        var output = _traceableExpression(input);
-
-        // Apply activation if present
-        output = ApplyActivationToGraph(output);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> if a traceable expression was provided; otherwise, <c>false</c>.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// JIT compilation is only supported when the LambdaLayer was created with a traceable expression
-    /// that uses TensorOperations. Opaque user-defined functions cannot be compiled.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => _traceableExpression != null;
 
 }

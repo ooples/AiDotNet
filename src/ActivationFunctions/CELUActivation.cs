@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -125,22 +125,6 @@ public class CELUActivation<T> : ActivationFunctionBase<T>
             return NumOps.Exp(NumOps.Divide(input, _alpha));
         }
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because gradient computation is fully implemented in TensorOperations.CELU.</value>
-    /// <remarks>
-    /// <para>
-    /// CELU supports JIT compilation because:
-    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - The gradient is 1 if x >= 0, otherwise exp(x/α)
-    /// - It provides continuous differentiability unlike standard ELU
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

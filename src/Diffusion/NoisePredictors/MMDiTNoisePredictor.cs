@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -387,7 +387,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> Forward(Tensor<T> x, Tensor<T> timeEmbed, Tensor<T>? conditioning)
     {
-        var shape = x.Shape.ToArray();
+        var shape = x._shape;
         var batch = shape[0];
         var height = shape[2];
         var width = shape[3];
@@ -436,7 +436,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> PatchifyAndEmbed(Tensor<T> x)
     {
-        var shape = x.Shape.ToArray();
+        var shape = x._shape;
         var batch = shape[0];
         var channels = shape[1];
         var height = shape[2];
@@ -534,7 +534,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         Tensor<T> timeEmbed,
         MMDiTBlock block)
     {
-        var shape = imageTokens.Shape.ToArray();
+        var shape = imageTokens._shape;
         var batch = shape[0];
         var numImageTokens = shape[1];
         var numTextTokens = textTokens.Shape[1];
@@ -613,7 +613,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private Tensor<T> ForwardSingleBlock(Tensor<T> combined, Tensor<T> timeEmbed, MMDiTSingleBlock block)
     {
-        var shape = combined.Shape.ToArray();
+        var shape = combined._shape;
         var batch = shape[0];
         var seqLen = shape[1];
         var headDim = _hiddenSize / _numHeads;
@@ -658,7 +658,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         var normed = _finalNorm.Forward(imageTokens);
         normed = ApplyAdaLN(normed, scaleArr, shift);
 
-        var shape = normed.Shape.ToArray();
+        var shape = normed._shape;
         var batch = shape[0];
         var numPatches = shape[1];
         var patchDim = _inputChannels * _patchSize * _patchSize;
@@ -692,7 +692,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> Unpatchify(Tensor<T> patches, int height, int width)
     {
-        var shape = patches.Shape.ToArray();
+        var shape = patches._shape;
         var batch = shape[0];
         var patchDim = shape[2];
         var numPatchesH = height / _patchSize;
@@ -794,7 +794,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private Tensor<T> ExtractImageTokens(Tensor<T> combined, int textLen, int imageLen)
     {
-        var shape = combined.Shape.ToArray();
+        var shape = combined._shape;
         var batch = shape[0];
         var hidden = shape[2];
 
@@ -1121,6 +1121,67 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         public required DenseLayer<T> MLP1 { get; set; }
         public required DenseLayer<T> MLP2 { get; set; }
         public required DenseLayer<T> AdaLN { get; set; }
+    }
+
+    #endregion
+
+    #region Layer-Level Backpropagation
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var allGrads = new List<T>();
+
+        AddLayerGrads(allGrads, _patchEmbed);
+        AddLayerGrads(allGrads, _timeEmbed1);
+        AddLayerGrads(allGrads, _timeEmbed2);
+        AddLayerGrads(allGrads, _contextProj);
+
+        foreach (var block in _jointBlocks)
+        {
+            AddLayerGrads(allGrads, block.ImageNorm1);
+            AddLayerGrads(allGrads, block.ImageQProj);
+            AddLayerGrads(allGrads, block.ImageKProj);
+            AddLayerGrads(allGrads, block.ImageVProj);
+            AddLayerGrads(allGrads, block.ImageOutProj);
+            AddLayerGrads(allGrads, block.ImageNorm2);
+            AddLayerGrads(allGrads, block.ImageMLP1);
+            AddLayerGrads(allGrads, block.ImageMLP2);
+            AddLayerGrads(allGrads, block.ImageAdaLN);
+            AddLayerGrads(allGrads, block.TextNorm1);
+            AddLayerGrads(allGrads, block.TextQProj);
+            AddLayerGrads(allGrads, block.TextKProj);
+            AddLayerGrads(allGrads, block.TextVProj);
+            AddLayerGrads(allGrads, block.TextOutProj);
+            AddLayerGrads(allGrads, block.TextNorm2);
+            AddLayerGrads(allGrads, block.TextMLP1);
+            AddLayerGrads(allGrads, block.TextMLP2);
+            AddLayerGrads(allGrads, block.TextAdaLN);
+        }
+
+        foreach (var block in _singleBlocks)
+        {
+            AddLayerGrads(allGrads, block.Norm);
+            AddLayerGrads(allGrads, block.QProj);
+            AddLayerGrads(allGrads, block.KProj);
+            AddLayerGrads(allGrads, block.VProj);
+            AddLayerGrads(allGrads, block.OutProj);
+            AddLayerGrads(allGrads, block.MLP1);
+            AddLayerGrads(allGrads, block.MLP2);
+            AddLayerGrads(allGrads, block.AdaLN);
+        }
+
+        AddLayerGrads(allGrads, _finalNorm);
+        AddLayerGrads(allGrads, _adalnModulation);
+        AddLayerGrads(allGrads, _outputProj);
+
+        return new Vector<T>(allGrads.ToArray());
+    }
+
+    private static void AddLayerGrads(List<T> list, ILayer<T>? layer)
+    {
+        if (layer == null) return;
+        var g = layer.GetParameterGradients();
+        for (int i = 0; i < g.Length; i++) list.Add(g[i]);
     }
 
     #endregion

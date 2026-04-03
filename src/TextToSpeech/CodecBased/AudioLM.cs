@@ -198,12 +198,7 @@ public class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
         SetTrainingMode(true);
         try
         {
-            var o = Predict(input);
-            var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector());
-            var gt = Tensor<T>.FromVector(g);
-            for (int i = Layers.Count - 1; i >= 0; i--)
-                gt = Layers[i].Backward(gt);
-            _optimizer?.UpdateParameters(Layers);
+        TrainWithTape(input, expected);
         }
         finally
         {

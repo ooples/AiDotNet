@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -893,78 +893,5 @@ public class OrdinalRegression<T> : ClassifierBase<T>
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Indicates whether this model supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing class probabilities.</returns>
-    /// <remarks>
-    /// <para>
-    /// Creates a computation graph for the ordinal regression model that can be
-    /// JIT compiled for faster inference.
-    /// </para>
-    /// <para>
-    /// For Beginners:
-    /// JIT compilation can make predictions faster by converting the model to optimized code.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (_coefficients.Length == 0 || _thresholds.Length == 0)
-        {
-            throw new InvalidOperationException("Model must be trained first. Call Train().");
-        }
-
-        // Create input placeholder for features: [batchSize, numFeatures]
-        var inputTensor = new Tensor<T>(new int[] { 1, NumFeatures });
-        var inputNode = TensorOperations<T>.Variable(inputTensor, "features");
-        inputNodes.Add(inputNode);
-
-        // Create constant node for coefficients: [numFeatures, 1]
-        var coeffTensor = new Tensor<T>(new int[] { NumFeatures, 1 });
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            coeffTensor[j, 0] = _coefficients[j];
-        }
-        var coeffNode = TensorOperations<T>.Constant(coeffTensor, "coefficients");
-        inputNodes.Add(coeffNode);
-
-        // Compute linear predictor: η = X @ β, shape [batchSize, 1]
-        var etaNode = TensorOperations<T>.MatrixMultiply(inputNode, coeffNode);
-
-        // Create constant nodes for thresholds
-        var thresholdNodes = new List<ComputationNode<T>>();
-        for (int k = 0; k < NumClasses - 1; k++)
-        {
-            var threshTensor = new Tensor<T>(new int[] { 1, 1 });
-            threshTensor[0, 0] = _thresholds[k];
-            var threshNode = TensorOperations<T>.Constant(threshTensor, $"threshold_{k}");
-            inputNodes.Add(threshNode);
-            thresholdNodes.Add(threshNode);
-        }
-
-        // Compute cumulative probabilities using sigmoid
-        // P(Y ≤ k) = sigmoid(α_k - η)
-        var cumProbNodes = new List<ComputationNode<T>>();
-        for (int k = 0; k < NumClasses - 1; k++)
-        {
-            var diffNode = TensorOperations<T>.Subtract(thresholdNodes[k], etaNode);
-            var probNode = TensorOperations<T>.Sigmoid(diffNode);
-            cumProbNodes.Add(probNode);
-        }
-
-        // The output is the argmax of class probabilities
-        // For simplicity, we return the linear predictor for now
-        // (class prediction requires argmax which may not be differentiable)
-        etaNode.Name = "linear_predictor";
-
-        return etaNode;
     }
 }

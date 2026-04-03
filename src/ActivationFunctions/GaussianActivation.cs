@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -93,22 +93,6 @@ public class GaussianActivation<T> : ActivationFunctionBase<T>
 
         return NumOps.Multiply(NumOps.Multiply(negativeTwo, input), activationValue);
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because gradient computation is fully implemented in TensorOperations.Gaussian.</value>
-    /// <remarks>
-    /// <para>
-    /// Gaussian supports JIT compilation because:
-    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - The gradient is -2x * exp(-x²)
-    /// - It's useful for RBF networks and pattern recognition
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

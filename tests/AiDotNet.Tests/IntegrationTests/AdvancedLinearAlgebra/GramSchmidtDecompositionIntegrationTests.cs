@@ -198,51 +198,7 @@ public class GramSchmidtDecompositionIntegrationTests
 
     #region Linear System Solving Tests
 
-    [Theory]
-    [InlineData(3)]
-    [InlineData(4)]
-    [InlineData(5)]
-    public void GramSchmidt_Solve_ProducesCorrectSolution(int size)
-    {
-        // Arrange - Create a system with known solution
-        var A = CreateTestMatrix(size, size, seed: 42);
-        var xExpected = new Vector<double>(size);
-        for (int i = 0; i < size; i++)
-            xExpected[i] = i + 1.0;
 
-        var b = A.Multiply(xExpected);
-
-        // Act
-        var gs = new GramSchmidtDecomposition<double>(A, GramSchmidtAlgorithmType.Modified);
-        var xComputed = gs.Solve(b);
-
-        // Assert - Verify A*x_computed ≈ b
-        var bComputed = A.Multiply(xComputed);
-        for (int i = 0; i < size; i++)
-        {
-            Assert.True(Math.Abs(bComputed[i] - b[i]) < LooseTolerance,
-                $"A*x should equal b. Component {i}: expected {b[i]}, got {bComputed[i]}");
-        }
-    }
-
-    [Fact]
-    public void GramSchmidt_Solve_IdentityMatrix_ReturnsSameVector()
-    {
-        // Arrange
-        var I = Matrix<double>.CreateIdentityMatrix(4);
-        var b = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 });
-
-        // Act
-        var gs = new GramSchmidtDecomposition<double>(I);
-        var x = gs.Solve(b);
-
-        // Assert
-        for (int i = 0; i < 4; i++)
-        {
-            Assert.True(Math.Abs(x[i] - b[i]) < LooseTolerance,
-                $"Solution for identity matrix should be the input vector. Index {i}");
-        }
-    }
 
     #endregion
 

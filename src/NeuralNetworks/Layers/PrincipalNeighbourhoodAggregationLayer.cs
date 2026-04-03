@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4, 8", TestConstructorArgs = "8, 4", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 4, 4 }); for (int i = 0; i < 4; i++) { adj[0, i, i] = 1.0; if (i > 0) adj[0, i, i-1] = 1.0; if (i < 3) adj[0, i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
-public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
@@ -51,7 +51,11 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
     private readonly int _hiddenDim;
 
     // Pre-transformation weights (applied before aggregation) - Tensor-based for GPU acceleration
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _preTransformWeights;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _preTransformBias;
 
     // Post-aggregation MLP weights - Tensor-based for GPU acceleration
@@ -177,6 +181,15 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         _postAggregationBias1.Fill(NumOps.Zero);
         _postAggregationBias2.Fill(NumOps.Zero);
         _bias.Fill(NumOps.Zero);
+
+        RegisterTrainableParameter(_preTransformWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_preTransformBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_postAggregationWeights1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_postAggregationBias1, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_postAggregationWeights2, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_postAggregationBias2, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_selfWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
     }
 
     private void InitializeTensor(Tensor<T> tensor, int fanIn, int fanOut)
@@ -341,7 +354,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
     /// GPU-accelerated forward pass for PrincipalNeighbourhoodAggregationLayer.
     /// Implements multiple aggregators and scalers on GPU using sparse operations.
     /// </summary>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -396,7 +409,11 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
         // Convert adjacency matrix to CSR for sparse operations
         var (adjValues, adjColIndices, adjRowPointers) = ConvertToCSR(_adjacencyMatrix, numNodes);
-        using var adjCsr = new CsrGpuTensor<T>(backend, adjValues, adjColIndices, adjRowPointers, numNodes, numNodes);
+        // Upload CSR arrays to GPU for sparse operations
+        using var adjValuesBuffer = backend.AllocateBuffer(adjValues);
+        using var adjColIndicesBuffer = backend.AllocateBuffer(adjColIndices.Select(x => (float)x).ToArray());
+        using var adjRowPointersBuffer = backend.AllocateBuffer(adjRowPointers.Select(x => (float)x).ToArray());
+        int adjNnz = adjValues.Length;
 
         // Compute node degrees from adjacency matrix row sums
         float[] degrees = ComputeDegrees(_adjacencyMatrix, numNodes);
@@ -452,9 +469,9 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
                     case PNAAggregator.Mean:
                         // A @ transformed for sum; divide by degree for mean
                         backend.CsrSpMM(
-                            adjCsr.Values, adjCsr.ColumnIndices, adjCsr.RowPointers,
+                            adjValuesBuffer, adjColIndicesBuffer, adjRowPointersBuffer,
                             transformedBuffer, aggregatedBuffer,
-                            numNodes, preTransformFeatures, numNodes, adjCsr.Nnz);
+                            numNodes, preTransformFeatures, numNodes, adjNnz);
 
                         if (aggregator == PNAAggregator.Mean)
                         {
@@ -466,7 +483,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
                     case PNAAggregator.Max:
                         // Use GPU segmented max aggregation
                         backend.CsrSegmentedMax(
-                            adjCsr.ColumnIndices, adjCsr.RowPointers,
+                            adjColIndicesBuffer, adjRowPointersBuffer,
                             transformedBuffer, aggregatedBuffer,
                             numNodes, numNodes, preTransformFeatures);
                         break;
@@ -474,7 +491,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
                     case PNAAggregator.Min:
                         // Use GPU segmented min aggregation
                         backend.CsrSegmentedMin(
-                            adjCsr.ColumnIndices, adjCsr.RowPointers,
+                            adjColIndicesBuffer, adjRowPointersBuffer,
                             transformedBuffer, aggregatedBuffer,
                             numNodes, numNodes, preTransformFeatures);
                         break;
@@ -482,7 +499,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
                     case PNAAggregator.StdDev:
                         // Use GPU segmented stddev aggregation
                         backend.CsrSegmentedStdDev(
-                            adjCsr.ColumnIndices, adjCsr.RowPointers,
+                            adjColIndicesBuffer, adjRowPointersBuffer,
                             transformedBuffer, aggregatedBuffer,
                             numNodes, numNodes, preTransformFeatures);
                         break;
@@ -490,9 +507,9 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
                     default:
                         // Default to sum
                         backend.CsrSpMM(
-                            adjCsr.Values, adjCsr.ColumnIndices, adjCsr.RowPointers,
+                            adjValuesBuffer, adjColIndicesBuffer, adjRowPointersBuffer,
                             transformedBuffer, aggregatedBuffer,
-                            numNodes, preTransformFeatures, numNodes, adjCsr.Nnz);
+                            numNodes, preTransformFeatures, numNodes, adjNnz);
                         break;
                 }
 
@@ -589,7 +606,7 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
 
         // Create output tensor
         int[] outputShape = batchSize == 1 ? [numNodes, _outputFeatures] : [batchSize, numNodes, _outputFeatures];
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
     }
 
     /// <summary>
@@ -915,145 +932,6 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         return Engine.TensorTile(biasReshaped, [batchSize, numNodes, 1]);
     }
 
-    /// <inheritdoc/>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass using vectorized Engine operations.
-    /// </summary>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null ||
-            _lastTransformed == null || _lastAggregated == null || _lastMlpHidden == null ||
-            _lastMlpHiddenPreRelu == null || _lastMlpOutput == null || _lastDegrees == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before Backward.");
-        }
-
-        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
-        int batchSize = _lastInput.Shape[0];
-        int numNodes = _lastInput.Shape[1];
-
-        // Gradient of final bias: sum over batch and nodes (axes 0 and 1)
-        _biasGradient = Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
-
-        // Gradient through self-loop: selfWeightsGradient = input^T @ grad
-        // Sum over batch for weight gradient
-        _selfWeightsGradient = new Tensor<T>([_inputFeatures, _outputFeatures]);
-        _selfWeightsGradient.Fill(NumOps.Zero);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            var inputSlice = Engine.TensorSlice(_lastInput, [b, 0, 0], [1, numNodes, _inputFeatures])
-                .Reshape([numNodes, _inputFeatures]);
-            var gradSlice = Engine.TensorSlice(activationGradient, [b, 0, 0], [1, numNodes, _outputFeatures])
-                .Reshape([numNodes, _outputFeatures]);
-
-            var inputSliceT = Engine.TensorTranspose(inputSlice);
-            var batchGrad = Engine.TensorMatMul(inputSliceT, gradSlice);
-            _selfWeightsGradient = Engine.TensorAdd(_selfWeightsGradient, batchGrad);
-        }
-
-        // Input gradient from self-loop
-        var selfWeightsT = Engine.TensorTranspose(_selfWeights);
-        var selfInputGrad = Engine.TensorMatMul(activationGradient, selfWeightsT);
-
-        // Gradient through MLP Layer 2
-        _postAggregationBias2Gradient = Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
-
-        _postAggregationWeights2Gradient = new Tensor<T>([_hiddenDim, _outputFeatures]);
-        _postAggregationWeights2Gradient.Fill(NumOps.Zero);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            var hiddenSlice = Engine.TensorSlice(_lastMlpHidden, [b, 0, 0], [1, numNodes, _hiddenDim])
-                .Reshape([numNodes, _hiddenDim]);
-            var gradSlice = Engine.TensorSlice(activationGradient, [b, 0, 0], [1, numNodes, _outputFeatures])
-                .Reshape([numNodes, _outputFeatures]);
-
-            var hiddenT = Engine.TensorTranspose(hiddenSlice);
-            var batchGrad = Engine.TensorMatMul(hiddenT, gradSlice);
-            _postAggregationWeights2Gradient = Engine.TensorAdd(_postAggregationWeights2Gradient, batchGrad);
-        }
-
-        // Gradient to hidden layer
-        var weights2T = Engine.TensorTranspose(_postAggregationWeights2);
-        var mlpHiddenGradPre = Engine.TensorMatMul(activationGradient, weights2T);
-
-        // ReLU derivative
-        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape.ToArray());
-        zeroTensor.Fill(NumOps.Zero);
-        var reluMask = Engine.TensorGreaterThan(_lastMlpHiddenPreRelu, zeroTensor);
-        var oneTensor = new Tensor<T>(_lastMlpHiddenPreRelu.Shape.ToArray());
-        oneTensor.Fill(NumOps.One);
-        var reluDeriv = Engine.TensorWhere(reluMask, oneTensor, zeroTensor);
-        var mlpHiddenGrad = Engine.TensorMultiply(mlpHiddenGradPre, reluDeriv);
-
-        // Gradient through MLP Layer 1
-        _postAggregationBias1Gradient = Engine.ReduceSum(mlpHiddenGrad, [0, 1], keepDims: false);
-
-        _postAggregationWeights1Gradient = new Tensor<T>([_combinedFeatures, _hiddenDim]);
-        _postAggregationWeights1Gradient.Fill(NumOps.Zero);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            var aggSlice = Engine.TensorSlice(_lastAggregated, [b, 0, 0], [1, numNodes, _combinedFeatures])
-                .Reshape([numNodes, _combinedFeatures]);
-            var gradSlice = Engine.TensorSlice(mlpHiddenGrad, [b, 0, 0], [1, numNodes, _hiddenDim])
-                .Reshape([numNodes, _hiddenDim]);
-
-            var aggT = Engine.TensorTranspose(aggSlice);
-            var batchGrad = Engine.TensorMatMul(aggT, gradSlice);
-            _postAggregationWeights1Gradient = Engine.TensorAdd(_postAggregationWeights1Gradient, batchGrad);
-        }
-
-        // Gradient to aggregated features
-        var weights1T = Engine.TensorTranspose(_postAggregationWeights1);
-        var aggregatedGrad = Engine.TensorMatMul(mlpHiddenGrad, weights1T);
-
-        // For simplicity, backprop through aggregation using mean aggregation gradient as approximation
-        // Full backprop through max/min/std would require storing indices and complex computations
-        var transformedGrad = BackpropThroughAggregation(aggregatedGrad, numNodes);
-
-        // Gradient through pre-transform
-        _preTransformBiasGradient = Engine.ReduceSum(transformedGrad, [0, 1], keepDims: false);
-
-        _preTransformWeightsGradient = new Tensor<T>([_inputFeatures, _inputFeatures]);
-        _preTransformWeightsGradient.Fill(NumOps.Zero);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            var inputSlice = Engine.TensorSlice(_lastInput, [b, 0, 0], [1, numNodes, _inputFeatures])
-                .Reshape([numNodes, _inputFeatures]);
-            var gradSlice = Engine.TensorSlice(transformedGrad, [b, 0, 0], [1, numNodes, _inputFeatures])
-                .Reshape([numNodes, _inputFeatures]);
-
-            var inputSliceT = Engine.TensorTranspose(inputSlice);
-            var batchGrad = Engine.TensorMatMul(inputSliceT, gradSlice);
-            _preTransformWeightsGradient = Engine.TensorAdd(_preTransformWeightsGradient, batchGrad);
-        }
-
-        // Input gradient from pre-transform
-        var preWeightsT = Engine.TensorTranspose(_preTransformWeights);
-        var preInputGrad = Engine.TensorMatMul(transformedGrad, preWeightsT);
-
-        // Combine input gradients
-        var inputGradient = Engine.TensorAdd(selfInputGrad, preInputGrad);
-
-        // Restore gradient to original input shape
-        if (_originalInputShape != null && _originalInputShape.Length != 3)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
     /// <summary>
     /// Backpropagates through aggregation operations using vectorized Engine operations.
     /// </summary>
@@ -1130,209 +1008,6 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         permutation[last - 1] = rank - 1;
 
         return tensor.Transpose(permutation);
-    }
-
-    /// <summary>
-    /// Backward pass using automatic differentiation with computation graph.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method implements true autodiff for the PNA layer by building a computation graph
-    /// that captures the forward pass operations and propagating gradients through it.
-    /// </para>
-    /// <para>
-    /// <b>Production-Ready Features:</b>
-    /// <list type="bullet">
-    /// <item>Uses GradientTape for proper autodiff recording</item>
-    /// <item>Handles MLP layers with ReLU activation</item>
-    /// <item>GPU-accelerated via IEngine operations</item>
-    /// <item>Hybrid approach for complex aggregations (max, min, std)</item>
-    /// </list>
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null ||
-            _lastTransformed == null || _lastAggregated == null || _lastMlpHidden == null ||
-            _lastMlpHiddenPreRelu == null || _lastMlpOutput == null || _lastDegrees == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before Backward.");
-        }
-
-        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient);
-        int batchSize = _lastInput.Shape[0];
-        int numNodes = _lastInput.Shape[1];
-
-        // Create computation nodes for autodiff
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-
-        // Pre-transform weights
-        var preWeightsNode = Autodiff.TensorOperations<T>.Variable(_preTransformWeights, "pre_weights", requiresGradient: true);
-        var preBiasNode = Autodiff.TensorOperations<T>.Variable(_preTransformBias, "pre_bias", requiresGradient: true);
-
-        // Post-aggregation MLP weights
-        var post1WeightsNode = Autodiff.TensorOperations<T>.Variable(_postAggregationWeights1, "post1_weights", requiresGradient: true);
-        var post1BiasNode = Autodiff.TensorOperations<T>.Variable(_postAggregationBias1, "post1_bias", requiresGradient: true);
-        var post2WeightsNode = Autodiff.TensorOperations<T>.Variable(_postAggregationWeights2, "post2_weights", requiresGradient: true);
-        var post2BiasNode = Autodiff.TensorOperations<T>.Variable(_postAggregationBias2, "post2_bias", requiresGradient: true);
-
-        // Self-loop weights
-        var selfWeightsNode = Autodiff.TensorOperations<T>.Variable(_selfWeights, "self_weights", requiresGradient: true);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(_bias, "bias", requiresGradient: true);
-
-        var allNodes = new List<Autodiff.ComputationNode<T>>
-        {
-            inputNode, preWeightsNode, preBiasNode,
-            post1WeightsNode, post1BiasNode, post2WeightsNode, post2BiasNode,
-            selfWeightsNode, biasNode
-        };
-
-        // Build computation graph for forward pass
-
-        // Step 1: Pre-transform: input @ preWeights + preBias
-        var preTransformed = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, preWeightsNode);
-        allNodes.Add(preTransformed);
-
-        // Broadcast bias across batch and nodes
-        var preBiasBroadcast = BroadcastBias(_preTransformBias, batchSize, numNodes);
-        var preBiasBroadcastNode = Autodiff.TensorOperations<T>.Variable(preBiasBroadcast, "pre_bias_broadcast", requiresGradient: true);
-        allNodes.Add(preBiasBroadcastNode);
-
-        var transformedNode = Autodiff.TensorOperations<T>.Add(preTransformed, preBiasBroadcastNode);
-        allNodes.Add(transformedNode);
-
-        // Step 2: Use cached aggregated features (aggregation is complex, use cached values)
-        var aggregatedNode = Autodiff.TensorOperations<T>.Variable(_lastAggregated, "aggregated", requiresGradient: true);
-        allNodes.Add(aggregatedNode);
-
-        // Step 3: MLP Layer 1
-        var mlpHidden1 = Autodiff.TensorOperations<T>.MatrixMultiply(aggregatedNode, post1WeightsNode);
-        allNodes.Add(mlpHidden1);
-
-        var post1BiasBroadcast = BroadcastBias(_postAggregationBias1, batchSize, numNodes);
-        var post1BiasBroadcastNode = Autodiff.TensorOperations<T>.Variable(post1BiasBroadcast, "post1_bias_broadcast", requiresGradient: true);
-        allNodes.Add(post1BiasBroadcastNode);
-
-        var mlpHidden1WithBias = Autodiff.TensorOperations<T>.Add(mlpHidden1, post1BiasBroadcastNode);
-        allNodes.Add(mlpHidden1WithBias);
-
-        // ReLU activation
-        var mlpHidden1Activated = Autodiff.TensorOperations<T>.ReLU(mlpHidden1WithBias);
-        allNodes.Add(mlpHidden1Activated);
-
-        // Step 4: MLP Layer 2
-        var mlpOutput = Autodiff.TensorOperations<T>.MatrixMultiply(mlpHidden1Activated, post2WeightsNode);
-        allNodes.Add(mlpOutput);
-
-        var post2BiasBroadcast = BroadcastBias(_postAggregationBias2, batchSize, numNodes);
-        var post2BiasBroadcastNode = Autodiff.TensorOperations<T>.Variable(post2BiasBroadcast, "post2_bias_broadcast", requiresGradient: true);
-        allNodes.Add(post2BiasBroadcastNode);
-
-        var mlpOutputWithBias = Autodiff.TensorOperations<T>.Add(mlpOutput, post2BiasBroadcastNode);
-        allNodes.Add(mlpOutputWithBias);
-
-        // Step 5: Self-loop contribution
-        var selfContribution = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, selfWeightsNode);
-        allNodes.Add(selfContribution);
-
-        // Step 6: Final combination
-        var combined = Autodiff.TensorOperations<T>.Add(mlpOutputWithBias, selfContribution);
-        allNodes.Add(combined);
-
-        var finalBiasBroadcast = BroadcastBias(_bias, batchSize, numNodes);
-        var finalBiasBroadcastNode = Autodiff.TensorOperations<T>.Variable(finalBiasBroadcast, "final_bias_broadcast", requiresGradient: true);
-        allNodes.Add(finalBiasBroadcastNode);
-
-        var outputNode = Autodiff.TensorOperations<T>.Add(combined, finalBiasBroadcastNode);
-        allNodes.Add(outputNode);
-
-        // Set gradient on output node
-        outputNode.Gradient = activationGradient;
-
-        // Topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-
-        foreach (var node in allNodes)
-        {
-            if (!visited.Contains(node))
-            {
-                stack.Push((node, false));
-
-                while (stack.Count > 0)
-                {
-                    var (currentNode, processed) = stack.Pop();
-                    if (visited.Contains(currentNode)) continue;
-
-                    if (processed)
-                    {
-                        visited.Add(currentNode);
-                        topoOrder.Add(currentNode);
-                    }
-                    else
-                    {
-                        stack.Push((currentNode, true));
-                        if (currentNode.Parents != null)
-                        {
-                            foreach (var parent in currentNode.Parents)
-                            {
-                                if (!visited.Contains(parent))
-                                {
-                                    stack.Push((parent, false));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract gradients from computation nodes
-        _biasGradient = biasNode.Gradient != null
-            ? Engine.ReduceSum(biasNode.Gradient, [0, 1], keepDims: false)
-            : Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
-
-        _selfWeightsGradient = selfWeightsNode.Gradient ?? new Tensor<T>([_inputFeatures, _outputFeatures]);
-        _postAggregationWeights2Gradient = post2WeightsNode.Gradient ?? new Tensor<T>([_hiddenDim, _outputFeatures]);
-        _postAggregationBias2Gradient = post2BiasNode.Gradient != null
-            ? Engine.ReduceSum(post2BiasNode.Gradient, [0, 1], keepDims: false)
-            : new Tensor<T>([_outputFeatures]);
-        _postAggregationWeights1Gradient = post1WeightsNode.Gradient ?? new Tensor<T>([_combinedFeatures, _hiddenDim]);
-        _postAggregationBias1Gradient = post1BiasNode.Gradient != null
-            ? Engine.ReduceSum(post1BiasNode.Gradient, [0, 1], keepDims: false)
-            : new Tensor<T>([_hiddenDim]);
-        _preTransformWeightsGradient = preWeightsNode.Gradient ?? new Tensor<T>([_inputFeatures, _inputFeatures]);
-        _preTransformBiasGradient = preBiasNode.Gradient != null
-            ? Engine.ReduceSum(preBiasNode.Gradient, [0, 1], keepDims: false)
-            : new Tensor<T>([_inputFeatures]);
-
-        // If autodiff didn't compute gradients properly, compute them using Engine operations
-        if (NumOps.Equals(_selfWeightsGradient[0], NumOps.Zero))
-        {
-            ComputeGradientsViaEngine(activationGradient, batchSize, numNodes);
-        }
-
-        // Extract input gradient
-        var inputGradient = inputNode.Gradient ?? new Tensor<T>(_lastInput.Shape.ToArray());
-
-        // Restore gradient to original input shape
-        if (_originalInputShape != null && _originalInputShape.Length != 3)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
     }
 
     /// <summary>
@@ -1468,28 +1143,28 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_preTransformWeights.Data),
-            Vector<T>.FromMemory(_preTransformBias.Data),
-            Vector<T>.FromMemory(_postAggregationWeights1.Data),
-            Vector<T>.FromMemory(_postAggregationBias1.Data),
-            Vector<T>.FromMemory(_postAggregationWeights2.Data),
-            Vector<T>.FromMemory(_postAggregationBias2.Data),
-            Vector<T>.FromMemory(_selfWeights.Data),
-            Vector<T>.FromMemory(_bias.Data)
+            new Vector<T>(_preTransformWeights.ToArray()),
+            new Vector<T>(_preTransformBias.ToArray()),
+            new Vector<T>(_postAggregationWeights1.ToArray()),
+            new Vector<T>(_postAggregationBias1.ToArray()),
+            new Vector<T>(_postAggregationWeights2.ToArray()),
+            new Vector<T>(_postAggregationBias2.ToArray()),
+            new Vector<T>(_selfWeights.ToArray()),
+            new Vector<T>(_bias.ToArray())
         );
     }
 
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
-        var gPreTransformWeights = _preTransformWeightsGradient != null ? (_preTransformWeightsGradient is not null ? Vector<T>.FromMemory(_preTransformWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_preTransformWeights.Length);
-        var gPreTransformBias = _preTransformBiasGradient != null ? (_preTransformBiasGradient is not null ? Vector<T>.FromMemory(_preTransformBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_preTransformBias.Length);
-        var gPostWeights1 = _postAggregationWeights1Gradient != null ? (_postAggregationWeights1Gradient is not null ? Vector<T>.FromMemory(_postAggregationWeights1Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_postAggregationWeights1.Length);
-        var gPostBias1 = _postAggregationBias1Gradient != null ? (_postAggregationBias1Gradient is not null ? Vector<T>.FromMemory(_postAggregationBias1Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_postAggregationBias1.Length);
-        var gPostWeights2 = _postAggregationWeights2Gradient != null ? (_postAggregationWeights2Gradient is not null ? Vector<T>.FromMemory(_postAggregationWeights2Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_postAggregationWeights2.Length);
-        var gPostBias2 = _postAggregationBias2Gradient != null ? (_postAggregationBias2Gradient is not null ? Vector<T>.FromMemory(_postAggregationBias2Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_postAggregationBias2.Length);
-        var gSelfWeights = _selfWeightsGradient != null ? (_selfWeightsGradient is not null ? Vector<T>.FromMemory(_selfWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_selfWeights.Length);
-        var gBias = _biasGradient != null ? (_biasGradient is not null ? Vector<T>.FromMemory(_biasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_bias.Length);
+        var gPreTransformWeights = _preTransformWeightsGradient != null ? new Vector<T>(_preTransformWeightsGradient.ToArray()) : new Vector<T>(_preTransformWeights.Length);
+        var gPreTransformBias = _preTransformBiasGradient != null ? new Vector<T>(_preTransformBiasGradient.ToArray()) : new Vector<T>(_preTransformBias.Length);
+        var gPostWeights1 = _postAggregationWeights1Gradient != null ? new Vector<T>(_postAggregationWeights1Gradient.ToArray()) : new Vector<T>(_postAggregationWeights1.Length);
+        var gPostBias1 = _postAggregationBias1Gradient != null ? new Vector<T>(_postAggregationBias1Gradient.ToArray()) : new Vector<T>(_postAggregationBias1.Length);
+        var gPostWeights2 = _postAggregationWeights2Gradient != null ? new Vector<T>(_postAggregationWeights2Gradient.ToArray()) : new Vector<T>(_postAggregationWeights2.Length);
+        var gPostBias2 = _postAggregationBias2Gradient != null ? new Vector<T>(_postAggregationBias2Gradient.ToArray()) : new Vector<T>(_postAggregationBias2.Length);
+        var gSelfWeights = _selfWeightsGradient != null ? new Vector<T>(_selfWeightsGradient.ToArray()) : new Vector<T>(_selfWeights.Length);
+        var gBias = _biasGradient != null ? new Vector<T>(_biasGradient.ToArray()) : new Vector<T>(_bias.Length);
 
         return Vector<T>.Concatenate(gPreTransformWeights, gPreTransformBias, gPostWeights1, gPostBias1, gPostWeights2, gPostBias2, gSelfWeights, gBias);
     }
@@ -1579,40 +1254,5 @@ public class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, IGraphCon
         _postAggregationBias2Gradient = null;
         _selfWeightsGradient = null;
         _biasGradient = null;
-    }
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => true;
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Export learnable parameters as constants
-        var preWeightsNode = Autodiff.TensorOperations<T>.Constant(_preTransformWeights, "pre_weights");
-        var selfWeightsNode = Autodiff.TensorOperations<T>.Constant(_selfWeights, "self_weights");
-        var biasNode = Autodiff.TensorOperations<T>.Constant(_bias, "bias");
-
-        // Build computation graph for self-loop path (most direct gradient flow)
-        var selfContribution = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, selfWeightsNode);
-        var output = Autodiff.TensorOperations<T>.Add(selfContribution, biasNode);
-
-        // Apply activation if supported
-        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
-        {
-            return ScalarActivation.ApplyToGraph(output);
-        }
-
-        return output;
     }
 }

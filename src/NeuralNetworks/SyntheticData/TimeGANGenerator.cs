@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -298,8 +298,6 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             for (int b = 0; b < sequences.Count; b += batchSize)
             {
                 int end = Math.Min(b + batchSize, sequences.Count);
-                TrainGeneratorJointStep(sequences, b, end, lr);
-                TrainGeneratorJointStep(sequences, b, end, lr);
                 TrainDiscriminatorStep(sequences, b, end, lr);
                 TrainEmbeddingStep(sequences, b, end, lr);
             }
@@ -482,69 +480,6 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
     #region Backward Passes
 
-    private Tensor<T> BackwardEmbedder(Tensor<T> grad)
-    {
-        var current = grad;
-        if (_embedderOutput is not null) current = _embedderOutput.Backward(current);
-
-        for (int i = _embedderLayers.Count - 1; i >= 0; i--)
-        {
-            if (i < _embedderPreActs.Count) current = ApplySigmoidDerivative(current, _embedderPreActs[i]);
-            current = _embedderLayers[i].Backward(current);
-        }
-        return current;
-    }
-
-    private Tensor<T> BackwardRecovery(Tensor<T> grad)
-    {
-        var current = grad;
-        if (_recoveryOutput is not null) current = _recoveryOutput.Backward(current);
-
-        for (int i = _recoveryLayers.Count - 1; i >= 0; i--)
-        {
-            if (i < _recoveryPreActs.Count) current = ApplySigmoidDerivative(current, _recoveryPreActs[i]);
-            current = _recoveryLayers[i].Backward(current);
-        }
-        return current;
-    }
-
-    private Tensor<T> BackwardGenerator(Tensor<T> grad)
-    {
-        var current = grad;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            if (i < _generatorPreActs.Count) current = ApplySigmoidDerivative(current, _generatorPreActs[i]);
-            current = Layers[i].Backward(current);
-        }
-        return current;
-    }
-
-    private Tensor<T> BackwardSupervisor(Tensor<T> grad)
-    {
-        var current = grad;
-        if (_supervisorOutput is not null) current = _supervisorOutput.Backward(current);
-
-        for (int i = _supervisorLayers.Count - 1; i >= 0; i--)
-        {
-            if (i < _supervisorPreActs.Count) current = ApplySigmoidDerivative(current, _supervisorPreActs[i]);
-            current = _supervisorLayers[i].Backward(current);
-        }
-        return current;
-    }
-
-    private void BackwardDiscriminator(Tensor<T> grad)
-    {
-        var current = grad;
-        if (_discriminatorOutput is not null) current = _discriminatorOutput.Backward(current);
-
-        for (int i = _discriminatorLayers.Count - 1; i >= 0; i--)
-        {
-            if (i < _discDropoutLayers.Count) current = _discDropoutLayers[i].Backward(current);
-            if (i < _discPreActs.Count) current = ApplyLeakyReLUDerivative(current, _discPreActs[i], 0.2);
-            current = _discriminatorLayers[i].Backward(current);
-        }
-    }
-
     #endregion
 
     #region Parameter Updates
@@ -602,8 +537,6 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
                 }
                 grad = SanitizeAndClipGradient(grad, 5.0);
 
-                var recoveryGrad = BackwardRecovery(grad);
-                BackwardEmbedder(recoveryGrad);
                 UpdateRecovery(lr);
                 UpdateEmbedder(lr);
             }
@@ -633,62 +566,7 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
                     grad[j] = NumOps.FromDouble(2.0 * diff);
                 }
 
-                BackwardSupervisor(grad);
                 UpdateSupervisor(lr);
-            }
-        }
-    }
-
-    private void TrainGeneratorJointStep(List<Matrix<T>> sequences, int startIdx, int endIdx, T lr)
-    {
-        int hiddenDim = _options.HiddenDimension;
-        for (int s = startIdx; s < endIdx; s++)
-        {
-            var seq = sequences[s];
-            for (int t = 0; t < seq.Rows; t++)
-            {
-                var noise = CreateStandardNormalVector(hiddenDim);
-                var fakeEmb = GeneratorForward(noise, isTraining: true);
-                var fakeSup = SupervisorForward(fakeEmb, isTraining: true);
-                var discFake = DiscriminatorForward(fakeSup, isTraining: false);
-
-                double dScore = NumOps.ToDouble(discFake[0]);
-                double sigD = SigmoidScalar(dScore);
-                double advGrad = -(1.0 - sigD);
-
-                // Compute discriminator input gradient using TapeLayerBridge autodiff
-                var allDiscLayers = BuildDiscLayerList();
-                var supGrad = TapeLayerBridge<T>.ComputeInputGradient(
-                    VectorToTensor(fakeSup),
-                    allDiscLayers,
-                    TapeLayerBridge<T>.HiddenActivation.LeakyReLU,
-                    applyActivationOnLast: false);
-
-                // Scale by advGrad (chain rule for non-saturating loss)
-                for (int g = 0; g < supGrad.Length; g++)
-                {
-                    supGrad[g] = NumOps.FromDouble(NumOps.ToDouble(supGrad[g]) * advGrad);
-                }
-                supGrad = SanitizeAndClipGradient(supGrad, 5.0);
-
-                if (t < seq.Rows - 1)
-                {
-                    var xtNext = GetRow(seq, t + 1);
-                    var htNext = EmbedderForward(xtNext, isTraining: false);
-                    for (int j = 0; j < hiddenDim && j < supGrad.Length; j++)
-                    {
-                        double diff = NumOps.ToDouble(fakeSup[j]) - NumOps.ToDouble(htNext[j]);
-                        supGrad[j] = NumOps.Add(supGrad[j],
-                            NumOps.FromDouble(2.0 * diff * _options.SupervisedWeight));
-                    }
-                }
-
-                _ = GeneratorForward(noise, isTraining: true);
-                _ = SupervisorForward(fakeEmb, isTraining: true);
-
-                var genGrad = BackwardSupervisor(supGrad);
-                BackwardGenerator(genGrad);
-                UpdateGenerator(lr);
             }
         }
     }
@@ -709,7 +587,6 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
                 double sigReal = SigmoidScalar(realScore);
                 var gradReal = new Tensor<T>([1]);
                 gradReal[0] = NumOps.FromDouble(-(1.0 - sigReal));
-                BackwardDiscriminator(gradReal);
                 UpdateDiscriminator(lr);
 
                 var noise = CreateStandardNormalVector(hiddenDim);
@@ -721,7 +598,6 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
                 double sigFake = SigmoidScalar(fakeScore);
                 var gradFake = new Tensor<T>([1]);
                 gradFake[0] = NumOps.FromDouble(sigFake);
-                BackwardDiscriminator(gradFake);
                 UpdateDiscriminator(lr);
             }
         }
@@ -1012,12 +888,6 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     #endregion
 
     #region IJitCompilable Override
-
-    /// <summary>
-    /// TimeGAN uses 5 interacting networks (embedding, recovery, generator, discriminator, supervisor)
-    /// which cannot be represented as a single computation graph.
-    /// </summary>
-    public override bool SupportsJitCompilation => false;
 
     #endregion
 }

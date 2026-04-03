@@ -1,4 +1,5 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -335,6 +336,43 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         }
 
         return CreateOptimizationResult(bestStepData, inputData);
+    }
+
+    // Per-parameter state for tape-based training (full precision — quantization is for legacy path)
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeM = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeV = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private int _tapeStep;
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        _tapeStep++;
+
+        T beta1 = _currentBeta1;
+        T beta2 = _currentBeta2;
+        T oneMinusBeta1 = NumOps.Subtract(NumOps.One, beta1);
+        T oneMinusBeta2 = NumOps.Subtract(NumOps.One, beta2);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+        T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(Convert.ToDouble(beta1), _tapeStep));
+        T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(Convert.ToDouble(beta2), _tapeStep));
+
+        foreach (var param in context.Parameters)
+        {
+            if (!context.Gradients.TryGetValue(param, out var grad))
+                continue;
+
+            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeM[param] = m; }
+            if (!_tapeV.TryGetValue(param, out var v)) { v = new Tensor<T>(param._shape); _tapeV[param] = v; }
+
+            Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1)), m);
+            Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(v, beta2), Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusBeta2)), v);
+
+            var mHat = Engine.TensorDivideScalar(m, biasCorrection1);
+            var vHat = Engine.TensorDivideScalar(v, biasCorrection2);
+            var denom = Engine.TensorAddScalar(Engine.TensorSqrt(vHat), epsilon);
+            var update = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHat, denom), CurrentLearningRate);
+            Engine.TensorSubtractInPlace(param, update);
+        }
     }
 
     /// <summary>

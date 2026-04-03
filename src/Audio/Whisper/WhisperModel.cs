@@ -800,33 +800,15 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             throw new NotSupportedException("Cannot train in ONNX inference mode. Use the native constructor for training.");
         }
 
-        // Set training mode
         SetTrainingMode(true);
-
-        // 1. Preprocess audio to mel spectrogram
-        var melFeatures = PreprocessAudio(input);
-
-        // 2. Forward pass through encoder-decoder layers
-        var prediction = Forward(melFeatures);
-
-        // 3. Flatten tensors to vectors for loss calculation
-        var flattenedPredictions = prediction.ToVector();
-        var flattenedExpected = expectedOutput.ToVector();
-
-        // 4. Calculate loss
-        LastLoss = _lossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
-
-        // 5. Calculate gradient of loss with respect to output
-        var outputGradients = _lossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
-
-        // 6. Backward pass through layers
-        Backpropagate(Tensor<T>.FromVector(outputGradients));
-
-        // 7. Update parameters using optimizer
-        _optimizer?.UpdateParameters(Layers);
-
-        // Exit training mode
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

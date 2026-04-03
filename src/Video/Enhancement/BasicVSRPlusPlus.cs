@@ -482,17 +482,15 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode.");
 
-        // Forward pass
-        var output = EnhanceVideoNative(input);
-
-        // Compute loss gradient
-        var lossGradient = ComputeLossGradient(output, expectedOutput);
-
-        // Backward pass
-        BackwardPass(lossGradient);
-
-        // Update parameters
-        UpdateAllParameters();
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     #endregion
@@ -804,7 +802,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         int height = hasBatch ? feature.Shape[2] : feature.Shape[1];
         int width = hasBatch ? feature.Shape[3] : feature.Shape[2];
 
-        var warped = new Tensor<T>(feature.Shape.ToArray());
+        var warped = new Tensor<T>(feature._shape);
 
         for (int b = 0; b < batch; b++)
         {
@@ -977,7 +975,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
             inputData[i] = Convert.ToSingle(frames.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, frames.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, frames._shape);
         var inputMeta = _onnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1005,7 +1003,7 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
 
     private Tensor<T> ComputeLossGradient(Tensor<T> output, Tensor<T> target)
     {
-        var gradient = new Tensor<T>(output.Shape.ToArray());
+        var gradient = new Tensor<T>(output._shape);
 
         for (int i = 0; i < output.Length; i++)
         {
@@ -1018,177 +1016,6 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         }
 
         return gradient;
-    }
-
-    /// <summary>
-    /// Production-ready backward pass with proper gradient routing through
-    /// bidirectional propagation, warping operations, and all network components.
-    /// </summary>
-    /// <param name="gradient">Loss gradient with shape [numFrames, channels, height*scale, width*scale].</param>
-    private void BackwardPass(Tensor<T> gradient)
-    {
-        if (_cachedInitialFeatures == null || _cachedFlows == null ||
-            _cachedResidualInputs == null || _cachedUpsampleInputs == null ||
-            _cachedOutputConvInputs == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int numFrames = _cachedNumFrames;
-
-        // Gradient accumulators for each frame's features (after propagation)
-        var featureGradients = new List<Tensor<T>>();
-        for (int i = 0; i < numFrames; i++)
-        {
-            featureGradients.Add(new Tensor<T>(_cachedInitialFeatures[0].Shape.ToArray()));
-        }
-
-        // Process each frame's gradient through output conv, upsampling, and residual blocks
-        for (int f = 0; f < numFrames; f++)
-        {
-            // Extract per-frame gradient
-            var frameGrad = ExtractFrameBatch(gradient, f);
-
-            // Backward through output convolution
-            var grad = OutputConv.Backward(frameGrad);
-
-            // Backward through upsampling layers (in reverse order)
-            for (int i = _upsampleLayers.Count - 1; i >= 0; i--)
-            {
-                grad = _upsampleLayers[i].Backward(grad);
-            }
-
-            // Backward through residual blocks (in reverse order)
-            for (int i = _residualBlocks.Count - 1; i >= 0; i--)
-            {
-                grad = _residualBlocks[i].Backward(grad);
-            }
-
-            // Accumulate gradient for this frame
-            AccumulateGradient(featureGradients[f], grad);
-        }
-
-        // Backward through bidirectional propagation (reverse order of iterations)
-        var propagationGradients = BackwardThroughPropagation(featureGradients, numFrames);
-
-        // Backward through initial feature extraction for each frame
-        for (int f = 0; f < numFrames; f++)
-        {
-            FeatExtract.Backward(propagationGradients[f]);
-        }
-    }
-
-    /// <summary>
-    /// Backward pass through bidirectional propagation with proper gradient routing
-    /// through deformable alignments, warping, and propagation convolutions.
-    /// </summary>
-    private List<Tensor<T>> BackwardThroughPropagation(List<Tensor<T>> outputGradients, int numFrames)
-    {
-        if (_cachedBackwardPropFeatures == null || _cachedForwardPropFeatures == null ||
-            _cachedBackwardOutputFeatures == null || _cachedForwardOutputFeatures == null ||
-            _cachedBackwardAlignInputs == null || _cachedForwardAlignInputs == null ||
-            _cachedFlows == null)
-        {
-            throw new InvalidOperationException("Propagation cache not available.");
-        }
-
-        var currentGradients = new List<Tensor<T>>(outputGradients);
-
-        // Backward through propagation iterations (in reverse order)
-        for (int iter = _numPropagations - 1; iter >= 0; iter--)
-        {
-            // Initialize gradient accumulators for this iteration
-            var backwardPhaseGradients = new List<Tensor<T>>();
-            for (int i = 0; i < numFrames; i++)
-            {
-                backwardPhaseGradients.Add(new Tensor<T>(currentGradients[0].Shape.ToArray()));
-            }
-
-            // --- Backward through FORWARD propagation phase ---
-            // Forward propagation went from first to last (i = 1 to numFrames-1)
-            // So backward goes from last to first
-            for (int i = numFrames - 1; i >= 1; i--)
-            {
-                var grad = currentGradients[i];
-
-                // Backward through forward propagation conv
-                var propConvGrad = _forwardConvs[iter].Backward(grad);
-
-                // Split gradient at concatenation point (current features + aligned)
-                var (currentPartGrad, alignedPartGrad) = SplitConcatenatedGradient(
-                    propConvGrad, _numFeatures, _numFeatures);
-
-                // Backward through forward alignment
-                var alignGrad = _forwardAlignments[iter].Backward(alignedPartGrad);
-
-                // Split alignment input gradient (backward features + warped)
-                var (backwardFeatGrad, warpedGrad) = SplitConcatenatedGradient(
-                    alignGrad, _numFeatures, _numFeatures);
-
-                // Backward through warping: gradients go to previous frame features and flow
-                // Use the actual propagated features (conv output), not the concat tensor
-                var (unwarpedGrad, flowGrad) = WarpBackward(
-                    warpedGrad, _cachedFlows[i - 1].forward,
-                    _cachedForwardOutputFeatures[iter][i - 1]);
-
-                // Accumulate gradients
-                AccumulateGradient(backwardPhaseGradients[i], currentPartGrad);
-                AccumulateGradient(backwardPhaseGradients[i], backwardFeatGrad);
-                AccumulateGradient(backwardPhaseGradients[i - 1], unwarpedGrad);
-
-                // Flow gradients would be passed to flow estimator (SPyNet)
-                // For now, we store them for potential future use
-            }
-
-            // First frame passes through directly in forward propagation
-            AccumulateGradient(backwardPhaseGradients[0], currentGradients[0]);
-
-            // --- Backward through BACKWARD propagation phase ---
-            var inputGradients = new List<Tensor<T>>();
-            for (int i = 0; i < numFrames; i++)
-            {
-                inputGradients.Add(new Tensor<T>(currentGradients[0].Shape.ToArray()));
-            }
-
-            // Backward propagation went from last to first (i = numFrames-2 to 0)
-            // So backward goes from first to last
-            for (int i = 0; i < numFrames - 1; i++)
-            {
-                var grad = backwardPhaseGradients[i];
-
-                // Backward through backward propagation conv
-                var propConvGrad = _backwardConvs[iter].Backward(grad);
-
-                // Split gradient at concatenation point (original features + aligned)
-                var (origPartGrad, alignedPartGrad) = SplitConcatenatedGradient(
-                    propConvGrad, _numFeatures, _numFeatures);
-
-                // Backward through backward alignment
-                var alignGrad = _backwardAlignments[iter].Backward(alignedPartGrad);
-
-                // Split alignment input gradient (propagated features + warped)
-                var (propFeatGrad, warpedGrad) = SplitConcatenatedGradient(
-                    alignGrad, _numFeatures, _numFeatures);
-
-                // Backward through warping: gradients go to next frame features and flow
-                // Use the actual propagated features (conv output), not the concat tensor
-                var (unwarpedGrad, flowGrad) = WarpBackward(
-                    warpedGrad, _cachedFlows[i].backward,
-                    _cachedBackwardOutputFeatures[iter][i + 1]);
-
-                // Accumulate gradients
-                AccumulateGradient(inputGradients[i], origPartGrad);
-                AccumulateGradient(inputGradients[i], propFeatGrad);
-                AccumulateGradient(inputGradients[i + 1], unwarpedGrad);
-            }
-
-            // Last frame passes through directly in backward propagation
-            AccumulateGradient(inputGradients[numFrames - 1], backwardPhaseGradients[numFrames - 1]);
-
-            currentGradients = inputGradients;
-        }
-
-        return currentGradients;
     }
 
     /// <summary>
@@ -1265,8 +1092,8 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         int height = hasBatch ? outputGrad.Shape[2] : outputGrad.Shape[1];
         int width = hasBatch ? outputGrad.Shape[3] : outputGrad.Shape[2];
 
-        var featureGrad = new Tensor<T>(inputFeature.Shape.ToArray());
-        var flowGrad = new Tensor<T>(flow.Shape.ToArray());
+        var featureGrad = new Tensor<T>(inputFeature._shape);
+        var flowGrad = new Tensor<T>(flow._shape);
 
         for (int b = 0; b < batch; b++)
         {
@@ -1416,6 +1243,15 @@ public class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     protected override void InitializeLayers()
     {
         ClearLayers();
+
+        if (_flowEstimator is not null) Layers.Add(_flowEstimator);
+        if (_featExtract is not null) Layers.Add(_featExtract);
+        foreach (var layer in _backwardAlignments) Layers.Add(layer);
+        foreach (var layer in _forwardAlignments) Layers.Add(layer);
+        foreach (var layer in _backwardConvs) Layers.Add(layer);
+        foreach (var layer in _forwardConvs) Layers.Add(layer);
+        foreach (var layer in _upsampleLayers) Layers.Add(layer);
+        if (_outputConv is not null) Layers.Add(_outputConv);
     }
 
     #endregion

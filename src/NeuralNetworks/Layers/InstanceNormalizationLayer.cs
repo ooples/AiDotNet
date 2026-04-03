@@ -1,9 +1,10 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -39,11 +40,13 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
-public class InstanceNormalizationLayer<T> : LayerBase<T>
+public partial class InstanceNormalizationLayer<T> : LayerBase<T>
 {
     private readonly T _epsilon;
     private readonly int _numChannels;
     private readonly bool _affine;
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
+
     private Tensor<T> _gamma;
     private Tensor<T> _beta;
     private Tensor<T>? _lastInput;
@@ -54,7 +57,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     private int[] _originalInputShape = [];
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
+    private Tensor<T>? _gpuInput;
     private IGpuBuffer? _gpuMean;
     private IGpuBuffer? _gpuInvVar;
     private int _gpuBatch;
@@ -97,7 +100,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the gamma (scale) parameters.
     /// </summary>
-    public Vector<T> GetGamma() => Vector<T>.FromMemory(_gamma.Data);
+    public Vector<T> GetGamma() => _gamma.ToVector();
 
     /// <summary>
     /// Gets the gamma (scale) parameters as a tensor.
@@ -107,7 +110,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the beta (shift) parameters.
     /// </summary>
-    public Vector<T> GetBeta() => Vector<T>.FromMemory(_beta.Data);
+    public Vector<T> GetBeta() => _beta.ToVector();
 
     /// <summary>
     /// Gets the beta (shift) parameters as a tensor.
@@ -243,7 +246,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     /// normalization where each channel is normalized independently.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -329,7 +332,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
             _gpuSpatialSize = spatialSize;
 
             // Also cache for CPU backward compatibility
-            _lastInput = input.ToTensor();
+            _lastInput = input;
             var meanData = new float[statsSize];
             var varData = new float[statsSize];
             backend.DownloadBuffer(saveMeanBuffer, meanData);
@@ -344,129 +347,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
             saveInvVarBuffer.Dispose();
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <summary>
-    /// Performs the backward pass using GPU-resident tensors.
-    /// </summary>
-    /// <param name="outputGradient">GPU-resident gradient tensor.</param>
-    /// <returns>GPU-resident input gradient tensor.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        if (_gpuInput == null || _gpuMean == null || _gpuInvVar == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
-
-        int batch = _gpuBatch;
-        int channels = _gpuChannels;
-        int spatialSize = _gpuSpatialSize;
-        int totalSize = batch * channels * spatialSize;
-
-        // Upload gamma to GPU
-        var gammaData = DirectGpuEngine.ToFloatArray<T>(_gamma.Data.ToArray());
-        using var gammaBuffer = backend.AllocateBuffer(gammaData);
-
-        // Allocate output buffers
-        var gradInputBuffer = backend.AllocateBuffer(totalSize);
-        var gradGammaBuffer = backend.AllocateBuffer(channels);
-        var gradBetaBuffer = backend.AllocateBuffer(channels);
-
-        // Use GPU InstanceNormBackward kernel
-        float epsilon = (float)NumOps.ToDouble(_epsilon);
-        backend.InstanceNormBackward(
-            outputGradient.Buffer,
-            _gpuInput.Buffer,
-            gammaBuffer,
-            _gpuMean,
-            _gpuInvVar,
-            gradInputBuffer,
-            gradGammaBuffer,
-            gradBetaBuffer,
-            batch, channels, spatialSize, epsilon);
-
-        // Download gradGamma and gradBeta for parameter updates
-        var gradGammaData = backend.DownloadBuffer(gradGammaBuffer);
-        var gradBetaData = backend.DownloadBuffer(gradBetaBuffer);
-        gradGammaBuffer.Dispose();
-        gradBetaBuffer.Dispose();
-
-        _gammaGradient = new Tensor<T>([channels], new Vector<T>(DirectGpuEngine.FromFloatArray<T>(gradGammaData)));
-        _betaGradient = new Tensor<T>([channels], new Vector<T>(DirectGpuEngine.FromFloatArray<T>(gradBetaData)));
-
-        // Return input gradient as GPU tensor
-        return new GpuTensor<T>(backend, gradInputBuffer, outputGradient.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: true);
-    }
-
-    /// <summary>
-    /// Performs the backward pass of instance normalization.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from the next layer.</param>
-    /// <returns>Gradient with respect to the input.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastMean == null || _lastVariance == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Flatten gradient to 4D for processing (matching forward pass)
-        Tensor<T> flattenedGradient;
-        int channels;
-
-        if (outputGradient.Rank == 2)
-        {
-            channels = outputGradient.Shape[1];
-            flattenedGradient = outputGradient.Reshape(new int[] { outputGradient.Shape[0], channels, 1, 1 });
-        }
-        else if (outputGradient.Rank == 3)
-        {
-            channels = outputGradient.Shape[1];
-            flattenedGradient = outputGradient.Reshape(new int[] { outputGradient.Shape[0], channels, outputGradient.Shape[2], 1 });
-        }
-        else if (outputGradient.Rank == 4)
-        {
-            flattenedGradient = outputGradient;
-        }
-        else if (outputGradient.Rank == 5)
-        {
-            channels = outputGradient.Shape[1];
-            int spatialDim = outputGradient.Shape[2] * outputGradient.Shape[3] * outputGradient.Shape[4];
-            flattenedGradient = outputGradient.Reshape(new int[] { outputGradient.Shape[0], channels, spatialDim, 1 });
-        }
-        else
-        {
-            int batch = outputGradient.Shape[0];
-            channels = outputGradient.Shape[1];
-            int spatialDim = 1;
-            for (int i = 2; i < outputGradient.Rank; i++)
-            {
-                spatialDim *= outputGradient.Shape[i];
-            }
-            flattenedGradient = outputGradient.Reshape(new int[] { batch, channels, spatialDim, 1 });
-        }
-
-        // Use Engine for GPU/CPU accelerated backward pass
-        var inputGradient = Engine.GroupNormBackward(
-            flattenedGradient,
-            _lastInput,
-            _numChannels, // numGroups = numChannels for instance norm
-            _gamma,
-            _lastMean,
-            _lastVariance,
-            NumOps.ToDouble(_epsilon),
-            out var gradGamma,
-            out var gradBeta);
-
-        _gammaGradient = gradGamma;
-        _betaGradient = gradBeta;
-
-        // Reshape gradient back to original input shape
-        return inputGradient.Reshape(_originalInputShape);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -481,8 +362,11 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
         if (_gammaGradient == null || _betaGradient == null)
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
-        _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
-        _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+        // Update in-place to preserve GPU-registered tensor references
+        var updGamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
+        var updBeta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+        for (int i = 0; i < _gamma.Length; i++) _gamma[i] = updGamma[i];
+        for (int i = 0; i < _beta.Length; i++) _beta[i] = updBeta[i];
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_gamma);
@@ -498,7 +382,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
         if (!_affine)
             return new Vector<T>(0);
 
-        return Vector<T>.Concatenate(Vector<T>.FromMemory(_gamma.Data), Vector<T>.FromMemory(_beta.Data));
+        return Vector<T>.Concatenate(_gamma.ToVector(), _beta.ToVector());
     }
 
     /// <summary>
@@ -541,7 +425,7 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_gammaGradient == null || _betaGradient == null) return new Vector<T>(ParameterCount);
-        return Vector<T>.Concatenate((_gammaGradient is not null ? Vector<T>.FromMemory(_gammaGradient.Data) : new Vector<T>(0)), (_betaGradient is not null ? Vector<T>.FromMemory(_betaGradient.Data) : new Vector<T>(0)));
+        return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
     }
 
     public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
@@ -563,53 +447,5 @@ public class InstanceNormalizationLayer<T> : LayerBase<T>
         _gpuBatch = 0;
         _gpuChannels = 0;
         _gpuSpatialSize = 0;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <remarks>
-    /// Instance normalization supports JIT compilation by leveraging GroupNorm with numGroups = numChannels.
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the InstanceNormalization operation.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph representing the Instance Normalization layer.
-    /// Instance normalization is implemented as GroupNorm with numGroups = numChannels,
-    /// meaning each channel is normalized independently across spatial dimensions.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape is null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input node with batch dimension
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Create gamma and beta parameter nodes
-        var gammaNode = TensorOperations<T>.Constant(_gamma, "gamma");
-        var betaNode = TensorOperations<T>.Constant(_beta, "beta");
-
-        // Apply GroupNorm operation with numGroups = numChannels (instance norm)
-        var outputNode = TensorOperations<T>.GroupNorm(
-            inputNode,
-            _numChannels, // numGroups = numChannels for instance norm
-            gammaNode,
-            betaNode,
-            NumOps.ToDouble(_epsilon));
-
-        return outputNode;
     }
 }

@@ -203,7 +203,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Backward pass through dueling architecture
             var gradients = LossFunction.CalculateDerivative(currentQValues, targetQValues);
-            _qNetwork.Backward(experience.State, gradients);
+            /* _qNetwork.Backward(experience.State, gradients) removed — tape-based */ ;
 
             // Update parameters
             _qNetwork.UpdateWeights(LearningRate);
@@ -533,64 +533,6 @@ internal class DuelingNetwork<T>
     public Vector<T> Predict(Vector<T> input)
     {
         return Forward(input);
-    }
-
-    public void Backward(Vector<T> state, Vector<T> qGradients)
-    {
-        // Compute gradients for value and advantage streams
-        // Q(s,a) = V(s) + (A(s,a) - mean(A(s,:)))
-        // dQ/dV = 1 for all actions
-        // dQ/dA_i = 1 - 1/n (where n is action count)
-
-        // Value gradient: sum of all Q gradients
-        T valueGrad = _numOps.Zero;
-        for (int i = 0; i < _actionSize; i++)
-        {
-            valueGrad = _numOps.Add(valueGrad, qGradients[i]);
-        }
-
-        // Advantage gradients (centered due to mean subtraction)
-        T meanQGrad = _numOps.Divide(valueGrad, _numOps.FromDouble(_actionSize));
-        var advantageGrads = new Vector<T>(_actionSize);
-        for (int i = 0; i < _actionSize; i++)
-        {
-            advantageGrads[i] = _numOps.Subtract(qGradients[i], meanQGrad);
-        }
-
-        // Backprop through advantage stream
-        var advantageTensor = Tensor<T>.FromVector(advantageGrads);
-        for (int i = _advantageLayers.Count - 1; i >= 0; i--)
-        {
-            advantageTensor = _advantageLayers[i].Backward(advantageTensor);
-        }
-
-        // Backprop through value stream
-        var valueGradVec = new Vector<T>(1);
-        valueGradVec[0] = valueGrad;
-        var valueTensor = Tensor<T>.FromVector(valueGradVec);
-        for (int i = _valueLayers.Count - 1; i >= 0; i--)
-        {
-            valueTensor = _valueLayers[i].Backward(valueTensor);
-        }
-
-        // Both streams converge to shared layers, so we need to sum gradients
-        // The gradients from both streams need to be added together for shared layers
-        var sharedGradientFromAdvantage = advantageTensor.ToVector();
-        var sharedGradientFromValue = valueTensor.ToVector();
-
-        // Combine gradients from both streams
-        var combinedSharedGrad = new Vector<T>(sharedGradientFromAdvantage.Length);
-        for (int i = 0; i < combinedSharedGrad.Length; i++)
-        {
-            combinedSharedGrad[i] = _numOps.Add(sharedGradientFromAdvantage[i], sharedGradientFromValue[i]);
-        }
-
-        // Backprop through shared layers
-        var sharedTensor = Tensor<T>.FromVector(combinedSharedGrad);
-        for (int i = _sharedLayers.Count - 1; i >= 0; i--)
-        {
-            sharedTensor = _sharedLayers[i].Backward(sharedTensor);
-        }
     }
 
     public void UpdateWeights(T learningRate)

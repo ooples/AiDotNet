@@ -126,31 +126,6 @@ public class LinearProjector<T> : IProjectorHead<T>
     }
 
     /// <inheritdoc />
-    public Tensor<T> Backward(Tensor<T> gradients)
-    {
-        if (gradients is null) throw new ArgumentNullException(nameof(gradients));
-        if (_lastInput is null) throw new InvalidOperationException("Forward must be called before Backward");
-
-        // Vectorized backward using Engine.TensorMatMul
-
-        // Input gradient: dX = dY @ W^T
-        var weightT = _weight.Transpose([1, 0]);
-        var inputGradTensor = Engine.TensorMatMul(gradients, weightT);
-
-        // Weight gradient: dW = X^T @ dY
-        var inputT = _lastInput.Transpose([1, 0]);
-        _gradWeight = Engine.TensorMatMul(inputT, gradients);
-
-        // Bias gradient: dB = sum(dY, axis=0)
-        if (_useBias)
-        {
-            _gradBias = Engine.ReduceSum(gradients, new[] { 0 });
-        }
-
-        return inputGradTensor;
-    }
-
-    /// <inheritdoc />
     public Vector<T> GetParameters()
     {
         var paramList = new List<T>();

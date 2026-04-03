@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -163,23 +163,6 @@ public class SparsemaxActivation<T> : ActivationFunctionBase<T>
 
         return jacobian;
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.Sparsemax provides full forward and backward pass support.</value>
-    /// <remarks>
-    /// <para>
-    /// Sparsemax supports JIT compilation with support set tracking for correct gradient computation.
-    /// The backward pass routes gradients only through the support set (non-zero outputs),
-    /// computing the mean gradient within the support and subtracting it from each element.
-    /// </para>
-    /// <para>
-    /// Note: Currently implemented for 2D tensors (batch, features) along axis=-1.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

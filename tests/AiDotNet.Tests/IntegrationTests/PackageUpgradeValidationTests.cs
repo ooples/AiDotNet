@@ -235,63 +235,7 @@ public class PackageUpgradeValidationTests
 
     #region Neural Network Layer Smoke Tests
 
-    [Fact]
-    public void FullyConnectedLayer_ForwardBackward_ShapeAndFiniteness()
-    {
-        // Use IdentityActivation to avoid ReLU zeroing out negative pre-activations.
-        // Explicit cast needed because IdentityActivation implements both IActivationFunction and IVectorActivationFunction.
-        var layer = new FullyConnectedLayer<double>(4, 3, (IActivationFunction<double>)new IdentityActivation<double>());
-        var input = new Tensor<double>(new[] { 4 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 }));
 
-        var output = layer.Forward(input);
-
-        // Shape invariants
-        Assert.Equal(3, output.Length);
-
-        // All outputs should be finite
-        for (int i = 0; i < output.Length; i++)
-        {
-            Assert.True(IsFinite(output[i]), $"FCL output at index {i} should be finite, got {output[i]}");
-        }
-
-        // Backward should preserve input shape and produce finite gradients
-        var grad = new Tensor<double>(new[] { 3 }, new Vector<double>(new[] { 0.1, 0.2, 0.3 }));
-        var inputGrad = layer.Backward(grad);
-
-        Assert.Equal(4, inputGrad.Length);
-        for (int i = 0; i < inputGrad.Length; i++)
-        {
-            Assert.True(IsFinite(inputGrad[i]), $"FCL input gradient at index {i} should be finite, got {inputGrad[i]}");
-        }
-    }
-
-    [Fact]
-    public void DenseLayer_ForwardBackward_ShapeAndFiniteness()
-    {
-        var layer = new DenseLayer<double>(4, 3);
-        var input = new Tensor<double>(new[] { 4 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 }));
-
-        var output = layer.Forward(input);
-
-        // Shape invariants
-        Assert.Equal(3, output.Length);
-
-        // All outputs should be finite
-        for (int i = 0; i < output.Length; i++)
-        {
-            Assert.True(IsFinite(output[i]), $"DenseLayer output at index {i} should be finite, got {output[i]}");
-        }
-
-        // Backward should preserve input shape and produce finite gradients
-        var grad = new Tensor<double>(new[] { 3 }, new Vector<double>(new[] { 0.1, 0.2, 0.3 }));
-        var inputGrad = layer.Backward(grad);
-
-        Assert.Equal(4, inputGrad.Length);
-        for (int i = 0; i < inputGrad.Length; i++)
-        {
-            Assert.True(IsFinite(inputGrad[i]), $"DenseLayer input gradient at index {i} should be finite, got {inputGrad[i]}");
-        }
-    }
 
     [Fact]
     public void BatchNormLayer_Forward_NormalizesValues()

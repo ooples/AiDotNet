@@ -476,13 +476,14 @@ public class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        var output = Predict(input);
-        var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-        var gt = Tensor<T>.FromVector(grad);
-        for (int i = Math.Min(_visionEncoderEnd, Layers.Count) - 1; i >= 0; i--)
-            gt = Layers[i].Backward(gt);
-        _optimizer?.UpdateParameters(Layers);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc />

@@ -189,4 +189,20 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
         layer.SetParameters(new Vector<T>(p));
         return offset + count;
     }
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var allGrads = new List<T>();
+        AddGrads(allGrads, _patchEmbed);
+        foreach (var b in _doubleBlocks) AddGrads(allGrads, b);
+        foreach (var b in _singleBlocks) AddGrads(allGrads, b);
+        AddGrads(allGrads, _finalLayer);
+        return new Vector<T>(allGrads.ToArray());
+    }
+
+    private static void AddGrads(List<T> list, DenseLayer<T> layer)
+    {
+        var g = layer.GetParameterGradients();
+        for (int i = 0; i < g.Length; i++) list.Add(g[i]);
+    }
 }

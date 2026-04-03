@@ -237,16 +237,6 @@ public class ContextEncoder<T>
     }
 
     /// <summary>
-    /// Backward pass through the context encoder.
-    /// </summary>
-    public Tensor<T> Backward(Tensor<T> gradient)
-    {
-        // Simplified backward
-        var grad = _outputProjection.Backward(gradient);
-        return _queryProjection.Backward(grad);
-    }
-
-    /// <summary>
     /// Updates parameters.
     /// </summary>
     public void UpdateParameters(T learningRate)

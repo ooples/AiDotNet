@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -54,6 +55,7 @@ namespace AiDotNet.NeuralNetworks;
 public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly GRUOptions _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private T _learningRate;
 
     /// <inheritdoc/>
@@ -95,9 +97,10 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     {
     }
 
-    public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture, ILossFunction<T>? lossFunction = null, GRUOptions? options = null, double learningRate = 0.001) :
+    public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null, GRUOptions? options = null, double learningRate = 0.001) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new GRUOptions();
         Options = _options;
         _learningRate = NumOps.FromDouble(learningRate);
@@ -258,50 +261,21 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Persistent Adam optimizer for stable convergence across Train() calls.
     /// </summary>
+    #pragma warning disable CS0169
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+#pragma warning restore CS0169
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-
-        // Reset recurrent state and propagate training mode.
-        // GRU layers keep hidden state across calls — without reset,
-        // independent Train() calls start from stale activations.
         foreach (var layer in Layers)
         {
             layer.ResetState();
             layer.SetTrainingMode(true);
         }
 
-        // Single forward/backward pass
-        var output = ForwardWithMemory(input);
-        var outputVector = output.ToVector();
-        var expectedVector = expectedOutput.ToVector();
+        TrainWithTape(input, expectedOutput, _optimizer);
 
-        // Compute loss
-        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
-
-        // Backward pass using proper loss gradient, reshaped to match forward output
-        var lossGradient = LossFunction.CalculateDerivative(outputVector, expectedVector);
-        var gradTensor = Tensor<T>.FromVector(lossGradient);
-        if (gradTensor.Rank < output.Rank)
-        {
-            gradTensor = gradTensor.Reshape(output.Shape.ToArray());
-        }
-        // Clip loss gradient before backprop (Cho et al. 2014 — essential for GRUs)
-        gradTensor = ClipGradient(gradTensor);
-        Backpropagate(gradTensor);
-
-        // Use _learningRate but cap for Adam stability (Cho et al. 2014 — GRUs need conservative LR)
-        double effectiveLR = Math.Min(NumOps.ToDouble(_learningRate), 0.0005);
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = effectiveLR });
-        var paramGradients = ClipGradient(GetParameterGradients());
-        var currentParams = GetParameters();
-        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGradients);
-        UpdateParameters(updatedParams);
-
-        // Set network back to inference mode
         SetTrainingMode(false);
     }
 
@@ -439,8 +413,8 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         return new GRUNeuralNetwork<T>(
             Architecture,
-            LossFunction,
-            _options,
-            NumOps.ToDouble(_learningRate));
+            lossFunction: LossFunction,
+            options: _options,
+            learningRate: NumOps.ToDouble(_learningRate));
     }
 }

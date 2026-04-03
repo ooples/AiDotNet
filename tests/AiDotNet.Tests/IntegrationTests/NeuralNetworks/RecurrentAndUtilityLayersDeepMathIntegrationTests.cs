@@ -414,36 +414,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         Assert.True(output.Length == 12, $"Expected 12 elements, got {output.Length}");
     }
 
-    [Fact]
-    public void ReshapeLayer_Backward_RestoresInputShape()
-    {
-        var reshape = new ReshapeLayer<double>(new[] { 6 }, new[] { 2, 3 });
 
-        var input = new Tensor<double>(new[] { 1, 6 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
-        reshape.Forward(input);
-
-        var grad = new Tensor<double>(new[] { 1, 2, 3 }, new Vector<double>(new double[] { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6 }));
-        var inputGrad = reshape.Backward(grad);
-
-        Assert.Equal(6, inputGrad.Length);
-    }
-
-    [Fact]
-    public void ReshapeLayer_Backward_PreservesGradientValues()
-    {
-        var reshape = new ReshapeLayer<double>(new[] { 6 }, new[] { 2, 3 });
-
-        var input = new Tensor<double>(new[] { 1, 6 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
-        reshape.Forward(input);
-
-        var grad = new Tensor<double>(new[] { 1, 2, 3 }, new Vector<double>(new double[] { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6 }));
-        var inputGrad = reshape.Backward(grad);
-
-        var gradArr = grad.ToArray();
-        var inputGradArr = inputGrad.ToArray();
-        for (int i = 0; i < 6; i++)
-            Assert.Equal(gradArr[i], inputGradArr[i], Tol);
-    }
 
     [Fact]
     public void ReshapeLayer_NoTrainableParameters()
@@ -456,33 +427,6 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     // GRU - Backward Gradient Structure
     // ========================================================================
 
-    [Fact]
-    public void GRU_Backward_GradientIsFinite()
-    {
-        var gru = new GRULayer<double>(inputSize: 3, hiddenSize: 4,
-            activation: (IActivationFunction<double>?)null);
-        gru.SetTrainingMode(true);
-
-        var input = new Tensor<double>(new[] { 2, 3 });
-        for (int t = 0; t < 2; t++)
-            for (int f = 0; f < 3; f++)
-                input[t, f] = (t + 1) * 0.1 + f * 0.2;
-
-        gru.Forward(input);
-
-        var grad = new Tensor<double>(new[] { 4 });
-        for (int h = 0; h < 4; h++)
-            grad[h] = 0.1 * (h + 1);
-
-        var inputGrad = gru.Backward(grad);
-        var inputGradArr = inputGrad.ToArray();
-
-        for (int i = 0; i < inputGradArr.Length; i++)
-        {
-            Assert.False(double.IsNaN(inputGradArr[i]), $"NaN in gradient at index {i}");
-            Assert.False(double.IsInfinity(inputGradArr[i]), $"Infinity in gradient at index {i}");
-        }
-    }
 
     // ========================================================================
     // GRU vs LSTM - Structural Comparisons
@@ -570,24 +514,4 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     // MeanLayer - Backward Gradient
     // ========================================================================
 
-    [Fact]
-    public void MeanLayer_Backward_GradientIsFinite()
-    {
-        var mean = new MeanLayer<double>(new[] { 2, 3 }, 1);
-
-        var input = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
-        mean.Forward(input);
-
-        var grad = new Tensor<double>(new[] { 2 }, new Vector<double>(new double[] { 3.0, 6.0 }));
-        var inputGrad = mean.Backward(grad);
-        var inputGradArr = inputGrad.ToArray();
-
-        Assert.Equal(6, inputGradArr.Length);
-
-        for (int i = 0; i < 6; i++)
-        {
-            Assert.False(double.IsNaN(inputGradArr[i]), $"NaN at index {i}");
-            Assert.False(double.IsInfinity(inputGradArr[i]), $"Infinity at index {i}");
-        }
-    }
 }

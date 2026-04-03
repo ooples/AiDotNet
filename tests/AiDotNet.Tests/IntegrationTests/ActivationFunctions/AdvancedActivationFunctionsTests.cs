@@ -887,47 +887,8 @@ public class AdvancedActivationFunctionsTests
 
     #region Backward Pass Tests
 
-    [Fact]
-    public void SwishActivation_Backward_ProducesValidGradient()
-    {
-        var swish = new SwishActivation<double>();
-        var input = new Tensor<double>(new double[] { -1.0, 0.0, 1.0, 2.0 }, [4]);
-        var gradOutput = new Tensor<double>(new double[] { 1.0, 1.0, 1.0, 1.0 }, [4]);
-        var gradInput = swish.Backward(input, gradOutput);
-        Assert.Equal(4, gradInput.Length);
-        for (int i = 0; i < gradInput.Length; i++)
-        {
-            Assert.False(double.IsNaN(gradInput[i]));
-        }
-    }
 
-    [Fact]
-    public void MishActivation_Backward_ProducesValidGradient()
-    {
-        var mish = new MishActivation<double>();
-        var input = new Tensor<double>(new double[] { -1.0, 0.0, 1.0, 2.0 }, [4]);
-        var gradOutput = new Tensor<double>(new double[] { 1.0, 1.0, 1.0, 1.0 }, [4]);
-        var gradInput = mish.Backward(input, gradOutput);
-        Assert.Equal(4, gradInput.Length);
-        for (int i = 0; i < gradInput.Length; i++)
-        {
-            Assert.False(double.IsNaN(gradInput[i]));
-        }
-    }
 
-    [Fact]
-    public void SELUActivation_Backward_ProducesValidGradient()
-    {
-        var selu = new SELUActivation<double>();
-        var input = new Tensor<double>(new double[] { -1.0, 0.0, 1.0, 2.0 }, [4]);
-        var gradOutput = new Tensor<double>(new double[] { 1.0, 1.0, 1.0, 1.0 }, [4]);
-        var gradInput = selu.Backward(input, gradOutput);
-        Assert.Equal(4, gradInput.Length);
-        for (int i = 0; i < gradInput.Length; i++)
-        {
-            Assert.False(double.IsNaN(gradInput[i]));
-        }
-    }
 
     #endregion
 }

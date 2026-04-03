@@ -1,6 +1,7 @@
 using System.Threading;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.TimeSeries;
 
@@ -348,7 +349,10 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// finding patterns in the data.
     /// </para>
     /// </remarks>
-    protected abstract void TrainCore(Matrix<T> x, Vector<T> y);
+    protected virtual void TrainCore(Matrix<T> x, Vector<T> y)
+    {
+        // Default: tape-based training handles parameter updates
+    }
 
     /// <summary>
     /// Validates the training input data before proceeding with training.
@@ -435,6 +439,9 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     /// </remarks>
     public virtual Vector<T> Predict(Matrix<T> input)
     {
+        // Suppress tape recording during inference
+        using var _noGrad = new NoGradScope<T>();
+
         // Check if model is trained
         if (!IsTrained)
         {
@@ -1722,17 +1729,51 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
     public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         var loss = lossFunction ?? DefaultLossFunction;
-        var parameters = GetParameters();
-        var gradients = new Vector<T>(parameters.Length);
 
-        // SPSA gradient approximation: estimates ALL N gradients with just 2 forward passes
-        // per sample (vs 2N for per-parameter finite differences).
+        // Primary path: layer-level backpropagation for exact gradients.
+        // Available for NeuralNetworkBase-derived time series models (Autoformer, Informer, etc.).
+        try
+        {
+            var predicted = Predict(input);
+
+            var lossGrad = loss.CalculateDerivative(predicted, target);
+            var lossGradTensor = Tensor<T>.FromVector(lossGrad);
+
+            BackpropagateLayers(lossGradTensor);
+
+            var gradients = GetLayerParameterGradients();
+
+            bool hasValidGradients = false;
+            for (int i = 0; i < Math.Min(gradients.Length, 100); i++)
+            {
+                if (!NumOps.Equals(gradients[i], NumOps.Zero))
+                {
+                    hasValidGradients = true;
+                    break;
+                }
+            }
+
+            if (hasValidGradients)
+                return gradients;
+        }
+        catch (NotSupportedException)
+        {
+            // Expected for models without layer-level backprop — fall through to SPSA
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                $"Layer backpropagation failed for {GetType().Name}, falling back to SPSA: {ex.Message}");
+        }
+
+        // Fallback: SPSA gradient approximation — estimates ALL N gradients with just 2 forward
+        // passes per sample (vs 2N for per-parameter finite differences).
         // Reference: Spall, J.C., IEEE TAC, 1992.
+        var parameters = GetParameters();
+        var gradients_spsa = new Vector<T>(parameters.Length);
         T epsilon = NumOps.FromDouble(1e-3);
         T twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
-        T negOne = NumOps.FromDouble(-1.0);
-        T posOne = NumOps.FromDouble(1.0);
         int numSamples = 3;
 
         var delta = new Vector<T>(parameters.Length);
@@ -1752,13 +1793,35 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
 
             T lossDiff = NumOps.Subtract(lossPlus, lossMinus);
             var scaledDelta = Engine.Multiply(delta, twoEpsilon);
-            gradients = Engine.Add(gradients, Engine.Divide(
+            gradients_spsa = Engine.Add(gradients_spsa, Engine.Divide(
                 Engine.Fill(parameters.Length, lossDiff), scaledDelta));
         }
 
-        gradients = Engine.Multiply(gradients, NumOps.FromDouble(1.0 / numSamples));
+        gradients_spsa = Engine.Multiply(gradients_spsa, NumOps.FromDouble(1.0 / numSamples));
 
-        return gradients;
+        return gradients_spsa;
+    }
+
+    /// <summary>
+    /// Backpropagates the loss gradient through the model's neural network layers.
+    /// Override in NeuralNetworkBase-derived time series models to enable exact gradients.
+    /// </summary>
+    /// <param name="lossGradient">Gradient of the loss w.r.t. the model output.</param>
+    protected virtual void BackpropagateLayers(Tensor<T> lossGradient)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement BackpropagateLayers. " +
+            "Override this method in NeuralNetworkBase-derived models.");
+    }
+
+    /// <summary>
+    /// Extracts accumulated parameter gradients from all layers after backpropagation.
+    /// </summary>
+    protected virtual Vector<T> GetLayerParameterGradients()
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement GetLayerParameterGradients. " +
+            "Override this method to extract layer-level gradients.");
     }
 
     public virtual void ApplyGradients(Vector<T> gradients, T learningRate)

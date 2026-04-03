@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.DownSampling)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 2, 8, 8")]
-public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
+public class TransitionLayer<T> : LayerBase<T>
 {
     private readonly BatchNormalizationLayer<T> _bn;
     private readonly ConvolutionalLayer<T> _conv;
@@ -60,11 +60,10 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     private Tensor<T>? _bnOut;
     private Tensor<T>? _reluOut;
     private Tensor<T>? _convOut;
-    private bool _poolSkipped;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuBnOut;
-    private IGpuTensor<T>? _gpuConvOut;
+    private Tensor<T>? _gpuBnOut;
+    private Tensor<T>? _gpuConvOut;
     private bool _gpuAdded3DBatch;
 
     /// <summary>
@@ -137,6 +136,10 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             inputShape: [OutputChannels, inputHeight, inputWidth],
             poolSize: 2,
             strides: 2);
+
+        RegisterSubLayer(_bn);
+        RegisterSubLayer(_conv);
+        RegisterSubLayer(_pool);
     }
 
     /// <summary>
@@ -188,27 +191,11 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         _convOut = _conv.Forward(_reluOut);
 
         // Handle batched input (4D) - use Engine.AvgPool2D directly
-        // Skip pooling when spatial dims < pool size (prevents 0-sized output)
-        // Per Huang et al. 2017: for small inputs, spatial dims may reach 1x1 before
-        // all transitions are applied
-        int spatialH = _convOut.Shape[_convOut.Shape.Length - 2];
-        int spatialW = _convOut.Shape[_convOut.Shape.Length - 1];
-        Tensor<T> output;
-        if (spatialH < 2 || spatialW < 2)
-        {
-            output = _convOut; // Skip pooling at minimum spatial dims
-            _poolSkipped = true;
-        }
-        else if (_convOut.Shape.Length == 4)
-        {
-            output = Engine.AvgPool2D(_convOut, poolSize: 2, stride: 2, padding: 0);
-            _poolSkipped = false;
-        }
-        else
-        {
-            output = _pool.Forward(_convOut);
-            _poolSkipped = false;
-        }
+        // AveragePoolingLayer expects 3D input, so we handle 4D separately
+        // [B, C, H, W] uses Engine directly, [C, H, W] uses the AveragePoolingLayer
+        Tensor<T> output = _convOut.Shape.Length == 4
+            ? Engine.AvgPool2D(_convOut, poolSize: 2, stride: 2, padding: 0)
+            : _pool.Forward(_convOut);
 
         // Restore original batch dimensions for any-rank support
         if (_originalInputShape != null && _originalInputShape.Length > 4)
@@ -244,7 +231,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
     /// All intermediate results stay GPU-resident.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -259,7 +246,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         if (shape.Length < 3)
             throw new ArgumentException($"TransitionLayer requires at least 3D tensor [C, H, W]. Got rank {shape.Length}.");
 
-        IGpuTensor<T> processInput;
+        Tensor<T> processInput;
         bool added3DBatch = false;
 
         if (shape.Length == 4)
@@ -283,7 +270,7 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         // Cache for backward pass
         if (IsTrainingMode)
         {
-            _lastInput = processInput.ToTensor();
+            _lastInput = processInput;
             _originalInputShape = shape;
         }
 
@@ -299,9 +286,9 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
             _gpuBnOut = bnOutput;
             _gpuConvOut = convOutput;
             _gpuAdded3DBatch = added3DBatch;
-            _bnOut = bnOutput.ToTensor();
-            _reluOut = reluOutput.ToTensor();
-            _convOut = convOutput.ToTensor();
+            _bnOut = bnOutput;
+            _reluOut = reluOutput;
+            _convOut = convOutput;
         }
 
         // Restore original tensor rank
@@ -323,148 +310,6 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         }
 
         return poolOutput;
-    }
-
-    /// <summary>
-    /// Computes the gradient of the loss with respect to the input on the GPU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        if (_gpuBnOut == null || _gpuConvOut == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Handle 3D -> 4D shape conversion if we did it in forward
-        IGpuTensor<T> grad = outputGradient;
-        if (_gpuAdded3DBatch && outputGradient.Shape.Length == 3)
-        {
-            grad = gpuEngine.ReshapeGpu(outputGradient, new[] { 1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2] });
-        }
-
-        // Backward through pool
-        var poolType = _pool.GetType();
-        var poolBackwardGpu = poolType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
-        if (poolBackwardGpu != null)
-        {
-            var poolResult = poolBackwardGpu.Invoke(_pool, new object[] { grad });
-            if (poolResult is IGpuTensor<T> poolGrad)
-            {
-                grad = poolGrad;
-            }
-            else
-            {
-                throw new InvalidOperationException(
-                    $"BackwardGpu on pool returned {poolResult?.GetType().Name ?? "null"}, expected IGpuTensor<{typeof(T).Name}>.");
-            }
-        }
-        else
-        {
-            var cpuGrad = grad.ToTensor();
-            var cpuResult = _convOut != null ? AvgPool2DBackward(cpuGrad, _gpuConvOut.Shape.ToArray()) : _pool.Backward(cpuGrad);
-            grad = gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
-        }
-
-        // Backward through conv
-        var convType = _conv.GetType();
-        var convBackwardGpu = convType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
-        if (convBackwardGpu != null)
-        {
-            var convResult = convBackwardGpu.Invoke(_conv, new object[] { grad });
-            if (convResult is IGpuTensor<T> convGrad)
-            {
-                grad = convGrad;
-            }
-            else
-            {
-                throw new InvalidOperationException(
-                    $"BackwardGpu on conv returned {convResult?.GetType().Name ?? "null"}, expected IGpuTensor<{typeof(T).Name}>.");
-            }
-        }
-        else
-        {
-            var cpuGrad = grad.ToTensor();
-            var cpuResult = _conv.Backward(cpuGrad);
-            grad = gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
-        }
-
-        // Backward through ReLU - uses BN output as input
-        grad = gpuEngine.ReluBackwardGpu<T>(grad, _gpuBnOut);
-
-        // Backward through BN
-        var bnType = _bn.GetType();
-        var bnBackwardGpu = bnType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
-        if (bnBackwardGpu != null)
-        {
-            var bnResult = bnBackwardGpu.Invoke(_bn, new object[] { grad });
-            if (bnResult is IGpuTensor<T> bnGrad)
-            {
-                grad = bnGrad;
-            }
-            else
-            {
-                throw new InvalidOperationException(
-                    $"BackwardGpu on BN returned {bnResult?.GetType().Name ?? "null"}, expected IGpuTensor<{typeof(T).Name}>.");
-            }
-        }
-        else
-        {
-            var cpuGrad = grad.ToTensor();
-            var cpuResult = _bn.Backward(cpuGrad);
-            grad = gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
-        }
-
-        // Remove batch dimension if we added it
-        if (_gpuAdded3DBatch && grad.Shape.Length == 4)
-        {
-            grad = gpuEngine.ReshapeGpu(grad, new[] { grad.Shape[1], grad.Shape[2], grad.Shape[3] });
-        }
-
-        return grad;
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the Transition Layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the output.</param>
-    /// <returns>The gradient of the loss with respect to the input.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput is null || _bnOut is null || _reluOut is null || _convOut is null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Add batch dim if original input was 3D
-        bool was3D = _lastInput is not null && _originalInputShape is not null && _originalInputShape.Length == 3;
-        var grad = outputGradient;
-        if (was3D && grad.Shape.Length == 3)
-            grad = grad.Reshape([1, grad.Shape[0], grad.Shape[1], grad.Shape[2]]);
-
-        // Backward through pool - skip when pooling was skipped in Forward
-        if (!_poolSkipped)
-        {
-            // 4D: manual backward, 3D: use pooling layer
-            grad = grad.Shape.Length == 4
-                ? AvgPool2DBackward(grad, _convOut.Shape.ToArray())
-                : _pool.Backward(grad);
-        }
-
-        // Backward through conv
-        grad = _conv.Backward(grad);
-
-        // Backward through ReLU
-        grad = ApplyReluDerivative(_bnOut, grad);
-
-        // Backward through BN
-        grad = _bn.Backward(grad);
-
-        // Remove batch dim if we added it
-        if (was3D && grad.Shape.Length == 4 && grad.Shape[0] == 1)
-            grad = grad.Reshape([grad.Shape[1], grad.Shape[2], grad.Shape[3]]);
-
-        return grad;
     }
 
     /// <summary>
@@ -595,40 +440,6 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
         _pool.ResetState();
     }
 
-    /// <summary>
-    /// Gets whether this layer supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            return _bn.SupportsJitCompilation &&
-                   _conv.SupportsJitCompilation &&
-                   _pool.SupportsJitCompilation;
-        }
-    }
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes));
-        }
-
-        if (InputShape is null || InputShape.Length == 0)
-        {
-            throw new InvalidOperationException("Layer input shape not configured.");
-        }
-
-        // Create symbolic input node with batch dimension
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return BuildComputationGraph(inputNode, "");
-    }
-
     /// <inheritdoc />
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
     {
@@ -659,4 +470,5 @@ public class TransitionLayer<T> : LayerBase<T>, IChainableComputationGraph<T>
 
         return poolNode;
     }
+
 }

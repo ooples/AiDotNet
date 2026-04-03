@@ -110,47 +110,8 @@ public class MambaBlockTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void Backward_ProducesValidGradients()
-    {
-        int seqLen = 4;
-        int modelDim = 32;
-        int stateDim = 8;
-        var block = new MambaBlock<float>(seqLen, modelDim, stateDim);
-        var input = CreateRandomTensor(new[] { 1, seqLen, modelDim });
 
-        var output = block.Forward(input);
-        var grad = CreateRandomTensor(output.Shape.ToArray());
-        var inputGrad = block.Backward(grad);
 
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGrad));
-    }
-
-    [Fact]
-    public void Backward_2D_ProducesValidGradients()
-    {
-        int seqLen = 4;
-        int modelDim = 32;
-        int stateDim = 8;
-        var block = new MambaBlock<float>(seqLen, modelDim, stateDim);
-        var input = CreateRandomTensor(new[] { seqLen, modelDim });
-
-        var output = block.Forward(input);
-        var grad = CreateRandomTensor(output.Shape.ToArray());
-        var inputGrad = block.Backward(grad);
-
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-    }
-
-    [Fact]
-    public void Backward_ThrowsWithoutForward()
-    {
-        var block = new MambaBlock<float>(4, 32, 8);
-        var grad = CreateRandomTensor(new[] { 1, 4, 32 });
-
-        Assert.Throws<InvalidOperationException>(() => block.Backward(grad));
-    }
 
     [Fact]
     public void ParameterCount_MatchesExpectedFormula()
@@ -328,22 +289,6 @@ public class MambaBlockTests
         Assert.False(ContainsNaNDouble(output));
     }
 
-    [Fact]
-    public void Backward_Double_ProducesValidGradients()
-    {
-        int seqLen = 4;
-        int modelDim = 32;
-        int stateDim = 8;
-        var block = new MambaBlock<double>(seqLen, modelDim, stateDim);
-        var input = CreateRandomDoubleTensor(new[] { 1, seqLen, modelDim });
-
-        var output = block.Forward(input);
-        var grad = CreateRandomDoubleTensor(output.Shape.ToArray());
-        var inputGrad = block.Backward(grad);
-
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-        Assert.False(ContainsNaNDouble(inputGrad));
-    }
 
     #region Helpers
 

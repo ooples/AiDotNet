@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -215,7 +215,7 @@ public class FlowFormer<T> : OpticalFlowBase<T>
         int h = image.Rank == 4 ? image.Shape[2] : image.Shape[1];
         int w = image.Rank == 4 ? image.Shape[3] : image.Shape[2];
 
-        var warped = new Tensor<T>(image.Shape.ToArray());
+        var warped = new Tensor<T>(image._shape);
 
         for (int batch = 0; batch < b; batch++)
         {
@@ -258,7 +258,7 @@ public class FlowFormer<T> : OpticalFlowBase<T>
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(_onnxSession.InputMetadata.Keys.First(), onnxInput) };
 
         using var results = _onnxSession.Run(inputs);
@@ -306,15 +306,15 @@ public class FlowFormer<T> : OpticalFlowBase<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode.");
-
-        var prediction = Predict(input);
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        var gradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var gradTensor = new Tensor<T>(prediction.Shape.ToArray(), gradient);
-
-        for (int i = Layers.Count - 1; i >= 0; i--) gradTensor = Layers[i].Backward(gradTensor);
-        _optimizer?.UpdateParameters(Layers);
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     #endregion

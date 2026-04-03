@@ -1,8 +1,10 @@
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -32,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "8, 8, 3, 4, 16")]
-public class PatchEmbeddingLayer<T> : LayerBase<T>
+public partial class PatchEmbeddingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The size of each square patch (both width and height).
@@ -77,11 +79,15 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// <summary>
     /// The projection weights that transform flattened patches to embeddings.
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _projectionWeights;
 
     /// <summary>
     /// The bias terms added to the projected embeddings.
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _projectionBias;
 
     /// <summary>
@@ -110,24 +116,24 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     private Tensor<T>? _lastPreActivation;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuPatchesFlat;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuPatchesFlat;
     private int _gpuBatchSize;
     private bool _gpuHasBatch;
 
     #region GPU Weight Storage Fields
 
     // GPU tensors for GPU-resident training
-    private GpuTensor<T>? _gpuWeights;
-    private GpuTensor<T>? _gpuBias;
-    private GpuTensor<T>? _gpuWeightGradient;
-    private GpuTensor<T>? _gpuBiasGradient;
-    private GpuTensor<T>? _gpuWeightVelocity;
-    private GpuTensor<T>? _gpuBiasVelocity;
-    private GpuTensor<T>? _gpuWeightM;
-    private GpuTensor<T>? _gpuWeightV;
-    private GpuTensor<T>? _gpuBiasM;
-    private GpuTensor<T>? _gpuBiasV;
+    private Tensor<T>? _gpuWeights;
+    private Tensor<T>? _gpuBias;
+    private Tensor<T>? _gpuWeightGradient;
+    private Tensor<T>? _gpuBiasGradient;
+    private Tensor<T>? _gpuWeightVelocity;
+    private Tensor<T>? _gpuBiasVelocity;
+    private Tensor<T>? _gpuWeightM;
+    private Tensor<T>? _gpuWeightV;
+    private Tensor<T>? _gpuBiasM;
+    private Tensor<T>? _gpuBiasV;
 
     #endregion
 
@@ -349,209 +355,6 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass of the patch embedding layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient to be passed to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method calculates how the layer's parameters should change during training.
-    ///
-    /// During the backward pass:
-    /// - The gradient tells us how much each output contributed to the error
-    /// - We use this to figure out how to adjust the projection weights and biases
-    /// - We also calculate gradients to pass back to earlier layers
-    ///
-    /// This allows the entire network to learn through backpropagation.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients by building a computation graph
-    /// that mirrors the forward pass operations (Reshape -> Permute -> Reshape -> MatMul -> Add).
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // 1. Create variables
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-        var weightsNode = Autodiff.TensorOperations<T>.Variable(_projectionWeights, "weights", requiresGradient: true);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(_projectionBias, "bias", requiresGradient: true);
-
-        // 2. Patchify Logic
-        int batchSize = _lastInput.Shape[0];
-        int patchDim = _channels * _patchSize * _patchSize;
-
-        // Reshape to split H and W into patches: [B, C, Nh, P, Nw, P]
-        var reshapedNode = Autodiff.TensorOperations<T>.Reshape(inputNode,
-            batchSize, _channels, _numPatchesHeight, _patchSize, _numPatchesWidth, _patchSize);
-
-        // Permute to group patch dimensions: [B, Nh, Nw, C, P, P]
-        // Using new Permute operation added to TensorOperations
-        var transposedNode = Autodiff.TensorOperations<T>.Permute(reshapedNode, 0, 2, 4, 1, 3, 5);
-
-        // Flatten patches: [B, N, patchDim]
-        var patchesNode = Autodiff.TensorOperations<T>.Reshape(transposedNode, batchSize, _numPatches, patchDim);
-
-        // 3. Projection: patches @ weights
-        var projectedNode = Autodiff.TensorOperations<T>.MatrixMultiply(patchesNode, weightsNode);
-
-        // 4. Add Bias (broadcast)
-        // Reshape bias to [1, 1, EmbedDim] to match [B, N, EmbedDim] for broadcasting on last dim
-        // Note: TensorOperations.Add supports broadcasting if implemented, or we can explicit reshape
-        // TensorOperations.Add usually does broadcast logic.
-        // But to be safe and explicit (and match Forward logic), let's reshape bias.
-        var biasReshapedNode = Autodiff.TensorOperations<T>.Reshape(biasNode, 1, 1, _embeddingDim);
-        var preActivationNode = Autodiff.TensorOperations<T>.Add(projectedNode, biasReshapedNode);
-
-        // 5. Apply Activation
-        var activatedOutput = ApplyActivationToGraph(preActivationNode);
-
-        // 6. Set Gradient and Execute Backward
-        activatedOutput.Gradient = outputGradient;
-
-        // Inline topological sort
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((activatedOutput, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // 7. Store Gradients
-        _projectionWeightsGradient = weightsNode.Gradient;
-        _projectionBiasGradient = biasNode.Gradient;
-
-        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-
-        // Restore gradient shape to match original input shape
-        if (_originalInputShape != null && _originalInputShape.Length != 4)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastPreActivation == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        // Reshape gradient to match _lastPreActivation shape if needed
-        // Forward may have reshaped output; backward gradient must match pre-activation shape
-        var grad = outputGradient;
-        if (!_lastPreActivation.Shape.ToArray().SequenceEqual(outputGradient.Shape.ToArray()) &&
-            _lastPreActivation.Length == outputGradient.Length)
-        {
-            grad = outputGradient.Reshape(_lastPreActivation.Shape.ToArray());
-        }
-
-        var activationGradient = ApplyActivationDerivative(_lastPreActivation, grad);
-
-        int batchSize = _lastInput.Shape[0];
-        int patchDim = _channels * _patchSize * _patchSize;
-
-        // 1. Gradient w.r.t Bias: Sum over batch and patches
-        _projectionBiasGradient = Engine.ReduceSum(activationGradient, new[] { 0, 1 });
-
-        // 2. Reconstruct patches from input
-        var reshapedInput = _lastInput.Reshape(batchSize, _channels, _numPatchesHeight, _patchSize, _numPatchesWidth, _patchSize);
-        var transposedInput = reshapedInput.Transpose(new[] { 0, 2, 4, 1, 3, 5 });
-        var patches = transposedInput.Reshape(batchSize, _numPatches, patchDim);
-
-        // 3. Gradient w.r.t Weights: sum_b(patches[b]^T @ grad[b])
-        _projectionWeightsGradient = new Tensor<T>([patchDim, _embeddingDim]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            var patchB = patches.GetSliceAlongDimension(b, 0).Reshape([_numPatches, patchDim]);
-            var gradB = activationGradient.GetSliceAlongDimension(b, 0).Reshape([_numPatches, _embeddingDim]);
-            var patchBT = Engine.TensorTranspose(patchB); // [P, N]
-            var wGradB = Engine.TensorMatMul(patchBT, gradB); // [P, E]
-            _projectionWeightsGradient = _projectionWeightsGradient.Add(wGradB);
-        }
-
-        // 4. Gradient w.r.t Input (Patches)
-        // [B*N, E] @ [E, P] -> [B*N, P]
-        var weightsT = Engine.TensorTranspose(_projectionWeights);
-        var gradFlat = activationGradient.Reshape(batchSize * _numPatches, _embeddingDim);
-        var patchesGradFlat = Engine.TensorMatMul(gradFlat, weightsT);
-        var patchesGrad = patchesGradFlat.Reshape(batchSize, _numPatches, patchDim);
-
-        // 5. Un-patchify: Reshape/Transpose back to image [B, C, H, W]
-        // [B, N, P] -> [B, Nh, Nw, C, P, P]
-        var gradReshaped = patchesGrad.Reshape(batchSize, _numPatchesHeight, _numPatchesWidth, _channels, _patchSize, _patchSize);
-
-        // Transpose to [B, C, Nh, P, Nw, P]
-        var gradTransposed = gradReshaped.Transpose(new[] { 0, 3, 1, 4, 2, 5 });
-
-        // Reshape to [B, C, H, W]
-        var inputGradient = gradTransposed.Reshape(_lastInput.Shape.ToArray());
-
-        // Restore gradient shape to match original input shape
-        if (_originalInputShape != null && _originalInputShape.Length != 4)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
     /// Updates the layer's parameters using the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate controlling the size of parameter updates.</param>
@@ -666,8 +469,8 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         if (_projectionWeightsGradient == null || _projectionBiasGradient == null)
             return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_projectionWeightsGradient is not null ? Vector<T>.FromMemory(_projectionWeightsGradient.Data) : new Vector<T>(0)),
-            (_projectionBiasGradient is not null ? Vector<T>.FromMemory(_projectionBiasGradient.Data) : new Vector<T>(0)));
+            new Vector<T>(_projectionWeightsGradient.ToArray()),
+            new Vector<T>(_projectionBiasGradient.ToArray()));
     }
 
     public override void ClearGradients()
@@ -713,7 +516,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     /// 4. Linear projection with fused bias addition
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -726,7 +529,7 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         // PatchEmbedding expects 4D input [B, C, H, W]
         bool hasBatch = shape.Length == 4;
         int batchSize;
-        IGpuTensor<T> processInput;
+        Tensor<T> processInput;
 
         if (shape.Length == 3)
         {
@@ -801,96 +604,6 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs GPU-resident backward pass for patch embedding.
-    /// </summary>
-    /// <param name="outputGradient">The gradient from subsequent layer [B, N, embedDim].</param>
-    /// <returns>The gradient with respect to input [B, C, H, W].</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (_gpuPatchesFlat == null || _gpuInput == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        // outputGradient shape: [B, N, embedDim] or [N, embedDim] if no batch
-        int patchDim = _channels * _patchSize * _patchSize;
-
-        // Reshape output gradient for linear backward: [B, N, embedDim] -> [B*N, embedDim]
-        IGpuTensor<T> gradFlat;
-        if (outputGradient.Shape.Length == 2)
-        {
-            // [N, embedDim] -> [1*N, embedDim]
-            gradFlat = outputGradient;
-        }
-        else
-        {
-            // [B, N, embedDim] -> [B*N, embedDim]
-            gradFlat = gpuEngine.ReshapeGpu(outputGradient, [_gpuBatchSize * _numPatches, _embeddingDim]);
-        }
-
-        // Step 1: Backprop through linear projection
-        // Weight gradient: patches^T @ gradOutput -> [patchDim, B*N] @ [B*N, embedDim] = [patchDim, embedDim]
-        var patchesFlatT = gpuEngine.TransposeGpu<T>(_gpuPatchesFlat);
-        var weightGradGpu = gpuEngine.MatMulGpuTensors<T>(patchesFlatT, gradFlat);
-        _projectionWeightsGradient = weightGradGpu.ToTensor();
-
-        // Bias gradient: sum of gradOutput along batch dimension -> [embedDim]
-        var biasGradGpu = gpuEngine.SumAxisGpu<T>(gradFlat, 0);
-        _projectionBiasGradient = biasGradGpu.ToTensor();
-
-        // Store GPU gradients for GPU-resident training
-        _gpuWeightGradient?.Dispose();
-        _gpuWeightGradient = new GpuTensor<T>(backend, weightGradGpu.Buffer, weightGradGpu.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: false);
-        _gpuBiasGradient?.Dispose();
-        _gpuBiasGradient = new GpuTensor<T>(backend, biasGradGpu.Buffer, biasGradGpu.Shape.ToArray(), GpuTensorRole.Gradient, ownsBuffer: false);
-
-        // Input gradient: gradOutput @ weights^T -> [B*N, embedDim] @ [embedDim, patchDim] = [B*N, patchDim]
-        var weightsGpu = gpuEngine.UploadToGpu<T>(_projectionWeights, GpuTensorRole.Weight);
-        var weightsT = gpuEngine.TransposeGpu<T>(weightsGpu);
-        var patchGrad = gpuEngine.MatMulGpuTensors<T>(gradFlat, weightsT);
-
-        // Step 2: Reshape patch gradient back to image space
-        // [B*N, patchDim] -> [B, N, patchDim] -> [B, Nh, Nw, C, P, P]
-        var patchGrad3D = gpuEngine.ReshapeGpu(patchGrad, [_gpuBatchSize, _numPatches, patchDim]);
-        var patchGradSpatial = gpuEngine.ReshapeGpu(patchGrad3D,
-            [_gpuBatchSize, _numPatchesHeight, _numPatchesWidth, _channels, _patchSize, _patchSize]);
-
-        // Step 3: Reverse permute: [B, Nh, Nw, C, P, P] -> [B, C, Nh, P, Nw, P]
-        var gradPermuted = gpuEngine.PermuteGpu(patchGradSpatial, [0, 3, 1, 4, 2, 5]);
-
-        // Step 4: Reshape back to image: [B, C, Nh, P, Nw, P] -> [B, C, H, W]
-        var inputGrad = gpuEngine.ReshapeGpu(gradPermuted, [_gpuBatchSize, _channels, _imageHeight, _imageWidth]);
-
-        // Dispose intermediate tensors
-        patchesFlatT.Dispose();
-        weightGradGpu.Dispose();
-        biasGradGpu.Dispose();
-        weightsGpu.Dispose();
-        weightsT.Dispose();
-        patchGrad.Dispose();
-        patchGrad3D.Dispose();
-        patchGradSpatial.Dispose();
-        gradPermuted.Dispose();
-        if (gradFlat != outputGradient)
-            gradFlat.Dispose();
-
-        // Remove batch dimension if input didn't have it
-        if (!_gpuHasBatch)
-        {
-            var result = gpuEngine.ReshapeGpu(inputGrad, [_channels, _imageHeight, _imageWidth]);
-            inputGrad.Dispose();
-            return result;
-        }
-
-        return inputGrad;
-    }
-
-    /// <summary>
     /// Updates layer parameters using GPU-resident optimizer.
     /// </summary>
     /// <param name="config">The GPU optimizer configuration.</param>
@@ -904,8 +617,8 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         // Ensure GPU weights are initialized
-        _gpuWeights ??= new GpuTensor<T>(backend, _projectionWeights, GpuTensorRole.Weight);
-        _gpuBias ??= new GpuTensor<T>(backend, _projectionBias, GpuTensorRole.Bias);
+        _gpuWeights ??= GpuTensorHelper.UploadToGpu<T>(backend, _projectionWeights, GpuTensorRole.Weight);
+        _gpuBias ??= GpuTensorHelper.UploadToGpu<T>(backend, _projectionBias, GpuTensorRole.Bias);
 
         // Verify gradients exist
         if (_gpuWeightGradient == null || _gpuBiasGradient == null)
@@ -922,8 +635,8 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
         config.ApplyUpdate(backend, _gpuBias.Buffer, _gpuBiasGradient.Buffer, BuildPatchEmbeddingOptimizerState("bias"), biasCount);
 
         // Sync back to CPU tensors for compatibility
-        _projectionWeights = _gpuWeights.ToTensor();
-        _projectionBias = _gpuBias.ToTensor();
+        _projectionWeights = _gpuWeights;
+        _projectionBias = _gpuBias;
 
         // Invalidate GPU cache after parameter updates
         Engine.InvalidatePersistentTensor(_projectionWeights);
@@ -944,25 +657,25 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
             case GpuOptimizerType.Nag:
             case GpuOptimizerType.Lars:
                 // Momentum-based optimizers need velocity buffers
-                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
 
             case GpuOptimizerType.Adam:
             case GpuOptimizerType.AdamW:
             case GpuOptimizerType.Lamb:
                 // Adam-family optimizers need M (first moment) and V (second moment) buffers
-                _gpuWeightM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
 
             case GpuOptimizerType.RmsProp:
             case GpuOptimizerType.Adagrad:
                 // RmsProp/Adagrad need squared average/accumulated gradient - reuse velocity buffers
-                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
         }
     }
@@ -993,31 +706,4 @@ public class PatchEmbeddingLayer<T> : LayerBase<T>
             _ => throw new ArgumentException($"Unknown parameter: {paramName}", nameof(paramName))
         };
     }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (_projectionWeights == null || _projectionBias == null)
-            throw new InvalidOperationException("Layer weights not initialized.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Weights and biases are already Tensor<T>
-        var weightsNode = TensorOperations<T>.Constant(_projectionWeights, "weights");
-        var biasNode = TensorOperations<T>.Constant(_projectionBias, "bias");
-
-        var output = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
-        return TensorOperations<T>.Add(output, biasNode);
-    }
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => _projectionWeights != null && _projectionBias != null;
 }

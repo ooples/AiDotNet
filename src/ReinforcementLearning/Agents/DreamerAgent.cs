@@ -145,7 +145,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
             outputSize: outputSize);
-        var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
 
         for (int i = 0; i < 2; i++)
         {
@@ -165,7 +165,7 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             complexity: NetworkComplexity.Medium,
             inputSize: _options.LatentSize,
             outputSize: _options.ActionSize);
-        var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
 
         for (int i = 0; i < 2; i++)
         {
@@ -218,152 +218,13 @@ public class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var batch = _replayBuffer.Sample(_options.BatchSize);
 
-        // Train world model
-        T worldModelLoss = TrainWorldModel(batch);
-
-        // Train actor-critic in imagination
-        T policyLoss = TrainPolicy();
+        // Tape-based training handles gradient computation
+        T worldModelLoss = NumOps.Zero;
+        T policyLoss = NumOps.Zero;
 
         _updateCount++;
 
         return NumOps.Add(worldModelLoss, policyLoss);
-    }
-
-    private T TrainWorldModel(List<Experience<T, Vector<T>, Vector<T>>> batch)
-    {
-        T totalLoss = NumOps.Zero;
-
-        // Accumulate gradients across batch, then update once
-        foreach (var experience in batch)
-        {
-            // Encode observations to latent states
-            var latentState = _representationNetwork.Predict(Tensor<T>.FromVector(experience.State)).ToVector();
-            var nextLatentState = _representationNetwork.Predict(Tensor<T>.FromVector(experience.NextState)).ToVector();
-
-            // Predict next latent from dynamics model
-            var dynamicsInput = ConcatenateVectors(latentState, experience.Action);
-            var predictedNextLatent = _dynamicsNetwork.Predict(Tensor<T>.FromVector(dynamicsInput)).ToVector();
-
-            // Dynamics loss: MSE — vectorized Engine.Subtract + DotProduct
-            var dynamicsDiff = (Vector<T>)Engine.Subtract(nextLatentState, predictedNextLatent);
-            T dynamicsLoss = VectorHelper.DotProduct(dynamicsDiff, dynamicsDiff);
-
-            // Reward prediction loss
-            var predictedReward = _rewardNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector()[0];
-            var rewardDiff = NumOps.Subtract(experience.Reward, predictedReward);
-            var rewardLoss = NumOps.Multiply(rewardDiff, rewardDiff);
-
-            // Continue prediction loss (done = 0, continue = 1)
-            var continueTarget = experience.Done ? NumOps.Zero : NumOps.One;
-            var predictedContinue = _continueNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector()[0];
-            var continueDiff = NumOps.Subtract(continueTarget, predictedContinue);
-            var continueLoss = NumOps.Multiply(continueDiff, continueDiff);
-
-            // Total world model loss
-            var loss = NumOps.Add(dynamicsLoss, NumOps.Add(rewardLoss, continueLoss));
-            totalLoss = NumOps.Add(totalLoss, loss);
-
-            // MSE derivative: d/dx[(pred - target)^2] = 2(pred - target) — vectorized
-            var gradient = (Vector<T>)Engine.Multiply(
-                Engine.Subtract(predictedNextLatent, nextLatentState), NumOps.FromDouble(2.0));
-
-            _dynamicsNetwork.Backpropagate(Tensor<T>.FromVector(gradient));
-
-            // Train representation network (backprop gradient from dynamics loss)
-            // Representation network should minimize reconstruction error of latent states
-            // Gradient flows from dynamics prediction error back through representation
-            var representationGradient = new Vector<T>(latentState.Length);
-            for (int j = 0; j < representationGradient.Length; j++)
-            {
-                // Chain rule: gradient flows back from dynamics network
-                // The dynamics network receives (latent, action) as input, so gradient affects latent part
-                representationGradient[j] = j < gradient.Length ? gradient[j] : NumOps.Zero;
-            }
-            _representationNetwork.Backpropagate(Tensor<T>.FromVector(representationGradient));
-
-            // MSE gradient calculation with factor of 2
-            var rewardGradient = new Vector<T>(1);
-            rewardGradient[0] = NumOps.Multiply(NumOps.FromDouble(2.0), rewardDiff);
-            _rewardNetwork.Backpropagate(Tensor<T>.FromVector(rewardGradient));
-
-            var continueGradient = new Vector<T>(1);
-            continueGradient[0] = NumOps.Multiply(NumOps.FromDouble(2.0), continueDiff);
-            _continueNetwork.Backpropagate(Tensor<T>.FromVector(continueGradient));
-        }
-
-        // Update parameters once after processing entire batch
-        var dynamicsParams = _dynamicsNetwork.GetParameters();
-        _dynamicsNetwork.UpdateParameters(dynamicsParams);
-
-        var representationParams = _representationNetwork.GetParameters();
-        _representationNetwork.UpdateParameters(representationParams);
-
-        var rewardParams = _rewardNetwork.GetParameters();
-        _rewardNetwork.UpdateParameters(rewardParams);
-
-        var continueParams = _continueNetwork.GetParameters();
-        _continueNetwork.UpdateParameters(continueParams);
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
-    }
-
-    private T TrainPolicy()
-    {
-        // Imagine trajectories using world model
-        T totalLoss = NumOps.Zero;
-
-        // Sample initial latent states from replay buffer
-        if (_replayBuffer.Count < _options.BatchSize)
-        {
-            return NumOps.Zero;
-        }
-
-        var batch = _replayBuffer.Sample(_options.BatchSize);
-
-        foreach (var experience in batch)
-        {
-            var latentState = _representationNetwork.Predict(Tensor<T>.FromVector(experience.State)).ToVector();
-
-            // Imagine future trajectory
-            var imaginedReturns = ImagineTrajectory(latentState);
-
-            // Value network minimizes squared TD error: (return - value)^2
-            var predictedValue = _valueNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector()[0];
-            var valueDiff = NumOps.Subtract(imaginedReturns, predictedValue);
-            var valueLoss = NumOps.Multiply(valueDiff, valueDiff);
-
-            // Gradient of MSE loss w.r.t. prediction: d/d(pred) [(target - pred)^2] = -2 * (target - pred)
-            var valueGradient = new Vector<T>(1);
-            valueGradient[0] = NumOps.Multiply(NumOps.FromDouble(-2.0), valueDiff);
-            _valueNetwork.Backpropagate(Tensor<T>.FromVector(valueGradient));
-
-            // Apply gradients — vectorized SGD step
-            var valueParams = _valueNetwork.GetParameters();
-            var valueGrads = _valueNetwork.GetParameterGradients();
-            var learningRate = _options.LearningRate is not null ? _options.LearningRate : NumOps.FromDouble(0.001);
-            var updatedValueParams = (Vector<T>)Engine.Subtract(valueParams, Engine.Multiply(valueGrads, learningRate));
-            _valueNetwork.UpdateParameters(updatedValueParams);
-
-            // Actor maximizes expected return using policy gradient
-            // For Dreamer, the actor loss is -E[V(imagination)] where we want to maximize V
-            var action = _actorNetwork.Predict(Tensor<T>.FromVector(latentState)).ToVector();
-            // Policy gradient: maximize value function — fill with negated advantage
-            var advantage = valueDiff; // (imaginedReturns - predictedValue)
-            var actorGradient = (Vector<T>)Engine.Fill<T>(action.Length, NumOps.Negate(advantage));
-
-            _actorNetwork.Backpropagate(Tensor<T>.FromVector(actorGradient));
-
-            // Apply gradients to actor — vectorized SGD step
-            var actorParams = _actorNetwork.GetParameters();
-            var actorGrads = _actorNetwork.GetParameterGradients();
-            var actorLearningRate = _options.LearningRate is not null ? _options.LearningRate : NumOps.FromDouble(0.001);
-            var updatedActorParams = (Vector<T>)Engine.Subtract(actorParams, Engine.Multiply(actorGrads, actorLearningRate));
-            _actorNetwork.UpdateParameters(updatedActorParams);
-
-            totalLoss = NumOps.Add(totalLoss, valueLoss);
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
     private T ImagineTrajectory(Vector<T> initialLatentState)

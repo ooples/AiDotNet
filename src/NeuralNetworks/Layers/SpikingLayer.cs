@@ -1,8 +1,9 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -37,7 +38,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, NormalizesInput = true, IsStateful = true, ChangesShape = true, UsesSurrogateGradient = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
-public class SpikingLayer<T> : LayerBase<T>
+public partial class SpikingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The type of spiking neuron model to use.
@@ -132,6 +133,8 @@ public class SpikingLayer<T> : LayerBase<T>
     /// These weights are adjusted during training to make the layer learn.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
@@ -153,6 +156,8 @@ public class SpikingLayer<T> : LayerBase<T>
     /// Biases are adjusted during training along with the weights.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _bias;
 
     /// <summary>
@@ -254,11 +259,6 @@ public class SpikingLayer<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     private Tensor<T> _membranePotential;
-
-    /// <summary>
-    /// Gets the current membrane potential tensor (for output layer readout per spytorch).
-    /// </summary>
-    internal Tensor<T> MembranePotential => _membranePotential;
 
     /// <summary>
     /// Countdown timer for refractory period for each output neuron.
@@ -645,14 +645,11 @@ public class SpikingLayer<T> : LayerBase<T>
         _tau = tau;
         _refractoryPeriod = refractoryPeriod;
 
-        // Per Neftci et al. 2019: SNN weight init scaled by (1 - beta) / sqrt(fan_in).
-        // Standard Normal distribution ensures non-zero weight sums per row.
-        double beta = 1.0 - 1.0 / _tau;
-        double weightScale = 7.0 * (1.0 - beta) / Math.Sqrt(inputSize);
-        _weights = Engine.TensorRandomUniformRange<T>(
-            [inputSize, outputSize],
-            NumOps.FromDouble(-weightScale),
-            NumOps.FromDouble(weightScale));
+        // Initialize weights with small random values as Tensor<T>
+        // CreateRandom gives [0,1], scale to [-0.1, 0.1]
+        // Initialize weights with Xavier-like init [-0.1, 0.1] using InitializeLayerWeights
+        _weights = new Tensor<T>([inputSize, outputSize]);
+        InitializeLayerWeights(_weights, inputSize, outputSize);
 
         _bias = new Tensor<T>([outputSize]);
         _bias.Fill(NumOps.Zero);
@@ -700,6 +697,9 @@ public class SpikingLayer<T> : LayerBase<T>
             _hGate = new Tensor<T>([outputSize]);
             _hGate.Fill(NumOps.FromDouble(0.60)); // Sodium inactivation
         }
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -795,7 +795,7 @@ public class SpikingLayer<T> : LayerBase<T>
     /// that require sequential updates. This method uses GPU for input/output transfer while
     /// processing neuron dynamics on CPU due to their inherently sequential nature.
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs == null || inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -867,7 +867,7 @@ public class SpikingLayer<T> : LayerBase<T>
         var outputBuffer = backend.AllocateBuffer(outputData);
         var outputShape = output.Shape.ToArray();
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -1490,8 +1490,8 @@ public class SpikingLayer<T> : LayerBase<T>
             return new Vector<T>(ParameterCount);
 
         return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_weightGradients.Data),
-            Vector<T>.FromMemory(_biasGradients.Data)
+            new Vector<T>(_weightGradients.ToArray()),
+            new Vector<T>(_biasGradients.ToArray())
         );
     }
 
@@ -1746,248 +1746,6 @@ public class SpikingLayer<T> : LayerBase<T>
         _spikes.Fill(NumOps.Zero);
     }
 
-    /// <summary>
-    /// Performs the backward pass of the spiking layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the spiking layer, which is used during training to propagate
-    /// error gradients back through the network. Since spike events are non-differentiable, it uses a surrogate
-    /// gradient approach to approximate the derivative of the spike function. This enables backpropagation
-    /// through spiking neurons by providing a smooth approximation to the discontinuous threshold crossing.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how to adjust the network during training.
-    /// 
-    /// Training spiking neurons is challenging because spikes are binary events (either a neuron fires or it doesn't),
-    /// which normally can't be used with standard neural network training methods.
-    /// 
-    /// To solve this problem, this method:
-    /// 1. Uses a technique called "surrogate gradients" to approximate how changes in membrane potential affect spiking
-    /// 2. It computes a smooth function based on the membrane potential that approximates spike probability
-    /// 3. Using this approximation, it calculates:
-    ///    - How to adjust weights and biases to improve performance
-    ///    - How errors should flow back to previous layers
-    /// 
-    /// This clever approach allows spiking neural networks to be trained with backpropagation
-    /// despite their fundamentally discrete nature.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Cannot perform backward pass before forward pass");
-
-        // Flatten gradients if needed
-        var gradFlat = outputGradient.Length == outputGradient.Shape[0]
-            ? outputGradient
-            : outputGradient.Reshape([outputGradient.Length]);
-
-        // Compute surrogate gradients using vectorized operations
-        // surrogate(v) = 1 / (beta * cosh^2(v/beta))
-        // This is the derivative of the surrogate spike function tanh(v/beta)
-        double beta = 10.0;
-        var surrogateGradient = new Tensor<T>([_membranePotential.Length]);
-
-        // Vectorized surrogate gradient computation using IEngine
-        // surrogate(v) = 1 / (beta * cosh^2(v/beta))
-        T invBeta = NumOps.FromDouble(1.0 / beta);
-        T betaT = NumOps.FromDouble(beta);
-        T one = NumOps.FromDouble(1.0);
-
-        // Reshape membrane potential to 1D for tensor operations
-        var vFlat = _membranePotential.Length == _membranePotential.Shape[0]
-            ? _membranePotential
-            : _membranePotential.Reshape([_membranePotential.Length]);
-
-        // Compute v/beta
-        var scaledV = Engine.TensorMultiplyScalar(vFlat, invBeta);
-
-        // Compute cosh(v/beta)
-        var coshVals = Engine.TensorCosh(scaledV);
-
-        // Compute cosh^2
-        var coshSquared = Engine.TensorMultiply(coshVals, coshVals);
-
-        // Compute beta * cosh^2
-        var denominator = Engine.TensorMultiplyScalar(coshSquared, betaT);
-
-        // Compute 1 / (beta * cosh^2) using ones tensor and divide
-        var ones = new Tensor<T>([coshSquared.Length]);
-        Engine.TensorFill(ones, one);
-        surrogateGradient = Engine.TensorDivide(ones, denominator);
-
-        // Scaled gradient = outputGradient * surrogateGradient (element-wise)
-        var scaledGrad = Engine.TensorMultiply(gradFlat, surrogateGradient);
-
-        // Compute weight gradients: dL/dW = outer_product(input, scaledGrad)
-        // Reshape for outer product: input [inputSize, 1] @ scaledGrad [1, outputSize] = [inputSize, outputSize]
-        var inputFlat = _lastInput.Length == _lastInput.Shape[0]
-            ? _lastInput
-            : _lastInput.Reshape([_lastInput.Length]);
-
-        // Manual outer product: weightGradUpdate[i,j] = inputFlat[i] * scaledGrad[j]
-        int inLen = inputFlat.Length;
-        int outLen = scaledGrad.Length;
-        var weightGradUpdate = new Tensor<T>([inLen, outLen]);
-        for (int i = 0; i < inLen; i++)
-            for (int j = 0; j < outLen; j++)
-                weightGradUpdate[i, j] = NumOps.Multiply(inputFlat[i], scaledGrad[j]);
-
-        // Accumulate weight gradients
-        _weightGradients = Engine.TensorAdd(_weightGradients, weightGradUpdate);
-
-        // Bias gradients = scaledGrad (already computed)
-        _biasGradients = Engine.TensorAdd(_biasGradients, scaledGrad);
-
-        // Manual input gradient: inputGrad[i] = sum_j(W[i,j] * scaledGrad[j])
-        var inputGradient = new Tensor<T>([inLen]);
-        for (int i = 0; i < inLen; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < outLen; j++)
-                sum = NumOps.Add(sum, NumOps.Multiply(_weights[i, j], scaledGrad[j]));
-            inputGradient[i] = sum;
-        }
-
-        // Reshape to match input shape if needed
-        if (_lastInput.Shape.Length > 1)
-        {
-            inputGradient = inputGradient.Reshape(_lastInput.Shape.ToArray());
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation with a sigmoid-based surrogate gradient.
-    /// Spiking functions are non-differentiable, so we use a smooth approximation that enables
-    /// gradient-based learning while preserving the discrete nature of spikes.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Cannot perform backward pass before forward pass");
-
-        // Flatten input for computation graph
-        var inputFlat = _lastInput.Length == _lastInput.Shape[0]
-            ? _lastInput
-            : _lastInput.Reshape([_lastInput.Length]);
-
-        // Create computation graph nodes
-        var inputNode = TensorOperations<T>.Variable(inputFlat, "input", requiresGradient: true);
-        var weightsNode = TensorOperations<T>.Variable(_weights, "weights", requiresGradient: true);
-        var biasNode = TensorOperations<T>.Variable(_bias, "bias", requiresGradient: true);
-
-        // Forward computation graph:
-        // 1. Transpose weights: [inputSize, outputSize] -> [outputSize, inputSize]
-        var weightsT = TensorOperations<T>.Transpose(weightsNode);
-
-        // 2. Compute input current: W^T @ input + bias
-        var inputReshaped = TensorOperations<T>.Reshape(inputNode, inputFlat.Length, 1);
-        var preActivation = TensorOperations<T>.MatrixMultiply(weightsT, inputReshaped);
-        var preActivationFlat = TensorOperations<T>.Reshape(preActivation, _bias.Length);
-        var withBias = TensorOperations<T>.Add(preActivationFlat, biasNode);
-
-        // 3. Apply surrogate spike function (tanh-based surrogate for differentiability)
-        // The forward pass uses hard threshold, but autodiff uses soft surrogate
-        double threshold = _threshold;
-        double surrogateBeta = 1.0 / _tau;
-        var output = TensorOperations<T>.SurrogateSpike(withBias, threshold, surrogateBeta);
-
-        // Set output gradient on the computation graph
-        output.Gradient = outputGradient.Length == outputGradient.Shape[0]
-            ? outputGradient
-            : outputGradient.Reshape([outputGradient.Length]);
-
-        // Inline topological sort for backward pass
-        var visited = new HashSet<ComputationNode<T>>();
-        var topoOrder = new List<ComputationNode<T>>();
-        var stack = new Stack<(ComputationNode<T> node, bool processed)>();
-        stack.Push((output, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract and accumulate gradients
-        if (weightsNode.Gradient != null)
-        {
-            // weightsNode gradient is for transposed weights [outputSize, inputSize]
-            // Need to transpose back to [inputSize, outputSize] for accumulation
-            var weightsGradT = Engine.TensorTranspose(weightsNode.Gradient);
-            _weightGradients = _weightGradients == null
-                ? weightsGradT
-                : Engine.TensorAdd(_weightGradients, weightsGradT);
-        }
-
-        if (biasNode.Gradient != null)
-        {
-            _biasGradients = _biasGradients == null
-                ? biasNode.Gradient
-                : Engine.TensorAdd(_biasGradients, biasNode.Gradient);
-        }
-
-        // Return input gradient, reshaping if necessary
-        var inputGradient = inputNode.Gradient ?? new Tensor<T>(inputFlat.Shape.ToArray());
-        if (_lastInput.Shape.Length > 1)
-        {
-            inputGradient = inputGradient.Reshape(_lastInput.Shape.ToArray());
-        }
-
-        return inputGradient;
-    }
-
 
     /// <summary>
     /// Updates the parameters of the layer using the calculated gradients and learning rate.
@@ -2031,72 +1789,4 @@ public class SpikingLayer<T> : LayerBase<T>
         // Reset bias gradients for next batch
         _biasGradients.Fill(NumOps.Zero);
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
-
-        // SpikingLayer JIT uses surrogate gradient for single-timestep computation:
-        // 1. Linear transformation: pre_activation = W @ input + bias
-        // 2. Surrogate spike: spikes = SurrogateSpike(pre_activation, threshold)
-        //
-        // This is a simplified model suitable for inference. Training uses full temporal simulation.
-
-        var input = inputNodes[0];
-
-        // Use weights and bias tensors directly
-        int inputSize = _weights.Shape[0];
-        int outputSize = _weights.Shape[1];
-
-        // Transpose weights for computation graph: [inputSize, outputSize] -> [outputSize, inputSize]
-        var weightsTensor = Engine.TensorTranspose(_weights);
-
-        var weightsNode = TensorOperations<T>.Constant(weightsTensor, "spiking_weights");
-        var biasNode = TensorOperations<T>.Constant(_bias, "spiking_bias");
-
-        // Reshape input for matrix multiplication
-        var inputReshaped = TensorOperations<T>.Reshape(input, inputSize, 1);
-
-        // W @ input
-        var weighted = TensorOperations<T>.MatrixMultiply(weightsNode, inputReshaped);
-        var weightedFlat = TensorOperations<T>.Reshape(weighted, outputSize);
-
-        // W @ input + bias (this represents the membrane potential after one timestep)
-        var membranePotential = TensorOperations<T>.Add(weightedFlat, biasNode);
-
-        // Apply surrogate spike function with threshold
-        // Default threshold is typically 1.0 for normalized inputs
-        double threshold = _threshold;
-        double surrogateBeta = 1.0 / _tau; // Use tau to scale surrogate sharpness
-        var spikes = TensorOperations<T>.SurrogateSpike(membranePotential, threshold, surrogateBeta);
-
-        // Apply activation if present
-        var output = ApplyActivationToGraph(spikes);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c>. SpikingLayer uses surrogate gradients for JIT compilation.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// JIT compilation for spiking neurons uses a surrogate gradient approach where the
-    /// non-differentiable spike threshold is approximated with a smooth function during
-    /// backpropagation. The forward pass produces discrete spikes (0 or 1), but gradients
-    /// are computed using a sigmoid-based surrogate.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
-
 }

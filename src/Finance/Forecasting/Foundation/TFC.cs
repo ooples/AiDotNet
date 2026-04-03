@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -277,7 +277,6 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
             LastLoss = NumOps.Add(forecastLoss, contrastiveLoss);
 
             var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-            BackwardNative(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
             _optimizer.UpdateParameters(Layers);
         }
@@ -476,7 +475,7 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
     {
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -584,55 +583,6 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         return current;
     }
 
-    private Tensor<T> BackwardNative(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        bool addedBatchDim = false;
-        if (current.Rank == 1)
-        {
-            current = current.Reshape(new[] { 1, current.Length });
-            addedBatchDim = true;
-        }
-
-        if (_forecastHead is not null)
-            current = _forecastHead.Backward(current);
-
-        if (_projectionHead is not null)
-            current = _projectionHead.Backward(current);
-
-        // Scale gradient for dual-encoder averaging
-        var scaledGrad = new Tensor<T>(current.Shape.ToArray());
-        for (int i = 0; i < current.Length; i++)
-            scaledGrad.Data.Span[i] = NumOps.Divide(current[i], NumOps.FromDouble(2.0));
-
-        // Backward through frequency encoder
-        var freqGrad = scaledGrad;
-        for (int i = _freqEncoderLayers.Count - 1; i >= 0; i--)
-            freqGrad = _freqEncoderLayers[i].Backward(freqGrad);
-
-        if (_freqInputProjection is not null)
-            freqGrad = _freqInputProjection.Backward(freqGrad);
-
-        // Backward through time encoder
-        var timeGrad = scaledGrad;
-        for (int i = _timeEncoderLayers.Count - 1; i >= 0; i--)
-            timeGrad = _timeEncoderLayers[i].Backward(timeGrad);
-
-        if (_timeInputProjection is not null)
-            timeGrad = _timeInputProjection.Backward(timeGrad);
-
-        // Sum gradients from both paths
-        current = new Tensor<T>(timeGrad.Shape.ToArray());
-        for (int i = 0; i < timeGrad.Length && i < freqGrad.Length; i++)
-            current.Data.Span[i] = NumOps.Add(timeGrad[i], freqGrad[i]);
-
-        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
-            current = current.Reshape(new[] { current.Shape[1] });
-
-        return current;
-    }
-
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession == null)
@@ -686,7 +636,7 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         int n = input.Rank > 1 ? input.Shape[^1] : input.Length;
         int numSamples = input.Rank > 1 ? input.Length / n : 1;
         int halfN = n / 2 + 1;
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         T invN = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
 
         for (int s = 0; s < numSamples; s++)

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Autodiff;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
@@ -449,7 +449,7 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
         }
 
         // Create ONNX input tensor
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
 
         // Get input name from model
         var inputMeta = OnnxSession.InputMetadata;

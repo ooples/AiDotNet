@@ -114,39 +114,7 @@ public class GQAInferenceIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void GQA_Backward_ProducesGradient()
-    {
-        int seqLen = 4;
-        int embDim = 32;
-        int numHeads = 4;
-        int numKVHeads = 2;
 
-        var layer = new GroupedQueryAttentionLayer<float>(seqLen, embDim, numHeads, numKVHeads);
-        var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
-
-        var output = layer.Forward(input);
-        var grad = CreateRandomTensor(output.Shape.ToArray());
-        var inputGrad = layer.Backward(grad);
-
-        Assert.Equal(input.Shape.ToArray(), inputGrad.Shape.ToArray());
-    }
-
-    [Fact]
-    public void GQA_UpdateParameters_DoesNotThrow()
-    {
-        int seqLen = 4;
-        int embDim = 32;
-        int numHeads = 4;
-        int numKVHeads = 2;
-
-        var layer = new GroupedQueryAttentionLayer<float>(seqLen, embDim, numHeads, numKVHeads);
-        var input = CreateRandomTensor(new[] { 1, seqLen, embDim });
-
-        layer.Forward(input);
-        layer.Backward(CreateRandomTensor(new[] { 1, seqLen, embDim }));
-        layer.UpdateParameters(0.01f);
-    }
 
     #region Helpers
 

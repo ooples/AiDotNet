@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -36,7 +36,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.PositionalEncoding)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 1", TestConstructorArgs = "8, 16")]
-public class TimeEmbeddingLayer<T> : LayerBase<T>
+public partial class TimeEmbeddingLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The dimension of the sinusoidal embedding before MLP projection.
@@ -51,11 +51,15 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
     /// <summary>
     /// First linear layer weights: [embeddingDim, outputDim]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _linear1Weights;
 
     /// <summary>
     /// First linear layer biases: [outputDim]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _linear1Bias;
 
     /// <summary>
@@ -104,10 +108,10 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
     private Tensor<T>? _linear2BiasGradient;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuTimesteps;
-    private IGpuTensor<T>? _gpuSinusoidalEmbed;
-    private IGpuTensor<T>? _gpuHidden;
-    private IGpuTensor<T>? _gpuPreActivation;
+    private Tensor<T>? _gpuTimesteps;
+    private Tensor<T>? _gpuSinusoidalEmbed;
+    private Tensor<T>? _gpuHidden;
+    private Tensor<T>? _gpuPreActivation;
     private int[]? _gpuInputShape;
 
     /// <summary>
@@ -120,8 +124,8 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
     {
         if (_linear1WeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_linear1WeightsGradient is not null ? Vector<T>.FromMemory(_linear1WeightsGradient.Data) : new Vector<T>(0)), (_linear1BiasGradient is not null ? Vector<T>.FromMemory(_linear1BiasGradient.Data) : new Vector<T>(0)),
-            (_linear2WeightsGradient is not null ? Vector<T>.FromMemory(_linear2WeightsGradient.Data) : new Vector<T>(0)), (_linear2BiasGradient is not null ? Vector<T>.FromMemory(_linear2BiasGradient.Data) : new Vector<T>(0)));
+            _linear1WeightsGradient.ToVector(), _linear1BiasGradient!.ToVector(),
+            _linear2WeightsGradient!.ToVector(), _linear2BiasGradient!.ToVector());
     }
 
     public override void ClearGradients()
@@ -134,10 +138,13 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     protected override bool SupportsGpuExecution => true;
 
-    private Tensor<T>? _frequencies;
+    [TrainableParameter(Role = PersistentTensorRole.Constant)]
+
+
+    private Tensor<T> _frequencies = new Tensor<T>([1, 1]);
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0) throw new ArgumentException("TimeEmbeddingLayer requires an input tensor.");
         var input = inputs[0];
@@ -159,7 +166,7 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
         }
 
         int batch = input.Shape[0];
-        IGpuTensor<T> timesteps = input.Shape.Length == 1
+        Tensor<T> timesteps = input.Shape.Length == 1
             ? gpuEngine.ReshapeGpu(input, [batch, 1])
             : input;
 
@@ -181,9 +188,9 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
 
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
-            _lastSinusoidalEmbed = embedding.ToTensor();
-            _lastHidden = hidden.ToTensor();
+            _lastInput = input;
+            _lastSinusoidalEmbed = embedding;
+            _lastHidden = hidden;
 
             // Cache GPU tensors for backward pass
             _gpuInputShape = input.Shape.ToArray();
@@ -194,65 +201,6 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Performs the GPU-resident backward pass of the time embedding layer.
-    /// </summary>
-    /// <param name="outputGradient">The GPU tensor containing the gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the timestep input (typically zeros since sinusoidal embedding is fixed).</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (_gpuSinusoidalEmbed == null || _gpuHidden == null || _gpuPreActivation == null || _gpuInputShape == null)
-            throw new InvalidOperationException("ForwardGpu must be called in training mode before BackwardGpu.");
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        int batch = outputGradient.Shape[0];
-
-        // Step 1: Backprop through Linear2 (output = hidden @ W2 + b2)
-        // dL/dHidden = dL/dOutput @ W2^T
-        var linear2WeightsGpu = gpuEngine.UploadToGpu<T>(_linear2Weights, GpuTensorRole.Weight);
-        var linear2WeightsT = gpuEngine.TransposeGpu<T>(linear2WeightsGpu);
-        var hiddenGradient = gpuEngine.MatMulGpuTensors<T>(outputGradient, linear2WeightsT);
-
-        // dL/dW2 = hidden^T @ dL/dOutput
-        var hiddenT = gpuEngine.TransposeGpu<T>(_gpuHidden);
-        var w2Grad = gpuEngine.MatMulGpuTensors<T>(hiddenT, outputGradient);
-        _linear2WeightsGradient = w2Grad.ToTensor();
-
-        // dL/db2 = sum(dL/dOutput, axis=0)
-        _linear2BiasGradient = gpuEngine.SumAxisGpu<T>(outputGradient, 0).ToTensor();
-
-        // Step 2: Backprop through Swish activation
-        // SwishBackwardGpu takes (gradOutput, output) where output is the Swish output (hidden)
-        var preActivationGradient = gpuEngine.SwishBackwardGpu<T>(hiddenGradient, _gpuHidden);
-
-        // Step 3: Backprop through Linear1 (preActivation = embedding @ W1 + b1)
-        // dL/dEmbedding = dL/dPreActivation @ W1^T (not needed since sinusoidal embedding is fixed)
-        // dL/dW1 = embedding^T @ dL/dPreActivation
-        var embeddingT = gpuEngine.TransposeGpu<T>(_gpuSinusoidalEmbed);
-        var w1Grad = gpuEngine.MatMulGpuTensors<T>(embeddingT, preActivationGradient);
-        _linear1WeightsGradient = w1Grad.ToTensor();
-
-        // dL/db1 = sum(dL/dPreActivation, axis=0)
-        _linear1BiasGradient = gpuEngine.SumAxisGpu<T>(preActivationGradient, 0).ToTensor();
-
-        // Step 4: Return zeros for input gradient (timesteps are not learnable)
-        // The sinusoidal embedding is fixed, so gradient w.r.t. timesteps is typically not needed
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        int inputSize = 1;
-        foreach (var dim in _gpuInputShape)
-            inputSize *= dim;
-
-        var zeroBuffer = backend.AllocateBuffer(inputSize);
-        backend.Fill(zeroBuffer, 0.0f, inputSize);
-
-        return new GpuTensor<T>(backend, zeroBuffer, _gpuInputShape, GpuTensorRole.Gradient, ownsBuffer: true);
     }
 
     /// <summary>
@@ -422,65 +370,6 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass of the time embedding layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input (timesteps).</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastSinusoidalEmbed == null || _lastHidden == null || _lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batch = outputGradient.Shape[0];
-
-        // Initialize gradients
-        _linear2WeightsGradient = Tensor<T>.CreateDefault([_outputDim, _outputDim], NumOps.Zero);
-        _linear2BiasGradient = Tensor<T>.CreateDefault([_outputDim], NumOps.Zero);
-        _linear1WeightsGradient = Tensor<T>.CreateDefault([_embeddingDim, _outputDim], NumOps.Zero);
-        _linear1BiasGradient = Tensor<T>.CreateDefault([_outputDim], NumOps.Zero);
-
-        // Backprop through second linear layer using Engine tensor ops
-        // Bias gradient: sum over batch dimension
-        _linear2BiasGradient = Engine.ReduceSum(outputGradient, [0], keepDims: false);
-
-        // Weight gradient: lastHidden^T @ outputGradient -> [outputDim, outputDim]
-        var lastHiddenT = Engine.TensorTranspose(_lastHidden);
-        _linear2WeightsGradient = Engine.TensorMatMul(lastHiddenT, outputGradient);
-
-        // Hidden gradient: outputGradient @ linear2Weights^T -> [batch, outputDim]
-        var linear2WeightsT = Engine.TensorTranspose(_linear2Weights);
-        var hiddenGradient = Engine.TensorMatMul(outputGradient, linear2WeightsT);
-
-        // Backprop through SiLU activation
-        // Recompute pre-activation: sinEmbed @ linear1Weights + bias
-        var recomputedPreAct = Engine.TensorMatMul(_lastSinusoidalEmbed, _linear1Weights);
-        var bias1BC = _linear1Bias.Reshape([1, _outputDim]);
-        recomputedPreAct = Engine.TensorBroadcastAdd(recomputedPreAct, bias1BC);
-
-        var preActivationGrad = new Tensor<T>([batch, _outputDim]);
-        for (int b = 0; b < batch; b++)
-        {
-            for (int j = 0; j < _outputDim; j++)
-            {
-                preActivationGrad[b, j] = NumOps.Multiply(hiddenGradient[b, j], SiLUDerivative(recomputedPreAct[b, j]));
-            }
-        }
-
-        // Backprop through first linear layer using Engine tensor ops
-        // Bias gradient: sum over batch dimension
-        _linear1BiasGradient = Engine.ReduceSum(preActivationGrad, [0], keepDims: false);
-
-        // Weight gradient: sinEmbed^T @ preActivationGrad -> [embeddingDim, outputDim]
-        var sinEmbedT = Engine.TensorTranspose(_lastSinusoidalEmbed);
-        _linear1WeightsGradient = Engine.TensorMatMul(sinEmbedT, preActivationGrad);
-
-        // Return gradient w.r.t. timesteps (typically not used but required by interface)
-        return _lastInput.Rank == 1
-            ? Tensor<T>.CreateDefault([batch], NumOps.Zero)
-            : Tensor<T>.CreateDefault([batch, 1], NumOps.Zero);
-    }
-
-    /// <summary>
     /// Updates the parameters of the layer using the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
@@ -509,10 +398,10 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
     {
         var parts = new Vector<T>[]
         {
-            Vector<T>.FromMemory(_linear1Weights.Data),
-            Vector<T>.FromMemory(_linear1Bias.Data),
-            Vector<T>.FromMemory(_linear2Weights.Data),
-            Vector<T>.FromMemory(_linear2Bias.Data)
+            _linear1Weights.ToVector(),
+            _linear1Bias.ToVector(),
+            _linear2Weights.ToVector(),
+            _linear2Bias.ToVector()
         };
         return Vector<T>.Concatenate(parts);
     }
@@ -562,54 +451,5 @@ public class TimeEmbeddingLayer<T> : LayerBase<T>
         _gpuHidden = null;
         _gpuPreActivation = null;
         _gpuInputShape = null;
-    }
-
-    /// <summary>
-    /// Gets whether this layer supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
-    /// Exports the layer as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List of input nodes (expects one node containing timesteps).</param>
-    /// <returns>A computation node representing the time embedding output.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph for the time embedding:
-    /// 1. Sinusoidal embedding of timesteps
-    /// 2. First linear layer (matrix multiply + bias)
-    /// 3. SiLU/Swish activation
-    /// 4. Second linear layer (matrix multiply + bias)
-    /// </para>
-    /// </remarks>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null || inputNodes.Count < 1)
-            throw new ArgumentException("TimeEmbeddingLayer requires exactly one input node (timesteps).", nameof(inputNodes));
-
-        var timesteps = inputNodes[0];
-
-        // Step 1: Compute sinusoidal time embedding
-        var sinEmbed = Autodiff.TensorOperations<T>.SinusoidalTimeEmbedding(timesteps, _embeddingDim);
-
-        // Step 2: First linear layer - MatMul(sinEmbed, weights1) + bias1
-        var weights1Node = Autodiff.TensorOperations<T>.Variable(_linear1Weights, "time_linear1_weights", requiresGradient: true);
-        var bias1Node = Autodiff.TensorOperations<T>.Variable(_linear1Bias, "time_linear1_bias", requiresGradient: true);
-
-        var linear1Out = Autodiff.TensorOperations<T>.MatrixMultiply(sinEmbed, weights1Node);
-        var linear1WithBias = Autodiff.TensorOperations<T>.Add(linear1Out, bias1Node);
-
-        // Step 3: SiLU/Swish activation
-        var hidden = Autodiff.TensorOperations<T>.Swish(linear1WithBias);
-
-        // Step 4: Second linear layer - MatMul(hidden, weights2) + bias2
-        var weights2Node = Autodiff.TensorOperations<T>.Variable(_linear2Weights, "time_linear2_weights", requiresGradient: true);
-        var bias2Node = Autodiff.TensorOperations<T>.Variable(_linear2Bias, "time_linear2_bias", requiresGradient: true);
-
-        var linear2Out = Autodiff.TensorOperations<T>.MatrixMultiply(hidden, weights2Node);
-        var output = Autodiff.TensorOperations<T>.Add(linear2Out, bias2Node);
-
-        return output;
     }
 }

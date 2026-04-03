@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -508,7 +508,7 @@ public class CSDI<T> : ForecastingModelBase<T>
         SetTrainingMode(true);
 
         // Generate random mask (simulate missing data)
-        var mask = GenerateRandomMask(input.Shape.ToArray());
+        var mask = GenerateRandomMask(input._shape);
 
         // Sample random diffusion timestep
         int t = _random.Next(_numDiffusionSteps);
@@ -529,7 +529,6 @@ public class CSDI<T> : ForecastingModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(maskedOutput.ToVector(), maskedNoise.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, maskedOutput.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -815,29 +814,6 @@ public class CSDI<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Performs backpropagation through all layers.
-    /// </summary>
-    /// <param name="gradOutput">Gradient of the loss with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Backpropagation computes gradients for each layer
-    /// by propagating the loss gradient backwards. This is how the network learns:
-    /// gradients tell each parameter how to change to reduce the loss.
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            grad = Layers[i].Backward(grad);
-        }
-
-        return grad;
-    }
-
-    /// <summary>
     /// Flattens the input tensor for processing through dense layers.
     /// </summary>
     /// <param name="input">Input tensor.</param>
@@ -851,7 +827,7 @@ public class CSDI<T> : ForecastingModelBase<T>
     private Tensor<T> FlattenInput(Tensor<T> input)
     {
         int totalSize = 1;
-        foreach (var dim in input.Shape.ToArray())
+        foreach (var dim in input._shape)
         {
             totalSize *= dim;
         }
@@ -932,7 +908,7 @@ public class CSDI<T> : ForecastingModelBase<T>
             inputArray[i] = Convert.ToSingle(NumOps.ToDouble(inputVector[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputArray, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputArray, input._shape);
         var inputs = new List<NamedOnnxValue>
         {
             NamedOnnxValue.CreateFromTensor("input", onnxInput)
@@ -947,7 +923,7 @@ public class CSDI<T> : ForecastingModelBase<T>
             outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
         }
 
-        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(outputData));
+        return new Tensor<T>(input._shape, new Vector<T>(outputData));
     }
 
     #endregion
@@ -1022,8 +998,8 @@ public class CSDI<T> : ForecastingModelBase<T>
             }
         }
 
-        return (new Tensor<T>(data.Shape.ToArray(), new Vector<T>(noisyVec)),
-                new Tensor<T>(data.Shape.ToArray(), new Vector<T>(noiseVec)));
+        return (new Tensor<T>(data._shape, new Vector<T>(noisyVec)),
+                new Tensor<T>(data._shape, new Vector<T>(noiseVec)));
     }
 
     /// <summary>
@@ -1086,7 +1062,7 @@ public class CSDI<T> : ForecastingModelBase<T>
             }
         }
 
-        return new Tensor<T>(current.Shape.ToArray(), new Vector<T>(resultVec));
+        return new Tensor<T>(current._shape, new Vector<T>(resultVec));
     }
 
     /// <summary>
@@ -1124,7 +1100,7 @@ public class CSDI<T> : ForecastingModelBase<T>
             }
         }
 
-        return new Tensor<T>(data.Shape.ToArray(), new Vector<T>(resultVec));
+        return new Tensor<T>(data._shape, new Vector<T>(resultVec));
     }
 
     /// <summary>
@@ -1152,7 +1128,7 @@ public class CSDI<T> : ForecastingModelBase<T>
             resultVec[i] = maskVal >= 0.5 ? originalVec[i] : imputedVec[i];
         }
 
-        return new Tensor<T>(imputed.Shape.ToArray(), new Vector<T>(resultVec));
+        return new Tensor<T>(imputed._shape, new Vector<T>(resultVec));
     }
 
     #endregion
@@ -1280,7 +1256,7 @@ public class CSDI<T> : ForecastingModelBase<T>
             resultVec[i] = maskVal < 0.5 ? tensorVec[i] : NumOps.Zero;
         }
 
-        return new Tensor<T>(tensor.Shape.ToArray(), new Vector<T>(resultVec));
+        return new Tensor<T>(tensor._shape, new Vector<T>(resultVec));
     }
 
     /// <summary>

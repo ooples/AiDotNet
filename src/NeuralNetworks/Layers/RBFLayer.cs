@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -150,7 +150,7 @@ public class RBFLayer<T> : LayerBase<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0) throw new ArgumentException("RBFLayer requires an input tensor.");
         var input = inputs[0];
@@ -168,8 +168,8 @@ public class RBFLayer<T> : LayerBase<T>
 
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
-            _lastOutput = output.ToTensor();
+            _lastInput = input;
+            _lastOutput = output;
         }
 
         return output;
@@ -283,71 +283,6 @@ public class RBFLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass of the RBF layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the RBF layer, which is used during training
-    /// to propagate error gradients back through the network. It calculates the gradients of the loss
-    /// with respect to the centers and widths (to update the layer's parameters) and with respect to
-    /// the input (to propagate back to previous layers).
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer should change to reduce errors.
-    /// 
-    /// During the backward pass:
-    /// 1. The error gradient from the next layer is received
-    /// 2. The layer calculates how each center should move to reduce the error
-    /// 3. The layer calculates how each width should change to reduce the error
-    /// 4. The layer calculates how the previous layer's output should change
-    /// 
-    /// This is like saying "Based on the mistakes we made, how should we adjust our pattern detectors
-    /// to be more accurate next time?" The gradients tell us both how to update this layer and
-    /// how to guide the previous layers.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Ensure outputGradient is 2D for RBFKernelBackward
-        bool wasUnbatched = outputGradient.Rank == 1;
-        var grad2D = wasUnbatched
-            ? outputGradient.Reshape([1, outputGradient.Shape[0]])
-            : outputGradient;
-
-        // Use Engine.RBFKernelBackward for GPU/CPU acceleration
-        var epsilons = ComputeEpsilonsFromWidths();
-        var (gradInput, gradCenters, gradEpsilons) = Engine.RBFKernelBackward(
-            grad2D, _lastInput, _centers, epsilons, _lastOutput);
-
-        _centersGradient = gradCenters;
-
-        // Convert epsilon gradients back to width gradients
-        // epsilon = 1/(2*w²), depsilon/dw = -2/(2*w³) = -1/w³
-        // dL/dw = dL/depsilon * depsilon/dw = dL/depsilon * (-1/w³)
-        _widthsGradient = ConvertEpsilonGradientsToWidthGradients(gradEpsilons);
-
-        // Remove batch dimension if input was unbatched
-        return wasUnbatched ? gradInput.Reshape([gradInput.Shape[1]]) : gradInput;
-    }
-
-    /// <summary>
     /// Converts epsilon gradients to width gradients using chain rule.
     /// </summary>
     private Tensor<T> ConvertEpsilonGradientsToWidthGradients(Tensor<T> gradEpsilons)
@@ -361,100 +296,6 @@ public class RBFLayer<T> : LayerBase<T>
             gradWidths[i] = NumOps.Multiply(gradEpsilons[i], dEpsilonDWidth);
         }
         return gradWidths;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation via the RBFKernel operation to compute gradients.
-    /// The operation handles Gaussian RBF computations with proper gradient flow.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Create computation nodes - _centers and _widths are already Tensors
-        var inputNode = Autodiff.TensorOperations<T>.Variable(
-            _lastInput,
-            "input",
-            requiresGradient: true);
-
-        var centersNode = Autodiff.TensorOperations<T>.Variable(
-            _centers,
-            "centers",
-            requiresGradient: true);
-
-        var widthsNode = Autodiff.TensorOperations<T>.Variable(
-            _widths,
-            "widths",
-            requiresGradient: true);
-
-        // Apply RBFKernel operation
-        var outputNode = Autodiff.TensorOperations<T>.RBFKernel(
-            inputNode,
-            centersNode,
-            widthsNode);
-
-        // Set the output gradient
-        outputNode.Gradient = outputGradient;
-
-        // Production-grade: Inline topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-                continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Update parameter gradients (already Tensor types)
-        if (centersNode.Gradient != null)
-            _centersGradient = centersNode.Gradient;
-
-        if (widthsNode.Gradient != null)
-            _widthsGradient = widthsNode.Gradient;
-
-        // Return input gradient
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
     }
 
 
@@ -668,32 +509,10 @@ public class RBFLayer<T> : LayerBase<T>
         var widthSpan = _widths.AsWritableSpan();
         for (int i = 0; i < widthSpan.Length; i++)
             widthSpan[i] = NumOps.FromDouble(Random.NextDouble());
+
+        // Register after initialization so tensor references are final
+        RegisterTrainableParameter(_centers, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_widths, PersistentTensorRole.Weights);
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input [batch, inputSize]
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // _centers is already a Tensor [numCenters, inputSize]
-        var centersNode = TensorOperations<T>.Constant(_centers, "centers");
-
-        // Convert widths to epsilons: epsilon = 1 / (2 * width²) for Gaussian RBF
-        var epsilonsTensor = ComputeEpsilonsFromWidths();
-        var epsilonsNode = TensorOperations<T>.Constant(epsilonsTensor, "epsilons");
-
-        // Use RBFKernel operation: computes exp(-epsilon * distance²)
-        return TensorOperations<T>.RBFKernel(inputNode, centersNode, epsilonsNode);
-    }
-
-    public override bool SupportsJitCompilation => true;
 
 }

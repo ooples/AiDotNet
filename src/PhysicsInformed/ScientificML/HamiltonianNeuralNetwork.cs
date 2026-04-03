@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -326,22 +326,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         }
 
         /// <summary>
-        /// Performs a backward pass through the network to calculate gradients.
-        /// </summary>
-        /// <param name="outputGradient">The gradient of the loss with respect to the network's output.</param>
-        /// <returns>The gradient of the loss with respect to the network's input.</returns>
-        public Tensor<T> Backward(Tensor<T> outputGradient)
-        {
-            Tensor<T> gradient = outputGradient;
-            for (int i = Layers.Count - 1; i >= 0; i--)
-            {
-                gradient = Layers[i].Backward(gradient);
-            }
-
-            return gradient;
-        }
-
-        /// <summary>
         /// Trains the Hamiltonian neural network using the provided input and expected output.
         /// </summary>
         /// <param name="input">The input tensor for training (state vectors [q, p]).</param>
@@ -374,9 +358,8 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             LastLoss = NumOps.Add(primaryLoss, auxiliaryLoss);
 
             var outputGradient = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction.Shape.ToArray());
+            var outputGradientTensor = Tensor<T>.FromVector(outputGradient).Reshape(prediction._shape);
 
-            Backward(outputGradientTensor);
             _optimizer.UpdateParameters(Layers);
 
             IsTrainingMode = false;
@@ -452,7 +435,8 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         {
             try
             {
-                return NeuralNetworkDerivatives<T>.ComputeGradient(this, state, 1);
+                return NeuralNetworkDerivatives<T>.ComputeDerivatives(this, state, 1).FirstDerivatives
+                    ?? new T[1, state.Length];
             }
             catch (InvalidOperationException)
             {

@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -178,7 +178,7 @@ public class EQVAEModel<T> : VAEModelBase<T>
     public override (Tensor<T> Mean, Tensor<T> LogVariance) EncodeWithDistribution(Tensor<T> image)
     {
         var mean = Encode(image, sampleMode: false);
-        var logVar = new Tensor<T>(mean.Shape.ToArray());
+        var logVar = new Tensor<T>(mean._shape);
         return (mean, logVar);
     }
 
@@ -203,7 +203,7 @@ public class EQVAEModel<T> : VAEModelBase<T>
         var latentTrans = Encode(transformed);
 
         // L2 distance between latent representations should be preserved
-        var diff = new Tensor<T>(latentOrig.Shape.ToArray());
+        var diff = new Tensor<T>(latentOrig._shape);
         var origSpan = latentOrig.AsSpan();
         var transSpan = latentTrans.AsSpan();
         var diffSpan = diff.AsWritableSpan();
@@ -279,4 +279,20 @@ public class EQVAEModel<T> : VAEModelBase<T>
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var gradients = new List<T>();
+        foreach (var layer in _encoderLayers)
+        {
+            var g = layer.GetParameterGradients();
+            for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
+        }
+        foreach (var layer in _decoderLayers)
+        {
+            var g = layer.GetParameterGradients();
+            for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
+        }
+        return new Vector<T>(gradients.ToArray());
+    }
 }

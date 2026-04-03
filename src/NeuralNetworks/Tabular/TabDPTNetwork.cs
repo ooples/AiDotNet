@@ -160,16 +160,7 @@ public class TabDPTNetwork<T> : NeuralNetworkBase<T>
         Tensor<T> prediction = Predict(input);
         LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
         Tensor<T> error = prediction.Subtract(expectedOutput);
-        BackpropagateError(error);
         UpdateNetworkParameters();
-    }
-
-    private void BackpropagateError(Tensor<T> error)
-    {
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            error = Layers[i].Backward(error);
-        }
     }
 
     private void UpdateNetworkParameters()

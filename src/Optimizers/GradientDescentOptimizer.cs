@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -154,6 +155,20 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// just means adding back that step.
     /// </para>
     /// </remarks>
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        foreach (var param in context.Parameters)
+        {
+            if (context.Gradients.TryGetValue(param, out var grad))
+            {
+                var update = Engine.TensorMultiplyScalar(grad, CurrentLearningRate);
+                Engine.TensorSubtractInPlace(param, update);
+            }
+        }
+    }
+
     public override Vector<T> ReverseUpdate(Vector<T> updatedParameters, Vector<T> appliedGradients)
     {
         if (updatedParameters == null)

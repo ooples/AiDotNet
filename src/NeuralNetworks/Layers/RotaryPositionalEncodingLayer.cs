@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 
@@ -57,7 +57,7 @@ internal class RotaryPositionalEncodingLayer<T> : LayerBase<T>
     private readonly object _cacheLock = new();
 
     /// <inheritdoc />
-    public override bool SupportsTraining => true;
+    public override bool SupportsTraining => false; // Precomputed frequency caches, no trainable parameters
 
     /// <summary>
     /// Gets the head dimension this RoPE layer operates on.
@@ -342,20 +342,6 @@ internal class RotaryPositionalEncodingLayer<T> : LayerBase<T>
         return RotateTensor(input, 0);
     }
 
-    /// <summary>
-    /// Backward pass applies inverse rotation (orthogonal transpose).
-    /// </summary>
-    /// <param name="outputGradient">Gradient tensor with same shape as forward output.</param>
-    /// <returns>Gradient with inverse rotation applied.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        int rank = outputGradient.Shape.Length;
-        int seqLen = rank >= 2 ? outputGradient.Shape[rank - 2] : outputGradient.Shape[0];
-        EnsureCacheLength(seqLen);
-
-        return InverseRotateTensor(outputGradient, 0);
-    }
-
     /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
@@ -372,22 +358,5 @@ internal class RotaryPositionalEncodingLayer<T> : LayerBase<T>
     public override void ResetState()
     {
         // Cache is stateless across sequences
-    }
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // RoPE is a unary transform; for graph export, treat as identity placeholder
-        return inputNode;
     }
 }

@@ -620,7 +620,7 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
         var reconstructed = Decode(latentSample);
 
         // Reshape the output to match the input shape
-        return new Tensor<T>(input.Shape.ToArray(), reconstructed);
+        return new Tensor<T>(input._shape, reconstructed);
     }
 
     /// <summary>
@@ -650,122 +650,15 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        IsTrainingMode = true;
-
-        // Flatten the input tensor to a vector
-        var inputVector = input.ToVector();
-
-        // Forward pass
-        var (mean, logVariance) = Encode(inputVector);
-        _lastMean = mean;
-        _lastLogVariance = logVariance;
-
-        var latentSample = Reparameterize(mean, logVariance);
-        var reconstructed = Decode(latentSample);
-
-        // Calculate reconstruction loss
-        var reconstructionLoss = LossFunction.CalculateLoss(inputVector, reconstructed);
-
-        // Calculate auxiliary loss (KL divergence) using the interface
-        T auxiliaryLoss = NumOps.Zero;
-        if (UseAuxiliaryLoss)
+        SetTrainingMode(true);
+        try
         {
-            var klDivergence = ComputeAuxiliaryLoss();
-            auxiliaryLoss = NumOps.Multiply(klDivergence, AuxiliaryLossWeight);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
-
-        // Calculate total loss
-        var totalLoss = NumOps.Add(reconstructionLoss, auxiliaryLoss);
-        LastLoss = totalLoss;
-
-        // Backpropagation using proper reconstruction loss derivative
-        var reconstructionGradient = LossFunction.CalculateDerivative(inputVector, reconstructed);
-        var gradTensor = Tensor<T>.FromVector(reconstructionGradient);
-
-        // Backward through decoder layers
-        for (int i = Layers.Count - 1; i >= Layers.Count / 2; i--)
+        finally
         {
-            gradTensor = Layers[i].Backward(gradTensor);
+            SetTrainingMode(false);
         }
-
-        // Backward through latent space (KL gradient per Kingma & Welling §2.4)
-        var (meanGrad, logVarGrad) = CalculateLatentGradients(gradTensor);
-
-        // Backward through encoder layers
-        var encoderGrad = meanGrad;
-        for (int i = (Layers.Count / 2) - 1; i >= 0; i--)
-        {
-            encoderGrad = Layers[i].Backward(encoderGrad);
-        }
-
-        // Update parameters using the optimizer
-        _optimizer.UpdateParameters(Layers);
-
-        IsTrainingMode = false;
-    }
-
-    /// <summary>
-    /// Calculates the gradient for the entire Variational Autoencoder network.
-    /// </summary>
-    /// <param name="totalLoss">The total loss value used to initiate the gradient calculation.</param>
-    /// <returns>A list of tensors representing the gradients for each layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method performs a full backward pass through the VAE network:
-    /// 1. Calculates gradients for the decoder layers.
-    /// 2. Computes gradients for the latent space (mean and log variance).
-    /// 3. Calculates gradients for the encoder layers.
-    /// 4. Applies gradient clipping to prevent exploding gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method figures out how to adjust each part of the VAE to improve its performance.
-    /// 
-    /// It works backwards through the network:
-    /// 1. Starting from the output, it calculates how to change the decoder
-    /// 2. Then it figures out how to adjust the middle (latent) part
-    /// 3. Finally, it calculates changes for the encoder
-    /// 4. It also makes sure the changes aren't too big, which could cause problems
-    /// 
-    /// This process helps the VAE learn from its mistakes and get better over time.
-    /// </para>
-    /// </remarks>
-    private List<Tensor<T>> CalculateGradient(T totalLoss)
-    {
-        var gradients = new List<Tensor<T>>();
-
-        // Backward pass through the decoder layers
-        Tensor<T> currentGradient = new Tensor<T>([1], new Vector<T>(Enumerable.Repeat(totalLoss, 1)));
-        for (int i = Layers.Count - 1; i >= Layers.Count / 2; i--)
-        {
-            var layerGradient = Layers[i].Backward(currentGradient);
-            gradients.Insert(0, layerGradient);
-            currentGradient = layerGradient;
-        }
-
-        // Backward pass through the latent space
-        var (meanGradient, logVarianceGradient) = CalculateLatentGradients(currentGradient);
-
-        // Backward pass through the encoder layers
-        for (int i = (Layers.Count / 2) - 1; i >= 0; i--)
-        {
-            if (Layers[i] is MeanLayer<T>)
-            {
-                currentGradient = Layers[i].Backward(meanGradient);
-            }
-            else if (Layers[i] is LogVarianceLayer<T>)
-            {
-                currentGradient = Layers[i].Backward(logVarianceGradient);
-            }
-            else
-            {
-                currentGradient = Layers[i].Backward(currentGradient);
-            }
-            gradients.Insert(0, currentGradient);
-        }
-
-        // Apply gradient clipping to prevent exploding gradients
-        ClipGradients(gradients);
-
-        return gradients;
     }
 
     /// <summary>

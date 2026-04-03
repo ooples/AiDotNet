@@ -882,7 +882,7 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
     /// </summary>
     private Tensor<T> ApplyGuidance(Tensor<T> uncondPred, Tensor<T> condPred, double scale)
     {
-        var result = new Tensor<T>(condPred.Shape.ToArray());
+        var result = new Tensor<T>(condPred._shape);
         var scaleT = NumOps.FromDouble(scale);
 
         for (int i = 0; i < result.Length; i++)
@@ -904,7 +904,7 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         double sqrtAlphaCumprod = Math.Sqrt(alphaCumprod);
         double sqrtOneMinusAlphaCumprod = Math.Sqrt(1.0 - alphaCumprod);
 
-        var result = new Tensor<T>(latents.Shape.ToArray());
+        var result = new Tensor<T>(latents._shape);
 
         for (int i = 0; i < result.Length; i++)
         {
@@ -1328,19 +1328,14 @@ public class AudioLDMModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         }
 
         SetTrainingMode(true);
-
-        var prediction = Forward(input);
-        var flatPrediction = prediction.ToVector();
-        var flatExpected = expectedOutput.ToVector();
-
-        LastLoss = _lossFunction.CalculateLoss(flatPrediction, flatExpected);
-        var lossGradient = _lossFunction.CalculateDerivative(flatPrediction, flatExpected);
-
-        Backpropagate(Tensor<T>.FromVector(lossGradient));
-
-        _optimizer?.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

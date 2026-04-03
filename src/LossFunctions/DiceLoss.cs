@@ -121,5 +121,19 @@ public class DiceLoss<T> : LossFunctionBase<T>
         return new Vector<T>(result);
     }
 
-
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Dice = 1 - (2 * intersection + smooth) / (|pred| + |target| + smooth)
+        var intersection = Engine.TensorMultiply(predicted, target);
+        var allAxes = Enumerable.Range(0, intersection.Shape.Length).ToArray();
+        var interSum = Engine.ReduceSum(intersection, allAxes, keepDims: false);
+        var predSum = Engine.ReduceSum(predicted, allAxes, keepDims: false);
+        var targSum = Engine.ReduceSum(target, allAxes, keepDims: false);
+        var twoInter = Engine.TensorMultiplyScalar(interSum, NumOps.FromDouble(2.0));
+        var numerator = Engine.TensorAddScalar(twoInter, NumOps.One);
+        var denominator = Engine.TensorAddScalar(Engine.TensorAdd(predSum, targSum), NumOps.One);
+        var dice = Engine.TensorDivide(numerator, denominator);
+        return Engine.ScalarMinusTensor(NumOps.One, dice);
+    }
 }

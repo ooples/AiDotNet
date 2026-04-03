@@ -1,4 +1,4 @@
-
+﻿
 
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -157,40 +157,9 @@ public class TanhActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>
     {
         var tanh = Activate(input);
         var tanhSquared = Engine.TensorMultiply(tanh, tanh);
-        var one = Tensor<T>.CreateDefault(input.Shape.ToArray(), NumOps.One);
+        var one = Tensor<T>.CreateDefault(input._shape, NumOps.One);
         return Engine.TensorSubtract(one, tanhSquared);
     }
-
-    /// <summary>
-    /// Calculates the backward pass gradient for Tanh using GPU-accelerated fused operation.
-    /// </summary>
-    /// <param name="input">The input tensor that was used in the forward pass.</param>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method uses a single GPU kernel to compute the gradient,
-    /// which is faster than computing derivative and gradient multiplication separately.
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
-    {
-        // Tanh backward uses forward output: grad = gradOutput * (1 - output^2)
-        var tanhOutput = Activate(input);
-        return Engine.TanhBackward(outputGradient, tanhOutput);
-    }
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because Tanh gradient computation is fully implemented and tested.</value>
-    /// <remarks>
-    /// <para>
-    /// Tanh supports JIT compilation because:
-    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - The operation is well-defined and differentiable
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.
@@ -235,27 +204,6 @@ public class TanhActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>
         backend.Tanh(input, output, size);
     }
 
-    /// <summary>
-    /// Calculates the Tanh backward pass gradient on GPU.
-    /// </summary>
-    /// <param name="backend">The GPU backend to use for execution.</param>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="input">Not used for Tanh (can be null). Tanh backward uses forward output.</param>
-    /// <param name="output">The output buffer from the forward pass.</param>
-    /// <param name="gradInput">The output buffer to store the input gradient.</param>
-    /// <param name="size">The number of elements to process.</param>
-    /// <remarks>
-    /// Tanh backward on GPU: gradInput[i] = gradOutput[i] * (1 - output[i]^2)
-    /// Note: Tanh backward uses the forward output, not the input.
-    /// </remarks>
-    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
-    {
-        if (output == null)
-            throw new ArgumentNullException(nameof(output), "Tanh backward requires the output from forward pass.");
-
-        backend.TanhBackward(gradOutput, output, gradInput, size);
-    }
-
     #endregion
 
     /// <summary>
@@ -263,7 +211,7 @@ public class TanhActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>
     /// </summary>
     public Tensor<T> DerivativeFromOutput(Tensor<T> output)
     {
-        var ones = new Tensor<T>(output.Shape.ToArray());
+        var ones = new Tensor<T>(output._shape);
         ones.Fill(NumOps.One);
         return ones.Subtract(output.ElementwiseMultiply(output));
     }

@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -337,48 +337,9 @@ public class VAEDecoder<T> : LayerBase<T>
         return Engine.Tanh(input);
     }
 
-    /// <summary>
-    /// Performs the backward pass through the decoder.
-    /// </summary>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _siluOutput == null || _normOutOutput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        // Backward through tanh
-        var grad = ApplyTanhDerivative(_siluOutput, outputGradient);
-
-        // Backward through output conv
-        grad = _outputConv.Backward(grad);
-
-        // Backward through SiLU
-        grad = ApplySiLUDerivative(_normOutOutput, grad);
-
-        // Backward through output normalization
-        grad = _normOut.Backward(grad);
-
-        // Backward through up blocks
-        for (int i = _upBlocks.Length - 1; i >= 0; i--)
-        {
-            grad = _upBlocks[i].Backward(grad);
-        }
-
-        // Backward through middle blocks
-        grad = _midBlocks[1].Backward(grad);
-        grad = _midBlocks[0].Backward(grad);
-
-        // Backward through input conv
-        grad = _inputConv.Backward(grad);
-
-        // Backward through post-quant conv
-        return _postQuantConv.Backward(grad);
-    }
-
     private Tensor<T> ApplySiLUDerivative(Tensor<T> input, Tensor<T> gradient)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
         var inputSpan = input.AsSpan();
         var gradSpan = gradient.AsSpan();
         var outputSpan = output.AsWritableSpan();
@@ -393,7 +354,7 @@ public class VAEDecoder<T> : LayerBase<T>
 
     private Tensor<T> ApplyTanhDerivative(Tensor<T> input, Tensor<T> gradient)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
         var inputSpan = input.AsSpan();
         var gradSpan = gradient.AsSpan();
         var outputSpan = output.AsWritableSpan();
@@ -529,15 +490,6 @@ public class VAEDecoder<T> : LayerBase<T>
         }
         _normOut.ResetState();
         _outputConv.ResetState();
-    }
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("VAEDecoder JIT compilation is not yet implemented.");
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
@@ -128,7 +128,7 @@ public class TextImageAlignmentChecker<T> : TextSafetyModuleBase<T>
         var textCategories = ClassifyTextContent(lower);
 
         // Extract image visual signals
-        var imageFeatures = ExtractImageFeatures(span, image.Shape.ToArray());
+        var imageFeatures = ExtractImageFeatures(span, image._shape);
 
         // Check for misalignment between text claims and image content
         // Text says "safe" but image has unsafe visual features

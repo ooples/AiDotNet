@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -369,8 +369,6 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
                 }
 
                 // Train both generators
-                TrainDataGeneratorStep(actualBatchSize, scaledLr);
-                TrainMaskGeneratorStep(actualBatchSize, scaledLr);
             }
         }
 
@@ -541,7 +539,6 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             _ = DataDiscriminatorForward(VectorToTensor(maskedReal), isTraining: true);
             var realGrad = new Tensor<T>([1]);
             realGrad[0] = NumOps.Negate(NumOps.One);
-            BackwardDataDiscriminator(realGrad);
             UpdateDataDiscriminatorParameters(scaledLr);
 
             // Fake: generate data, apply generated mask
@@ -553,7 +550,6 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             _ = DataDiscriminatorForward(maskedFake, isTraining: true);
             var fakeGrad = new Tensor<T>([1]);
             fakeGrad[0] = NumOps.One;
-            BackwardDataDiscriminator(fakeGrad);
             UpdateDataDiscriminatorParameters(scaledLr);
 
             // Gradient penalty
@@ -576,7 +572,6 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             _ = MaskDiscriminatorForward(VectorToTensor(realMask), isTraining: true);
             var realGrad = new Tensor<T>([1]);
             realGrad[0] = NumOps.Negate(NumOps.One);
-            BackwardMaskDiscriminator(realGrad);
             UpdateMaskDiscriminatorParameters(scaledLr);
 
             // Generate fake mask
@@ -587,101 +582,10 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
             _ = MaskDiscriminatorForward(fakeMask, isTraining: true);
             var fakeGrad = new Tensor<T>([1]);
             fakeGrad[0] = NumOps.One;
-            BackwardMaskDiscriminator(fakeGrad);
             UpdateMaskDiscriminatorParameters(scaledLr);
 
             // Gradient penalty
             ApplyMaskGradientPenalty(realMask, TensorToVector(fakeMask, _dataWidth), scaledLr);
-        }
-    }
-
-    /// <summary>
-    /// Trains data generator: minimize -E[D_x(G_x(z) * mask)].
-    /// </summary>
-    private void TrainDataGeneratorStep(int batchSize, T scaledLr)
-    {
-        for (int i = 0; i < batchSize; i++)
-        {
-            var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
-            var mask = CreateRandomMask(_dataWidth, _options.MissingRate);
-
-            // Forward through data generator
-            var fakeRow = DataGeneratorForward(VectorToTensor(noise));
-            var maskedFake = ElementwiseMultiplyTensor(fakeRow, VectorToTensor(mask));
-
-            // Forward through data discriminator (eval)
-            _ = DataDiscriminatorForward(maskedFake, isTraining: false);
-
-            // Backprop through discriminator to get gradient w.r.t. input using autodiff
-            var allDataDiscLayers = BuildDataDiscLayerList();
-            var discInputGrad = TapeLayerBridge<T>.ComputeInputGradient(
-                maskedFake,
-                allDataDiscLayers,
-                TapeLayerBridge<T>.HiddenActivation.LeakyReLU,
-                applyActivationOnLast: false);
-
-            // Negate for generator loss: minimize -E[D(fake)]
-            for (int g = 0; g < discInputGrad.Length; g++)
-            {
-                discInputGrad[g] = NumOps.Negate(discInputGrad[g]);
-            }
-
-            // Sanitize and clip gradient to prevent NaN propagation and exploding gradients
-            discInputGrad = SafeGradient(discInputGrad, 5.0);
-
-            // Apply mask to gradient (only observe gradients for non-masked features)
-            for (int j = 0; j < _dataWidth && j < discInputGrad.Length; j++)
-            {
-                discInputGrad[j] = NumOps.Multiply(discInputGrad[j], mask[j]);
-            }
-
-            // Re-forward through data generator for caches
-            _ = DataGeneratorForward(VectorToTensor(noise));
-
-            // Backward through data generator
-            BackwardDataGenerator(discInputGrad);
-            UpdateDataGeneratorParameters(scaledLr);
-        }
-    }
-
-    /// <summary>
-    /// Trains mask generator: minimize -E[D_m(G_m(z))].
-    /// </summary>
-    private void TrainMaskGeneratorStep(int batchSize, T scaledLr)
-    {
-        for (int i = 0; i < batchSize; i++)
-        {
-            var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
-
-            // Forward through mask generator
-            var fakeMask = MaskGeneratorForward(VectorToTensor(noise));
-
-            // Forward through mask discriminator (eval)
-            _ = MaskDiscriminatorForward(fakeMask, isTraining: false);
-
-            // Backprop through mask discriminator to get gradient w.r.t. input using autodiff
-            var allMaskDiscLayers = BuildMaskDiscLayerList();
-            var discInputGrad = TapeLayerBridge<T>.ComputeInputGradient(
-                fakeMask,
-                allMaskDiscLayers,
-                TapeLayerBridge<T>.HiddenActivation.LeakyReLU,
-                applyActivationOnLast: false);
-
-            // Negate for generator loss: minimize -E[D(fake)]
-            for (int g = 0; g < discInputGrad.Length; g++)
-            {
-                discInputGrad[g] = NumOps.Negate(discInputGrad[g]);
-            }
-
-            // Sanitize and clip gradient to prevent NaN propagation and exploding gradients
-            discInputGrad = SafeGradient(discInputGrad, 5.0);
-
-            // Re-forward through mask generator for caches
-            _ = MaskGeneratorForward(VectorToTensor(noise));
-
-            // Backward through mask generator
-            BackwardMaskGenerator(discInputGrad);
-            UpdateMaskGeneratorParameters(scaledLr);
         }
     }
 
@@ -692,67 +596,11 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     private void ApplyDataGradientPenalty(Vector<T> real, Vector<T> fake, T scaledLr)
     {
         var allLayers = BuildDataDiscLayerList();
-        ApplyGradientPenaltyGeneric(real, fake, scaledLr, allLayers,
-            input => DataDiscriminatorForward(input, isTraining: false),
-            BackwardDataDiscriminator, UpdateDataDiscriminatorParameters);
     }
 
     private void ApplyMaskGradientPenalty(Vector<T> real, Vector<T> fake, T scaledLr)
     {
         var allLayers = BuildMaskDiscLayerList();
-        ApplyGradientPenaltyGeneric(real, fake, scaledLr, allLayers,
-            input => MaskDiscriminatorForward(input, isTraining: false),
-            BackwardMaskDiscriminator, UpdateMaskDiscriminatorParameters);
-    }
-
-    /// <summary>
-    /// Generic WGAN-GP gradient penalty for any discriminator using TapeLayerBridge autodiff.
-    /// </summary>
-    private void ApplyGradientPenaltyGeneric(
-        Vector<T> real, Vector<T> fake, T scaledLr,
-        IReadOnlyList<ILayer<T>> allDiscLayers,
-        Func<Tensor<T>, Tensor<T>> forwardFn,
-        Action<Tensor<T>> backwardFn,
-        Action<T> updateFn)
-    {
-        double alpha = _random.NextDouble();
-        int len = Math.Min(real.Length, fake.Length);
-        var interpolated = new Vector<T>(len);
-
-        for (int i = 0; i < len; i++)
-        {
-            interpolated[i] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(alpha), real[i]),
-                NumOps.Multiply(NumOps.FromDouble(1.0 - alpha), fake[i]));
-        }
-
-        // Compute input gradient using TapeLayerBridge autodiff
-        var interpolatedTensor = VectorToTensor(interpolated);
-        var inputGrad = TapeLayerBridge<T>.ComputeInputGradient(
-            interpolatedTensor,
-            allDiscLayers,
-            TapeLayerBridge<T>.HiddenActivation.LeakyReLU,
-            applyActivationOnLast: false);
-
-        // Compute L2 norm
-        double gradNormSq = 0;
-        for (int i = 0; i < inputGrad.Length; i++)
-        {
-            double g = NumOps.ToDouble(inputGrad[i]);
-            gradNormSq += g * g;
-        }
-        double gradNorm = Math.Sqrt(gradNormSq + 1e-12);
-
-        double penaltyGradScale = 2.0 * _options.GradientPenaltyWeight * (gradNorm - 1.0) / gradNorm;
-
-        if (Math.Abs(penaltyGradScale) > 1e-10)
-        {
-            _ = forwardFn(VectorToTensor(interpolated));
-            var penaltyGrad = new Tensor<T>([1]);
-            penaltyGrad[0] = NumOps.FromDouble(penaltyGradScale);
-            backwardFn(penaltyGrad);
-            updateFn(scaledLr);
-        }
     }
 
     /// <summary>
@@ -790,99 +638,8 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
 
     #region Backward Passes
 
-    private void BackwardDataDiscriminator(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-        current = _dataDiscLayers[^1].Backward(current);
-        for (int i = _dataDiscLayers.Count - 2; i >= 0; i--)
-        {
-            if (i < _dataDiscPreActs.Count)
-                current = ApplyLeakyReLUDerivative(current, _dataDiscPreActs[i]);
-            current = _dataDiscLayers[i].Backward(current);
-        }
-    }
-
-    private void BackwardMaskDiscriminator(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-        current = _maskDiscLayers[^1].Backward(current);
-        for (int i = _maskDiscLayers.Count - 2; i >= 0; i--)
-        {
-            if (i < _maskDiscPreActs.Count)
-                current = ApplyLeakyReLUDerivative(current, _maskDiscPreActs[i]);
-            current = _maskDiscLayers[i].Backward(current);
-        }
-    }
-
-    private void BackwardDataGenerator(Tensor<T> gradOutput)
-    {
-        if (_usingCustomLayers)
-        {
-            var current = gradOutput;
-            for (int i = Layers.Count - 1; i >= 0; i--)
-            {
-                current = Layers[i].Backward(current);
-            }
-            return;
-        }
-
-        BackwardResidualGenerator(gradOutput, Layers, _dataGenBNLayers, _dataGenPreActs,
-            _options.EmbeddingDimension);
-    }
-
     private void BackwardMaskGenerator(Tensor<T> gradOutput)
     {
-        BackwardResidualGenerator(gradOutput, _maskGenLayers.Cast<ILayer<T>>().ToList(), _maskGenBNLayers, _maskGenPreActs,
-            _options.EmbeddingDimension);
-    }
-
-    /// <summary>
-    /// Generic backward pass through a residual generator (shared by data and mask generators).
-    /// </summary>
-    private static void BackwardResidualGenerator(
-        Tensor<T> gradOutput,
-        List<ILayer<T>> layers,
-        List<BatchNormalizationLayer<T>> bnLayers,
-        List<Tensor<T>> preActivations,
-        int inputDim)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var current = gradOutput;
-
-        // Backward through output layer
-        current = layers[^1].Backward(current);
-
-        // Split off residual gradient
-        int lastHiddenDim = current.Length - inputDim;
-        if (lastHiddenDim > 0)
-        {
-            var hiddenGrad = new Tensor<T>([lastHiddenDim]);
-            for (int j = 0; j < lastHiddenDim && j < current.Length; j++)
-                hiddenGrad[j] = current[j];
-            current = hiddenGrad;
-        }
-
-        // Backward through hidden layers
-        for (int i = layers.Count - 2; i >= 0; i--)
-        {
-            if (i < preActivations.Count)
-                current = ApplyReLUDerivativeStatic(current, preActivations[i], numOps);
-
-            current = bnLayers[i].Backward(current);
-            current = layers[i].Backward(current);
-
-            if (i > 0)
-            {
-                int prevDim = current.Length - inputDim;
-                if (prevDim > 0)
-                {
-                    var hiddenGrad = new Tensor<T>([prevDim]);
-                    for (int j = 0; j < prevDim && j < current.Length; j++)
-                        hiddenGrad[j] = current[j];
-                    current = hiddenGrad;
-                }
-            }
-        }
     }
 
     private void UpdateDataGeneratorParameters(T learningRate)
@@ -1230,11 +987,6 @@ public class MisGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerat
     #endregion
 
     #region IJitCompilable Override
-
-    /// <summary>
-    /// MisGAN uses dual generator/discriminator pairs (data + mask) which cannot be represented as a single computation graph.
-    /// </summary>
-    public override bool SupportsJitCompilation => false;
 
     #endregion
 }

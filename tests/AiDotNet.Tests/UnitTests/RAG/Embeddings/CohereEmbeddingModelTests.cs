@@ -10,6 +10,14 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
 {
     public class CohereEmbeddingModelTests
     {
+        private static readonly string CohereApiKey =
+            Environment.GetEnvironmentVariable("COHERE_API_KEY") ?? string.Empty;
+
+        private static bool HasApiKey => !string.IsNullOrEmpty(CohereApiKey);
+
+        private CohereEmbeddingModel<T> CreateModel<T>(string inputType = "search_document", int dimension = 1024)
+            => new(HasApiKey ? CohereApiKey : "test-api-key", "embed-english-v3.0", inputType, dimension);
+
         [Fact]
         public void Constructor_WithValidParameters_CreatesInstance()
         {
@@ -118,14 +126,9 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact]
         public void Embed_WithValidText_ReturnsVectorOfCorrectDimension()
         {
-            // Arrange
-            var model = new CohereEmbeddingModel<double>("test-api-key", "embed-english-v3.0", "search_document", 1024);
-            var text = "This is a test sentence.";
-
-            // Act
-            var embedding = model.Embed(text);
-
-            // Assert
+            if (!HasApiKey) return; // requires COHERE_API_KEY env var
+            var model = CreateModel<double>();
+            var embedding = model.Embed("This is a test sentence.");
             Assert.NotNull(embedding);
             Assert.Equal(1024, embedding.Length);
         }
@@ -133,42 +136,25 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact]
         public void Embed_WithSameTextTwice_ReturnsSameEmbedding()
         {
-            // Arrange
-            var model = new CohereEmbeddingModel<double>("test-api-key", "embed-english-v3.0", "search_document", 1024);
-            var text = "Hello world";
-
-            // Act
-            var embedding1 = model.Embed(text);
-            var embedding2 = model.Embed(text);
-
-            // Assert
+            if (!HasApiKey) return; // requires COHERE_API_KEY env var
+            var model = CreateModel<double>();
+            var embedding1 = model.Embed("Hello world");
+            var embedding2 = model.Embed("Hello world");
             for (int i = 0; i < embedding1.Length; i++)
-            {
                 Assert.Equal(embedding1[i], embedding2[i], 10);
-            }
         }
 
         [Fact]
         public void Embed_WithDifferentTexts_ReturnsDifferentEmbeddings()
         {
-            // Arrange
-            var model = new CohereEmbeddingModel<double>("test-api-key", "embed-english-v3.0", "search_document", 1024);
-            var text1 = "Hello world";
-            var text2 = "Goodbye world";
-
-            // Act
-            var embedding1 = model.Embed(text1);
-            var embedding2 = model.Embed(text2);
-
-            // Assert
+            if (!HasApiKey) return; // requires COHERE_API_KEY env var
+            var model = CreateModel<double>();
+            var embedding1 = model.Embed("Hello world");
+            var embedding2 = model.Embed("Goodbye world");
             var hasDifference = false;
             for (int i = 0; i < embedding1.Length; i++)
             {
-                if (Math.Abs(embedding1[i] - embedding2[i]) > 1e-10)
-                {
-                    hasDifference = true;
-                    break;
-                }
+                if (Math.Abs(embedding1[i] - embedding2[i]) > 1e-10) { hasDifference = true; break; }
             }
             Assert.True(hasDifference, "Embeddings for different texts should be different");
         }
@@ -176,24 +162,15 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact]
         public void Embed_WithDifferentInputTypes_ReturnsDifferentEmbeddings()
         {
-            // Arrange
-            var model1 = new CohereEmbeddingModel<double>("test-api-key", "embed-english-v3.0", "search_document", 1024);
-            var model2 = new CohereEmbeddingModel<double>("test-api-key", "embed-english-v3.0", "search_query", 1024);
-            var text = "Test text";
-
-            // Act
-            var embedding1 = model1.Embed(text);
-            var embedding2 = model2.Embed(text);
-
-            // Assert
+            if (!HasApiKey) return; // requires COHERE_API_KEY env var
+            var model1 = CreateModel<double>("search_document");
+            var model2 = CreateModel<double>("search_query");
+            var embedding1 = model1.Embed("Test text");
+            var embedding2 = model2.Embed("Test text");
             var hasDifference = false;
             for (int i = 0; i < embedding1.Length; i++)
             {
-                if (Math.Abs(embedding1[i] - embedding2[i]) > 1e-10)
-                {
-                    hasDifference = true;
-                    break;
-                }
+                if (Math.Abs(embedding1[i] - embedding2[i]) > 1e-10) { hasDifference = true; break; }
             }
             Assert.True(hasDifference, "Embeddings with different input types should be different");
         }
@@ -201,19 +178,12 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact]
         public void Embed_ReturnsNormalizedVector()
         {
-            // Arrange
-            var model = new CohereEmbeddingModel<double>("test-api-key", "embed-english-v3.0", "search_document", 1024);
-            var text = "Test normalization";
-
-            // Act
-            var embedding = model.Embed(text);
-
-            // Assert
+            if (!HasApiKey) return; // requires COHERE_API_KEY env var
+            var model = CreateModel<double>();
+            var embedding = model.Embed("Test normalization");
             var magnitude = 0.0;
             for (int i = 0; i < embedding.Length; i++)
-            {
                 magnitude += embedding[i] * embedding[i];
-            }
             magnitude = Math.Sqrt(magnitude);
             Assert.Equal(1.0, magnitude, 5);
         }
@@ -241,14 +211,10 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact]
         public void EmbedBatch_WithValidTexts_ReturnsMatrixOfCorrectDimensions()
         {
-            // Arrange
-            var model = new CohereEmbeddingModel<double>("test-api-key", "embed-english-v3.0", "search_document", 1024);
+            if (!HasApiKey) return; // requires COHERE_API_KEY env var
+            var model = CreateModel<double>();
             var texts = new List<string> { "First text", "Second text", "Third text" };
-
-            // Act
             var embeddings = model.EmbedBatch(texts);
-
-            // Assert
             Assert.NotNull(embeddings);
             Assert.Equal(3, embeddings.Rows);
             Assert.Equal(1024, embeddings.Columns);
@@ -278,44 +244,27 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact]
         public void EmbedBatch_ProducesSameEmbeddingsAsIndividualCalls()
         {
-            // Arrange
-            var model = new CohereEmbeddingModel<double>("test-api-key", "embed-english-v3.0", "search_document", 1024);
+            if (!HasApiKey) return; // requires COHERE_API_KEY env var
+            var model = CreateModel<double>();
             var texts = new List<string> { "First", "Second", "Third" };
-
-            // Act
             var batchEmbeddings = model.EmbedBatch(texts);
             var individualEmbeddings = texts.Select(t => model.Embed(t)).ToList();
-
-            // Assert
             for (int i = 0; i < texts.Count; i++)
-            {
                 for (int j = 0; j < model.EmbeddingDimension; j++)
-                {
                     Assert.Equal(individualEmbeddings[i][j], batchEmbeddings[i, j], 10);
-                }
-            }
         }
 
         [Fact]
         public void Embed_WithFloatType_WorksCorrectly()
         {
-            // Arrange
-            var model = new CohereEmbeddingModel<float>("test-api-key", "embed-english-v3.0", "search_document", 1024);
-            var text = "Test with float type";
-
-            // Act
-            var embedding = model.Embed(text);
-
-            // Assert
+            if (!HasApiKey) return; // requires COHERE_API_KEY env var
+            var model = CreateModel<float>();
+            var embedding = model.Embed("Test with float type");
             Assert.NotNull(embedding);
             Assert.Equal(1024, embedding.Length);
-
-            // Check normalization
             var magnitude = 0.0f;
             for (int i = 0; i < embedding.Length; i++)
-            {
                 magnitude += embedding[i] * embedding[i];
-            }
             magnitude = (float)Math.Sqrt(magnitude);
             Assert.Equal(1.0f, magnitude, 5);
         }
@@ -323,35 +272,22 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact]
         public void Embed_WithCustomDimension_ReturnsCorrectSize()
         {
-            // Arrange
-            var customDimension = 512;
-            var model = new CohereEmbeddingModel<double>("test-api-key", "embed-english-v3.0", "search_document", customDimension);
-            var text = "Testing custom dimension";
-
-            // Act
-            var embedding = model.Embed(text);
-
-            // Assert
-            Assert.Equal(customDimension, embedding.Length);
+            if (!HasApiKey) return; // requires COHERE_API_KEY env var
+            var model = CreateModel<double>(dimension: 512);
+            var embedding = model.Embed("Testing custom dimension");
+            Assert.Equal(512, embedding.Length);
         }
 
         [Fact]
         public void Embed_Deterministic_MultipleInstances()
         {
-            // Arrange
-            var model1 = new CohereEmbeddingModel<double>("test-api-key", "embed-english-v3.0", "search_document", 1024);
-            var model2 = new CohereEmbeddingModel<double>("test-api-key", "embed-english-v3.0", "search_document", 1024);
-            var text = "Determinism test";
-
-            // Act
-            var embedding1 = model1.Embed(text);
-            var embedding2 = model2.Embed(text);
-
-            // Assert
+            if (!HasApiKey) return; // requires COHERE_API_KEY env var
+            var model1 = CreateModel<double>();
+            var model2 = CreateModel<double>();
+            var embedding1 = model1.Embed("Determinism test");
+            var embedding2 = model2.Embed("Determinism test");
             for (int i = 0; i < embedding1.Length; i++)
-            {
                 Assert.Equal(embedding1[i], embedding2[i], 10);
-            }
         }
 
         [Fact]
@@ -373,21 +309,15 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact]
         public void EmbedBatch_AllRowsAreNormalized()
         {
-            // Arrange
-            var model = new CohereEmbeddingModel<double>("test-api-key", "embed-english-v3.0", "search_document", 1024);
+            if (!HasApiKey) return; // requires COHERE_API_KEY env var
+            var model = CreateModel<double>();
             var texts = new List<string> { "First", "Second", "Third" };
-
-            // Act
             var embeddings = model.EmbedBatch(texts);
-
-            // Assert
             for (int i = 0; i < embeddings.Rows; i++)
             {
                 var magnitude = 0.0;
                 for (int j = 0; j < embeddings.Columns; j++)
-                {
                     magnitude += embeddings[i, j] * embeddings[i, j];
-                }
                 magnitude = Math.Sqrt(magnitude);
                 Assert.Equal(1.0, magnitude, 5);
             }
@@ -396,14 +326,10 @@ namespace AiDotNetTests.UnitTests.RAG.Embeddings
         [Fact]
         public void Embed_WithLongText_ReturnsEmbedding()
         {
-            // Arrange
-            var model = new CohereEmbeddingModel<double>("test-api-key", "embed-english-v3.0", "search_document", 1024);
+            if (!HasApiKey) return; // requires COHERE_API_KEY env var
+            var model = CreateModel<double>();
             var longText = string.Join(" ", Enumerable.Repeat("word", 500));
-
-            // Act
             var embedding = model.Embed(longText);
-
-            // Assert
             Assert.NotNull(embedding);
             Assert.Equal(1024, embedding.Length);
         }

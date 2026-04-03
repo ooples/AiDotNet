@@ -127,7 +127,7 @@ public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider, IWeightLoa
     ///
     /// The result stays on the GPU until you call ToTensor() to download it to CPU memory.
     /// </remarks>
-    IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs);
+    Tensor<T> ForwardGpu(params Tensor<T>[] inputs);
 
     /// <summary>
     /// Gets whether this layer can execute on GPU.
@@ -144,23 +144,7 @@ public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider, IWeightLoa
     /// </remarks>
     bool CanExecuteOnGpu { get; }
 
-    /// <summary>
-    /// Calculates gradients during the backward pass of backpropagation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> During training, neural networks learn by adjusting their parameters.
-    /// To know how to adjust them, we need to calculate how much each parameter affects the error.
-    /// 
-    /// This method handles the "backward pass" where error information flows backward through the network.
-    /// It takes the gradient (direction of error) from the next layer and calculates:
-    /// 1. How to update this layer's parameters
-    /// 2. What gradient to pass to the previous layer
-    /// 
-    /// Think of it like tracing back through a series of decisions to figure out which ones led to a mistake.
-    /// </remarks>
-    Tensor<T> Backward(Tensor<T> outputGradient);
+    // Backward() removed — use GradientTape-based autodiff via ITrainableLayer<T> instead.
 
     /// <summary>
     /// Updates the layer's parameters using the specified learning rate.
@@ -291,6 +275,25 @@ public interface ILayer<T> : IJitCompilable<T>, IDiagnosticsProvider, IWeightLoa
     /// This method switches the layer between these two modes.
     /// </remarks>
     void SetTrainingMode(bool isTraining);
+
+    /// <summary>
+    /// Returns the immediate child layers contained within this layer.
+    /// Composite layers (e.g., TransformerEncoderLayer, InvertedResidualBlock) override
+    /// this to expose their internal sub-layers, enabling recursive parameter collection.
+    /// </summary>
+    /// <returns>Child layers, or empty if this is a leaf layer.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is the equivalent of PyTorch's <c>nn.Module.children()</c>. The framework
+    /// uses this to recursively discover all trainable parameters in a model without
+    /// requiring each composite layer to manually implement <see cref="ITrainableLayer{T}"/>.
+    /// </para>
+    /// <para><b>For Beginners:</b> Some layers contain other layers inside them (like a
+    /// TransformerEncoder contains Attention + FeedForward + Normalization layers).
+    /// This method lets the framework look inside composite layers to find all the
+    /// weights that need to be trained.</para>
+    /// </remarks>
+    IReadOnlyList<ILayer<T>> GetSubLayers();
 
     /// <summary>
     /// Gets the gradients of all trainable parameters.

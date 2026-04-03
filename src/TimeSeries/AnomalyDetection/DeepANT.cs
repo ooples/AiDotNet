@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -423,7 +423,7 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
 
         // Serialize FC weights tensor
         writer.Write(_fcWeights.Shape.Length);
-        foreach (int dim in _fcWeights.Shape.ToArray())
+        foreach (int dim in _fcWeights._shape)
             writer.Write(dim);
         writer.Write(_fcWeights.Length);
         for (int i = 0; i < _fcWeights.Length; i++)
@@ -431,7 +431,7 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
 
         // Serialize FC bias tensor
         writer.Write(_fcBias.Shape.Length);
-        foreach (int dim in _fcBias.Shape.ToArray())
+        foreach (int dim in _fcBias._shape)
             writer.Write(dim);
         writer.Write(_fcBias.Length);
         for (int i = 0; i < _fcBias.Length; i++)
@@ -606,7 +606,6 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public override int ParameterCount => _kernels.Length + _biases.Length;
     public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => false;
 
     public ConvLayerTensor(int outputChannels, int kernelSize, int seed = 42)
         : base(new[] { kernelSize }, new[] { outputChannels })
@@ -672,41 +671,6 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         return output;
     }
 
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput is null || _lastPreActivations is null)
-            return new Tensor<T>(new[] { _kernelSize });
-
-        int numPositions = _lastNumPositions;
-        _kernelGradients = new Tensor<T>(_kernels.Shape.ToArray());
-        _biasGradients = new Tensor<T>(_biases.Shape.ToArray());
-        var inputGrad = new Tensor<T>(new[] { _lastInput.Length });
-
-        for (int outChannel = 0; outChannel < _outputChannels; outChannel++)
-        {
-            T dChannel = NumOps.Divide(outputGradient[outChannel], NumOps.FromDouble(numPositions));
-
-            for (int pos = 0; pos < numPositions; pos++)
-            {
-                T preAct = _lastPreActivations[outChannel, pos];
-                T dRelu = NumOps.GreaterThan(preAct, NumOps.Zero) ? dChannel : NumOps.Zero;
-
-                _biasGradients[outChannel] = NumOps.Add(_biasGradients[outChannel], dRelu);
-
-                for (int k = 0; k < _kernelSize && (pos + k) < _lastInput.Length; k++)
-                {
-                    int kernelIdx = outChannel * _kernelSize + k;
-                    _kernelGradients[kernelIdx] = NumOps.Add(_kernelGradients[kernelIdx],
-                        NumOps.Multiply(dRelu, _lastInput[pos + k]));
-                    inputGrad[pos + k] = NumOps.Add(inputGrad[pos + k],
-                        NumOps.Multiply(dRelu, _kernels[kernelIdx]));
-                }
-            }
-        }
-
-        return inputGrad;
-    }
-
     public override void UpdateParameters(T learningRate)
     {
         if (_kernelGradients is null || _biasGradients is null) return;
@@ -732,21 +696,16 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         return new Vector<T>(p.ToArray());
     }
 
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
-    {
-        throw new NotSupportedException("ConvLayerTensor JIT compilation is not yet implemented.");
-    }
-
     public override void Serialize(BinaryWriter writer)
     {
         writer.Write(_outputChannels);
         writer.Write(_kernelSize);
         writer.Write(_kernels.Shape.Length);
-        foreach (int dim in _kernels.Shape.ToArray()) writer.Write(dim);
+        foreach (int dim in _kernels._shape) writer.Write(dim);
         writer.Write(_kernels.Length);
         for (int i = 0; i < _kernels.Length; i++) writer.Write(NumOps.ToDouble(_kernels[i]));
         writer.Write(_biases.Shape.Length);
-        foreach (int dim in _biases.Shape.ToArray()) writer.Write(dim);
+        foreach (int dim in _biases._shape) writer.Write(dim);
         writer.Write(_biases.Length);
         for (int i = 0; i < _biases.Length; i++) writer.Write(NumOps.ToDouble(_biases[i]));
     }

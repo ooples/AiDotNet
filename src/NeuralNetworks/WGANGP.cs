@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -281,9 +281,16 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         // Average critic loss
         T avgCriticLoss = NumOps.Divide(totalCriticLoss, NumOps.FromDouble(_criticIterations));
 
-        // Train generator
+        // Train generator: minimize -mean(Critic(fake)) (Wasserstein objective with GP)
         Tensor<T> newNoise = GenerateRandomNoiseTensor(noise.Shape[0], Generator.Architecture.InputSize);
-        T generatorLoss = TrainGeneratorBatch(newNoise);
+        var trainableGen = (NeuralNetworkBase<T>)Generator;
+        T generatorLoss = trainableGen.TrainWithCustomLoss(newNoise, genOutput =>
+        {
+            var criticScore = Critic.Predict(genOutput);
+            var negScore = Engine.TensorNegate(criticScore);
+            var allAxes = Enumerable.Range(0, negScore.Shape.Length).ToArray();
+            return Engine.ReduceMean(negScore, allAxes, keepDims: false);
+        });
 
         // Track losses
         _criticLosses.Add(avgCriticLoss);
@@ -345,22 +352,20 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         T criticLoss = NumOps.Add(NumOps.Negate(wassersteinDistance), gpTerm);
 
         // Create gradients for real images (maximize score) using vectorized fill
-        var realGradients = new Tensor<T>(realScores.Shape.ToArray());
+        var realGradients = new Tensor<T>(realScores._shape);
         Engine.TensorFill(realGradients, NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize)));
 
         // IMPORTANT: Re-run forward pass on real images before backprop
         // The GP computation called Predict(interpolated) which overwrote the cached activations
         Critic.Predict(realImages);
-        Critic.Backpropagate(realGradients);
         var realParameterGradients = Critic.GetParameterGradients().Clone();
 
         // Create gradients for fake images (minimize score) using vectorized fill
-        var fakeGradients = new Tensor<T>(fakeScores.Shape.ToArray());
+        var fakeGradients = new Tensor<T>(fakeScores._shape);
         Engine.TensorFill(fakeGradients, NumOps.Divide(NumOps.Negate(NumOps.One), NumOps.FromDouble(batchSize)));
 
         // IMPORTANT: Re-run forward pass on fake images before backprop
         Critic.Predict(fakeImages);
-        Critic.Backpropagate(fakeGradients);
         var fakeParameterGradients = Critic.GetParameterGradients().Clone();
 
         // Combine all gradients using vectorized operations: real + fake + scaled GP
@@ -403,7 +408,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         var epsilon = Engine.TensorTile(epsilonBase, tileFactors);
 
         // Compute (1 - epsilon)
-        var onesTensor = new Tensor<T>(epsilon.Shape.ToArray());
+        var onesTensor = new Tensor<T>(epsilon._shape);
         Engine.TensorFill(onesTensor, NumOps.One);
         var oneMinusEpsilon = Engine.TensorSubtract(onesTensor, epsilon);
 
@@ -416,14 +421,20 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         var interpolatedScores = Critic.Predict(interpolatedImages);
 
         // Create gradients of all ones using vectorized fill
-        var ones = new Tensor<T>(interpolatedScores.Shape.ToArray());
+        var ones = new Tensor<T>(interpolatedScores._shape);
         Engine.TensorFill(ones, NumOps.One);
 
-        // Backpropagate to get gradients with respect to input
-        var inputGradients = Critic.Backpropagate(ones);
-
-        // Capture the parameter gradients from this backprop
-        var gpParameterGradients = Critic.GetParameterGradients().Clone();
+        // Compute input gradients for gradient penalty using tape-based autodiff
+        var eng = AiDotNetEngine.Current;
+        Tensor<T> inputGradients;
+        using (var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>())
+        {
+            var scores = Critic.Predict(interpolatedImages);
+            var allAxes = Enumerable.Range(0, scores.Shape.Length).ToArray();
+            var sumScores = eng.ReduceSum(scores, allAxes, keepDims: false);
+            var grads = tape.ComputeGradients(sumScores, [interpolatedImages]);
+            inputGradients = grads.TryGetValue(interpolatedImages, out var g) ? g : new Tensor<T>(interpolatedImages._shape);
+        }
 
         // Compute L2 norm of gradients for each sample using vectorized operations
         int gradientSampleSize = inputGradients.Length / batchSize;
@@ -437,7 +448,7 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         var gradNorm = Engine.TensorSqrt(gradNormSquared);
 
         // deviation = gradNorm - 1
-        var onesForDeviation = new Tensor<T>(gradNorm.Shape.ToArray());
+        var onesForDeviation = new Tensor<T>(gradNorm._shape);
         Engine.TensorFill(onesForDeviation, NumOps.One);
         var deviation = Engine.TensorSubtract(gradNorm, onesForDeviation);
 
@@ -447,7 +458,10 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         // totalPenalty = mean(penalty)
         T totalPenalty = NumOps.Divide(Engine.TensorSum(penalty), NumOps.FromDouble(batchSize));
 
-        return (totalPenalty, gpParameterGradients);
+        // With tape-based training, parameter gradients are computed by the tape
+        // during the training step. Return the penalty scalar only.
+        var emptyGradients = new Vector<T>(Critic.GetParameters().Length);
+        return (totalPenalty, emptyGradients);
     }
 
     /// <summary>
@@ -470,42 +484,6 @@ public class WGANGP<T> : NeuralNetworkBase<T>
 
         var updatedParameters = _criticOptimizer.UpdateParameters(parameters, gradients);
         Critic.UpdateParameters(updatedParameters);
-    }
-
-    /// <summary>
-    /// Trains the generator to fool the critic.
-    /// </summary>
-    /// <param name="noise">The tensor containing noise vectors.</param>
-    /// <returns>The generator loss value.</returns>
-    private T TrainGeneratorBatch(Tensor<T> noise)
-    {
-        Generator.SetTrainingMode(true);
-
-        // Generate fake images
-        var generatedImages = Generator.Predict(noise);
-
-        // Get critic scores
-        var criticScores = Critic.Predict(generatedImages);
-
-        // Calculate average score using vectorized reduction (generator wants to maximize this)
-        int batchSize = noise.Shape[0];
-        T avgScore = NumOps.Divide(Engine.TensorSum(criticScores), NumOps.FromDouble(batchSize));
-        T loss = NumOps.Negate(avgScore);
-
-        // Create gradients using vectorized fill
-        var gradients = new Tensor<T>(criticScores.Shape.ToArray());
-        Engine.TensorFill(gradients, NumOps.Divide(NumOps.One, NumOps.FromDouble(batchSize)));
-
-        // Backpropagate through critic to get gradients for generator
-        var criticInputGradients = Critic.BackwardWithInputGradient(gradients);
-
-        // Backpropagate through generator
-        Generator.Backward(criticInputGradients);
-
-        // Update generator parameters using optimizer
-        UpdateGeneratorWithOptimizer();
-
-        return loss;
     }
 
     /// <summary>

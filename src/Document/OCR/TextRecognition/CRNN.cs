@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -340,7 +340,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int height = processed.Shape[2];
         int width = processed.Shape[3];
 
-        var normalized = new Tensor<T>(processed.Shape.ToArray());
+        var normalized = new Tensor<T>(processed._shape);
         for (int i = 0; i < processed.Data.Length; i++)
         {
             double val = NumOps.ToDouble(processed.Data.Span[i]);
@@ -418,7 +418,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
         if (output.Rank == 3)
         {
-            int classDim = Array.IndexOf(output.Shape.ToArray(), expectedClasses);
+            int classDim = Array.IndexOf(output._shape, expectedClasses);
             if (classDim < 0)
             {
                 classDim = 2;
@@ -628,14 +628,7 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        var output = Predict(input);
-        LastLoss = LossFunction.CalculateLoss(output.ToVector(), expectedOutput.ToVector());
-
-        var gradient = Tensor<T>.FromVector(
-            LossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector()));
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-            gradient = Layers[i].Backward(gradient);
+        TrainWithTape(input, expectedOutput);
 
         UpdateParameters(CollectGradients());
         SetTrainingMode(false);

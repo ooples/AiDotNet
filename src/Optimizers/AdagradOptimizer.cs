@@ -1,5 +1,7 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Optimizers;
 
@@ -302,6 +304,31 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         var updatedParams = (Vector<T>)Engine.Subtract(parameters, updates);
 
         return updatedParams;
+    }
+
+    // Per-parameter accumulated squared gradient for tape-based training
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeAccSqGrad = new(TensorReferenceComparer<Tensor<T>>.Instance);
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+
+        foreach (var param in context.Parameters)
+        {
+            if (!context.Gradients.TryGetValue(param, out var grad))
+                continue;
+
+            if (!_tapeAccSqGrad.TryGetValue(param, out var accSq)) { accSq = new Tensor<T>(param._shape); _tapeAccSqGrad[param] = accSq; }
+
+            // accSqGrad += grad^2
+            Engine.TensorAddInPlace(accSq, Engine.TensorMultiply(grad, grad));
+
+            // param -= lr * grad / (sqrt(accSqGrad) + epsilon)
+            var denom = Engine.TensorAddScalar(Engine.TensorSqrt(accSq), epsilon);
+            var update = Engine.TensorMultiplyScalar(Engine.TensorDivide(grad, denom), CurrentLearningRate);
+            Engine.TensorSubtractInPlace(param, update);
+        }
     }
 
     /// <summary>

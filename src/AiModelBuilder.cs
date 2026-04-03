@@ -2502,6 +2502,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         }
         else if (!model.SupportsParameterInitialization)
         {
+            if (_knowledgeDistillationOptions is not null)
+            {
+                throw new NotSupportedException(
+                    "Knowledge distillation is not supported for non-parametric models. " +
+                    "Remove the ConfigureKnowledgeDistillation() call.");
+            }
+
             // DIRECT TRAINING PATH for non-parametric models (TS, density-based clustering, etc.)
             // These models use their own internal optimizers and don't benefit from the outer
             // optimizer's clone-evaluate-select loop. Train directly on the full training data.
@@ -2552,22 +2559,20 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         else
         {
             // REGULAR TRAINING PATH
+            if (_knowledgeDistillationOptions is not null)
+            {
+                throw new NotSupportedException(
+                    "Knowledge distillation is not yet integrated with the tape-based training flow. " +
+                    "Remove the ConfigureKnowledgeDistillation() call or provide a pre-distilled teacher " +
+                    "model via a custom loss function that combines hard and soft targets.");
+            }
+
             // Ensure the optimizer has the model configured before optimization
             // This is required for InitializeRandomSolution to access model.ParameterCount
             finalOptimizer.SetModel(model);
 
-            // Optimize the final model on the full training set (optionally using knowledge distillation)
-            optimizationResult = _knowledgeDistillationOptions != null
-                ? await PerformKnowledgeDistillationAsync(
-                    model,
-                    finalOptimizer,
-                    XTrain,
-                    yTrain,
-                    XVal,
-                    yVal,
-                    XTest,
-                    yTest)
-                : finalOptimizer.Optimize(optimizationInputData);
+            // Optimize the final model on the full training set
+            optimizationResult = finalOptimizer.Optimize(optimizationInputData);
         }
 
         var trainingEndTime = DateTime.UtcNow;
@@ -5384,315 +5389,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     // ============================================================================
     // Private Knowledge Distillation Helper Methods
     // ============================================================================
-
-    /// <summary>
-    /// Performs knowledge distillation training using the configured options.
-    /// </summary>
-    private Task<OptimizationResult<T, TInput, TOutput>> PerformKnowledgeDistillationAsync(
-        IFullModel<T, TInput, TOutput> studentModel,
-        IOptimizer<T, TInput, TOutput> optimizer,
-        TInput XTrain,
-        TOutput yTrain,
-        TInput XVal,
-        TOutput yVal,
-        TInput XTest,
-        TOutput yTest)
-    {
-        if (_knowledgeDistillationOptions == null)
-            throw new InvalidOperationException("Knowledge distillation options not configured");
-
-        var options = _knowledgeDistillationOptions;
-
-
-
-        var NumOps = MathHelper.GetNumericOperations<T>();
-
-        // Get a reference input for shape conversions (needed for Matrix<T> and Tensor<T>)
-        // Use InputHelper to extract a single sample from the training data
-        TInput referenceInput = InputHelper<T, TInput>.GetItem(XTrain, 0);
-
-        try
-        {
-            // Step 1: Create teacher model using factory
-            // Trainer expects Vector<T> for single samples, but options.TeacherModel uses TInput/TOutput (dataset types)
-            ITeacherModel<Vector<T>, Vector<T>> teacher;
-            if (options.TeacherModel != null)
-            {
-                // Wrap IFullModel as teacher - requires explicit output dimension
-                if (!options.OutputDimension.HasValue)
-                    throw new InvalidOperationException(
-                        "OutputDimension is required when using TeacherModel. " +
-                        "Please specify options.OutputDimension explicitly.");
-
-                // Adapter function: IFullModel<T, TInput, TOutput>.Predict -> Func<Vector<T>, Vector<T>>
-                Func<Vector<T>, Vector<T>> adaptedTeacherPredict = inputSampleVector =>
-                {
-                    // Convert trainer's Vector<T> (single sample) to teacher's TInput type
-                    TInput teacherInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(inputSampleVector, referenceInput);
-                    // Call teacher's predict method with TInput
-                    TOutput teacherOutput = options.TeacherModel.Predict(teacherInput);
-                    // Convert teacher's TOutput back to trainer's Vector<T>
-                    return ConversionsHelper.ConvertToVector<T, TOutput>(teacherOutput);
-                };
-
-                teacher = new KnowledgeDistillation.TeacherModelWrapper<T>(
-                    adaptedTeacherPredict,
-                    options.OutputDimension.Value);
-            }
-            else if (options.Teachers != null && options.Teachers.Length > 0)
-            {
-                // Adapt each teacher in the ensemble to work with Vector<T> samples
-                var adaptedTeachers = options.Teachers.Select(t =>
-                {
-                    Func<Vector<T>, Vector<T>> adaptedPredict = inputSampleVector =>
-                    {
-                        TInput teacherInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(inputSampleVector, referenceInput);
-                        TOutput teacherOutput = t.GetLogits(teacherInput);
-                        return ConversionsHelper.ConvertToVector<T, TOutput>(teacherOutput);
-                    };
-                    return new KnowledgeDistillation.TeacherModelWrapper<T>(adaptedPredict, t.OutputDimension);
-                }).ToArray();
-
-                teacher = KnowledgeDistillation.TeacherModelFactory<T>.CreateTeacher(
-                    TeacherModelType.Ensemble,
-                    ensembleModels: adaptedTeachers,
-                    ensembleWeights: options.EnsembleWeights != null ? (double[])options.EnsembleWeights : null);
-            }
-            else if (options.TeacherForward != null)
-            {
-                if (!options.OutputDimension.HasValue)
-                    throw new InvalidOperationException(
-                        "OutputDimension is required when using TeacherForward. " +
-                        "Please specify options.OutputDimension explicitly.");
-
-                // Adapter function: Func<TInput, TOutput> -> Func<Vector<T>, Vector<T>>
-                Func<Vector<T>, Vector<T>> adaptedTeacherForward = inputSampleVector =>
-                {
-                    // Convert trainer's Vector<T> (single sample) to teacher's TInput type
-                    TInput teacherInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(inputSampleVector, referenceInput);
-                    // Call teacher's forward function with TInput
-                    TOutput teacherOutput = options.TeacherForward(teacherInput);
-                    // Convert teacher's TOutput back to trainer's Vector<T>
-                    return ConversionsHelper.ConvertToVector<T, TOutput>(teacherOutput);
-                };
-
-                teacher = new KnowledgeDistillation.TeacherModelWrapper<T>(
-                    adaptedTeacherForward,
-                    options.OutputDimension.Value);
-            }
-            else
-            {
-                throw new InvalidOperationException(
-                    "No teacher model configured. Please set TeacherModel, Teachers, or TeacherForward in KnowledgeDistillationOptions.");
-            }
-
-            // Step 2: Create distillation strategy using factory
-            var strategy = KnowledgeDistillation.DistillationStrategyFactory<T>.CreateStrategy(
-                options.StrategyType,
-                temperature: options.Temperature,
-                alpha: options.Alpha);
-
-            // Step 3: Create checkpoint configuration from options
-            DistillationCheckpointConfig? checkpointConfig = null;
-            if (options.SaveCheckpoints)
-            {
-                checkpointConfig = new DistillationCheckpointConfig
-                {
-                    CheckpointDirectory = options.CheckpointDirectory ?? "./checkpoints",
-                    SaveEveryEpochs = options.CheckpointFrequency,
-                    KeepBestN = options.SaveOnlyBestCheckpoint ? 1 : 0,
-                    SaveStudent = true,
-                    BestMetric = "validation_loss",
-                    LowerIsBetter = true
-                };
-            }
-
-            // Step 4: Create trainer with early stopping and checkpointing configuration
-            var trainer = new KnowledgeDistillation.KnowledgeDistillationTrainer<T>(
-                teacher,
-                strategy,
-                checkpointConfig: checkpointConfig,
-                useEarlyStopping: options.UseEarlyStopping,
-                earlyStoppingMinDelta: options.EarlyStoppingMinDelta,
-                earlyStoppingPatience: options.EarlyStoppingPatience);
-
-            Console.WriteLine($"Starting Knowledge Distillation:");
-            Console.WriteLine($"  Strategy: {options.StrategyType}");
-            Console.WriteLine($"  Temperature: {options.Temperature}");
-            Console.WriteLine($"  Alpha: {options.Alpha}");
-            Console.WriteLine($"  Epochs: {options.Epochs}");
-            Console.WriteLine($"  Batch Size: {options.BatchSize}");
-            Console.WriteLine();
-
-            // Step 4: Prepare training data - convert to Vector<Vector<T>>
-            var trainMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(XTrain);
-            var trainVector = ConversionsHelper.ConvertToVector<T, TOutput>(yTrain);
-            var valMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(XVal);
-            var valVector = ConversionsHelper.ConvertToVector<T, TOutput>(yVal);
-
-            var trainInputs = new Vector<Vector<T>>(trainMatrix.Rows);
-            var trainLabels = new Vector<Vector<T>>(trainMatrix.Rows);
-            for (int i = 0; i < trainMatrix.Rows; i++)
-            {
-                trainInputs[i] = trainMatrix.GetRow(i);
-                // Create one-hot encoded labels
-                var oneHot = new Vector<T>(teacher.OutputDimension);
-                int labelIdx = (int)Convert.ToDouble(trainVector[i]);
-                if (labelIdx >= 0 && labelIdx < teacher.OutputDimension)
-                    oneHot[labelIdx] = NumOps.One;
-                trainLabels[i] = oneHot;
-            }
-
-            Vector<Vector<T>>? valInputs = null;
-            Vector<Vector<T>>? valLabels = null;
-            if (valMatrix.Rows > 0)
-            {
-                valInputs = new Vector<Vector<T>>(valMatrix.Rows);
-                valLabels = new Vector<Vector<T>>(valMatrix.Rows);
-                for (int i = 0; i < valMatrix.Rows; i++)
-                {
-                    valInputs[i] = valMatrix.GetRow(i);
-                    var oneHot = new Vector<T>(teacher.OutputDimension);
-                    int labelIdx = (int)Convert.ToDouble(valVector[i]);
-                    if (labelIdx >= 0 && labelIdx < teacher.OutputDimension)
-                        oneHot[labelIdx] = NumOps.One;
-                    valLabels[i] = oneHot;
-                }
-            }
-
-            // Step 5: Validate that student supports gradient backpropagation
-            if (studentModel is not INeuralNetwork<T>)
-            {
-                throw new InvalidOperationException(
-                    $"Knowledge distillation requires a neural network (INeuralNetwork<T>) for gradient backpropagation. " +
-                    $"Current model type: {studentModel.GetType().Name}. Use a neural network model as the student.");
-            }
-
-            // Step 6: Define forward and backward functions
-            // Storage for per-sample inputs to enable forward pass replay during backprop
-            // Use a queue to match forward inputs with backward gradients in FIFO order
-            var inputQueue = new Queue<Vector<T>>();
-
-            // Forward function must save activations for backprop AND capture inputs for replay
-            // Convert Vector<T> (from KD trainer) → TInput → model.Predict → TOutput → Vector<T>
-            Func<Vector<T>, Vector<T>> studentForwardCapturing = input =>
-            {
-                // Capture input for forward replay in backward pass (FIFO queue)
-                var capturedInput = new Vector<T>(input.Length);
-                for (int i = 0; i < input.Length; i++)
-                    capturedInput[i] = input[i];
-                inputQueue.Enqueue(capturedInput);
-
-                // Convert KD trainer's Vector<T> to model's TInput type using reference for shape
-                TInput modelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(input, referenceInput);
-
-                if (studentModel is INeuralNetwork<T> nnModel)
-                {
-                    // Use ForwardWithMemory() to save activations for backpropagation
-                    var output = nnModel.ForwardWithMemory(Tensor<T>.FromVector(input));
-                    return output.ToVector();
-                }
-
-                // Fallback for non-neural-network models: call Predict and convert result
-                TOutput modelOutput = studentModel.Predict(modelInput);
-                return ConversionsHelper.ConvertToVector<T, TOutput>(modelOutput);
-            };
-
-            // Prepare backward function for parameter updates during distillation training
-            // This function receives output gradients from distillation strategy and applies them to the model
-            Action<Vector<T>> studentBackward = gradient =>
-            {
-                // Cast to INeuralNetwork to access backpropagation methods
-                if (studentModel is not INeuralNetwork<T> nnModel)
-                {
-                    throw new InvalidOperationException(
-                        "Knowledge distillation requires a neural network (INeuralNetwork<T>) for gradient backpropagation. " +
-                        $"Current model type: {studentModel.GetType().Name}");
-                }
-
-                try
-                {
-                    // CRITICAL FIX: Replay forward pass to restore correct activations before backprop
-                    // The KD trainer calls forward for all batch samples first, which overwrites
-                    // the activation memory. We must dequeue and rerun forward with the matching input
-                    // to ensure Backpropagate uses the correct activations for this specific sample.
-                    if (inputQueue.Count > 0)
-                    {
-                        var matchingInput = inputQueue.Dequeue();
-                        nnModel.ForwardWithMemory(Tensor<T>.FromVector(matchingInput));
-                    }
-
-                    // Step 1: Backpropagate output gradient through network to compute parameter gradients
-                    nnModel.Backpropagate(Tensor<T>.FromVector(gradient));
-
-                    // Step 2: Get parameter gradients from backpropagation
-                    var paramGradients = nnModel.GetParameterGradients();
-
-                    // Step 3: Apply gradient-based optimizer update if available
-                    if (optimizer is IGradientBasedOptimizer<T, Vector<T>, Vector<T>> gradOptimizer)
-                    {
-                        // Use optimizer's UpdateParameters to apply gradients with proper state management
-                        // This preserves momentum, ADAM state, and uses configured learning rate
-                        var currentParams = nnModel.GetParameters();
-                        var updatedParams = gradOptimizer.UpdateParameters(currentParams, paramGradients);
-                        nnModel.UpdateParameters(updatedParams);
-                    }
-                    else
-                    {
-                        // Fallback: Simple gradient descent with configured learning rate
-                        // This doesn't preserve optimizer state but respects the learning rate
-                        var engine = AiDotNetEngine.Current;
-                        var currentParams = nnModel.GetParameters();
-                        var learningRate = NumOps.FromDouble(options.LearningRate);
-                        nnModel.UpdateParameters(engine.Subtract(currentParams, engine.Multiply(paramGradients, learningRate)));
-                    }
-                }
-                catch (Exception ex)
-                {
-                    throw new InvalidOperationException(
-                        "Failed to apply gradient updates during knowledge distillation. " +
-                        "Ensure the model supports backpropagation.", ex);
-                }
-            };
-
-            // Step 5: Run knowledge distillation training
-            Console.WriteLine("Training student model with knowledge distillation...");
-            trainer.Train(
-                studentForwardCapturing,
-                studentBackward,
-                trainInputs,
-                trainLabels,
-                epochs: options.Epochs,
-                batchSize: options.BatchSize,
-                validationInputs: valInputs,
-                validationLabels: valLabels);
-
-            // Step 7: Return result from KD-trained model (don't re-optimize)
-            // Model is already trained via knowledge distillation, just wrap it in result
-            var result = new OptimizationResult<T, TInput, TOutput>
-            {
-                BestSolution = studentModel,
-                BestFitnessScore = NumOps.FromDouble(0.0) // Score tracking happened during KD training
-            };
-            return Task.FromResult(result);
-        }
-        catch (InvalidOperationException)
-        {
-            // Re-throw validation errors (e.g., non-neural-network student) —
-            // these are configuration bugs that must not be silently swallowed.
-            throw;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error setting up knowledge distillation: {ex.Message}");
-            Console.WriteLine("Falling back to standard training.");
-            // Reset optimizer and set model before falling back to standard training
-            optimizer.Reset();
-            optimizer.SetModel(studentModel);
-            return Task.FromResult(optimizer.Optimize(OptimizerHelper<T, TInput, TOutput>.CreateOptimizationInputData(
-                XTrain, yTrain, XVal, yVal, XTest, yTest)));
-        }
-    }
 
     // ============================================================================
     // Private Agent Helper Methods

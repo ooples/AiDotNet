@@ -423,7 +423,7 @@ public class Cutie<T> : NeuralNetworkBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = _onnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -457,22 +457,14 @@ public class Cutie<T> : NeuralNetworkBase<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode. Use native mode for training.");
 
-        var prediction = Predict(input);
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
-
-        var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-
-        var currentGradient = outputGradientTensor;
-        for (int i = Layers.Count - 1; i >= 0; i--)
+        SetTrainingMode(true);
+        try
         {
-            currentGradient = Layers[i].Backward(currentGradient);
+            TrainWithTape(input, expectedOutput);
         }
-
-        if (_optimizer != null)
+        finally
         {
-            _optimizer.UpdateParameters(Layers);
+            SetTrainingMode(false);
         }
     }
 
@@ -556,7 +548,7 @@ public class Cutie<T> : NeuralNetworkBase<T>
         int height = query.Shape[2];
         int width = query.Shape[3];
 
-        var attended = new Tensor<T>(query.Shape.ToArray());
+        var attended = new Tensor<T>(query._shape);
 
         foreach (var (key, value) in _memoryBank)
         {

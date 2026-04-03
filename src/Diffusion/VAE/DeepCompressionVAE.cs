@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -171,7 +171,7 @@ public class DeepCompressionVAE<T> : VAEModelBase<T>
             x = layer.Forward(x);
 
         // DC-AE is deterministic (not variational) — logVar is zeros
-        var logVar = new Tensor<T>(x.Shape.ToArray());
+        var logVar = new Tensor<T>(x._shape);
         return (x, logVar);
     }
 
@@ -245,4 +245,20 @@ public class DeepCompressionVAE<T> : VAEModelBase<T>
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var gradients = new List<T>();
+        foreach (var layer in _encoderLayers)
+        {
+            var g = layer.GetParameterGradients();
+            for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
+        }
+        foreach (var layer in _decoderLayers)
+        {
+            var g = layer.GetParameterGradients();
+            for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
+        }
+        return new Vector<T>(gradients.ToArray());
+    }
 }

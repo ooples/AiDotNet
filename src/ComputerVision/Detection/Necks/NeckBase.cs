@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
@@ -279,7 +279,7 @@ public abstract class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// <returns>Element-wise sum.</returns>
     protected Tensor<T> Add(Tensor<T> a, Tensor<T> b)
     {
-        if (!a.Shape.ToArray().SequenceEqual(b.Shape.ToArray()))
+        if (!a._shape.SequenceEqual(b._shape))
         {
             throw new ArgumentException("Feature maps must have the same shape for addition");
         }

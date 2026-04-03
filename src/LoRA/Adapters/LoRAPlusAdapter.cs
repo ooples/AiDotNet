@@ -209,30 +209,6 @@ public class LoRAPlusAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through both layers with dual learning rate scaling.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass computes gradients for both matrices but applies different scaling
-    /// factors to prepare for the dual learning rate update. Matrix B gradients are implicitly
-    /// prepared for faster updates during the UpdateParameters call.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where LoRA+ differs from standard LoRA!
-    /// During backpropagation, we compute gradients for both A and B matrices, but we'll
-    /// apply different learning rates when actually updating the parameters. This prepares
-    /// the gradients for the dual learning rate optimization.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // The base backward implementation computes gradients correctly
-        // The dual learning rate is applied in UpdateParameters
-        return base.Backward(outputGradient);
-    }
-
-    /// <summary>
     /// Updates parameters using dual learning rates (base rate for A, scaled rate for B).
     /// </summary>
     /// <param name="learningRate">This parameter is used as the base learning rate for matrix A.</param>

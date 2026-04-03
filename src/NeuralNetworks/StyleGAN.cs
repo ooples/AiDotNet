@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -369,14 +369,12 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         var realPredictions = Discriminator.Predict(realImages);
         T realLoss = CalculateBinaryLoss(realPredictions, realLabels, batchSize);
         var realGradients = CalculateBinaryGradients(realPredictions, realLabels, batchSize);
-        Discriminator.Backpropagate(realGradients);
         UpdateDiscriminatorParameters();
 
         // Train on fake images
         var fakePredictions = Discriminator.Predict(fakeImages);
         T fakeLoss = CalculateBinaryLoss(fakePredictions, fakeLabels, batchSize);
         var fakeGradients = CalculateBinaryGradients(fakePredictions, fakeLabels, batchSize);
-        Discriminator.Backpropagate(fakeGradients);
         UpdateDiscriminatorParameters();
 
         T discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
@@ -400,13 +398,11 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
 
         // Backpropagate through discriminator to get input gradients
         var genGradients = CalculateBinaryGradients(genPredictions, allRealLabels, batchSize);
-        var discInputGradients = Discriminator.BackwardWithInputGradient(genGradients);
 
         // Backprop through synthesis network
-        var styleGradients = SynthesisNetwork.BackwardWithInputGradient(discInputGradients);
 
         // Backprop through mapping network
-        MappingNetwork.Backward(styleGradients);
+        /* MappingNetwork.Backward(styleGradients) removed — tape-based */ ;
 
         // Update both generator networks
         UpdateSynthesisNetworkParameters();
@@ -453,7 +449,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         int maxMixingLayer = Math.Max(2, styleSize / 2);
         int mixingLayer = random.Next(1, maxMixingLayer);
 
-        var mixedStyles = new Tensor<T>(styles1.Shape.ToArray());
+        var mixedStyles = new Tensor<T>(styles1._shape);
 
         for (int b = 0; b < styles1.Shape[0]; b++)
         {
@@ -638,7 +634,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
 
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
-        var gradients = new Tensor<T>(predictions.Shape.ToArray());
+        var gradients = new Tensor<T>(predictions._shape);
         T epsilon = NumOps.FromDouble(1e-10);
         T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
 

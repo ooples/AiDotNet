@@ -149,7 +149,7 @@ public interface IActivationFunction<T>
     /// For vector activations (Softmax), this involves Jacobian multiplication.
     /// </para>
     /// </remarks>
-    Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient);
+    // Backward removed — tape-based autodiff handles activation gradients.
 
     #region GPU Training Support
 
@@ -215,7 +215,7 @@ public interface IActivationFunction<T>
     /// </para>
     /// </remarks>
     /// <exception cref="NotSupportedException">Thrown if SupportsGpuTraining is false.</exception>
-    void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size);
+    // BackwardGpu removed — tape-based autodiff handles this.
 
     #endregion
 }

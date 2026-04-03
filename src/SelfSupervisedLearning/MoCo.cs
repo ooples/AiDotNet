@@ -101,70 +101,6 @@ public class MoCo<T> : SSLMethodBase<T>
         _augmentation = new SSLAugmentationPolicies<T>(_config.Seed);
     }
 
-    /// <inheritdoc />
-    protected override SSLStepResult<T> TrainStepCore(Tensor<T> batch, SSLAugmentationContext<T>? augmentationContext)
-    {
-        var batchSize = batch.Shape[0];
-
-        // Create two augmented views
-        var (queryView, keyView) = _augmentation.ApplyMoCoV2(batch);
-
-        // Forward pass: query through online encoder
-        var hQuery = _encoder.ForwardWithMemory(queryView);
-        var query = _projector?.Project(hQuery) ?? hQuery;
-
-        // Forward pass: key through momentum encoder (no gradients)
-        var hKey = _momentumEncoder.Encode(keyView);
-        var key = _momentumProjector?.Project(hKey) ?? hKey;
-
-        // Get negatives from memory bank
-        var negatives = _memoryBank.GetAll();
-
-        // Compute InfoNCE loss
-        T loss;
-        Tensor<T> gradQuery;
-
-        if (_memoryBank.CurrentSize > 0)
-        {
-            (loss, gradQuery, _) = _loss.ComputeLossWithGradients(query, key, negatives);
-        }
-        else
-        {
-            // Fallback to in-batch negatives if queue is empty
-            (loss, gradQuery, _) = _loss.ComputeLossInBatchWithGradients(query, key);
-        }
-
-        // Backward pass through online encoder
-        if (_projector is not null)
-        {
-            var gradH = _projector.Backward(gradQuery);
-            _encoder.Backpropagate(gradH);
-        }
-        else
-        {
-            _encoder.Backpropagate(gradQuery);
-        }
-
-        // Update online encoder parameters
-        var learningRate = NumOps.FromDouble(GetEffectiveLearningRate());
-        UpdateEncoderParameters(learningRate);
-
-        // Update momentum encoder (EMA)
-        _momentumEncoder.UpdateFromMainEncoder(_encoder);
-
-        // Enqueue new keys to memory bank
-        _memoryBank.Enqueue(key);
-
-        // Create result
-        var result = CreateStepResult(loss);
-        result.NumPositivePairs = batchSize;
-        result.NumNegativePairs = _memoryBank.CurrentSize;
-        result.Metrics["queue_size"] = NumOps.FromDouble(_memoryBank.CurrentSize);
-        result.Metrics["momentum"] = NumOps.FromDouble(_momentumEncoder.Momentum);
-
-        return result;
-    }
-
     private void UpdateEncoderParameters(T learningRate)
     {
         var encoderGrads = new Vector<T>(_encoder.GetParameterGradients());
@@ -209,5 +145,7 @@ public class MoCo<T> : SSLMethodBase<T>
             combined[momentumParams.Length + i] = projParams[i];
 
         return new Vector<T>(combined);
-    }
+    
+
+}
 }

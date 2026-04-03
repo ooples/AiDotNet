@@ -1,6 +1,7 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -51,7 +52,7 @@ namespace AiDotNet.NeuralNetworks;
 public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
 {
     private readonly DeepBeliefNetworkOptions _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -218,17 +219,18 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public DeepBeliefNetwork(
         NeuralNetworkArchitecture<T> architecture,
-        T? learningRate = default,
         int epochs = 10,
         int batchSize = 32,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DeepBeliefNetworkOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _options = options ?? new DeepBeliefNetworkOptions();
         Options = _options;
 
-        _learningRate = learningRate ?? NumOps.FromDouble(0.01);
+        _learningRate = NumOps.FromDouble(_optimizer.GetCurrentLearningRate());
         _epochs = epochs;
         _batchSize = batchSize;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
@@ -332,114 +334,6 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs unsupervised pre-training of the DBN using greedy layer-wise approach.
-    /// </summary>
-    /// <param name="trainingData">The training data tensor.</param>
-    /// <param name="pretrainingEpochs">The number of epochs for pre-training each RBM layer. Default is 10.</param>
-    /// <param name="pretrainingLearningRate">The learning rate for pre-training. Default is 0.1 converted to type T.</param>
-    /// <param name="cdSteps">The number of contrastive divergence steps. Default is 1.</param>
-    /// <remarks>
-    /// <para>
-    /// This method implements the greedy layer-wise pre-training algorithm for Deep Belief Networks.
-    /// Each RBM layer is trained separately, starting from the bottom layer and moving up. After a layer
-    /// is trained, the training data is transformed through that layer to create the training data for the next layer.
-    /// This bottom-up approach helps the network learn a hierarchical representation of the data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method teaches each floor of the tower one at a time, from bottom to top.
-    /// 
-    /// The pre-training process works like this:
-    /// 1. Start with the raw input data and train the bottom RBM layer
-    /// 2. Use the bottom layer to transform the data and train the second layer
-    /// 3. Continue this process, training each layer with data transformed by all layers below it
-    /// 
-    /// This step-by-step approach:
-    /// - Helps the network learn increasingly abstract patterns
-    /// - Makes training more stable and effective
-    /// - Allows the network to learn useful features even without labeled data
-    /// 
-    /// After pre-training, the network has learned general patterns in your data and is ready
-    /// for fine-tuning on specific tasks.
-    /// </para>
-    /// </remarks>
-    public void PretrainGreedyLayerwise(
-        Tensor<T> trainingData,
-        int pretrainingEpochs = 10,
-        T? pretrainingLearningRate = default,
-        int cdSteps = 1)
-    {
-        var learningRate = pretrainingLearningRate ?? NumOps.FromDouble(0.1);
-
-        Console.WriteLine("Starting greedy layer-wise pre-training...");
-
-        // Initialize variable to hold input for the current layer
-        var layerInput = trainingData;
-
-        // Train each RBM layer one by one, from bottom to top
-        for (int layerIdx = 0; layerIdx < _rbmLayers.Count; layerIdx++)
-        {
-            var rbm = _rbmLayers[layerIdx];
-            Console.WriteLine($"Pre-training layer {layerIdx + 1}/{_rbmLayers.Count}...");
-
-            // Train the current RBM layer
-            for (int epoch = 0; epoch < pretrainingEpochs; epoch++)
-            {
-                T totalLoss = NumOps.Zero;
-
-                // Process data in batches
-                for (int batchStart = 0; batchStart < layerInput.Shape[0]; batchStart += _batchSize)
-                {
-                    // Get a batch of data
-                    int batchEnd = Math.Min(batchStart + _batchSize, layerInput.Shape[0]);
-                    int actualBatchSize = batchEnd - batchStart;
-                    var batch = layerInput.Slice(batchStart, 0, batchEnd, layerInput.Shape[1]);
-
-                    // Train the RBM on the current batch using contrastive divergence
-                    for (int i = 0; i < actualBatchSize; i++)
-                    {
-                        var example = batch.GetRow(i);
-                        rbm.TrainWithContrastiveDivergence(example, learningRate, cdSteps);
-                    }
-
-                    // Calculate reconstruction error for monitoring
-                    for (int i = 0; i < actualBatchSize; i++)
-                    {
-                        var example = batch.GetRow(i);
-                        var hidden = rbm.Forward(Tensor<T>.FromVector(example));
-                        // Use RBMLayer Backward method to reconstruct the input
-                        var reconstruction = rbm.Backward(hidden);
-
-                        T sampleLoss = CalculateReconstructionError(
-                            Tensor<T>.FromVector(example),
-                            reconstruction);
-                        totalLoss = NumOps.Add(totalLoss, sampleLoss);
-                    }
-                }
-
-                // Calculate average loss for the epoch
-                T avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(layerInput.Shape[0]));
-                Console.WriteLine($"Layer {layerIdx + 1}, Epoch {epoch + 1}/{pretrainingEpochs}, Average Loss: {avgLoss}");
-            }
-
-            // If not the last layer, transform data for the next layer
-            if (layerIdx < _rbmLayers.Count - 1)
-            {
-                var transformedData = new Tensor<T>(new[] { layerInput.Shape[0], rbm.GetOutputShape()[0] });
-
-                for (int i = 0; i < layerInput.Shape[0]; i++)
-                {
-                    var example = layerInput.GetRow(i);
-                    var hidden = rbm.Forward(Tensor<T>.FromVector(example));
-                    transformedData.SetRow(i, hidden.ToVector());
-                }
-
-                layerInput = transformedData;
-            }
-        }
-
-        Console.WriteLine("Greedy layer-wise pre-training complete.");
-    }
-
-    /// <summary>
     /// Calculates the reconstruction error between original and reconstructed data.
     /// </summary>
     /// <param name="original">The original input data.</param>
@@ -465,7 +359,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     private T CalculateReconstructionError(Tensor<T> original, Tensor<T> reconstruction)
     {
         // Check that shapes match
-        if (!Enumerable.SequenceEqual(original.Shape.ToArray(), reconstruction.Shape.ToArray()))
+        if (!Enumerable.SequenceEqual(original._shape, reconstruction._shape))
         {
             throw new ArgumentException("Original and reconstruction tensors must have the same shape.");
         }
@@ -588,28 +482,11 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
 
-        // Single forward/backward pass per Train call
-        var output = ForwardWithMemory(input);
-        var outputVector = output.ToVector();
-        var expectedVector = expectedOutput.ToVector();
+        TrainWithTape(input, expectedOutput, _optimizer);
 
-        // Compute loss
-        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
-
-        // Backward pass with proper loss gradient
-        var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
-        var gradTensor = Tensor<T>.FromVector(lossGrad);
-        if (gradTensor.Rank < output.Rank)
-            gradTensor = gradTensor.Reshape(output.Shape.ToArray());
-
-        Backpropagate(gradTensor);
-
-        // Persistent Adam optimizer
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        var paramGrads = GetParameterGradients();
-        var currentParams = GetParameters();
-        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
-        UpdateParameters(updatedParams);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(false);
+        SetTrainingMode(false);
     }
 
     /// <summary>
@@ -859,9 +736,9 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     {
         return new DeepBeliefNetwork<T>(
             Architecture,
-            _learningRate,
             _epochs,
             _batchSize,
+            _optimizer,
             _lossFunction
         );
     }

@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -486,5 +487,28 @@ public class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_BFGS_{_options.InitialLearningRate}_{_options.Tolerance}_{_iteration}";
+    }
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        var pv = context.GetFlatParameters();
+        var gv = context.GetFlatGradients();
+        var updated = UpdateParameters(pv, gv);
+        context.SetFlatParameters(updated);
+
+        // If re-evaluation is available, use backtracking line search
+        if (context.SupportsReevaluation)
+        {
+            T origLoss = context.Loss;
+            T newLoss = context.Reevaluate();
+            if (NumOps.GreaterThan(newLoss, origLoss))
+            {
+                var pv2 = context.GetFlatParameters();
+                var gv2 = context.GetFlatGradients();
+                var retry = UpdateParameters(pv2, gv2);
+                context.SetFlatParameters(retry);
+            }
+        }
     }
 }

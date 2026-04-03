@@ -1,8 +1,9 @@
-using System.Linq;
+﻿using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -36,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Gating)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -71,6 +72,8 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// During training, these weights are adjusted to better recognize important patterns in your data.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _transformWeights;
 
     /// <summary>
@@ -91,6 +94,8 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// It's like setting the initial position before fine-tuning.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _transformBias;
 
     /// <summary>
@@ -185,11 +190,11 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _gateBiasGradient;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuTransformOutput;
-    private IGpuTensor<T>? _gpuGateOutput;
-    private IGpuTensor<T>? _gpuTransformPreActivation;
-    private IGpuTensor<T>? _gpuGatePreActivation;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuTransformOutput;
+    private Tensor<T>? _gpuGateOutput;
+    private Tensor<T>? _gpuTransformPreActivation;
+    private Tensor<T>? _gpuGatePreActivation;
     private int[]? _gpuInputShape;
 
     /// <summary>
@@ -546,7 +551,7 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </summary>
     /// <param name="inputs">The GPU input tensors.</param>
     /// <returns>The GPU output tensor.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -578,13 +583,13 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         if (backend == null)
             throw new InvalidOperationException("GPU backend unavailable.");
 
-        int size = input.ElementCount;
+        int size = input.Length;
 
         // Transform path: transformLinear = input @ transformWeights + transformBias
         var transformPreActivation = gpuEngine.FusedLinearGpu(input, _transformWeights, _transformBias, FusedActivationType.None);
 
         // Apply transform activation
-        IGpuTensor<T> transformOutput;
+        Tensor<T> transformOutput;
         if (transformActivationType != FusedActivationType.None)
         {
             // Re-run with activation for output (we need pre-activation separately for backward)
@@ -592,7 +597,7 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
         else if (_vectorTransformActivation != null)
         {
-            var cpuTransform = transformPreActivation.ToTensor();
+            var cpuTransform = transformPreActivation;
             var cpuActivated = _vectorTransformActivation.Activate(cpuTransform);
             transformOutput = gpuEngine.UploadToGpu(cpuActivated, GpuTensorRole.Activation);
         }
@@ -601,21 +606,21 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Apply default tanh
             var tanhBuffer = backend.AllocateBuffer(size);
             backend.Tanh(transformPreActivation.Buffer, tanhBuffer, size);
-            transformOutput = new GpuTensor<T>(backend, tanhBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+            transformOutput = GpuTensorHelper.UploadToGpu<T>(backend, tanhBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
         }
 
         // Gate path: gateLinear = input @ gateWeights + gateBias
         var gatePreActivation = gpuEngine.FusedLinearGpu(input, _gateWeights, _gateBias, FusedActivationType.None);
 
         // Apply gate activation (sigmoid)
-        IGpuTensor<T> gateOutput;
+        Tensor<T> gateOutput;
         if (gateActivationType != FusedActivationType.None)
         {
             gateOutput = gpuEngine.FusedLinearGpu(input, _gateWeights, _gateBias, gateActivationType);
         }
         else if (_vectorGateActivation != null)
         {
-            var cpuGate = gatePreActivation.ToTensor();
+            var cpuGate = gatePreActivation;
             var cpuGateActivated = _vectorGateActivation.Activate(cpuGate);
             gateOutput = gpuEngine.UploadToGpu(cpuGateActivated, GpuTensorRole.Activation);
         }
@@ -624,7 +629,7 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // Apply default sigmoid
             var sigmoidBuffer = backend.AllocateBuffer(size);
             backend.Sigmoid(gatePreActivation.Buffer, sigmoidBuffer, size);
-            gateOutput = new GpuTensor<T>(backend, sigmoidBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+            gateOutput = GpuTensorHelper.UploadToGpu<T>(backend, sigmoidBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
         }
 
         // Highway output: output = gate * (transform - input) + input
@@ -656,14 +661,14 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _gpuInputShape = input.Shape.ToArray();
 
             // Also cache CPU tensors for CPU backward compatibility
-            _lastInput = input.ToTensor();
-            _lastTransformOutput = transformOutput.ToTensor();
-            _lastGateOutput = gateOutput.ToTensor();
-            _lastTransformPreActivation = transformPreActivation.ToTensor();
-            _lastGatePreActivation = gatePreActivation.ToTensor();
+            _lastInput = input;
+            _lastTransformOutput = transformOutput;
+            _lastGateOutput = gateOutput;
+            _lastTransformPreActivation = transformPreActivation;
+            _lastGatePreActivation = gatePreActivation;
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -704,356 +709,6 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             throw new InvalidOperationException("No activation function specified.");
         }
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the highway layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when Forward has not been called before Backward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the highway layer, which is used during training to propagate
-    /// error gradients back through the network. It calculates the gradients for all the weights and biases,
-    /// and returns the gradient with respect to the input for further backpropagation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
-    /// and parameters should change to reduce errors.
-    /// 
-    /// During the backward pass:
-    /// 1. The layer receives information about how its output should change to reduce the overall error
-    /// 2. It calculates how the gate values should change to better control the mix of transformed vs. bypassed data
-    /// 3. It calculates how the transform parameters should change to better process the input
-    /// 4. It determines how the input should change, which will be used by earlier layers
-    /// 
-    /// This process involves complex calculations that essentially run the layer's logic in reverse,
-    /// figuring out how each component contributed to errors in the output.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Performs the backward pass on GPU for the highway layer.
-    /// </summary>
-    /// <param name="outputGradient">The GPU tensor containing the gradient of the loss with respect to the output.</param>
-    /// <returns>The GPU tensor containing the gradient of the loss with respect to the input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (_gpuInput == null || _gpuTransformOutput == null || _gpuGateOutput == null ||
-            _gpuTransformPreActivation == null || _gpuGatePreActivation == null || _gpuInputShape == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        int size = outputGradient.ElementCount;
-        int batchSize = _gpuInputShape[0];
-        int inputDim = _gpuInputShape[1];
-
-        // Get activation types for backward computation
-        bool useTanhTransform = _transformActivation is TanhActivation<T> || _transformActivation == null;
-        bool useSigmoidGate = _gateActivation is SigmoidActivation<T> || _gateActivation == null;
-
-        // Step 1: Compute (transform - input) for gate gradient
-        var transformMinusInputBuffer = backend.AllocateBuffer(size);
-        backend.Subtract(_gpuTransformOutput.Buffer, _gpuInput.Buffer, transformMinusInputBuffer, size);
-        var transformMinusInput = new GpuTensor<T>(backend, transformMinusInputBuffer, _gpuInputShape, GpuTensorRole.Intermediate, ownsBuffer: true);
-
-        // Step 2: Gate gradient: dL/dgate = dL/dOutput * (transform - input)
-        var gateGradBuffer = backend.AllocateBuffer(size);
-        backend.Multiply(outputGradient.Buffer, transformMinusInput.Buffer, gateGradBuffer, size);
-        var gateGradPreActivation = new GpuTensor<T>(backend, gateGradBuffer, _gpuInputShape, GpuTensorRole.Gradient, ownsBuffer: true);
-
-        // Apply sigmoid derivative: d(sigmoid)/dx = sigmoid(x) * (1 - sigmoid(x))
-        IGpuTensor<T> gateGradient;
-        if (useSigmoidGate)
-        {
-            gateGradient = gpuEngine.SigmoidBackwardGpu(gateGradPreActivation, _gpuGatePreActivation);
-        }
-        else
-        {
-            // Fallback for other activations
-            var cpuGateGrad = gateGradPreActivation.ToTensor();
-            var cpuGatePreAct = _gpuGatePreActivation.ToTensor();
-            if (_gateActivation != null)
-            {
-                cpuGateGrad = cpuGateGrad.ElementwiseMultiply(cpuGatePreAct.Transform((x, _) => _gateActivation.Derivative(x)));
-            }
-            gateGradient = gpuEngine.UploadToGpu(cpuGateGrad, GpuTensorRole.Gradient);
-        }
-
-        // Step 3: Transform gradient: dL/dtransform = dL/dOutput * gate
-        var transformGradBuffer = backend.AllocateBuffer(size);
-        backend.Multiply(outputGradient.Buffer, _gpuGateOutput.Buffer, transformGradBuffer, size);
-        var transformGradPreActivation = new GpuTensor<T>(backend, transformGradBuffer, _gpuInputShape, GpuTensorRole.Gradient, ownsBuffer: true);
-
-        // Apply tanh derivative: d(tanh)/dx = 1 - tanh(x)^2
-        IGpuTensor<T> transformGradient;
-        if (useTanhTransform)
-        {
-            transformGradient = gpuEngine.TanhBackwardGpu(transformGradPreActivation, _gpuTransformPreActivation);
-        }
-        else if (_transformActivation is ReLUActivation<T>)
-        {
-            transformGradient = gpuEngine.ReluBackwardGpu(transformGradPreActivation, _gpuTransformPreActivation);
-        }
-        else
-        {
-            // Fallback for other activations
-            var cpuTransformGrad = transformGradPreActivation.ToTensor();
-            var cpuTransformPreAct = _gpuTransformPreActivation.ToTensor();
-            if (_transformActivation != null)
-            {
-                cpuTransformGrad = cpuTransformGrad.ElementwiseMultiply(cpuTransformPreAct.Transform((x, _) => _transformActivation.Derivative(x)));
-            }
-            transformGradient = gpuEngine.UploadToGpu(cpuTransformGrad, GpuTensorRole.Gradient);
-        }
-
-        // Step 4: Compute weight gradients
-        // Upload weights to GPU for transpose operations
-        var gpuTransformWeights = gpuEngine.UploadToGpu(_transformWeights, GpuTensorRole.Weight);
-        var gpuGateWeights = gpuEngine.UploadToGpu(_gateWeights, GpuTensorRole.Weight);
-
-        // Transpose input for weight gradient computation: dW = input^T @ gradient
-        var inputT = gpuEngine.TransposeGpu(_gpuInput);
-
-        // Gate weight gradients: _gateWeightsGradient = input^T @ gateGradient
-        var gpuGateWeightsGrad = gpuEngine.MatMulGpuTensors(inputT, gateGradient);
-        _gateWeightsGradient = gpuGateWeightsGrad.ToTensor();
-
-        // Gate bias gradients: sum over batch dimension
-        var gpuGateBiasGrad = gpuEngine.SumAxisGpu(gateGradient, 0);
-        _gateBiasGradient = gpuGateBiasGrad.ToTensor();
-
-        // Transform weight gradients: _transformWeightsGradient = input^T @ transformGradient
-        var gpuTransformWeightsGrad = gpuEngine.MatMulGpuTensors(inputT, transformGradient);
-        _transformWeightsGradient = gpuTransformWeightsGrad.ToTensor();
-
-        // Transform bias gradients: sum over batch dimension
-        var gpuTransformBiasGrad = gpuEngine.SumAxisGpu(transformGradient, 0);
-        _transformBiasGradient = gpuTransformBiasGrad.ToTensor();
-
-        // Step 5: Compute input gradient
-        // dL/dInput = dL/dGateLinear @ W_gate^T + dL/dTransformLinear @ W_transform^T + dL/dOutput * (1 - gate)
-
-        // Transpose weights
-        var gateWeightsT = gpuEngine.TransposeGpu(gpuGateWeights);
-        var transformWeightsT = gpuEngine.TransposeGpu(gpuTransformWeights);
-
-        // Input gradient from gate path
-        var inputGradFromGate = gpuEngine.MatMulGpuTensors(gateGradient, gateWeightsT);
-
-        // Input gradient from transform path
-        var inputGradFromTransform = gpuEngine.MatMulGpuTensors(transformGradient, transformWeightsT);
-
-        // (1 - gate) contribution: bypass gradient = outputGrad * (1 - gate)
-        var oneMinusGateBuffer = backend.AllocateBuffer(size);
-        var onesBuffer = backend.AllocateBuffer(size);
-
-        // Fill onesBuffer with 1.0
-        backend.Fill(onesBuffer, 1.0f, size);
-        backend.Subtract(onesBuffer, _gpuGateOutput.Buffer, oneMinusGateBuffer, size);
-        onesBuffer.Dispose();
-
-        var bypassGradBuffer = backend.AllocateBuffer(size);
-        backend.Multiply(outputGradient.Buffer, oneMinusGateBuffer, bypassGradBuffer, size);
-        oneMinusGateBuffer.Dispose();
-
-        // Sum all input gradients: inputGrad = inputGradFromGate + inputGradFromTransform + bypassGrad
-        var inputGradPartial = backend.AllocateBuffer(size);
-        backend.Add(inputGradFromGate.Buffer, inputGradFromTransform.Buffer, inputGradPartial, size);
-
-        var inputGradBuffer = backend.AllocateBuffer(size);
-        backend.Add(inputGradPartial, bypassGradBuffer, inputGradBuffer, size);
-        inputGradPartial.Dispose();
-        bypassGradBuffer.Dispose();
-
-        return new GpuTensor<T>(backend, inputGradBuffer, _gpuInputShape, GpuTensorRole.Gradient, ownsBuffer: true);
-    }
-
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. It's slower than the
-    /// manual implementation but can be useful for:
-    /// - Verifying gradient correctness
-    /// - Rapid prototyping with custom modifications
-    /// - Research and experimentation
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Create input variable node
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-
-        // Create variable nodes for weights and biases with gradient tracking
-        var transformWeightsNode = Autodiff.TensorOperations<T>.Variable(_transformWeights, "transform_weights", requiresGradient: true);
-        var transformBiasNode = Autodiff.TensorOperations<T>.Variable(_transformBias, "transform_bias", requiresGradient: true);
-        var gateWeightsNode = Autodiff.TensorOperations<T>.Variable(_gateWeights, "gate_weights", requiresGradient: true);
-        var gateBiasNode = Autodiff.TensorOperations<T>.Variable(_gateBias, "gate_bias", requiresGradient: true);
-
-        // Step 1: Compute transform path: transform = activation(input @ weights + bias)
-        var transformLinear = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, transformWeightsNode);
-        var transformWithBias = Autodiff.TensorOperations<T>.Add(transformLinear, transformBiasNode);
-
-        // Apply transform activation (typically Tanh)
-        Autodiff.ComputationNode<T> transformOutput;
-        if (_transformActivation != null && _transformActivation.SupportsJitCompilation)
-        {
-            transformOutput = _transformActivation.ApplyToGraph(transformWithBias);
-        }
-        else
-        {
-            // Default to Tanh if no activation specified
-            transformOutput = Autodiff.TensorOperations<T>.Tanh(transformWithBias);
-        }
-
-        // Step 2: Compute gate path: gate = sigmoid(input @ weights + bias)
-        var gateLinear = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, gateWeightsNode);
-        var gateWithBias = Autodiff.TensorOperations<T>.Add(gateLinear, gateBiasNode);
-
-        // Apply gate activation (typically Sigmoid)
-        Autodiff.ComputationNode<T> gateOutput;
-        if (_gateActivation != null && _gateActivation.SupportsJitCompilation)
-        {
-            gateOutput = _gateActivation.ApplyToGraph(gateWithBias);
-        }
-        else
-        {
-            // Default to Sigmoid if no activation specified
-            gateOutput = Autodiff.TensorOperations<T>.Sigmoid(gateWithBias);
-        }
-
-        // Step 3: Compute highway output: output = gate * transform + (1 - gate) * input
-        // Rewritten as: output = gate * (transform - input) + input
-        var transformMinusInput = Autodiff.TensorOperations<T>.Subtract(transformOutput, inputNode);
-        var gatedDiff = Autodiff.TensorOperations<T>.ElementwiseMultiply(gateOutput, transformMinusInput);
-        var outputNode = Autodiff.TensorOperations<T>.Add(gatedDiff, inputNode);
-
-        // Set the output gradient
-        outputNode.Gradient = outputGradient;
-
-        // Production-grade: Inline topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract parameter gradients
-        if (transformWeightsNode.Gradient != null)
-            _transformWeightsGradient = transformWeightsNode.Gradient;
-        if (transformBiasNode.Gradient != null)
-            _transformBiasGradient = transformBiasNode.Gradient;
-        if (gateWeightsNode.Gradient != null)
-            _gateWeightsGradient = gateWeightsNode.Gradient;
-        if (gateBiasNode.Gradient != null)
-            _gateBiasGradient = gateBiasNode.Gradient;
-
-        // Extract and return the input gradient
-        if (inputNode.Gradient == null)
-            throw new InvalidOperationException("Gradient computation failed in automatic differentiation.");
-
-        return inputNode.Gradient;
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _lastTransformOutput == null || _lastGateOutput == null ||
-            _lastTransformPreActivation == null || _lastGatePreActivation == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // dL/d(transform - input) = dL/dOutput * gate
-        // dL/dgate = dL/dOutput * (transform - input)
-        var transformMinusInput = Engine.TensorSubtract(_lastTransformOutput, _lastInput);
-        var gateGradient = Engine.TensorMultiply(outputGradient, transformMinusInput);
-        // Use pre-activation values for derivative computation (activation functions expect pre-activation inputs)
-        gateGradient = ApplyActivationDerivative(gateGradient, _lastGatePreActivation, _gateActivation, _vectorGateActivation);
-
-        var transformGradient = Engine.TensorMultiply(outputGradient, _lastGateOutput);
-        // Use pre-activation values for derivative computation
-        transformGradient = ApplyActivationDerivative(transformGradient, _lastTransformPreActivation, _transformActivation, _vectorTransformActivation);
-
-        // Compute weight gradients: dW = input^T @ gradient
-        var inputT = _lastInput.Transpose([1, 0]);
-        _gateWeightsGradient = inputT.MatrixMultiply(gateGradient);
-        _gateBiasGradient = gateGradient.Sum([0]);
-
-        _transformWeightsGradient = inputT.MatrixMultiply(transformGradient);
-        _transformBiasGradient = transformGradient.Sum([0]);
-
-        // Compute input gradient: dL/dInput = dL/dGateLinear @ W_gate^T + dL/dTransformLinear @ W_transform^T + dL/dOutput * (1 - gate)
-        var gateWeightsT = _gateWeights.Transpose([1, 0]);
-        var transformWeightsT = _transformWeights.Transpose([1, 0]);
-
-        var inputGradFromGate = gateGradient.MatrixMultiply(gateWeightsT);
-        var inputGradFromTransform = transformGradient.MatrixMultiply(transformWeightsT);
-
-        // (1 - gate) contribution
-        var ones = Tensor<T>.CreateDefault(_lastGateOutput.Shape.ToArray(), NumOps.One);
-        var oneMinusGate = Engine.TensorSubtract(ones, _lastGateOutput);
-        var bypassGradient = Engine.TensorMultiply(outputGradient, oneMinusGate);
-
-        var inputGradient = Engine.TensorAdd(inputGradFromGate, inputGradFromTransform);
-        inputGradient = Engine.TensorAdd(inputGradient, bypassGradient);
-
-        return inputGradient;
     }
 
     /// <summary>
@@ -1170,10 +825,10 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_transformWeights.Data),
-            Vector<T>.FromMemory(_transformBias.Data),
-            Vector<T>.FromMemory(_gateWeights.Data),
-            Vector<T>.FromMemory(_gateBias.Data));
+            new Vector<T>(_transformWeights.ToArray()),
+            new Vector<T>(_transformBias.ToArray()),
+            new Vector<T>(_gateWeights.ToArray()),
+            new Vector<T>(_gateBias.ToArray()));
     }
 
     /// <summary>
@@ -1264,10 +919,10 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _gateWeightsGradient == null || _gateBiasGradient == null)
             return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_transformWeightsGradient is not null ? Vector<T>.FromMemory(_transformWeightsGradient.Data) : new Vector<T>(0)),
-            (_transformBiasGradient is not null ? Vector<T>.FromMemory(_transformBiasGradient.Data) : new Vector<T>(0)),
-            (_gateWeightsGradient is not null ? Vector<T>.FromMemory(_gateWeightsGradient.Data) : new Vector<T>(0)),
-            (_gateBiasGradient is not null ? Vector<T>.FromMemory(_gateBiasGradient.Data) : new Vector<T>(0)));
+            new Vector<T>(_transformWeightsGradient.ToArray()),
+            new Vector<T>(_transformBiasGradient.ToArray()),
+            new Vector<T>(_gateWeightsGradient.ToArray()),
+            new Vector<T>(_gateBiasGradient.ToArray()));
     }
 
     public override void ClearGradients()
@@ -1381,108 +1036,5 @@ public class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         return diagnostics;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> when weights are initialized and activation functions support JIT.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// Highway layers support JIT compilation when:
-    /// - Transform and gate weights are initialized
-    /// - The transform activation function (typically Tanh) supports JIT
-    /// - The gate activation function (typically Sigmoid) supports JIT
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation =>
-        _transformWeights != null && _transformBias != null &&
-        _gateWeights != null && _gateBias != null &&
-        (_transformActivation?.SupportsJitCompilation ?? _vectorTransformActivation != null) &&
-        (_gateActivation?.SupportsJitCompilation ?? _vectorGateActivation != null);
-
-    /// <summary>
-    /// Exports the highway layer's forward pass as a JIT-compilable computation graph.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the gated highway output.</returns>
-    /// <remarks>
-    /// <para>
-    /// The highway layer computation graph implements:
-    /// output = gate * transform(input) + (1 - gate) * input
-    ///
-    /// Where:
-    /// - transform = activation(input @ transformWeights + transformBias)
-    /// - gate = sigmoid(input @ gateWeights + gateBias)
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates an optimized version of the highway layer.
-    /// The gate controls how much information flows through the transform path vs. the bypass path.
-    /// </para>
-    /// </remarks>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (_transformWeights == null || _transformBias == null ||
-            _gateWeights == null || _gateBias == null)
-            throw new InvalidOperationException("Weights and biases not initialized.");
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input node with batch dimension
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "highway_input");
-        inputNodes.Add(inputNode);
-
-        // Create variable nodes for weights and biases with gradient tracking
-        var transformWeightsNode = Autodiff.TensorOperations<T>.Variable(_transformWeights, "transform_weights", requiresGradient: true);
-        var transformBiasNode = Autodiff.TensorOperations<T>.Variable(_transformBias, "transform_bias", requiresGradient: true);
-        var gateWeightsNode = Autodiff.TensorOperations<T>.Variable(_gateWeights, "gate_weights", requiresGradient: true);
-        var gateBiasNode = Autodiff.TensorOperations<T>.Variable(_gateBias, "gate_bias", requiresGradient: true);
-
-        // Step 1: Compute transform path: transform = activation(input @ weights + bias)
-        var transformLinear = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, transformWeightsNode);
-        var transformWithBias = Autodiff.TensorOperations<T>.Add(transformLinear, transformBiasNode);
-
-        // Apply transform activation (typically Tanh)
-        Autodiff.ComputationNode<T> transformOutput;
-        if (_transformActivation != null && _transformActivation.SupportsJitCompilation)
-        {
-            transformOutput = _transformActivation.ApplyToGraph(transformWithBias);
-        }
-        else
-        {
-            // Default to Tanh if no activation specified
-            transformOutput = Autodiff.TensorOperations<T>.Tanh(transformWithBias);
-        }
-
-        // Step 2: Compute gate path: gate = sigmoid(input @ weights + bias)
-        var gateLinear = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, gateWeightsNode);
-        var gateWithBias = Autodiff.TensorOperations<T>.Add(gateLinear, gateBiasNode);
-
-        // Apply gate activation (typically Sigmoid)
-        Autodiff.ComputationNode<T> gateOutput;
-        if (_gateActivation != null && _gateActivation.SupportsJitCompilation)
-        {
-            gateOutput = _gateActivation.ApplyToGraph(gateWithBias);
-        }
-        else
-        {
-            // Default to Sigmoid if no activation specified
-            gateOutput = Autodiff.TensorOperations<T>.Sigmoid(gateWithBias);
-        }
-
-        // Step 3: Compute highway output: output = gate * transform + (1 - gate) * input
-        // Rewrite as: output = gate * transform + input - gate * input
-        //           = gate * (transform - input) + input
-        var transformMinusInput = Autodiff.TensorOperations<T>.Subtract(transformOutput, inputNode);
-        var gatedDiff = Autodiff.TensorOperations<T>.ElementwiseMultiply(gateOutput, transformMinusInput);
-        var output = Autodiff.TensorOperations<T>.Add(gatedDiff, inputNode);
-
-        return output;
     }
 }

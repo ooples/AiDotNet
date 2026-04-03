@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -580,70 +580,6 @@ public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<
     }
 
     #region IJitCompilable Implementation
-
-    /// <summary>
-    /// Gets whether this mapped Random Forest model supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> when the underlying model supports JIT compilation (soft tree mode enabled);
-    /// <c>false</c> otherwise.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// JIT compilation is supported when the underlying Random Forest model has soft tree mode enabled.
-    /// In soft tree mode, the discrete branching logic is replaced with smooth sigmoid-based gating,
-    /// making the model differentiable and compatible with JIT compilation.
-    /// </para>
-    /// <para><b>For Beginners:</b> JIT compilation is available when soft tree mode is enabled.
-    ///
-    /// Traditional Random Forests use hard yes/no decisions that can't be JIT compiled.
-    /// With soft tree mode, the trees use smooth transitions instead:
-    /// - This makes the model differentiable
-    /// - Enables JIT compilation for faster inference
-    /// - Gives similar results to traditional Random Forests
-    ///
-    /// To enable JIT compilation:
-    /// <code>
-    /// var rf = (RandomForestRegression&lt;double&gt;)wrappedModel;
-    /// rf.UseSoftTree = true;
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation =>
-        BaseModel is IJitCompilable<T> jitModel && jitModel.SupportsJitCompilation;
-
-    /// <summary>
-    /// Exports the model's computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The root node of the exported computation graph.</returns>
-    /// <exception cref="NotSupportedException">
-    /// Thrown when the underlying model does not support JIT compilation.
-    /// </exception>
-    /// <remarks>
-    /// <para>
-    /// Delegates to the underlying Random Forest model's ExportComputationGraph method.
-    /// Requires the underlying model to have soft tree mode enabled.
-    /// </para>
-    /// <para><b>For Beginners:</b> This exports the Random Forest as a computation graph.
-    ///
-    /// When soft tree mode is enabled, each tree becomes a smooth function that can be
-    /// compiled into an optimized computation graph. The ensemble of soft trees is then
-    /// averaged to produce the final prediction.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (BaseModel is IJitCompilable<T> jitModel && jitModel.SupportsJitCompilation)
-        {
-            return jitModel.ExportComputationGraph(inputNodes);
-        }
-
-        throw new NotSupportedException(
-            "This mapped Random Forest model does not support JIT compilation. " +
-            "To enable JIT compilation, set UseSoftTree = true on the underlying Random Forest model " +
-            "to use soft (differentiable) decision trees with sigmoid-based gating.");
-    }
 
     #endregion
 }

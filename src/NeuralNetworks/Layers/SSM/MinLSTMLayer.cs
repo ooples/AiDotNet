@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -134,9 +134,6 @@ public class MinLSTMLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Gets the model dimension (input/output width).
@@ -406,174 +403,6 @@ public class MinLSTMLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _lastProjectedInput == null ||
-            _lastForgetGateRaw == null || _lastInputGateRaw == null ||
-            _lastForgetGateSigmoid == null || _lastInputGateSigmoid == null ||
-            _lastForgetGateNorm == null || _lastInputGateNorm == null ||
-            _lastCellCandidate == null || _lastCellStates == null ||
-            _lastRecurrenceOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = _lastInput.Shape[0];
-        int seqLen = _lastInput.Shape[1];
-
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        var activationGrad = ApplyActivationDerivative(_lastOutput, grad3D);
-
-        // === Step 7 backward: Output projection ===
-        // y = recOut * W_out + b_out
-        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
-
-        var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
-        var recOutFlat = _lastRecurrenceOutput.Reshape(batchSize * seqLen, _expandedDimension);
-        _outputProjectionWeightsGradient = Engine.TensorMatMul(recOutFlat.Transpose([1, 0]), gradFlat);
-
-        var dRecurrence = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
-            .Reshape(batchSize, seqLen, _expandedDimension);
-
-        // === Step 6 backward: Recurrence ===
-        // c_t = f'_t * c_{t-1} + i'_t * c_tilde_t
-        // h_t = c_t (output is directly the cell state)
-        var dForgetNorm = new Tensor<T>(new[] { batchSize, seqLen, _expandedDimension });
-        var dInputNorm = new Tensor<T>(new[] { batchSize, seqLen, _expandedDimension });
-        var dCellCandidate = new Tensor<T>(new[] { batchSize, seqLen, _expandedDimension });
-        var dCellState = new Tensor<T>(new[] { batchSize, _expandedDimension });
-
-        for (int t = seqLen - 1; t >= 0; t--)
-        {
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int d = 0; d < _expandedDimension; d++)
-                {
-                    // dL/dc_t from both the output gradient and the future cell state gradient
-                    T dC = NumOps.Add(
-                        dRecurrence[new[] { bi, t, d }],
-                        dCellState[new[] { bi, d }]);
-
-                    T fPrime = _lastForgetGateNorm[new[] { bi, t, d }];
-                    T iPrime = _lastInputGateNorm[new[] { bi, t, d }];
-                    T cTilde = _lastCellCandidate[new[] { bi, t, d }];
-                    T cPrev = _lastCellStates[new[] { bi, t, d }]; // t=0 is initial state (zeros)
-
-                    // dc/df' = c_{t-1}
-                    dForgetNorm[new[] { bi, t, d }] = NumOps.Multiply(dC, cPrev);
-
-                    // dc/di' = c_tilde
-                    dInputNorm[new[] { bi, t, d }] = NumOps.Multiply(dC, cTilde);
-
-                    // dc/dc_tilde = i'
-                    dCellCandidate[new[] { bi, t, d }] = NumOps.Multiply(dC, iPrime);
-
-                    // dc/dc_{t-1} = f' (propagate gradient to previous timestep)
-                    dCellState[new[] { bi, d }] = NumOps.Multiply(dC, fPrime);
-                }
-            }
-        }
-
-        // === Steps 4-3 backward: Gate normalization -> sigmoid ===
-        // f' = f / (f + i),  i' = i / (f + i)
-        // Let s = f + i + eps
-        // df'/df = i / s^2,  df'/di = -f / s^2
-        // di'/df = -i / s^2, di'/di = f / s^2
-        // Combined: dL/df_raw = dL/df * sig'(f_raw),  where dL/df = df'/df * dL/df' + di'/df * dL/di'
-        var dForgetSigmoid = new Tensor<T>(new[] { batchSize, seqLen, _expandedDimension });
-        var dInputSigmoid = new Tensor<T>(new[] { batchSize, seqLen, _expandedDimension });
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int d = 0; d < _expandedDimension; d++)
-                {
-                    T f = _lastForgetGateSigmoid[new[] { bi, t, d }];
-                    T inp = _lastInputGateSigmoid[new[] { bi, t, d }];
-                    T s = NumOps.Add(NumOps.Add(f, inp), NumOps.FromDouble(1e-8));
-                    T s2 = NumOps.Multiply(s, s);
-
-                    T dFPrime = dForgetNorm[new[] { bi, t, d }];
-                    T dIPrime = dInputNorm[new[] { bi, t, d }];
-
-                    // dL/df = (i/s^2) * dL/df' + (-i/s^2) * dL/di'
-                    //       = (i/s^2) * (dL/df' - dL/di')
-                    T iOverS2 = NumOps.Divide(inp, s2);
-                    T dF = NumOps.Multiply(iOverS2, NumOps.Subtract(dFPrime, dIPrime));
-
-                    // dL/di = (-f/s^2) * dL/df' + (f/s^2) * dL/di'
-                    //       = (f/s^2) * (dL/di' - dL/df')
-                    T fOverS2 = NumOps.Divide(f, s2);
-                    T dI = NumOps.Multiply(fOverS2, NumOps.Subtract(dIPrime, dFPrime));
-
-                    dForgetSigmoid[new[] { bi, t, d }] = dF;
-                    dInputSigmoid[new[] { bi, t, d }] = dI;
-                }
-            }
-        }
-
-        // Sigmoid derivative: sig'(x) = sig(x) * (1 - sig(x))
-        var onesF = CreateOnesLike(_lastForgetGateSigmoid);
-        var forgetSigDeriv = Engine.TensorMultiply(
-            _lastForgetGateSigmoid,
-            Engine.TensorSubtract(onesF, _lastForgetGateSigmoid));
-        var dForgetRaw = Engine.TensorMultiply(dForgetSigmoid, forgetSigDeriv);
-
-        var onesI = CreateOnesLike(_lastInputGateSigmoid);
-        var inputSigDeriv = Engine.TensorMultiply(
-            _lastInputGateSigmoid,
-            Engine.TensorSubtract(onesI, _lastInputGateSigmoid));
-        var dInputRaw = Engine.TensorMultiply(dInputSigmoid, inputSigDeriv);
-
-        // === Step 5 backward: Cell candidate projection ===
-        // cellCand = projFlat * W_c + b_c
-        var projFlat = _lastProjectedInput.Reshape(batchSize * seqLen, _expandedDimension);
-        var dCellCandFlat = dCellCandidate.Reshape(batchSize * seqLen, _expandedDimension);
-        _cellCandidateWeightsGradient = Engine.TensorMatMul(projFlat.Transpose([1, 0]), dCellCandFlat);
-        _cellCandidateBiasGradient = Engine.ReduceSum(dCellCandidate, new int[] { 0, 1 });
-
-        // === Step 2-3 backward: Gate projections ===
-        // forgetRaw = projFlat * W_f + b_f
-        var dForgetRawFlat = dForgetRaw.Reshape(batchSize * seqLen, _expandedDimension);
-        _forgetGateWeightsGradient = Engine.TensorMatMul(projFlat.Transpose([1, 0]), dForgetRawFlat);
-        _forgetGateBiasGradient = Engine.ReduceSum(dForgetRaw, new int[] { 0, 1 });
-
-        // inputGateRaw = projFlat * W_i + b_i
-        var dInputRawFlat = dInputRaw.Reshape(batchSize * seqLen, _expandedDimension);
-        _inputGateWeightsGradient = Engine.TensorMatMul(projFlat.Transpose([1, 0]), dInputRawFlat);
-        _inputGateBiasGradient = Engine.ReduceSum(dInputRaw, new int[] { 0, 1 });
-
-        // === Accumulate projected input gradient from all paths ===
-        // Three paths feed back through projFlat: forget gate, input gate, cell candidate
-        var dProjFromForget = Engine.TensorMatMul(dForgetRawFlat, _forgetGateWeights.Transpose([1, 0]));
-        var dProjFromInput = Engine.TensorMatMul(dInputRawFlat, _inputGateWeights.Transpose([1, 0]));
-        var dProjFromCell = Engine.TensorMatMul(dCellCandFlat, _cellCandidateWeights.Transpose([1, 0]));
-
-        var dProjTotal = Engine.TensorAdd(dProjFromForget, dProjFromInput);
-        dProjTotal = Engine.TensorAdd(dProjTotal, dProjFromCell);
-
-        // === Step 1 backward: Input projection ===
-        // projected = inputFlat * W_inp + b_inp
-        var inputFlat = _lastInput.Reshape(batchSize * seqLen, _modelDimension);
-        _inputProjectionWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dProjTotal);
-        _inputProjectionBiasGradient = Engine.ReduceSum(
-            dProjTotal.Reshape(batchSize, seqLen, _expandedDimension), new int[] { 0, 1 });
-
-        var inputGradFlat = Engine.TensorMatMul(dProjTotal, _inputProjectionWeights.Transpose([1, 0]));
-        var inputGrad3D = inputGradFlat.Reshape(batchSize, seqLen, _modelDimension);
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return inputGrad3D.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return inputGrad3D.Reshape(_originalInputShape);
-
-        return inputGrad3D;
-    }
-
     /// <summary>
     /// Creates a tensor of ones with the same shape as the template tensor.
     /// </summary>
@@ -640,16 +469,16 @@ public class MinLSTMLayer<T> : LayerBase<T>
     {
         if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_inputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_inputProjectionWeightsGradient.Data) : new Vector<T>(0)),
-            (_inputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_inputProjectionBiasGradient.Data) : new Vector<T>(0)),
-            (_forgetGateWeightsGradient is not null ? Vector<T>.FromMemory(_forgetGateWeightsGradient.Data) : new Vector<T>(0)),
-            (_forgetGateBiasGradient is not null ? Vector<T>.FromMemory(_forgetGateBiasGradient.Data) : new Vector<T>(0)),
-            (_inputGateWeightsGradient is not null ? Vector<T>.FromMemory(_inputGateWeightsGradient.Data) : new Vector<T>(0)),
-            (_inputGateBiasGradient is not null ? Vector<T>.FromMemory(_inputGateBiasGradient.Data) : new Vector<T>(0)),
-            (_cellCandidateWeightsGradient is not null ? Vector<T>.FromMemory(_cellCandidateWeightsGradient.Data) : new Vector<T>(0)),
-            (_cellCandidateBiasGradient is not null ? Vector<T>.FromMemory(_cellCandidateBiasGradient.Data) : new Vector<T>(0)),
-            (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)),
-            (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)));
+            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
+            new Vector<T>(_forgetGateWeightsGradient!.ToArray()),
+            new Vector<T>(_forgetGateBiasGradient!.ToArray()),
+            new Vector<T>(_inputGateWeightsGradient!.ToArray()),
+            new Vector<T>(_inputGateBiasGradient!.ToArray()),
+            new Vector<T>(_cellCandidateWeightsGradient!.ToArray()),
+            new Vector<T>(_cellCandidateBiasGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
     }
 
     public override void ClearGradients()
@@ -691,33 +520,6 @@ public class MinLSTMLayer<T> : LayerBase<T>
     }
 
     #endregion
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
-        var inProjWeightsNode = TensorOperations<T>.Variable(_inputProjectionWeights, "W_inproj");
-        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
-        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(inProjWeightsNode);
-        inputNodes.Add(outWeightsNode);
-        inputNodes.Add(outBiasNode);
-
-        // Simplified computation graph: input projection -> output projection
-        var inProjT = TensorOperations<T>.Transpose(inProjWeightsNode);
-        var projected = TensorOperations<T>.MatrixMultiply(xNode, inProjT);
-        var outProjT = TensorOperations<T>.Transpose(outWeightsNode);
-        var finalOutput = TensorOperations<T>.MatrixMultiply(projected, outProjT);
-        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
-
-        return outputWithBias;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

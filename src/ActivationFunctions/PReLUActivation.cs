@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -139,19 +139,6 @@ public class PReLUActivation<T> : ActivationFunctionBase<T>
     {
         _alpha = newAlpha;
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.PReLU provides full forward and backward pass support.</value>
-    /// <remarks>
-    /// <para>
-    /// PReLU supports JIT compilation with full gradient computation.
-    /// The backward pass correctly computes gradients: 1 for positive inputs, alpha for negative inputs.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

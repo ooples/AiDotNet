@@ -1,9 +1,10 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
 using Newtonsoft.Json;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Classification.MultiLabel;
 
@@ -368,7 +369,11 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     /// <inheritdoc />
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
-        // Default implementation: no-op
+        // Default: no feature selection support. Subclasses that support
+        // feature selection should override this method.
+        throw new NotSupportedException(
+            $"{GetType().Name} does not support feature selection. " +
+            "Override SetActiveFeatureIndices to implement this capability.");
     }
 
     /// <inheritdoc />
@@ -458,18 +463,18 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     /// </summary>
     private class BinaryCrossEntropyLoss<TLoss> : ILossFunction<TLoss>
     {
-        private static INumericOperations<TLoss> Ops => MathHelper.GetNumericOperations<TLoss>();
+        private static INumericOperations<TLoss> NumOps => MathHelper.GetNumericOperations<TLoss>();
 
         public TLoss CalculateLoss(Vector<TLoss> predicted, Vector<TLoss> actual)
         {
             double loss = 0;
             for (int i = 0; i < predicted.Length; i++)
             {
-                double p = Math.Max(1e-15, Math.Min(1 - 1e-15, Ops.ToDouble(predicted[i])));
-                double y = Ops.ToDouble(actual[i]);
+                double p = Math.Max(1e-15, Math.Min(1 - 1e-15, NumOps.ToDouble(predicted[i])));
+                double y = NumOps.ToDouble(actual[i]);
                 loss -= y * Math.Log(p) + (1 - y) * Math.Log(1 - p);
             }
-            return Ops.FromDouble(loss / Math.Max(1, predicted.Length));
+            return NumOps.FromDouble(loss / Math.Max(1, predicted.Length));
         }
 
         public Vector<TLoss> CalculateDerivative(Vector<TLoss> predicted, Vector<TLoss> actual)
@@ -477,27 +482,27 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
             var derivative = new Vector<TLoss>(predicted.Length);
             for (int i = 0; i < predicted.Length; i++)
             {
-                double p = Math.Max(1e-15, Math.Min(1 - 1e-15, Ops.ToDouble(predicted[i])));
-                double y = Ops.ToDouble(actual[i]);
-                derivative[i] = Ops.FromDouble((p - y) / (p * (1 - p) + 1e-15));
+                double p = Math.Max(1e-15, Math.Min(1 - 1e-15, NumOps.ToDouble(predicted[i])));
+                double y = NumOps.ToDouble(actual[i]);
+                derivative[i] = NumOps.FromDouble((p - y) / (p * (1 - p) + 1e-15));
             }
             return derivative;
         }
 
-        public (TLoss Loss, IGpuTensor<TLoss> Gradient) CalculateLossAndGradientGpu(IGpuTensor<TLoss> predicted, IGpuTensor<TLoss> actual)
+        public (TLoss Loss, Tensor<TLoss> Gradient) CalculateLossAndGradientGpu(Tensor<TLoss> predicted, Tensor<TLoss> actual)
         {
-            var predictedCpu = predicted.ToTensor();
-            var actualCpu = actual.ToTensor();
+            var predictedCpu = predicted;
+            var actualCpu = actual;
             var predictedVector = new Vector<TLoss>(predictedCpu.Data.ToArray());
             var actualVector = new Vector<TLoss>(actualCpu.Data.ToArray());
 
             var loss = CalculateLoss(predictedVector, actualVector);
             var gradientVector = CalculateDerivative(predictedVector, actualVector);
-            var gradientTensor = new Tensor<TLoss>(predictedCpu.Shape.ToArray(), gradientVector);
+            var gradientTensor = new Tensor<TLoss>(predictedCpu._shape, gradientVector);
 
             var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
             var backend = engine?.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
-            var gradientGpu = new GpuTensor<TLoss>(backend, gradientTensor, GpuTensorRole.Gradient);
+            var gradientGpu = GpuTensorHelper.UploadToGpu<TLoss>(backend, gradientTensor, GpuTensorRole.Gradient);
 
             return (loss, gradientGpu);
         }

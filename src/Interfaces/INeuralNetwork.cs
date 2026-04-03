@@ -106,26 +106,7 @@ public interface INeuralNetwork<T> : IFullModel<T, Tensor<T>, Tensor<T>>, ILayer
     /// <returns>The output tensor from the network.</returns>
     Tensor<T> ForwardWithMemory(Tensor<T> input);
 
-    /// <summary>
-    /// Performs backpropagation to compute gradients for all parameters.
-    /// </summary>
-    /// <remarks>
-    /// This method propagates error gradients backward through the network,
-    /// computing how much each parameter contributed to the error.
-    ///
-    /// <b>For Beginners:</b> This is how the network learns from its mistakes.
-    ///
-    /// After making a prediction:
-    /// 1. We calculate the error (how wrong was the prediction?)
-    /// 2. Backpropagate sends this error backwards through layers
-    /// 3. Each layer calculates "how much did I contribute to this error?"
-    /// 4. These calculations (gradients) tell us how to adjust each weight
-    ///
-    /// This must be called after ForwardWithMemory() to have activations available.
-    /// </remarks>
-    /// <param name="outputGradients">Gradients of the loss with respect to network outputs.</param>
-    /// <returns>Gradients with respect to the input (for chaining networks).</returns>
-    Tensor<T> Backpropagate(Tensor<T> outputGradients);
+    // Backpropagate() removed — use GradientTape-based autodiff via TrainWithTape instead.
 
     /// <summary>
     /// Gets the gradients computed during the most recent backpropagation.
@@ -145,4 +126,27 @@ public interface INeuralNetwork<T> : IFullModel<T, Tensor<T>, Tensor<T>>, ILayer
     /// </remarks>
     /// <returns>A vector containing gradients for all trainable parameters.</returns>
     Vector<T> GetParameterGradients();
+
+    /// <summary>
+    /// Gets the loss value from the most recent training step.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> After you call <c>Train()</c> on the network, this method
+    /// tells you how well (or poorly) the network performed on that training step.
+    ///
+    /// The loss value is a number where:
+    /// - Lower values mean the network's predictions were closer to the expected output
+    /// - Higher values mean the predictions were further off
+    /// - A value of zero would mean perfect predictions (rarely achieved in practice)
+    ///
+    /// You can track loss values over time to see if your network is learning:
+    /// <code>
+    /// network.Train(input, target);
+    /// var loss = network.GetLastLoss();
+    /// Console.WriteLine($"Training loss: {loss}");
+    /// // Loss should generally decrease over many training steps
+    /// </code>
+    /// </remarks>
+    /// <returns>The loss value from the most recent training step, or zero if no training has occurred.</returns>
+    T GetLastLoss();
 }

@@ -1,5 +1,7 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Optimizers;
 
@@ -452,6 +454,69 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// This override provides accurate reversal for Adam's adaptive update rule:
     /// params_old = params_new + lr * m_hat / (sqrt(v_hat) + epsilon)
     /// </para>
+    // Per-parameter Adam state for tape-based training (keyed by tensor reference identity)
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeM = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeV = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private int _tapeStep;
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        _tapeStep++;
+
+        T beta1 = NumOps.FromDouble(_options.Beta1);
+        T beta2 = NumOps.FromDouble(_options.Beta2);
+        T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
+        T oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+        T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _tapeStep));
+        T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _tapeStep));
+
+        foreach (var param in context.Parameters)
+        {
+            if (!context.Gradients.TryGetValue(param, out var grad))
+                continue;
+
+            // Lazily initialize per-parameter moment tensors
+            if (!_tapeM.TryGetValue(param, out var m))
+            {
+                m = new Tensor<T>(param._shape);
+                _tapeM[param] = m;
+            }
+            if (!_tapeV.TryGetValue(param, out var v))
+            {
+                v = new Tensor<T>(param._shape);
+                _tapeV[param] = v;
+            }
+
+            // m = beta1 * m + (1 - beta1) * grad  (engine-accelerated)
+            var mScaled = Engine.TensorMultiplyScalar(m, beta1);
+            var gradScaled = Engine.TensorMultiplyScalar(grad, oneMinusBeta1);
+            var mNew = Engine.TensorAdd(mScaled, gradScaled);
+            Engine.TensorCopy(mNew, m);
+
+            // v = beta2 * v + (1 - beta2) * grad^2
+            var gradSquared = Engine.TensorMultiply(grad, grad);
+            var vScaled = Engine.TensorMultiplyScalar(v, beta2);
+            var gradSqScaled = Engine.TensorMultiplyScalar(gradSquared, oneMinusBeta2);
+            var vNew = Engine.TensorAdd(vScaled, gradSqScaled);
+            Engine.TensorCopy(vNew, v);
+
+            // Bias-corrected estimates
+            var mHat = Engine.TensorDivideScalar(m, biasCorrection1);
+            var vHat = Engine.TensorDivideScalar(v, biasCorrection2);
+
+            // update = mHat / (sqrt(vHat) + epsilon)
+            var vHatSqrt = Engine.TensorSqrt(vHat);
+            var denom = Engine.TensorAddScalar(vHatSqrt, epsilon);
+            var update = Engine.TensorDivide(mHat, denom);
+
+            // param -= lr * update  (in-place on the actual parameter tensor)
+            var scaledUpdate = Engine.TensorMultiplyScalar(update, CurrentLearningRate);
+            Engine.TensorSubtractInPlace(param, scaledUpdate);
+        }
+    }
+
     /// <para>
     /// Uses the current moment estimates (_m, _v, _t) to reconstruct the exact
     /// update that was applied, accounting for bias correction and adaptive learning rates.

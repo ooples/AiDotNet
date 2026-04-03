@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -554,7 +554,6 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -785,7 +784,7 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     private Tensor<T> CreateQuantileConditionedInput(Tensor<T> hiddenStates, double quantileLevel)
     {
-        var conditioned = new Tensor<T>(hiddenStates.Shape.ToArray());
+        var conditioned = new Tensor<T>(hiddenStates._shape);
         double qScale = 2.0 * quantileLevel - 1.0; // Map [0,1] to [-1,1]
 
         for (int i = 0; i < hiddenStates.Length; i++)
@@ -992,49 +991,6 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         return Engine.TensorAdd(a, b);
     }
 
-    /// <summary>
-    /// Performs the backward pass through TimesFM.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the loss function.</param>
-    /// <returns>Gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation through transformers:
-    /// 1. Gradient flows back through output projection
-    /// 2. Then back through each transformer layer (in reverse order)
-    /// 3. Finally through embeddings to the input
-    ///
-    /// This updates all weights to reduce prediction error.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        // Output projection backward
-        if (_outputProjection is not null)
-            current = _outputProjection.Backward(current);
-
-        // Final layer norm backward
-        if (_finalLayerNorm is not null)
-            current = _finalLayerNorm.Backward(current);
-
-        // Transformer layers backward (reverse order)
-        for (int i = _transformerLayers.Count - 1; i >= 0; i--)
-        {
-            current = _transformerLayers[i].Backward(current);
-        }
-
-        // Position embedding backward (simplified - skip for now as positions are fixed)
-        // Note: In full implementation, learned position embeddings would be updated here
-
-        // Patch embedding backward
-        if (_patchEmbedding is not null)
-            current = _patchEmbedding.Backward(current);
-
-        return current;
-    }
-
     #endregion
 
     #region Inference Methods
@@ -1075,7 +1031,7 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1121,7 +1077,7 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         if (batchSize > 1)
             throw new InvalidOperationException("TimesFM autoregressive helpers currently support batchSize = 1.");
 
-        var newInput = new Tensor<T>(input.Shape.ToArray());
+        var newInput = new Tensor<T>(input._shape);
         int steps = Math.Min(stepsUsed, _contextLength);
 
         // Shift existing data left by stepsUsed

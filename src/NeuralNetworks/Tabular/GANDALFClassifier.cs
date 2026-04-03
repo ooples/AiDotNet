@@ -174,39 +174,6 @@ public class GANDALFClassifier<T> : GANDALFBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass.
-    /// </summary>
-    /// <param name="targets">Target class indices [batch_size].</param>
-    /// <returns>Gradient with respect to input features [batch_size, num_features].</returns>
-    public Tensor<T> Backward(Vector<int> targets)
-    {
-        if (_probabilitiesCache == null || _logitsCache == null || _backboneOutputCache == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int batchSize = _probabilitiesCache.Shape[0];
-
-        // Gradient of cross-entropy + softmax
-        var logitsGrad = new Tensor<T>(_logitsCache.Shape.ToArray());
-        var scale = NumOps.FromDouble(1.0 / batchSize);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < _numClasses; c++)
-            {
-                var prob = _probabilitiesCache[b * _numClasses + c];
-                var oneHot = targets[b] == c ? NumOps.One : NumOps.Zero;
-                logitsGrad[b * _numClasses + c] = NumOps.Multiply(
-                    NumOps.Subtract(prob, oneHot), scale);
-            }
-        }
-
-        var backboneGrad = _classificationHead.Backward(logitsGrad);
-        return BackwardBackbone(backboneGrad);
-    }
-
-    /// <summary>
     /// Performs a single training step.
     /// </summary>
     /// <param name="features">Input features [batch_size, num_features].</param>
@@ -217,7 +184,6 @@ public class GANDALFClassifier<T> : GANDALFBase<T>
     {
         var probabilities = PredictProbabilities(features);
         var loss = ComputeCrossEntropyLoss(probabilities, targets);
-        _ = Backward(targets);
         UpdateParameters(learningRate);
         ResetState();
 

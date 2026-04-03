@@ -1,4 +1,4 @@
-using AiDotNet.Audio.Features;
+﻿using AiDotNet.Audio.Features;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 
@@ -171,7 +171,7 @@ public abstract class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase<T>
             return NormalizeEmbedding(embeddings[0]);
         }
 
-        var firstShape = embeddings[0].Shape.ToArray();
+        var firstShape = embeddings[0]._shape;
         int totalSize = embeddings[0].Length;
 
         // Validate all embeddings have the same shape

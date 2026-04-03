@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -520,7 +520,6 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -975,28 +974,6 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass for gradient computation.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of the loss with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The backward pass computes gradients by propagating
-    /// error signals backwards through the network. This enables learning.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var current = outputGradient;
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            current = Layers[i].Backward(current);
-        }
-
-        return current;
-    }
-
-    /// <summary>
     /// Performs ONNX-based inference for forecasting.
     /// </summary>
     /// <param name="input">Input tensor with historical data.</param>
@@ -1016,7 +993,7 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
 
         // Convert input to ONNX tensor format
         var inputData = ConvertToFloatArray(input);
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
 
         // Get input name from model
         var inputMeta = OnnxSession.InputMetadata;
@@ -1052,7 +1029,7 @@ public class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     private Tensor<T> ApplyRandomMasking(Tensor<T> input)
     {
-        var masked = new Tensor<T>(input.Shape.ToArray());
+        var masked = new Tensor<T>(input._shape);
         var rand = RandomHelper.CreateSecureRandom();
 
         // Copy input data

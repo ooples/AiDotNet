@@ -1,3 +1,4 @@
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -74,12 +75,12 @@ public class DecoderLayer<T> : LayerBase<T>
     private Tensor<T>? _lastEncoderOutput;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuDecoderInput;
-    private IGpuTensor<T>? _gpuEncoderOutput;
-    private IGpuTensor<T>? _gpuNormalized1;
-    private IGpuTensor<T>? _gpuNormalized2;
-    private IGpuTensor<T>? _gpuResidual1;
-    private IGpuTensor<T>? _gpuResidual2;
+    private Tensor<T>? _gpuDecoderInput;
+    private Tensor<T>? _gpuEncoderOutput;
+    private Tensor<T>? _gpuNormalized1;
+    private Tensor<T>? _gpuNormalized2;
+    private Tensor<T>? _gpuResidual1;
+    private Tensor<T>? _gpuResidual2;
 
     /// <summary>
     /// Gets the size of the input features for this layer.
@@ -163,6 +164,14 @@ public class DecoderLayer<T> : LayerBase<T>
         _norm1 = new LayerNormalizationLayer<T>(inputSize);
         _norm2 = new LayerNormalizationLayer<T>(inputSize);
         _norm3 = new LayerNormalizationLayer<T>(inputSize);
+
+        RegisterSubLayer(_selfAttention);
+        RegisterSubLayer(_crossAttention);
+        RegisterSubLayer(_feedForward1);
+        RegisterSubLayer(_feedForward2);
+        RegisterSubLayer(_norm1);
+        RegisterSubLayer(_norm2);
+        RegisterSubLayer(_norm3);
     }
 
     /// <summary>
@@ -188,6 +197,14 @@ public class DecoderLayer<T> : LayerBase<T>
         _norm1 = new LayerNormalizationLayer<T>(inputSize);
         _norm2 = new LayerNormalizationLayer<T>(inputSize);
         _norm3 = new LayerNormalizationLayer<T>(inputSize);
+
+        RegisterSubLayer(_selfAttention);
+        RegisterSubLayer(_crossAttention);
+        RegisterSubLayer(_feedForward1);
+        RegisterSubLayer(_feedForward2);
+        RegisterSubLayer(_norm1);
+        RegisterSubLayer(_norm2);
+        RegisterSubLayer(_norm3);
     }
 
     /// <summary>
@@ -355,7 +372,7 @@ public class DecoderLayer<T> : LayerBase<T>
     /// <remarks>
     /// All computations stay on GPU. Chains: SelfAttention → Norm1 → CrossAttention → Norm2 → FFN → Norm3.
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length < 2)
             throw new ArgumentException("DecoderLayer requires two inputs: [decoderInput, encoderOutput]", nameof(inputs));
@@ -398,228 +415,16 @@ public class DecoderLayer<T> : LayerBase<T>
             _gpuNormalized2 = normalized2;
             _gpuResidual1 = residual1;
             _gpuResidual2 = residual2;
-            _lastInput = decoderInput.ToTensor();
-            _lastEncoderOutput = encoderOutput.ToTensor();
+            _lastInput = decoderInput;
+            _lastEncoderOutput = encoderOutput;
         }
 
         return output;
     }
 
-    /// <summary>
-    /// Computes the gradient of the loss with respect to the inputs on the GPU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the decoder input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
+    // LastBackwardGradients removed — tape-based autodiff handles gradients.
 
-        if (_gpuNormalized1 == null || _gpuNormalized2 == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
-
-        // Backward through norm3
-        IGpuTensor<T> grad = InvokeBackwardGpu(_norm3, outputGradient, gpuEngine);
-
-        // Gradient through residual3: add to both branches
-        // Backward through FFN2
-        IGpuTensor<T> ffOutputGrad = InvokeBackwardGpu(_feedForward2, grad, gpuEngine);
-
-        // Backward through FFN1
-        IGpuTensor<T> ffHiddenGrad = InvokeBackwardGpu(_feedForward1, ffOutputGrad, gpuEngine);
-
-        // Add residual gradient from norm3
-        var norm2Grad = gpuEngine.AddGpu(ffHiddenGrad, grad);
-
-        // Backward through norm2
-        grad = InvokeBackwardGpu(_norm2, norm2Grad, gpuEngine);
-
-        // Gradient through residual2: add to both branches
-        // Backward through cross-attention
-        IGpuTensor<T> crossAttnGrad = InvokeBackwardGpu(_crossAttention, grad, gpuEngine);
-
-        // Add residual gradient from norm2
-        var norm1Grad = gpuEngine.AddGpu(crossAttnGrad, grad);
-
-        // Backward through norm1
-        grad = InvokeBackwardGpu(_norm1, norm1Grad, gpuEngine);
-
-        // Gradient through residual1: add to both branches
-        // Backward through self-attention
-        IGpuTensor<T> selfAttnGrad = InvokeBackwardGpu(_selfAttention, grad, gpuEngine);
-
-        // Add residual gradient to get final input gradient
-        var inputGrad = gpuEngine.AddGpu(selfAttnGrad, grad);
-
-        return inputGrad;
-    }
-
-    /// <summary>
-    /// Helper method to invoke BackwardGpu on a sublayer using reflection.
-    /// </summary>
-    private static IGpuTensor<T> InvokeBackwardGpu(LayerBase<T> layer, IGpuTensor<T> grad, DirectGpuTensorEngine gpuEngine)
-    {
-        var layerType = layer.GetType();
-        var backwardGpuMethod = layerType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
-
-        if (backwardGpuMethod != null)
-        {
-            return (IGpuTensor<T>)(backwardGpuMethod.Invoke(layer, new object[] { grad })
-                ?? throw new InvalidOperationException("BackwardGpu returned null."));
-        }
-        else
-        {
-            // Fallback to CPU backward
-            var cpuGrad = grad.ToTensor();
-            var cpuResult = layer.Backward(cpuGrad);
-            return gpuEngine.UploadToGpu<T>(cpuResult, GpuTensorRole.Gradient);
-        }
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the decoder layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>A concatenated tensor containing gradients for both the input and the encoder output.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method calculates how much each part of the input and the encoder output
-    /// contributed to the error. It's used during training to update the layer's parameters. The method expects
-    /// the forward pass to have been called first, as it uses information stored during the forward pass.</para>
-    /// <para>The returned tensor is a concatenation of two gradients: the gradient with respect to the input
-    /// and the gradient with respect to the encoder output. Use the <see cref="LastBackwardGradients"/> property
-    /// to access these gradients separately.</para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastEncoderOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var (inputGradient, encoderOutputGradient) = BackwardInternal(outputGradient);
-        _lastInputGradient = inputGradient;
-        _lastEncoderOutputGradient = encoderOutputGradient;
-
-        // Concatenate the input gradient and encoder output gradient
-        return Tensor<T>.Concatenate(new[] { inputGradient, encoderOutputGradient }, 1);
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation by delegating to the autodiff implementations
-    /// of the constituent layers (AttentionLayer, LayerNormalizationLayer, FeedForwardLayer).
-    /// Each sublayer will use its own autodiff implementation if available.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastEncoderOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Composite layer: just call Backward on each sublayer with UseAutodiff enabled
-        // The sublayers will handle their own autodiff if they support it
-        var (inputGradient, encoderOutputGradient) = BackwardInternal(outputGradient);
-        _lastInputGradient = inputGradient;
-        _lastEncoderOutputGradient = encoderOutputGradient;
-
-        // Concatenate the input gradient and encoder output gradient
-        return Tensor<T>.Concatenate(new[] { inputGradient, encoderOutputGradient }, 1);
-    }
-
-    /// <summary>
-    /// Gets the most recent gradients calculated during the backward pass.
-    /// </summary>
-    /// <returns>A tuple containing the gradient with respect to the input and the gradient with respect to the encoder output.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when accessed before a backward pass has been performed.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This property provides easy access to the separate gradients calculated
-    /// during the last backward pass. It's useful when you need to handle the input gradient and encoder output
-    /// gradient separately, rather than dealing with the concatenated gradient returned by the Backward method.</para>
-    /// </remarks>
-    public (Tensor<T> InputGradient, Tensor<T> EncoderOutputGradient) LastBackwardGradients
-    {
-        get
-        {
-            if (_lastInputGradient == null || _lastEncoderOutputGradient == null)
-                throw new InvalidOperationException("Backward pass must be called before accessing gradients.");
-            return (_lastInputGradient, _lastEncoderOutputGradient);
-        }
-    }
-
-    /// <summary>
-    /// Performs the internal backward pass of the decoder layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>A tuple containing the gradient with respect to the input and the encoder output.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method calculates the gradients for each component of the decoder layer
-    /// (self-attention, cross-attention, feed-forward network, and layer normalizations) in reverse order
-    /// of the forward pass. It's a crucial part of the backpropagation process in neural networks.</para>
-    /// </remarks>
-    private (Tensor<T> inputGradient, Tensor<T> encoderOutputGradient) BackwardInternal(Tensor<T> outputGradient)
-    {
-        // If forward received 2D input, the output gradient will also be 2D
-        // We need to reshape it to 3D to match internal processing shapes
-        Tensor<T> grad3D;
-        bool gradWas2D = outputGradient.Shape.Length == 2;
-
-        if (gradWas2D)
-        {
-            // 2D gradient: [seq, embed] -> [1, seq, embed]
-            grad3D = outputGradient.Reshape(1, outputGradient.Shape[0], outputGradient.Shape[1]);
-        }
-        else
-        {
-            grad3D = outputGradient;
-        }
-
-        // Backward through Norm3 first (output = Norm3(residual + ff))
-        var dNorm3 = _norm3.Backward(grad3D);
-
-        // Backward through FFN (reverse order: projection then expansion)
-        var dFF2 = _feedForward2.Backward(dNorm3);
-        var dNormalized2 = _feedForward1.Backward(dFF2);
-        dNormalized2 = dNormalized2.Add(dNorm3); // Residual connection gradient
-        var dNorm2 = _norm2.Backward(dNormalized2);
-
-        var dCrossAttention = _crossAttention.Backward(dNorm2);
-        var dNormalized1 = dCrossAttention.Add(dNorm2);
-        var dNorm1 = _norm1.Backward(dNormalized1);
-
-        var dSelfAttention = _selfAttention.Backward(dNorm1);
-        var dInput = dSelfAttention.Add(dNorm1);
-
-        // Encoder output gradient: use the cross-attention gradient (same as dCrossAttention)
-        // since cross-attention outputs depend on both query (from self-attention) and context (encoder)
-        var dEncoderOutput = dCrossAttention;
-
-        // If input was originally 2D, reshape gradients back to 2D
-        if (gradWas2D)
-        {
-            dInput = dInput.Reshape(dInput.Shape[1], dInput.Shape[2]);
-            dEncoderOutput = dEncoderOutput.Reshape(dEncoderOutput.Shape[1], dEncoderOutput.Shape[2]);
-        }
-
-        return (dInput, dEncoderOutput);
-    }
+    // BackwardInternal removed — tape-based autodiff handles decoder gradients.
 
     /// <summary>
     /// Updates the layer's parameters based on the computed gradients and a learning rate.
@@ -797,50 +602,5 @@ public class DecoderLayer<T> : LayerBase<T>
         _norm1.ParameterCount +
         _norm2.ParameterCount +
         _norm3.ParameterCount;
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // DecoderLayer requires TWO inputs: decoder input and encoder output
-        if (inputNodes.Count < 2)
-            throw new ArgumentException(
-                "DecoderLayer requires at least two input nodes: decoder input and encoder output.",
-                nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var decoderInput = inputNodes[0];
-        var encoderOutput = inputNodes[1];
-
-        // Self-attention on decoder input
-        var selfAttentionOutput = _selfAttention.ExportComputationGraph([decoderInput]);
-        var residual1 = TensorOperations<T>.Add(decoderInput, selfAttentionOutput);
-        var normalized1 = _norm1.ExportComputationGraph([residual1]);
-
-        // Cross-attention with encoder output
-        var crossAttentionOutput = _crossAttention.ExportComputationGraph([normalized1, encoderOutput]);
-        var residual2 = TensorOperations<T>.Add(normalized1, crossAttentionOutput);
-        var normalized2 = _norm2.ExportComputationGraph([residual2]);
-
-        // Feed-forward network
-        var ffExpanded = _feedForward1.ExportComputationGraph([normalized2]);
-        var feedForwardOutput = _feedForward2.ExportComputationGraph([ffExpanded]);
-        var residual3 = TensorOperations<T>.Add(normalized2, feedForwardOutput);
-        var output = _norm3.ExportComputationGraph([residual3]);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> because DecoderLayer can be compiled with multiple input nodes representing
-    /// the decoder input and encoder output. The computation graph supports multiple inputs.
-    /// </value>
-    public override bool SupportsJitCompilation => true;
 
 }

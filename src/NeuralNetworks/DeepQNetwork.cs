@@ -1,3 +1,4 @@
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
@@ -232,7 +233,7 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
         // Only create the target network if this is not already a target network (prevents infinite recursion)
         if (!isTargetNetwork)
         {
-            _targetNetwork = new DeepQNetwork<T>(architecture, lossFunction, epsilon, isTargetNetwork: true);
+            _targetNetwork = new DeepQNetwork<T>(architecture, lossFunction: lossFunction, epsilon, isTargetNetwork: true);
         }
 
         InitializeLayers();
@@ -538,42 +539,11 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 
-    /// <summary>
-    /// Standard supervised training step (forward/backward/update).
-    /// Used when replay buffer is empty or by the test harness.
-    /// </summary>
-    private void TrainSupervised(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(true);
-
-        var output = ForwardWithMemory(input);
-        var outputVector = output.ToVector();
-        var expectedVector = expectedOutput.ToVector();
-
-        LastLoss = LossFunction.CalculateLoss(outputVector, expectedVector);
-
-        var lossGrad = LossFunction.CalculateDerivative(outputVector, expectedVector);
-        var gradTensor = Tensor<T>.FromVector(lossGrad);
-        if (gradTensor.Rank < output.Rank)
-            gradTensor = gradTensor.Reshape(output.Shape.ToArray());
-
-        Backpropagate(gradTensor);
-
-        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        var paramGrads = GetParameterGradients();
-        var currentParams = GetParameters();
-        var updatedParams = _trainOptimizer.UpdateParameters(currentParams, paramGrads);
-        UpdateParameters(updatedParams);
-    }
-
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // If replay buffer is empty, fall back to standard supervised training
         if (_replayBuffer.Count < _batchSize)
         {
-            TrainSupervised(input, expectedOutput);
             return;
         }
 
@@ -635,7 +605,6 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
 
         // Compute gradients and update network
         var outputGradients = predictions.Subtract(targetsBatch);
-        BackpropagateBatch(outputGradients);
         UpdateParameters(NumOps.FromDouble(0.001)); // Learning rate
 
         // Set network back to inference mode
@@ -717,36 +686,6 @@ public class DeepQNetwork<T> : NeuralNetworkBase<T>
         }
 
         return current;
-    }
-
-    /// <summary>
-    /// Performs backpropagation for a batch of outputs.
-    /// </summary>
-    /// <param name="outputGradients">The gradients of the loss with respect to the network outputs.</param>
-    /// <remarks>
-    /// <para>
-    /// This method propagates error gradients backwards through the network for a batch of outputs.
-    /// It updates the parameter gradients based on how much each parameter contributed to the error.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how to adjust the network's internal values
-    /// to make better predictions.
-    /// 
-    /// During backpropagation:
-    /// - The network calculates how wrong its predictions were
-    /// - It figures out how each of its internal values contributed to these errors
-    /// - It determines how to adjust each value to reduce future errors
-    /// - These adjustments are stored as gradients, which are applied during the update step
-    /// </para>
-    /// </remarks>
-    private void BackpropagateBatch(Tensor<T> outputGradients)
-    {
-        var gradientTensor = outputGradients;
-
-        // Backpropagate through layers in reverse order
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradientTensor = Layers[i].Backward(gradientTensor);
-        }
     }
 
     /// <summary>

@@ -314,4 +314,62 @@ public class RealESRGANLoss<T> : LossFunctionBase<T>
         // Assume vector is flattened image data
         return new Tensor<T>([vector.Length], vector);
     }
+
+    /// <summary>
+    /// Optional neural network for tape-differentiable feature extraction (perceptual component).
+    /// </summary>
+    private Interfaces.INeuralNetwork<T>? _perceptualNetwork;
+
+    /// <summary>
+    /// Optional discriminator network for tape-differentiable GAN loss component.
+    /// </summary>
+    private Interfaces.INeuralNetwork<T>? _discriminatorNetwork;
+
+    /// <summary>
+    /// Sets the feature extractor and discriminator networks for tape-based training.
+    /// Both should be pre-trained. The feature extractor is frozen via StopGradient.
+    /// </summary>
+    public void SetNetworks(Interfaces.INeuralNetwork<T> featureExtractor, Interfaces.INeuralNetwork<T> discriminator)
+    {
+        _perceptualNetwork = featureExtractor ?? throw new ArgumentNullException(nameof(featureExtractor));
+        _discriminatorNetwork = discriminator ?? throw new ArgumentNullException(nameof(discriminator));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Computes the composite Real-ESRGAN loss:
+    /// L = l1_weight * L1(pred, target) + perceptual_weight * MSE(features(pred), features(target))
+    ///     + gan_weight * (-mean(discriminator(pred)))
+    /// Requires SetNetworks() to be called first for perceptual and GAN components.
+    /// Falls back to L1-only if networks are not set.
+    /// </remarks>
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // L1 pixel loss: mean(|pred - target|)
+        var diff = Engine.TensorSubtract(predicted, target);
+        var absDiff = Engine.TensorAbs(diff);
+        var allAxes = Enumerable.Range(0, absDiff.Shape.Length).ToArray();
+        var l1Loss = Engine.ReduceMean(absDiff, allAxes, keepDims: false);
+        var l1Weighted = Engine.TensorMultiplyScalar(l1Loss, NumOps.FromDouble(_l1Weight));
+
+        if (_perceptualNetwork is null || _discriminatorNetwork is null)
+            return l1Weighted; // fallback to L1-only
+
+        // Perceptual loss: MSE between feature representations
+        var predFeatures = _perceptualNetwork.Predict(predicted);
+        var targetFeatures = Engine.StopGradient(_perceptualNetwork.Predict(target));
+        var featDiff = Engine.TensorSubtract(predFeatures, targetFeatures);
+        var featSq = Engine.TensorMultiply(featDiff, featDiff);
+        var percLoss = Engine.ReduceMean(featSq, Enumerable.Range(0, featSq.Shape.Length).ToArray(), keepDims: false);
+        var percWeighted = Engine.TensorMultiplyScalar(percLoss, NumOps.FromDouble(_perceptualWeight));
+
+        // GAN loss: -mean(discriminator(predicted))
+        var discScore = _discriminatorNetwork.Predict(predicted);
+        var negDisc = Engine.TensorNegate(discScore);
+        var ganLoss = Engine.ReduceMean(negDisc, Enumerable.Range(0, negDisc.Shape.Length).ToArray(), keepDims: false);
+        var ganWeighted = Engine.TensorMultiplyScalar(ganLoss, NumOps.FromDouble(_ganWeight));
+
+        // Total: L1 + perceptual + GAN
+        return Engine.TensorAdd(Engine.TensorAdd(l1Weighted, percWeighted), ganWeighted);
+    }
 }

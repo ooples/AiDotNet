@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -524,8 +524,7 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
         // Backward pass
         var gradientVector = _lossFunction.CalculateDerivative(enhancedVector, cleanVector);
-        var gradientTensor = Tensor<T>.FromVector(gradientVector, enhancedStft.Shape.ToArray());
-        BackwardNative(gradientTensor);
+        var gradientTensor = Tensor<T>.FromVector(gradientVector, enhancedStft._shape);
 
         // Update parameters via optimizer
         _optimizer?.UpdateParameters(Layers);
@@ -689,37 +688,6 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     }
 
     /// <summary>
-    /// Backward pass through native layers.
-    /// </summary>
-    private void BackwardNative(Tensor<T> gradient)
-    {
-        var grad = gradient;
-
-        // Backward through mask
-        if (_maskLayer is null)
-            throw new InvalidOperationException("DCCRN mask layer not initialized. Call InitializeLayers first.");
-        grad = _maskLayer.Backward(grad);
-
-        // Backward through decoder
-        for (int i = _decoder.Count - 1; i >= 0; i--)
-        {
-            grad = _decoder[i].Backward(grad);
-        }
-
-        // Backward through LSTM
-        for (int i = _lstmLayers.Count - 1; i >= 0; i--)
-        {
-            grad = _lstmLayers[i].Backward(grad);
-        }
-
-        // Backward through encoder
-        for (int i = _encoder.Count - 1; i >= 0; i--)
-        {
-            grad = _encoder[i].Backward(grad);
-        }
-    }
-
-    /// <summary>
     /// Computes complex STFT.
     /// </summary>
     private Tensor<T> ComputeComplexSTFT(Tensor<T> audio)
@@ -798,7 +766,7 @@ public class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     private Tensor<T> ApplyComplexMask(Tensor<T> stft, Tensor<T> mask)
     {
-        var result = new Tensor<T>(stft.Shape.ToArray());
+        var result = new Tensor<T>(stft._shape);
 
         for (int i = 0; i < stft.Shape[0]; i++)
         {

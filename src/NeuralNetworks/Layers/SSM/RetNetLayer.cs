@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -500,206 +500,6 @@ public class RetNetLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null ||
-            _lastQuery == null || _lastKey == null || _lastValue == null ||
-            _lastRetentionOutput == null || _lastNormedRetention == null ||
-            _lastGate == null || _lastGateRaw == null ||
-            _lastDecayMasks == null || _lastRetentionScores == null ||
-            _lastGroupNormMean == null || _lastGroupNormVar == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = _lastInput.Shape[0];
-        int seqLen = _lastInput.Shape[1];
-
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        var activationGrad = ApplyActivationDerivative(_lastOutput, grad3D);
-
-        // Initialize all gradients
-        _queryWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _queryBiasGradient = new Tensor<T>([_modelDimension]);
-        _keyWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _keyBiasGradient = new Tensor<T>([_modelDimension]);
-        _valueWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _valueBiasGradient = new Tensor<T>([_modelDimension]);
-        _gammasGradient = new Tensor<T>([_numHeads]);
-        _outputGateWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputGateBiasGradient = new Tensor<T>([_modelDimension]);
-        _outputProjectionWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputProjectionBiasGradient = new Tensor<T>([_modelDimension]);
-        _groupNormScaleGradient = new Tensor<T>([_numHeads, _headDimension]);
-        _groupNormBiasGradient = new Tensor<T>([_numHeads, _headDimension]);
-
-        // ------ Step 6 backward: output projection ------
-        var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
-
-        // Gated output that was projected
-        var gatedOutput = Engine.TensorMultiply(_lastGate, _lastNormedRetention);
-        var gatedFlat = gatedOutput.Reshape(batchSize * seqLen, _modelDimension);
-
-        _outputProjectionWeightsGradient = Engine.TensorMatMul(
-            gatedFlat.Transpose([1, 0]), gradFlat);
-        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
-
-        var dGated = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
-            .Reshape(batchSize, seqLen, _modelDimension);
-
-        // ------ Step 5 backward: gated output = gate * normedRetention ------
-        var dNormedRetention = Engine.TensorMultiply(dGated, _lastGate);
-        var dGateSwish = Engine.TensorMultiply(dGated, _lastNormedRetention);
-
-        // Gate uses Swish: derivative = sigmoid(x) * (1 + x * (1 - sigmoid(x)))
-        var dGateRaw = Engine.TensorMultiply(dGateSwish, ComputeSiLUDerivative(_lastGateRaw));
-
-        // Gate weight gradients
-        var inputFlat = _lastInput.Reshape(batchSize * seqLen, _modelDimension);
-        var dGateRawFlat = dGateRaw.Reshape(batchSize * seqLen, _modelDimension);
-        _outputGateWeightsGradient = Engine.TensorMatMul(
-            inputFlat.Transpose([1, 0]), dGateRawFlat);
-        _outputGateBiasGradient = Engine.ReduceSum(dGateRaw, new int[] { 0, 1 });
-
-        // Input gradient from gate path
-        var dInputFromGate = Engine.TensorMatMul(
-            dGateRawFlat, _outputGateWeights.Transpose([1, 0]));
-
-        // ------ Step 4 backward: group normalization ------
-        var dRetention = GroupNormBackward(dNormedRetention, _lastRetentionOutput, batchSize, seqLen);
-
-        // ------ Step 3 backward: multi-scale retention ------
-        var dQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        T headScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int h = 0; h < _numHeads; h++)
-            {
-                int dimStart = h * _headDimension;
-                T gamma = _gammas[h];
-
-                // Backward through: output[i] = sum_j score[i,j] * V[j]
-                // dScore[i,j] = sum_d dOutput[i,d] * V[j,d]
-                // dV[j,d] += sum_i score[i,j] * dOutput[i,d]
-                var dScore = new T[seqLen, seqLen];
-                for (int i = 0; i < seqLen; i++)
-                {
-                    for (int j = 0; j <= i; j++)
-                    {
-                        T dScoreVal = NumOps.Zero;
-                        for (int d = 0; d < _headDimension; d++)
-                        {
-                            int flatD = dimStart + d;
-                            T dOut = dRetention[new[] { bi, i, flatD }];
-                            T vVal = _lastValue[new[] { bi, j, flatD }];
-                            dScoreVal = NumOps.Add(dScoreVal, NumOps.Multiply(dOut, vVal));
-
-                            // dV accumulation
-                            T score = _lastRetentionScores[new[] { bi, h, i, j }];
-                            dV[new[] { bi, j, flatD }] = NumOps.Add(
-                                dV[new[] { bi, j, flatD }],
-                                NumOps.Multiply(score, dOut));
-                        }
-                        dScore[i, j] = dScoreVal;
-                    }
-                }
-
-                // Backward through: score[i,j] = (Q_i . K_j) * headScale * D[i,j]
-                // dQ_i += sum_j dScore[i,j] * headScale * D[i,j] * K_j
-                // dK_j += sum_i dScore[i,j] * headScale * D[i,j] * Q_i
-                // dGamma_h += sum_{i,j} dScore[i,j] * (Q_i . K_j) * headScale * dD[i,j]/dGamma
-                for (int i = 0; i < seqLen; i++)
-                {
-                    for (int j = 0; j <= i; j++)
-                    {
-                        T decayVal = _lastDecayMasks[new[] { h, i, j }];
-                        T scaledDecay = NumOps.Multiply(headScale, decayVal);
-                        T dS = dScore[i, j];
-
-                        for (int d = 0; d < _headDimension; d++)
-                        {
-                            int flatD = dimStart + d;
-                            T qVal = _lastQuery[new[] { bi, i, flatD }];
-                            T kVal = _lastKey[new[] { bi, j, flatD }];
-
-                            // dQ[i,d] += dScore[i,j] * scale * decay * K[j,d]
-                            dQ[new[] { bi, i, flatD }] = NumOps.Add(
-                                dQ[new[] { bi, i, flatD }],
-                                NumOps.Multiply(NumOps.Multiply(dS, scaledDecay), kVal));
-
-                            // dK[j,d] += dScore[i,j] * scale * decay * Q[i,d]
-                            dK[new[] { bi, j, flatD }] = NumOps.Add(
-                                dK[new[] { bi, j, flatD }],
-                                NumOps.Multiply(NumOps.Multiply(dS, scaledDecay), qVal));
-                        }
-
-                        // dGamma: D[i,j] = gamma^(i-j), so dD/dGamma = (i-j) * gamma^(i-j-1)
-                        int diff = i - j;
-                        if (diff > 0)
-                        {
-                            // Compute the raw QK dot product for this position
-                            T dot = NumOps.Zero;
-                            for (int d = 0; d < _headDimension; d++)
-                            {
-                                int flatD = dimStart + d;
-                                dot = NumOps.Add(dot, NumOps.Multiply(
-                                    _lastQuery[new[] { bi, i, flatD }],
-                                    _lastKey[new[] { bi, j, flatD }]));
-                            }
-                            // dGamma += dScore * headScale * dot * (i-j) * gamma^(i-j-1)
-                            T gammaDerivPower = NumOps.One;
-                            for (int p = 0; p < diff - 1; p++)
-                                gammaDerivPower = NumOps.Multiply(gammaDerivPower, gamma);
-                            T dDecay = NumOps.Multiply(NumOps.FromDouble(diff), gammaDerivPower);
-                            _gammasGradient[h] = NumOps.Add(
-                                _gammasGradient[h],
-                                NumOps.Multiply(dS, NumOps.Multiply(headScale,
-                                    NumOps.Multiply(dot, dDecay))));
-                        }
-                    }
-                }
-            }
-        }
-
-        // ------ Steps 2,1 backward: Q, K, V projection weight gradients ------
-        var dQFlat = dQ.Reshape(batchSize * seqLen, _modelDimension);
-        var dKFlat = dK.Reshape(batchSize * seqLen, _modelDimension);
-        var dVFlat = dV.Reshape(batchSize * seqLen, _modelDimension);
-
-        _queryWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dQFlat);
-        _queryBiasGradient = Engine.ReduceSum(dQ, new int[] { 0, 1 });
-        _keyWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dKFlat);
-        _keyBiasGradient = Engine.ReduceSum(dK, new int[] { 0, 1 });
-        _valueWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dVFlat);
-        _valueBiasGradient = Engine.ReduceSum(dV, new int[] { 0, 1 });
-
-        // Input gradient from Q, K, V projection paths
-        var dInputFromQ = Engine.TensorMatMul(dQFlat, _queryWeights.Transpose([1, 0]));
-        var dInputFromK = Engine.TensorMatMul(dKFlat, _keyWeights.Transpose([1, 0]));
-        var dInputFromV = Engine.TensorMatMul(dVFlat, _valueWeights.Transpose([1, 0]));
-
-        // Sum all input gradients
-        var dInputTotal = Engine.TensorAdd(dInputFromQ, dInputFromK);
-        dInputTotal = Engine.TensorAdd(dInputTotal, dInputFromV);
-        dInputTotal = Engine.TensorAdd(dInputTotal, dInputFromGate);
-
-        var dInput = dInputTotal.Reshape(batchSize, seqLen, _modelDimension);
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return dInput.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return dInput.Reshape(_originalInputShape);
-
-        return dInput;
-    }
-
     /// <summary>
     /// Backward pass through group normalization.
     /// </summary>
@@ -857,15 +657,15 @@ public class RetNetLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
-            (_queryBiasGradient is not null ? Vector<T>.FromMemory(_queryBiasGradient.Data) : new Vector<T>(0)),
-            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
-            (_keyBiasGradient is not null ? Vector<T>.FromMemory(_keyBiasGradient.Data) : new Vector<T>(0)),
-            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
-            (_valueBiasGradient is not null ? Vector<T>.FromMemory(_valueBiasGradient.Data) : new Vector<T>(0)),
-            (_gammasGradient is not null ? Vector<T>.FromMemory(_gammasGradient.Data) : new Vector<T>(0)),
-            (_groupNormScaleGradient is not null ? Vector<T>.FromMemory(_groupNormScaleGradient.Data) : new Vector<T>(0)),
-            (_groupNormBiasGradient is not null ? Vector<T>.FromMemory(_groupNormBiasGradient.Data) : new Vector<T>(0)));
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_queryBiasGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_keyBiasGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_valueBiasGradient!.ToArray()),
+            new Vector<T>(_gammasGradient!.ToArray()),
+            new Vector<T>(_groupNormScaleGradient!.ToArray()),
+            new Vector<T>(_groupNormBiasGradient!.ToArray()));
     }
 
     public override void ClearGradients()
@@ -907,31 +707,6 @@ public class RetNetLayer<T> : LayerBase<T>
     }
 
     #endregion
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
-        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
-        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(outWeightsNode);
-        inputNodes.Add(outBiasNode);
-
-        var outT = TensorOperations<T>.Transpose(outWeightsNode);
-        var finalOutput = TensorOperations<T>.MatrixMultiply(xNode, outT);
-        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
-
-        return outputWithBias;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

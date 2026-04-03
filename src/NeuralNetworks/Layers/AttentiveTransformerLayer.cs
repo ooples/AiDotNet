@@ -1,7 +1,7 @@
-using AiDotNet.Autodiff;
-using AiDotNet.NeuralNetworks.Layers;
+﻿using AiDotNet.Autodiff;
+using AiDotNet.NeuralNetworks.Tabular;
 
-namespace AiDotNet.NeuralNetworks.Tabular;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Implements the Attentive Transformer block used in TabNet architecture for feature selection.
@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class AttentiveTransformer<T> : LayerBase<T>
+public class AttentiveTransformerLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
     private readonly int _outputDim;
@@ -58,9 +58,6 @@ public class AttentiveTransformer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Initializes a new instance of the AttentiveTransformer class.
@@ -86,7 +83,7 @@ public class AttentiveTransformer<T> : LayerBase<T>
     /// to be used multiple times.
     /// </para>
     /// </remarks>
-    public AttentiveTransformer(
+    public AttentiveTransformerLayer(
         int inputDim,
         int outputDim,
         double relaxationFactor = 1.5,
@@ -209,7 +206,7 @@ public class AttentiveTransformer<T> : LayerBase<T>
     {
         // prior_new = prior * (gamma - attention)
         var gamma = NumOps.FromDouble(_relaxationFactor);
-        var gammaFull = Tensor<T>.CreateDefault(priorScales.Shape.ToArray(), gamma);
+        var gammaFull = Tensor<T>.CreateDefault(priorScales._shape, gamma);
         var scaleFactor = Engine.TensorSubtract(gammaFull, attentionMask);
         return Engine.TensorMultiply(priorScales, scaleFactor);
     }
@@ -262,36 +259,6 @@ public class AttentiveTransformer<T> : LayerBase<T>
 
         // Average over batch
         return NumOps.Divide(totalEntropy, NumOps.FromDouble(batchSize));
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the Attentive Transformer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient flowing back.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_attentionMaskCache == null || _sparsemaxInputCache == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        // Backward through Sparsemax
-        var sparsemaxGrad = _sparsemax.Backward(outputGradient, _attentionMaskCache, axis: 1);
-
-        // Backward through prior scales multiplication (element-wise)
-        // If z = x * y, then dL/dx = dL/dz * y
-        var scaledGrad = _priorScalesCache != null
-            ? Engine.TensorMultiply(sparsemaxGrad, _priorScalesCache)
-            : sparsemaxGrad;
-
-        // Backward through batch normalization
-        var bnGrad = _bnLayer.Backward(scaledGrad);
-
-        // Backward through FC layer
-        var inputGrad = _fcLayer.Backward(bnGrad);
-
-        return inputGrad;
     }
 
     /// <inheritdoc/>
@@ -423,15 +390,5 @@ public class AttentiveTransformer<T> : LayerBase<T>
     {
         _fcLayer.SetTrainingMode(isTraining);
         // GhostBatchNormalization uses Forward (training) vs ForwardInference (eval) internally
-    }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Delegate to the inner fully connected layer's computation graph
-        return _fcLayer.ExportComputationGraph(inputNodes);
     }
 }

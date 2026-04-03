@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -471,6 +471,11 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeParameters()
     {
+        RegisterTrainableParameter(_localizationWeights1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_localizationBias1, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_localizationWeights2, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_localizationBias2, PersistentTensorRole.Biases);
+
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_localizationWeights1.Shape[0] + _localizationWeights1.Shape[1])));
         InitializeTensor(_localizationWeights1, scale);
         InitializeTensor(_localizationWeights2, scale);
@@ -782,292 +787,6 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     // Removed SampleInputImage (unused)
 
-    /// <summary>
-    /// Performs the backward pass of the spatial transformer layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the spatial transformer layer, which is used during training to propagate
-    /// error gradients back through the network. It computes gradients for the localization network parameters and returns
-    /// the gradient with respect to the input.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
-    /// and parameters should change to reduce errors.
-    /// 
-    /// During the backward pass:
-    /// 1. The method throws an error if the forward pass hasn't been called first
-    /// 2. It computes gradients for:
-    ///    - The input tensor (how the input should change)
-    ///    - The localization network parameters (how the transformation should change)
-    /// 3. This involves backpropagating through three components:
-    ///    - The sampler (how changes in output affect the sampling process)
-    ///    - The grid generator (how changes in sampling affect the grid coordinates)
-    ///    - The localization network (how changes in grid coordinates affect the transformation parameters)
-    /// 
-    /// The backward pass is complex because it must calculate how small changes in the transformation
-    /// parameters affect the final output. This allows the network to learn the optimal transformation.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastTransformationMatrix == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = _lastInput.Shape[0];
-
-        // Build theta tensor replicated across batch using Engine ops
-        Tensor<T> theta;
-        if (_lastTransformationMatrix.Rank == 2)
-        {
-            // [2, 3] → expand to [1, 2, 3] → tile to [batch, 2, 3]
-            var thetaExpanded = Engine.TensorExpandDims(_lastTransformationMatrix, 0);
-            theta = Engine.TensorTile(thetaExpanded, [batchSize, 1, 1]);
-        }
-        else if (_lastTransformationMatrix.Shape[0] == batchSize)
-        {
-            // Already batched [batch, 2, 3]
-            theta = _lastTransformationMatrix;
-        }
-        else
-        {
-            // [1, 2, 3] → tile to [batch, 2, 3]
-            theta = Engine.TensorTile(_lastTransformationMatrix, [batchSize, 1, 1]);
-        }
-
-        // Autodiff graph for sampling backward
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "st_input", requiresGradient: true);
-        var thetaNode = Autodiff.TensorOperations<T>.Variable(theta, "st_theta", requiresGradient: true);
-        var gridNode = Autodiff.TensorOperations<T>.AffineGrid(thetaNode, _outputHeight, _outputWidth);
-        var outputNode = Autodiff.TensorOperations<T>.GridSample(inputNode, gridNode);
-        outputNode.Gradient = outputGradient;
-        outputNode.Backward();
-
-        // Propagate theta gradient into localization network
-        if (thetaNode.Gradient != null)
-        {
-            var thetaGradFlat = thetaNode.Gradient.Reshape([batchSize, 6]);
-
-            // Gradients for second layer
-            var lastLoc1 = _lastLocalization1 ?? throw new InvalidOperationException("_lastLocalization1 has not been initialized.");
-            var loc1T = Engine.TensorTranspose(lastLoc1);
-            _localizationWeights2Gradient = Engine.TensorMatMul(loc1T, thetaGradFlat);
-            _localizationBias2Gradient = Engine.ReduceSum(thetaGradFlat, new[] { 0 }, keepDims: false);
-
-            // Backprop to localization1
-            var weights2T = Engine.TensorTranspose(_localizationWeights2);
-            var loc1Back = Engine.TensorMatMul(thetaGradFlat, weights2T);
-
-            // Activation derivative for localization1
-            Tensor<T> activationDeriv;
-            if (VectorActivation != null)
-            {
-                activationDeriv = VectorActivation.Derivative(lastLoc1);
-            }
-            else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
-            {
-                var act = ScalarActivation;
-                activationDeriv = lastLoc1.Transform((x, _) => act.Derivative(x));
-            }
-            else
-            {
-                activationDeriv = new Tensor<T>(lastLoc1.Shape.ToArray());
-                activationDeriv.Fill(NumOps.One);
-            }
-
-            var loc1Grad = Engine.TensorMultiply(loc1Back, activationDeriv);
-
-            // Gradients for first layer
-            var lastFlat = _lastFlattenedInput ?? throw new InvalidOperationException("_lastFlattenedInput has not been initialized.");
-            var flatInputT = Engine.TensorTranspose(lastFlat);
-            _localizationWeights1Gradient = Engine.TensorMatMul(flatInputT, loc1Grad);
-            _localizationBias1Gradient = Engine.ReduceSum(loc1Grad, new[] { 0 }, keepDims: false);
-
-            // Input gradient contribution from localization network
-            var weights1T = Engine.TensorTranspose(_localizationWeights1);
-            var inputLocGradFlat = Engine.TensorMatMul(loc1Grad, weights1T);
-            var inputLocGrad = inputLocGradFlat.Reshape(_lastInput.Shape.ToArray());
-
-            if (inputNode.Gradient != null)
-            {
-                inputNode.Gradient = Engine.TensorAdd(inputNode.Gradient, inputLocGrad);
-            }
-        }
-
-        Tensor<T> inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Spatial transformer backward failed.");
-
-        // Restore gradient to original input shape
-        if (_originalInputShape != null && _originalInputShape.Length != 2)
-        {
-            if (_inputHadChannel && _inputChannelFirst)
-            {
-                inputGradient = inputGradient.Transpose([0, 3, 1, 2]);
-            }
-
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation via AffineGrid and GridSample operations.
-    /// The localization network gradients are computed using standard matrix operations,
-    /// while the spatial transformation uses the specialized autodiff operations.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastTransformationMatrix == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = _lastInput.Shape[0];
-
-        // For now, SpatialTransformer with full localization network autodiff is complex
-        // We use the specialized AffineGrid and GridSample operations for the transformation part
-        // but handle the localization network manually to avoid excessive complexity
-
-        // Convert transformation matrix to tensor [batch, 2, 3] using Engine ops
-        // Note: Current implementation uses single transformation matrix for simplicity
-        var thetaExpanded = Engine.TensorExpandDims(_lastTransformationMatrix, 0); // [1, 2, 3]
-        var thetaTensor = Engine.TensorTile(thetaExpanded, [batchSize, 1, 1]); // [batch, 2, 3]
-
-        // Create computation nodes
-        var inputNode = Autodiff.TensorOperations<T>.Variable(
-            _lastInput,
-            "input",
-            requiresGradient: true);
-
-        var thetaNode = Autodiff.TensorOperations<T>.Variable(
-            thetaTensor,
-            "theta",
-            requiresGradient: true);
-
-        // Apply AffineGrid to generate sampling grid
-        var gridNode = Autodiff.TensorOperations<T>.AffineGrid(
-            thetaNode,
-            _outputHeight,
-            _outputWidth);
-
-        // Apply GridSample to sample from input
-        var outputNode = Autodiff.TensorOperations<T>.GridSample(
-            inputNode,
-            gridNode);
-
-        // Set the output gradient
-        outputNode.Gradient = outputGradient;
-
-        // Perform backward pass with inlined topological sort
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (currentNode, processed) = stack.Pop();
-            if (visited.Contains(currentNode)) continue;
-
-            if (processed)
-            {
-                visited.Add(currentNode);
-                topoOrder.Add(currentNode);
-            }
-            else
-            {
-                stack.Push((currentNode, true));
-                foreach (var parent in currentNode.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // For the localization network parameters, we need to backpropagate from theta gradients
-        // This requires converting theta gradients back and computing localization network gradients
-        if (thetaNode.Gradient != null)
-        {
-            // Initialize parameter gradients as Tensor<T>
-            _localizationWeights1Gradient = new Tensor<T>([_localizationWeights1.Shape[0], _localizationWeights1.Shape[1]]);
-            _localizationWeights1Gradient.Fill(NumOps.Zero);
-            _localizationBias1Gradient = new Tensor<T>([_localizationBias1.Shape[0]]);
-            _localizationBias1Gradient.Fill(NumOps.Zero);
-            _localizationWeights2Gradient = new Tensor<T>([_localizationWeights2.Shape[0], _localizationWeights2.Shape[1]]);
-            _localizationWeights2Gradient.Fill(NumOps.Zero);
-            _localizationBias2Gradient = new Tensor<T>([_localizationBias2.Shape[0]]);
-            _localizationBias2Gradient.Fill(NumOps.Zero);
-
-            // Extract theta gradient (averaging across batch for simplicity in this implementation)
-            // Average theta gradient across batch using Engine ops
-            // Reshape [batch, 2, 3] -> [batch, 6], then mean
-            var thetaGradBatch = thetaNode.Gradient.Reshape([batchSize, 6]);
-            var thetaGrad = Engine.ReduceMean(thetaGradBatch, [0], keepDims: true); // [1, 6]
-
-            // Backpropagate through localization network using Engine operations
-            // This is a simplified version - full implementation would process each batch item
-            var flattenedInput = _lastInput.Reshape([batchSize, _inputHeight * _inputWidth]);
-            var localization1 = Engine.TensorMatMul(flattenedInput, _localizationWeights1);
-            var bias1Expanded = _localizationBias1.Reshape([1, _localizationBias1.Shape[0]]);
-            localization1 = Engine.TensorBroadcastAdd(localization1, bias1Expanded);
-
-            // Gradient for localization bias2: copy from thetaGrad
-            Engine.TensorCopy(thetaGrad.Reshape([6]), _localizationBias2Gradient);
-
-            // Gradient for localization weights2 using outer product
-            // loc1[0] is [32], thetaGrad[0] is [6] -> outer product gives [32, 6]
-            var loc1First = localization1.Slice(0, 0, 1).Reshape([32]); // First batch item [32]
-            var thetaGradFlat = thetaGrad.Reshape([6]);
-            _localizationWeights2Gradient = Engine.TensorOuterProduct(loc1First, thetaGradFlat);
-        }
-
-        // Return input gradient
-        Tensor<T> inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-
-        // Restore gradient to original input shape
-        if (_originalInputShape != null && _originalInputShape.Length != 2)
-        {
-            if (_inputHadChannel && _inputChannelFirst)
-            {
-                inputGradient = inputGradient.Transpose([0, 3, 1, 2]);
-            }
-
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
     // Removed BackwardSampler (unused)
 
     /// <summary>
@@ -1320,10 +1039,10 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Vector<T> GetParameters()
     {
         // Use Vector<T>.Concatenate for efficient parameter collection
-        var flatW1 = Vector<T>.FromMemory(_localizationWeights1.Data);
-        var flatB1 = Vector<T>.FromMemory(_localizationBias1.Data);
-        var flatW2 = Vector<T>.FromMemory(_localizationWeights2.Data);
-        var flatB2 = Vector<T>.FromMemory(_localizationBias2.Data);
+        var flatW1 = new Vector<T>(_localizationWeights1.ToArray());
+        var flatB1 = new Vector<T>(_localizationBias1.ToArray());
+        var flatW2 = new Vector<T>(_localizationWeights2.ToArray());
+        var flatB2 = new Vector<T>(_localizationBias2.ToArray());
 
         return Vector<T>.Concatenate(
             Vector<T>.Concatenate(flatW1, flatB1),
@@ -1360,16 +1079,16 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Vector<T> GetParameterGradients()
     {
         var gW1 = _localizationWeights1Gradient != null
-            ? (_localizationWeights1Gradient is not null ? Vector<T>.FromMemory(_localizationWeights1Gradient.Data) : new Vector<T>(0))
+            ? new Vector<T>(_localizationWeights1Gradient.ToArray())
             : new Vector<T>(_localizationWeights1.Length);
         var gB1 = _localizationBias1Gradient != null
-            ? (_localizationBias1Gradient is not null ? Vector<T>.FromMemory(_localizationBias1Gradient.Data) : new Vector<T>(0))
+            ? new Vector<T>(_localizationBias1Gradient.ToArray())
             : new Vector<T>(_localizationBias1.Length);
         var gW2 = _localizationWeights2Gradient != null
-            ? (_localizationWeights2Gradient is not null ? Vector<T>.FromMemory(_localizationWeights2Gradient.Data) : new Vector<T>(0))
+            ? new Vector<T>(_localizationWeights2Gradient.ToArray())
             : new Vector<T>(_localizationWeights2.Length);
         var gB2 = _localizationBias2Gradient != null
-            ? (_localizationBias2Gradient is not null ? Vector<T>.FromMemory(_localizationBias2Gradient.Data) : new Vector<T>(0))
+            ? new Vector<T>(_localizationBias2Gradient.ToArray())
             : new Vector<T>(_localizationBias2.Length);
 
         return Vector<T>.Concatenate(
@@ -1522,7 +1241,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// 5. Uploads result back to GPU
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -1534,7 +1253,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Step 1: Preprocess input to NHWC format (CPU for shape handling, then upload)
         // Input shape handling requires dynamic shape analysis - do on CPU, upload result
-        var inputTensor = inputGpu.ToTensor();
+        var inputTensor = inputGpu;
         _originalInputShape = inputTensor.Shape.ToArray();
         int rank = inputTensor.Shape.Length;
 
@@ -1634,7 +1353,7 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         // Step 7: Convert output back to original format
         // Download for shape handling (output format conversion)
-        var outputNHWC = outputNHWCGpu.ToTensor();
+        var outputNHWC = outputNHWCGpu;
 
         Tensor<T> outputTensor;
         if (_inputHadChannel)
@@ -1676,8 +1395,8 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         {
             _lastInput = inputNHWC;
             _lastFlattenedInput = flattenedInput;
-            _lastLocalization1 = localization1Gpu.ToTensor();
-            _lastTransformationMatrix = thetaGpu.ToTensor();
+            _lastLocalization1 = localization1Gpu;
+            _lastTransformationMatrix = thetaGpu;
             _lastOutput = outputNHWC;
         }
 
@@ -1686,67 +1405,5 @@ public class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     #endregion
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (_localizationWeights1 == null || _localizationBias1 == null ||
-            _localizationWeights2 == null || _localizationBias2 == null)
-            throw new InvalidOperationException("Layer not initialized. Call Initialize() first.");
-
-        // Create input node
-        var symbolicInput = new Tensor<T>(InputShape);
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Localization network: 2-layer fully connected network
-        // Layer 1: Flatten input and apply first fully connected layer
-        int batchSize = InputShape[0];
-        var flattenedShape = new int[] { batchSize, _inputHeight * _inputWidth };
-        var flattenedInput = Autodiff.TensorOperations<T>.Reshape(inputNode, flattenedShape);
-
-        // Use tensors directly (already Tensor<T>)
-        var weights1Node = Autodiff.TensorOperations<T>.Constant(_localizationWeights1, "localization_weights1");
-        var bias1Node = Autodiff.TensorOperations<T>.Constant(_localizationBias1, "localization_bias1");
-
-        // First layer: MatMul + Add + Activation
-        var localization1 = Autodiff.TensorOperations<T>.MatrixMultiply(flattenedInput, weights1Node);
-        localization1 = Autodiff.TensorOperations<T>.Add(localization1, bias1Node);
-
-        // Apply activation function
-        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
-            localization1 = ScalarActivation.ApplyToGraph(localization1);
-        else if (VectorActivation != null && VectorActivation.SupportsJitCompilation)
-            localization1 = VectorActivation.ApplyToGraph(localization1);
-        else
-            localization1 = Autodiff.TensorOperations<T>.Tanh(localization1);
-
-        // Layer 2: Second fully connected layer to get transformation parameters
-        var weights2Node = Autodiff.TensorOperations<T>.Constant(_localizationWeights2, "localization_weights2");
-        var bias2Node = Autodiff.TensorOperations<T>.Constant(_localizationBias2, "localization_bias2");
-
-        var transformationParams = Autodiff.TensorOperations<T>.MatrixMultiply(localization1, weights2Node);
-        transformationParams = Autodiff.TensorOperations<T>.Add(transformationParams, bias2Node);
-
-        // Reshape transformation parameters to [batch, 2, 3] for affine transformation matrix
-        var thetaShape = new int[] { batchSize, 2, 3 };
-        var thetaNode = Autodiff.TensorOperations<T>.Reshape(transformationParams, thetaShape);
-
-        // Generate sampling grid using AffineGrid
-        var gridNode = Autodiff.TensorOperations<T>.AffineGrid(thetaNode, _outputHeight, _outputWidth);
-
-        // Sample from input using GridSample
-        var outputNode = Autodiff.TensorOperations<T>.GridSample(inputNode, gridNode);
-
-        return outputNode;
-    }
-
-    public override bool SupportsJitCompilation => _localizationWeights1 != null && _localizationBias1 != null &&
-                                                     _localizationWeights2 != null && _localizationBias2 != null;
 
 }

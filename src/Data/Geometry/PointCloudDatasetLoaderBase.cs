@@ -1,4 +1,4 @@
-using AiDotNet.Data.Loaders;
+﻿using AiDotNet.Data.Loaders;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
@@ -237,7 +237,7 @@ public abstract class PointCloudDatasetLoaderBase<T> : InputOutputDataLoaderBase
             throw new ArgumentException("Source tensor must have at least one dimension.", nameof(source));
         }
 
-        var newShape = (int[])source.Shape.ToArray().Clone();
+        var newShape = (int[])source.Shape.ToArray();
         newShape[0] = indices.Length;
         var result = new Tensor<T>(newShape);
 

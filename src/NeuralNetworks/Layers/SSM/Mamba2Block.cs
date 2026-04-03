@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -574,198 +574,6 @@ public class Mamba2Block<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null ||
-            _lastXBranch == null || _lastZBranch == null ||
-            _lastConvOutput == null || _lastSiluOutput == null ||
-            _lastSsdOutput == null || _lastGatedOutput == null ||
-            _lastDelta == null || _lastDeltaPreSoftplus == null ||
-            _lastB == null || _lastC == null ||
-            _lastHiddenStates == null || _lastNormInput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int rank = outputGradient.Shape.Length;
-        int batchSize = _lastInput.Shape[0];
-        int seqLen = _lastInput.Shape[1];
-
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        var activationGrad = ApplyActivationDerivativeFromOutput(_lastOutput, grad3D);
-
-        // Debug logging
-        static double GN(Tensor<T> t) { double s = 0; for (int i = 0; i < t.Length; i++) { double v = Convert.ToDouble(t[i]); s += v * v; } return Math.Sqrt(s); }
-        var _dbgPath = Path.Combine(Path.GetTempPath(), "mamba2_debug.log");
-        void Log(string m) { File.AppendAllText(_dbgPath, m + Environment.NewLine); }
-        Log($"=== Backward start: grad={GN(grad3D):G6} activGrad={GN(activationGrad):G6}");
-
-        // Step 8 backward: output projection
-        var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
-        _outputProjectionBiasGradient = ReduceSumAxes01(activationGrad, batchSize, seqLen, _modelDimension);
-        Log($"  outBias grads first4: {Convert.ToDouble(_outputProjectionBiasGradient[0]):G6}, {Convert.ToDouble(_outputProjectionBiasGradient[1]):G6}, {Convert.ToDouble(_outputProjectionBiasGradient[2]):G6}, {Convert.ToDouble(_outputProjectionBiasGradient[3]):G6}");
-
-        var gatedFlat = _lastGatedOutput.Reshape(batchSize * seqLen, _innerDimension);
-        _outputProjectionWeightsGradient = Engine.TensorMatMul(
-            gatedFlat.Transpose([1, 0]), gradFlat);
-
-        var dGated = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
-            .Reshape(batchSize, seqLen, _innerDimension);
-        Log($"  S8: dGated={GN(dGated):G6}");
-
-        // Step 7 backward: output gating
-        var zGate = Engine.Swish(_lastZBranch);
-        var normedOutput = ApplyRMSNorm(_lastNormInput, batchSize, seqLen);
-        var dNormed = Engine.TensorMultiply(dGated, zGate);
-        var dZGate = Engine.TensorMultiply(dGated, normedOutput);
-        var dZBranch = Engine.TensorMultiply(dZGate, ComputeSiLUDerivative(_lastZBranch));
-        Log($"  S7: dNormed={GN(dNormed):G6} dZBranch={GN(dZBranch):G6}");
-
-        // Step 6 backward: RMS norm (full derivative, not approximate)
-        // Forward: normalized = x / rms, output = gamma * normalized + beta
-        // where rms = sqrt(mean(x^2) + eps)
-        // Backward: dx = (gamma * dy - normalized * mean(gamma * dy * normalized)) / rms
-        var dSsd = new Tensor<T>(new[] { batchSize, seqLen, _innerDimension });
-        _normGammaGradient = new Tensor<T>(new[] { _innerDimension });
-        _normBetaGradient = new Tensor<T>(new[] { _innerDimension });
-        T epsilon = NumOps.FromDouble(1e-6);
-        T invDim = NumOps.FromDouble(1.0 / _innerDimension);
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                // Recompute forward quantities
-                T sumSq = NumOps.Zero;
-                for (int d = 0; d < _innerDimension; d++)
-                {
-                    T val = _lastNormInput[new[] { bi, t, d }];
-                    sumSq = NumOps.Add(sumSq, NumOps.Multiply(val, val));
-                }
-                T meanSq = NumOps.Add(NumOps.Multiply(sumSq, invDim), epsilon);
-                T rms = NumOps.Sqrt(meanSq);
-                T invRms = NumOps.Divide(NumOps.One, rms);
-
-                // Compute normalized values and accumulate parameter gradients
-                var normalized = new T[_innerDimension];
-                T dotProduct = NumOps.Zero; // sum of (gamma * dy * normalized)
-                for (int d = 0; d < _innerDimension; d++)
-                {
-                    normalized[d] = NumOps.Multiply(_lastNormInput[new[] { bi, t, d }], invRms);
-                    T dNormedVal = dNormed[new[] { bi, t, d }];
-
-                    // dGamma += normalized * dNormed
-                    _normGammaGradient[d] = NumOps.Add(_normGammaGradient[d],
-                        NumOps.Multiply(normalized[d], dNormedVal));
-                    // dBeta += dNormed
-                    _normBetaGradient[d] = NumOps.Add(_normBetaGradient[d], dNormedVal);
-
-                    // Accumulate dot product for input gradient correction term
-                    dotProduct = NumOps.Add(dotProduct,
-                        NumOps.Multiply(NumOps.Multiply(_normGamma[d], dNormedVal), normalized[d]));
-                }
-
-                // Input gradient: dx = (gamma * dy - normalized * mean(gamma * dy * normalized)) / rms
-                T meanDot = NumOps.Multiply(dotProduct, invDim);
-                for (int d = 0; d < _innerDimension; d++)
-                {
-                    T dNormedVal = dNormed[new[] { bi, t, d }];
-                    T gammaDy = NumOps.Multiply(_normGamma[d], dNormedVal);
-                    T correction = NumOps.Multiply(normalized[d], meanDot);
-                    dSsd[new[] { bi, t, d }] = NumOps.Multiply(
-                        NumOps.Subtract(gammaDy, correction), invRms);
-                }
-            }
-        }
-
-        Log($"  S6: dSsd={GN(dSsd):G6}");
-
-        // Step 5 backward: SSD backward (multi-head selective scan backward)
-        var dSiluOutput = SSDBackward(dSsd, _lastSiluOutput, _lastDelta, _lastB, _lastC,
-            _lastHiddenStates, batchSize, seqLen, out var dDelta, out var dB, out var dC);
-        Log($"  S5: dSilu={GN(dSiluOutput):G6} dDelta={GN(dDelta):G6} dB={GN(dB):G6} dC={GN(dC):G6}");
-
-        // Step 4 backward: parameter projection gradients
-        var softplusDerivative = Engine.Sigmoid(_lastDeltaPreSoftplus);
-        var dDeltaSoftplus = Engine.TensorMultiply(dDelta, softplusDerivative);
-
-        var dDeltaFlat = dDeltaSoftplus.Reshape(batchSize * seqLen, _numHeads);
-        _dtProjectionBiasGradient = ReduceSumAxes01(dDeltaSoftplus, batchSize, seqLen, _numHeads);
-
-        var siluFlat = _lastSiluOutput.Reshape(batchSize * seqLen, _innerDimension);
-        _dtProjectionWeightsGradient = Engine.TensorMatMul(
-            siluFlat.Transpose([1, 0]), dDeltaFlat);
-
-        var dBFlat = dB.Reshape(batchSize * seqLen, _stateDimension);
-        _bProjectionWeightsGradient = Engine.TensorMatMul(
-            siluFlat.Transpose([1, 0]), dBFlat);
-
-        var dCFlat = dC.Reshape(batchSize * seqLen, _stateDimension);
-        _cProjectionWeightsGradient = Engine.TensorMatMul(
-            siluFlat.Transpose([1, 0]), dCFlat);
-
-        // Gradients flowing back to siluOutput from B, C, dt projections
-        var dSiluFromDt = Engine.TensorMatMul(dDeltaFlat, _dtProjectionWeights.Transpose([1, 0]));
-        var dSiluFromB = Engine.TensorMatMul(dBFlat, _bProjectionWeights.Transpose([1, 0]));
-        var dSiluFromC = Engine.TensorMatMul(dCFlat, _cProjectionWeights.Transpose([1, 0]));
-
-        var dSiluTotal = Engine.TensorAdd(
-            dSiluOutput.Reshape(batchSize * seqLen, _innerDimension),
-            Engine.TensorAdd(dSiluFromDt, Engine.TensorAdd(dSiluFromB, dSiluFromC)));
-        dSiluTotal = dSiluTotal.Reshape(batchSize, seqLen, _innerDimension);
-
-        Log($"  S4: dSiluTotal={GN(dSiluTotal):G6}");
-
-        // Step 3 backward: SiLU derivative
-        var dConvOutput = Engine.TensorMultiply(dSiluTotal, ComputeSiLUDerivative(_lastConvOutput));
-
-        // Step 2 backward: Conv1D
-        var dXBranch = DepthwiseConv1DBackward(dConvOutput, _lastXBranch, batchSize, seqLen);
-        Log($"  S3-2: dConv={GN(dConvOutput):G6} dXBranch={GN(dXBranch):G6} dZBranch={GN(dZBranch):G6}");
-
-        // Step 1 backward: input projection
-        var dProjected = ConcatenateTensors(dXBranch, dZBranch, 2);
-        var dProjectedFlat = dProjected.Reshape(batchSize * seqLen, _innerDimension * 2);
-
-        _inputProjectionBiasGradient = ReduceSumAxes01(dProjected, batchSize, seqLen, _innerDimension * 2);
-
-        var input2D = _lastInput.Reshape(batchSize * seqLen, _modelDimension);
-        _inputProjectionWeightsGradient = Engine.TensorMatMul(
-            input2D.Transpose([1, 0]), dProjectedFlat);
-        Log($"  S1: dProjected={GN(dProjected):G6}");
-        Log($"  S1: dXBranch[0,0,0..2]=[{Convert.ToDouble(dXBranch[new[]{0,0,0}]):G4},{Convert.ToDouble(dXBranch[new[]{0,0,1}]):G4},{Convert.ToDouble(dXBranch[new[]{0,0,2}]):G4}]");
-        Log($"  S1: dZBranch[0,0,0..2]=[{Convert.ToDouble(dZBranch[new[]{0,0,0}]):G4},{Convert.ToDouble(dZBranch[new[]{0,0,1}]):G4},{Convert.ToDouble(dZBranch[new[]{0,0,2}]):G4}]");
-        Log($"  S1: dProjected[0,0,0..2]=[{Convert.ToDouble(dProjected[new[]{0,0,0}]):G4},{Convert.ToDouble(dProjected[new[]{0,0,1}]):G4},{Convert.ToDouble(dProjected[new[]{0,0,2}]):G4}]");
-        Log($"  S1: dProjected[0,0,{_innerDimension}..{_innerDimension+2}]=[{Convert.ToDouble(dProjected[new[]{0,0,_innerDimension}]):G4},{Convert.ToDouble(dProjected[new[]{0,0,_innerDimension+1}]):G4},{Convert.ToDouble(dProjected[new[]{0,0,_innerDimension+2}]):G4}]");
-        Log($"  S1: input2D[0,0..2]=[{Convert.ToDouble(input2D[new[]{0,0}]):G4},{Convert.ToDouble(input2D[new[]{0,1}]):G4},{Convert.ToDouble(input2D[new[]{0,2}]):G4}]");
-        // Manual verification: dW[0,0] = sum_t(input[t,0] * dProjected[t,0])
-        T manualDW00 = NumOps.Zero;
-        for (int t = 0; t < batchSize * seqLen; t++)
-        {
-            T iv = input2D[new[] { t, 0 }];
-            T dv = dProjectedFlat[new[] { t, 0 }];
-            manualDW00 = NumOps.Add(manualDW00, NumOps.Multiply(iv, dv));
-            Log($"  manual: input2D[{t},0]={Convert.ToDouble(iv):G6} dProj[{t},0]={Convert.ToDouble(dv):G6} running={Convert.ToDouble(manualDW00):G6}");
-        }
-        Log($"  S1: matmul dW[0,0]={Convert.ToDouble(_inputProjectionWeightsGradient[0]):G6} manual dW[0,0]={Convert.ToDouble(manualDW00):G6}");
-
-        var inputGradFlat = Engine.TensorMatMul(
-            dProjectedFlat, _inputProjectionWeights.Transpose([1, 0]));
-        var inputGrad3D = inputGradFlat.Reshape(batchSize, seqLen, _modelDimension);
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return inputGrad3D.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return inputGrad3D.Reshape(_originalInputShape);
-
-        return inputGrad3D;
-    }
-
     /// <summary>
     /// Backward pass through the SSD multi-head selective scan.
     /// </summary>
@@ -1150,20 +958,20 @@ public class Mamba2Block<T> : LayerBase<T>
     {
         if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_inputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_inputProjectionWeightsGradient.Data) : new Vector<T>(0)),
-            (_inputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_inputProjectionBiasGradient.Data) : new Vector<T>(0)),
-            (_convWeightsGradient is not null ? Vector<T>.FromMemory(_convWeightsGradient.Data) : new Vector<T>(0)),
-            (_convBiasGradient is not null ? Vector<T>.FromMemory(_convBiasGradient.Data) : new Vector<T>(0)),
-            (_bProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_bProjectionWeightsGradient.Data) : new Vector<T>(0)),
-            (_cProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_cProjectionWeightsGradient.Data) : new Vector<T>(0)),
-            (_aLogGradient is not null ? Vector<T>.FromMemory(_aLogGradient.Data) : new Vector<T>(0)),
-            (_dtProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_dtProjectionWeightsGradient.Data) : new Vector<T>(0)),
-            (_dtProjectionBiasGradient is not null ? Vector<T>.FromMemory(_dtProjectionBiasGradient.Data) : new Vector<T>(0)),
-            (_dParamGradient is not null ? Vector<T>.FromMemory(_dParamGradient.Data) : new Vector<T>(0)),
-            (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)),
-            (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)),
-            (_normGammaGradient is not null ? Vector<T>.FromMemory(_normGammaGradient.Data) : new Vector<T>(0)),
-            (_normBetaGradient is not null ? Vector<T>.FromMemory(_normBetaGradient.Data) : new Vector<T>(0)));
+            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
+            new Vector<T>(_convWeightsGradient!.ToArray()),
+            new Vector<T>(_convBiasGradient!.ToArray()),
+            new Vector<T>(_bProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_cProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_aLogGradient!.ToArray()),
+            new Vector<T>(_dtProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_dtProjectionBiasGradient!.ToArray()),
+            new Vector<T>(_dParamGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient!.ToArray()),
+            new Vector<T>(_normGammaGradient!.ToArray()),
+            new Vector<T>(_normBetaGradient!.ToArray()));
     }
 
     public override void ClearGradients()
@@ -1214,49 +1022,6 @@ public class Mamba2Block<T> : LayerBase<T>
     }
 
     #endregion
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _innerDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
-
-        var zPlaceholder = new Tensor<T>(new int[] { 1, _innerDimension });
-        var zNode = TensorOperations<T>.Variable(zPlaceholder, "z_t");
-
-        var hPrevPlaceholder = new Tensor<T>(new int[] { 1, _innerDimension * _stateDimension });
-        var hPrevNode = TensorOperations<T>.Variable(hPrevPlaceholder, "h_prev");
-
-        var dParamExpanded = new Tensor<T>(new int[] { _innerDimension });
-        for (int h = 0; h < _numHeads; h++)
-            for (int d = 0; d < _headDimension; d++)
-                dParamExpanded[h * _headDimension + d] = _dParam[h];
-        var dParamNode = TensorOperations<T>.Variable(dParamExpanded, "D");
-        var outProjWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
-        var outProjBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(zNode);
-        inputNodes.Add(hPrevNode);
-        inputNodes.Add(dParamNode);
-        inputNodes.Add(outProjWeightsNode);
-        inputNodes.Add(outProjBiasNode);
-
-        var skipOutput = TensorOperations<T>.ElementwiseMultiply(xNode, dParamNode);
-        var zGate = TensorOperations<T>.Swish(zNode);
-        var gatedOutput = TensorOperations<T>.ElementwiseMultiply(skipOutput, zGate);
-        var outProjWeightsT = TensorOperations<T>.Transpose(outProjWeightsNode);
-        var finalOutput = TensorOperations<T>.MatrixMultiply(gatedOutput, outProjWeightsT);
-        var outputWithBias = TensorOperations<T>.Add(finalOutput, outProjBiasNode);
-
-        return outputWithBias;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

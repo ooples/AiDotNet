@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -657,61 +657,6 @@ public class S4DLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null ||
-            _lastProjectedInput == null || _lastScanOutputReal == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int rank = outputGradient.Shape.Length;
-        int batchSize = _lastInput.Shape[0];
-        int seqLen = _lastInput.Shape[1];
-
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        var activationGrad = ApplyActivationDerivative(_lastOutput, grad3D);
-
-        // Output projection backward
-        var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
-        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
-
-        var scanFlat = _lastScanOutputReal.Reshape(batchSize * seqLen, _innerDimension);
-        _outputProjectionWeightsGradient = Engine.TensorMatMul(
-            scanFlat.Transpose([1, 0]), gradFlat);
-
-        var dScan = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
-            .Reshape(batchSize, seqLen, _innerDimension);
-
-        // Kernel-based backward (numerically stable)
-        var dProjected = KernelBasedBackward(
-            dScan, _lastProjectedInput, batchSize, seqLen);
-
-        // Input projection backward
-        var dProjFlat = dProjected.Reshape(batchSize * seqLen, _innerDimension);
-        _inputProjectionBiasGradient = Engine.ReduceSum(dProjected, new int[] { 0, 1 });
-
-        var input2D = _lastInput.Reshape(batchSize * seqLen, _modelDimension);
-        _inputProjectionWeightsGradient = Engine.TensorMatMul(
-            input2D.Transpose([1, 0]), dProjFlat);
-
-        var inputGradFlat = Engine.TensorMatMul(
-            dProjFlat, _inputProjectionWeights.Transpose([1, 0]));
-        var inputGrad3D = inputGradFlat.Reshape(batchSize, seqLen, _modelDimension);
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return inputGrad3D.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return inputGrad3D.Reshape(_originalInputShape);
-
-        return inputGrad3D;
-    }
-
     /// <summary>
     /// Backward pass through the complex recurrent scan.
     /// </summary>
@@ -1224,18 +1169,18 @@ public class S4DLayer<T> : LayerBase<T>
     {
         if (_aRealGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_aRealGradient is not null ? Vector<T>.FromMemory(_aRealGradient.Data) : new Vector<T>(0)),
-            (_aImagGradient is not null ? Vector<T>.FromMemory(_aImagGradient.Data) : new Vector<T>(0)),
-            (_bRealGradient is not null ? Vector<T>.FromMemory(_bRealGradient.Data) : new Vector<T>(0)),
-            (_bImagGradient is not null ? Vector<T>.FromMemory(_bImagGradient.Data) : new Vector<T>(0)),
-            (_cRealGradient is not null ? Vector<T>.FromMemory(_cRealGradient.Data) : new Vector<T>(0)),
-            (_cImagGradient is not null ? Vector<T>.FromMemory(_cImagGradient.Data) : new Vector<T>(0)),
-            (_dParamGradient is not null ? Vector<T>.FromMemory(_dParamGradient.Data) : new Vector<T>(0)),
-            _inputProjectionWeightsGradient != null ? (_inputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_inputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_inputProjectionWeights.Length),
-            _inputProjectionBiasGradient != null ? (_inputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_inputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_inputProjectionBias.Length),
-            _outputProjectionWeightsGradient != null ? (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionWeights.Length),
-            _outputProjectionBiasGradient != null ? (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionBias.Length),
-            _logDeltaGradient != null ? (_logDeltaGradient is not null ? Vector<T>.FromMemory(_logDeltaGradient.Data) : new Vector<T>(0)) : new Vector<T>(_logDelta.Length));
+            new Vector<T>(_aRealGradient!.ToArray()),
+            new Vector<T>(_aImagGradient!.ToArray()),
+            new Vector<T>(_bRealGradient!.ToArray()),
+            new Vector<T>(_bImagGradient!.ToArray()),
+            new Vector<T>(_cRealGradient!.ToArray()),
+            new Vector<T>(_cImagGradient!.ToArray()),
+            new Vector<T>(_dParamGradient!.ToArray()),
+            _inputProjectionWeightsGradient != null ? new Vector<T>(_inputProjectionWeightsGradient.ToArray()) : new Vector<T>(_inputProjectionWeights.Length),
+            _inputProjectionBiasGradient != null ? new Vector<T>(_inputProjectionBiasGradient.ToArray()) : new Vector<T>(_inputProjectionBias.Length),
+            _outputProjectionWeightsGradient != null ? new Vector<T>(_outputProjectionWeightsGradient.ToArray()) : new Vector<T>(_outputProjectionWeights.Length),
+            _outputProjectionBiasGradient != null ? new Vector<T>(_outputProjectionBiasGradient.ToArray()) : new Vector<T>(_outputProjectionBias.Length),
+            _logDeltaGradient != null ? new Vector<T>(_logDeltaGradient.ToArray()) : new Vector<T>(_logDelta.Length));
     }
 
     public override void ClearGradients()
@@ -1270,46 +1215,6 @@ public class S4DLayer<T> : LayerBase<T>
     }
 
     #endregion
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _innerDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
-
-        var hPrevRealPlaceholder = new Tensor<T>(new int[] { 1, _innerDimension * _stateDimension });
-        var hPrevRealNode = TensorOperations<T>.Variable(hPrevRealPlaceholder, "h_prev_real");
-
-        var hPrevImagPlaceholder = new Tensor<T>(new int[] { 1, _innerDimension * _stateDimension });
-        var hPrevImagNode = TensorOperations<T>.Variable(hPrevImagPlaceholder, "h_prev_imag");
-
-        var dParamNode = TensorOperations<T>.Variable(_dParam, "D");
-        var outProjWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
-        var outProjBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(hPrevRealNode);
-        inputNodes.Add(hPrevImagNode);
-        inputNodes.Add(dParamNode);
-        inputNodes.Add(outProjWeightsNode);
-        inputNodes.Add(outProjBiasNode);
-
-        // Skip connection output: y = D * x
-        var skipOutput = TensorOperations<T>.ElementwiseMultiply(xNode, dParamNode);
-
-        // Output projection
-        var outProjWeightsT = TensorOperations<T>.Transpose(outProjWeightsNode);
-        var finalOutput = TensorOperations<T>.MatrixMultiply(skipOutput, outProjWeightsT);
-        var outputWithBias = TensorOperations<T>.Add(finalOutput, outProjBiasNode);
-
-        return outputWithBias;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

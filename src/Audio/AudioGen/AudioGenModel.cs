@@ -911,25 +911,15 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             throw new NotSupportedException("Cannot train in ONNX inference mode. Use the native constructor for training.");
         }
 
-        // Set training mode
         SetTrainingMode(true);
-
-        // Forward pass
-        var prediction = Forward(input);
-
-        // Calculate loss
-        var flatPrediction = prediction.ToVector();
-        var flatExpected = expectedOutput.ToVector();
-        LastLoss = _lossFunction.CalculateLoss(flatPrediction, flatExpected);
-
-        // Backward pass
-        var lossGradient = _lossFunction.CalculateDerivative(flatPrediction, flatExpected);
-        Backpropagate(Tensor<T>.FromVector(lossGradient));
-
-        // Update parameters using optimizer
-        _optimizer?.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

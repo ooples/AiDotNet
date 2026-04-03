@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 
@@ -191,7 +191,7 @@ public class InMemoryDataLoader<T, TInput, TOutput> : InputOutputDataLoaderBase<
         if (_features is Tensor<T> tensor)
         {
             // Clone shape but change first dimension
-            var newShape = (int[])tensor.Shape.ToArray().Clone();
+            var newShape = (int[])tensor.Shape.ToArray();
             newShape[0] = indices.Length;
             var result = new Tensor<T>(newShape);
 
@@ -223,7 +223,7 @@ public class InMemoryDataLoader<T, TInput, TOutput> : InputOutputDataLoaderBase<
         if (_labels is Tensor<T> tensor)
         {
             // Clone shape but change first dimension
-            var newShape = (int[])tensor.Shape.ToArray().Clone();
+            var newShape = (int[])tensor.Shape.ToArray();
             newShape[0] = indices.Length;
             var result = new Tensor<T>(newShape);
 

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -157,23 +157,6 @@ public class RReLUActivation<T> : ActivationFunctionBase<T>
             _alpha = NumOps.Divide(NumOps.Add(_lowerBound, _upperBound), NumOps.FromDouble(2));
         }
     }
-
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because TensorOperations.RReLU provides full forward and backward pass support.</value>
-    /// <remarks>
-    /// <para>
-    /// RReLU supports JIT compilation with the following behavior:
-    /// - In inference mode (default for JIT): uses fixed alpha = (lower + upper) / 2
-    /// - In training mode: samples alpha once per forward pass (not per-element)
-    /// </para>
-    /// <para>
-    /// This is a reasonable compromise that enables JIT while preserving the randomization benefit during training.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.

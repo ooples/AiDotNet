@@ -1,9 +1,10 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -238,7 +239,7 @@ public class MeanLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">Input GPU tensors (uses first input).</param>
     /// <returns>GPU-resident output tensor with mean values.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -261,7 +262,7 @@ public class MeanLayer<T> : LayerBase<T>
 
         // GPU-resident mean reduction using permutation pattern from MaxAxisGpu
         // If axis is not last, permute to move it to the last position
-        IGpuTensor<T> processedInput = input;
+        Tensor<T> processedInput = input;
         bool needsPermute = Axis != inputRank - 1;
 
         if (needsPermute)
@@ -276,7 +277,7 @@ public class MeanLayer<T> : LayerBase<T>
         }
 
         // Calculate outer size (product of all dims except reduction axis)
-        int outerSize = processedInput.ElementCount / axisSize;
+        int outerSize = processedInput.Length / axisSize;
 
         // Allocate output buffer and perform GPU sum reduction
         var sumBuffer = backend.AllocateBuffer(outerSize);
@@ -305,201 +306,7 @@ public class MeanLayer<T> : LayerBase<T>
             _lastOutput = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(outputData), outputShape);
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <inheritdoc/>
-
-    /// <summary>
-    /// Computes the gradient of the loss with respect to the input on the GPU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// The backward pass broadcasts the output gradient back to the input shape
-    /// and scales by 1/axisSize (since mean = sum/N, gradient is distributed evenly).
-    /// </remarks>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        if (_gpuCachedInputShape == null)
-            throw new InvalidOperationException("Forward pass must be called in training mode before backward pass.");
-
-        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
-
-        int[] inputShape = _gpuCachedInputShape;
-        int axisSize = inputShape[Axis];
-        float scale = 1.0f / axisSize;
-
-        int inputSize = 1;
-        foreach (var dim in inputShape) inputSize *= dim;
-
-        // Download gradient and broadcast on CPU, then upload
-        // (More efficient would be a GPU broadcast kernel, but this ensures correctness)
-        var gradData = backend.DownloadBuffer(outputGradient.Buffer);
-
-        // Compute strides for broadcast
-        int[] outputShape = outputGradient.Shape.ToArray();
-        int[] inputStrides = new int[inputShape.Length];
-        int[] outputStrides = new int[outputShape.Length];
-        inputStrides[inputShape.Length - 1] = 1;
-        for (int i = inputShape.Length - 2; i >= 0; i--)
-            inputStrides[i] = inputStrides[i + 1] * inputShape[i + 1];
-
-        if (outputShape.Length > 0)
-        {
-            outputStrides[outputShape.Length - 1] = 1;
-            for (int i = outputShape.Length - 2; i >= 0; i--)
-                outputStrides[i] = outputStrides[i + 1] * outputShape[i + 1];
-        }
-
-        // Broadcast and scale on CPU
-        var broadcastedData = new float[inputSize];
-        System.Threading.Tasks.Parallel.For(0, inputSize, idx =>
-        {
-            // Convert linear index to multi-dimensional indices
-            int remaining = idx;
-            int outputIdx = 0;
-            int outDimIdx = 0;
-            for (int d = 0; d < inputShape.Length; d++)
-            {
-                int dimIdx = remaining / inputStrides[d];
-                remaining %= inputStrides[d];
-
-                // Skip the axis dimension when computing output index
-                if (d != Axis)
-                {
-                    outputIdx += dimIdx * outputStrides[outDimIdx];
-                    outDimIdx++;
-                }
-            }
-            broadcastedData[idx] = gradData[outputIdx] * scale;
-        });
-
-        var gradInputBuffer = backend.AllocateBuffer(broadcastedData);
-        return new GpuTensor<T>(backend, gradInputBuffer, inputShape, GpuTensorRole.Gradient, ownsBuffer: true);
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the mean layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the mean layer, which is used during training to propagate
-    /// error gradients back through the network. Since the mean operation averages multiple input values to
-    /// produce each output value, during backpropagation, the gradient for each output value is distributed
-    /// equally among all corresponding input values.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
-    /// should change to reduce errors.
-    ///
-    /// During the backward pass:
-    /// - The layer receives the error gradient from the next layer
-    /// - It needs to distribute this gradient back to its inputs
-    /// - For a mean operation, each input that contributed to an average receives an equal portion of the gradient
-    ///
-    /// For example:
-    /// If 5 values were averaged to produce one output, and that output's gradient is 10,
-    /// each of the 5 input values would receive a gradient of 10/5 = 2.
-    ///
-    /// This process is part of the "backpropagation" algorithm that helps neural networks learn.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Performs the backward pass using manual gradient calculation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Use Engine operation for GPU/CPU acceleration
-        return Engine.ReduceMeanBackward(outputGradient, _lastInput.Shape.ToArray(), [Axis]);
-    }
-
-    /// <summary>
-    /// Performs the backward pass using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Create computation node for the input
-        var inputNode = TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-
-        // Replay forward pass using autodiff
-        // ReduceMean takes axes parameter as array
-        var outputNode = TensorOperations<T>.ReduceMean(inputNode, axes: new int[] { Axis }, keepDims: false);
-
-        // Set gradient at output and perform backward pass
-        outputNode.Gradient = outputGradient;
-
-        // Production-grade: Inline topological sort for backward pass
-        var visited = new HashSet<ComputationNode<T>>();
-        var topoOrder = new List<ComputationNode<T>>();
-        var stack = new Stack<(ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-                continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract and return input gradient
-        if (inputNode.Gradient == null)
-            throw new InvalidOperationException("Gradient computation failed in automatic differentiation.");
-
-        return inputNode.Gradient;
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -587,21 +394,4 @@ public class MeanLayer<T> : LayerBase<T>
         _lastOutput = null;
         _gpuCachedInputShape = null;
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return TensorOperations<T>.ReduceMean(inputNode, axes: new[] { Axis }, keepDims: false);
-    }
-
-    public override bool SupportsJitCompilation => true;
 }

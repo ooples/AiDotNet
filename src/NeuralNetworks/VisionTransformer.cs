@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Options;
@@ -335,7 +335,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         if (input4D.Shape[1] != _channels || input4D.Shape[2] != _imageHeight || input4D.Shape[3] != _imageWidth)
         {
             throw new ArgumentException(
-                $"Input shape {string.Join("x", input4D.Shape.ToArray())} does not match expected " +
+                $"Input shape {string.Join("x", input4D._shape)} does not match expected " +
                 $"[batch, {_channels}, {_imageHeight}, {_imageWidth}].",
                 nameof(input));
         }
@@ -441,7 +441,6 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        StandardTrainStep(input, expectedOutput);
     }
 
     /// <summary>

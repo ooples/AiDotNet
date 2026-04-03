@@ -1,8 +1,11 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
+
+// Note: GradientTape references removed — ComputationNode has its own backward mechanism
 
 namespace AiDotNet.Interpretability.Helpers;
 
@@ -84,58 +87,6 @@ public class AutodiffGradientHelper<T>
     }
 
     /// <summary>
-    /// Computes the gradient of the model output with respect to the input.
-    /// </summary>
-    /// <param name="input">The input tensor.</param>
-    /// <param name="outputIndex">Index of the output to compute gradients for.</param>
-    /// <returns>Gradient tensor with the same shape as input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method:
-    /// 1. Creates a GradientTape to record operations
-    /// 2. Wraps your input in a ComputationNode and tells the tape to watch it
-    /// 3. Runs your model (recorded to the tape)
-    /// 4. Computes gradients using reverse-mode autodiff
-    ///
-    /// The result shows how each input element affects the specified output.
-    ///
-    /// Under the hood, this uses the chain rule of calculus applied automatically
-    /// through all the recorded operations.
-    /// </para>
-    /// </remarks>
-    public Tensor<T> ComputeGradient(Tensor<T> input, int outputIndex = 0)
-    {
-        using (var tape = new GradientTape<T>())
-        {
-            // Create input node and watch it
-            var inputNode = TensorOperations<T>.Variable(input, "input", requiresGradient: true);
-            tape.Watch(inputNode);
-
-            // Run model forward pass
-            var outputNode = _modelFunction(inputNode);
-
-            // Create one-hot gradient for target output
-            var outputGrad = new Tensor<T>(outputNode.Value.Shape.ToArray());
-            if (outputIndex < outputNode.Value.Length)
-            {
-                outputGrad[outputIndex] = NumOps.One;
-            }
-
-            // Set the output gradient and compute backward
-            outputNode.Gradient = outputGrad;
-            outputNode.Backward();
-
-            // Return input gradients
-            if (inputNode.Gradient != null)
-            {
-                return inputNode.Gradient;
-            }
-
-            return new Tensor<T>(input.Shape.ToArray());
-        }
-    }
-
-    /// <summary>
     /// Computes gradients for a vector input.
     /// </summary>
     /// <param name="input">The input vector.</param>
@@ -159,66 +110,50 @@ public class AutodiffGradientHelper<T>
         var gradTensor = ComputeGradient(inputTensor, outputIndex);
 
         // Convert back to vector
-        var gradient = new T[input.Length];
+        var gradient = new Vector<T>(input.Length);
         for (int i = 0; i < input.Length; i++)
         {
             gradient[i] = gradTensor[0, i];
         }
 
-        return new Vector<T>(gradient);
+        return gradient;
     }
 
     /// <summary>
-    /// Computes gradients with respect to multiple watched nodes.
+    /// Computes gradients for a tensor input.
     /// </summary>
-    /// <param name="inputNodes">Dictionary of named input nodes to watch.</param>
-    /// <param name="modelOutput">Function that produces output given input nodes.</param>
+    /// <param name="input">The input tensor.</param>
     /// <param name="outputIndex">Index of the output to compute gradients for.</param>
-    /// <returns>Dictionary mapping node names to their gradients.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Sometimes you want gradients with respect to multiple
-    /// things at once (e.g., both input features and model parameters). This method
-    /// lets you watch multiple nodes and get all their gradients in one backward pass.
-    ///
-    /// This is more efficient than computing gradients separately because we only
-    /// need one forward pass and one backward pass for all gradients.
-    ///
-    /// Example use case: Computing gradients for both input and layer activations
-    /// to understand what the network is doing at different levels.
-    /// </para>
-    /// </remarks>
-    public Dictionary<string, Tensor<T>> ComputeMultipleGradients(
-        Dictionary<string, ComputationNode<T>> inputNodes,
-        Func<Dictionary<string, ComputationNode<T>>, ComputationNode<T>> modelOutput,
-        int outputIndex = 0)
+    /// <returns>Gradient tensor with the same shape as input.</returns>
+    public Tensor<T> ComputeGradient(Tensor<T> input, int outputIndex = 0)
     {
-        using (var tape = new GradientTape<T>())
+        // Use tape-based autodiff to compute gradients through the computation graph
+        var eng = AiDotNetEngine.Current;
+        using var tape = new GradientTape<T>();
+
+        // Create a computation node for the input
+        var inputNode = TensorOperations<T>.Variable(input, "input");
+
+        // Run the model function
+        var outputNode = _modelFunction(inputNode);
+
+        if (outputNode.Value is null)
         {
-            // Watch all input nodes
-            foreach (var node in inputNodes.Values)
-            {
-                tape.Watch(node);
-            }
-
-            // Run forward pass
-            var outputNode = modelOutput(inputNodes);
-
-            // Compute gradients
-            var gradientMap = tape.Gradient(outputNode, inputNodes.Values);
-
-            // Convert to named dictionary
-            var result = new Dictionary<string, Tensor<T>>();
-            foreach (var kvp in inputNodes)
-            {
-                if (gradientMap.TryGetValue(kvp.Value, out var grad))
-                {
-                    result[kvp.Key] = grad;
-                }
-            }
-
-            return result;
+            return new Tensor<T>(input.Shape.ToArray());
         }
+
+        // Create one-hot selector for the target output index and compute scalar loss
+        var oneHot = new Tensor<T>(outputNode.Value.Shape.ToArray());
+        if (outputIndex < oneHot.Length)
+        {
+            oneHot[outputIndex] = NumOps.One;
+        }
+        var selected = eng.TensorMultiply(outputNode.Value, oneHot);
+        var allAxes = Enumerable.Range(0, selected.Shape.Length).ToArray();
+        var loss = eng.ReduceSum(selected, allAxes, keepDims: false);
+
+        var grads = tape.ComputeGradients(loss, [input]);
+        return grads.TryGetValue(input, out var g) ? g : new Tensor<T>(input.Shape.ToArray());
     }
 
     /// <summary>
@@ -244,53 +179,31 @@ public class AutodiffGradientHelper<T>
     /// </remarks>
     public Tensor<T> ComputeHessianVectorProduct(Tensor<T> input, Tensor<T> vector, int outputIndex = 0)
     {
-        using (var outerTape = new GradientTape<T>())
+        // Hessian-vector products require second-order autodiff (createGraph=true),
+        // which is supported by the Tensors GradientTape but not by ComputationNode backward.
+        // Use a numerical approximation: Hvp ≈ [∇f(x + εv) - ∇f(x)] / ε
+        var eps = 1e-5;
+        var numOps2 = MathHelper.GetNumericOperations<T>();
+
+        // Compute gradient at x
+        var grad0 = ComputeGradient(input, outputIndex);
+
+        // Compute gradient at x + ε*v
+        var perturbedShape = input._shape;
+        var perturbed = new Tensor<T>(perturbedShape);
+        for (int i = 0; i < input.Length; i++)
         {
-            var inputNode = TensorOperations<T>.Variable(input, "input", requiresGradient: true);
-            outerTape.Watch(inputNode);
-
-            using (var innerTape = new GradientTape<T>())
-            {
-                innerTape.Watch(inputNode);
-
-                // Forward pass
-                var outputNode = _modelFunction(inputNode);
-
-                // First gradient
-                var outputGrad = new Tensor<T>(outputNode.Value.Shape.ToArray());
-                if (outputIndex < outputNode.Value.Length)
-                {
-                    outputGrad[outputIndex] = NumOps.One;
-                }
-
-                // Compute first gradient with createGraph=true to enable second gradient
-                outputNode.Gradient = outputGrad;
-                var firstGradients = innerTape.Gradient(outputNode, new[] { inputNode }, createGraph: true);
-
-                if (!firstGradients.TryGetValue(inputNode, out var firstGrad))
-                {
-                    return new Tensor<T>(input.Shape.ToArray());
-                }
-
-                // Compute dot product of first gradient and vector
-                var gradNode = TensorOperations<T>.Variable(firstGrad, "firstGrad", requiresGradient: true);
-                var vectorNode = TensorOperations<T>.Constant(vector, "vector");
-                var dotProduct = TensorOperations<T>.Sum(
-                    TensorOperations<T>.ElementwiseMultiply(gradNode, vectorNode));
-
-                // Second gradient (Hessian-vector product)
-                dotProduct.Gradient = new Tensor<T>(dotProduct.Value.Shape.ToArray());
-                dotProduct.Gradient[0] = NumOps.One;
-                var hvp = outerTape.Gradient(dotProduct, new[] { inputNode });
-
-                if (hvp.TryGetValue(inputNode, out var result))
-                {
-                    return result;
-                }
-            }
+            perturbed[i] = numOps2.Add(input[i], numOps2.Multiply(numOps2.FromDouble(eps), vector[i]));
         }
+        var grad1 = ComputeGradient(perturbed, outputIndex);
 
-        return new Tensor<T>(input.Shape.ToArray());
+        // Hvp ≈ (grad1 - grad0) / ε
+        var result = new Tensor<T>(perturbedShape);
+        for (int i = 0; i < result.Length; i++)
+        {
+            result[i] = numOps2.Divide(numOps2.Subtract(grad1[i], grad0[i]), numOps2.FromDouble(eps));
+        }
+        return result;
     }
 
     /// <summary>
@@ -420,12 +333,7 @@ public static class GradientHelperFactory<T>
                 tensor[0, i] = input[i];
             }
             var output = model.Predict(tensor);
-            var result = new T[output.Length];
-            for (int i = 0; i < output.Length; i++)
-            {
-                result[i] = output.ToArray()[i];
-            }
-            return new Vector<T>(result);
+            return output.ToVector();
         };
 
         return new InputGradientHelper<T>(predict).CreateGradientFunction();

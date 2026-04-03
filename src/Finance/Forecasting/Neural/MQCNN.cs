@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -512,7 +512,6 @@ public class MQCNN<T> : ForecastingModelBase<T>
         LastLoss = CalculateQuantileLoss(predictions, target);
 
         var gradient = CalculateQuantileLossGradient(predictions, target);
-        Backward(gradient);
 
         _optimizer.UpdateParameters(Layers);
 
@@ -816,49 +815,6 @@ public class MQCNN<T> : ForecastingModelBase<T>
         return current;
     }
 
-    /// <summary>
-    /// Performs the backward pass through MQCNN.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the loss function.</param>
-    /// <returns>Gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation computes how each parameter contributed
-    /// to the prediction error. For MQCNN, the gradient is computed using quantile loss,
-    /// which has different gradients depending on whether predictions were above or below actual values.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> gradOutput)
-    {
-        var current = gradOutput;
-
-        // Output layer backward
-        if (_outputLayer is not null)
-            current = _outputLayer.Backward(current);
-
-        // Decoder layers backward
-        for (int i = _decoderLayers.Count - 1; i >= 0; i--)
-        {
-            current = _decoderLayers[i].Backward(current);
-        }
-
-        // Context layer backward
-        if (_contextLayer is not null)
-            current = _contextLayer.Backward(current);
-
-        // Encoder layers backward
-        for (int i = _encoderLayers.Count - 1; i >= 0; i--)
-        {
-            current = _encoderLayers[i].Backward(current);
-        }
-
-        // Encoder input projection backward
-        if (_encoderInputProjection is not null)
-            current = _encoderInputProjection.Backward(current);
-
-        return current;
-    }
-
     #endregion
 
     #region Quantile Loss Methods
@@ -939,7 +895,7 @@ public class MQCNN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> CalculateQuantileLossGradient(Tensor<T> predictions, Tensor<T> actuals)
     {
-        var gradient = new Tensor<T>(predictions.Shape.ToArray());
+        var gradient = new Tensor<T>(predictions._shape);
         int totalElements = _forecastHorizon * _quantiles.Length;
 
         for (int t = 0; t < _forecastHorizon && t < actuals.Length; t++)
@@ -1095,7 +1051,7 @@ public class MQCNN<T> : ForecastingModelBase<T>
         }
 
         // Create ONNX tensor using input shape
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1135,7 +1091,7 @@ public class MQCNN<T> : ForecastingModelBase<T>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
         int totalElements = _lookbackWindow * _numFeatures;
-        var newInput = new Tensor<T>(input.Shape.ToArray());
+        var newInput = new Tensor<T>(input._shape);
 
         // Shift old values left
         int shift = stepsUsed * _numFeatures;

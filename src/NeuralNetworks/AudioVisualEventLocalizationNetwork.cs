@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -90,20 +90,20 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
 
     // Audio encoder
     private DenseLayer<T> _audioInputProjection;
-    private ILayer<T>[] _audioEncoderLayers;
+    private MultiHeadAttentionLayer<T>[] _audioEncoderLayers;
     private DenseLayer<T> _audioOutputProjection;
 
     // Visual encoder
     private DenseLayer<T> _visualInputProjection;
-    private ILayer<T>[] _visualEncoderLayers;
+    private MultiHeadAttentionLayer<T>[] _visualEncoderLayers;
     private DenseLayer<T> _visualOutputProjection;
 
     // Temporal modeling
-    private ILayer<T>[] _temporalAttentionLayers;
+    private MultiHeadAttentionLayer<T>[] _temporalAttentionLayers;
     private DenseLayer<T> _temporalProposalHead;
 
     // Cross-modal fusion for event detection
-    private ILayer<T>[] _crossModalAttentionLayers;
+    private MultiHeadAttentionLayer<T>[] _crossModalAttentionLayers;
 
     // Task-specific heads
     private DenseLayer<T> _eventClassificationHead;
@@ -192,34 +192,42 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         else
         {
             Layers.AddRange(LayerHelper<T>.CreateAudioVisualEventLocalizationLayers(
-                Architecture.CalculatedInputSize, _embeddingDimension, _numEncoderLayers, _supportedCategories.Count));
+                _embeddingDimension, _numEncoderLayers, _supportedCategories.Count));
         }
 
-        // Distribute layers per Tian et al. 2018: Dense+ReLU encoder blocks + output head
+        // Distribute layers to internal fields
         int idx = 0;
 
-        // Audio encoder: input projection + encoder layer (distinct layers, not aliased)
+        // Audio encoder: input projection + attention × numEncoderLayers + output projection
         _audioInputProjection = (DenseLayer<T>)Layers[idx++];
-        var audioEncoder = Layers[idx++];
-        _audioEncoderLayers = Array.Empty<ILayer<T>>();
-        _audioOutputProjection = (DenseLayer<T>)audioEncoder;
+        _audioEncoderLayers = new MultiHeadAttentionLayer<T>[_numEncoderLayers];
+        for (int i = 0; i < _numEncoderLayers; i++)
+            _audioEncoderLayers[i] = (MultiHeadAttentionLayer<T>)Layers[idx++];
+        _audioOutputProjection = (DenseLayer<T>)Layers[idx++];
 
-        // Visual encoder: input projection + encoder layer (distinct layers, not aliased)
+        // Visual encoder: input projection + attention × numEncoderLayers + output projection
         _visualInputProjection = (DenseLayer<T>)Layers[idx++];
-        var visualEncoder = Layers[idx++];
-        _visualEncoderLayers = Array.Empty<ILayer<T>>();
-        _visualOutputProjection = (DenseLayer<T>)visualEncoder;
+        _visualEncoderLayers = new MultiHeadAttentionLayer<T>[_numEncoderLayers];
+        for (int i = 0; i < _numEncoderLayers; i++)
+            _visualEncoderLayers[i] = (MultiHeadAttentionLayer<T>)Layers[idx++];
+        _visualOutputProjection = (DenseLayer<T>)Layers[idx++];
 
-        // DMRN fusion: 2 Dense+ReLU layers
-        _temporalAttentionLayers = new ILayer<T>[] { Layers[idx++] };
+        // Temporal modeling: 4 attention layers + proposal head
+        _temporalAttentionLayers = new MultiHeadAttentionLayer<T>[4];
+        for (int i = 0; i < 4; i++)
+            _temporalAttentionLayers[i] = (MultiHeadAttentionLayer<T>)Layers[idx++];
         _temporalProposalHead = (DenseLayer<T>)Layers[idx++];
-        _crossModalAttentionLayers = Array.Empty<ILayer<T>>();
 
-        // Output head: single Dense(256->1)
+        // Cross-modal fusion: 4 attention layers
+        _crossModalAttentionLayers = new MultiHeadAttentionLayer<T>[4];
+        for (int i = 0; i < 4; i++)
+            _crossModalAttentionLayers[i] = (MultiHeadAttentionLayer<T>)Layers[idx++];
+
+        // Task-specific heads
         _eventClassificationHead = (DenseLayer<T>)Layers[idx++];
-        _temporalBoundaryHead = _eventClassificationHead;
-        _spatialLocalizationHead = _eventClassificationHead;
-        _anomalyDetectionHead = _eventClassificationHead;
+        _temporalBoundaryHead = (DenseLayer<T>)Layers[idx++];
+        _spatialLocalizationHead = (DenseLayer<T>)Layers[idx++];
+        _anomalyDetectionHead = (DenseLayer<T>)Layers[idx++];
     }
 
     private static List<string> GetDefaultEventCategories()
@@ -1323,68 +1331,22 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // Set eval mode on each layer (required for correct inference behavior)
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(false);
-        try
-        {
-            Tensor<T> current = input;
-            foreach (var layer in Layers)
-                current = layer.Forward(current);
-            return current;
-        }
-        finally
-        {
-            foreach (var layer in Layers)
-                layer.SetTrainingMode(true);
-        }
+        var audioFeatures = EncodeAudio(input);
+        return Tensor<T>.FromVector(audioFeatures);
     }
 
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(true);
-        var prediction = ForwardWithMemory(input);
-
-        // MSE loss (CrossEntropy assumes probability output, but model outputs raw values)
-        var flatPred = prediction.ToVector();
-        var flatTarget = expectedOutput.ToVector();
-        double mse = 0;
-        for (int i = 0; i < flatPred.Length; i++)
+        try
         {
-            double diff = Convert.ToDouble(flatPred[i]) - Convert.ToDouble(flatTarget[i]);
-            mse += diff * diff;
+            TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
         }
-        mse /= flatPred.Length;
-        LastLoss = NumOps.FromDouble(mse);
-
-        // MSE gradient: 2*(pred - target) / N
-        var gradData = new T[flatPred.Length];
-        double scale = 2.0 / flatPred.Length;
-        for (int i = 0; i < flatPred.Length; i++)
-            gradData[i] = NumOps.FromDouble((Convert.ToDouble(flatPred[i]) - Convert.ToDouble(flatTarget[i])) * scale);
-
-        // Gradient clipping to prevent explosion through attention layers
-        var gradTensor = new Tensor<T>(prediction.Shape.ToArray(), new Vector<T>(gradData));
-        double gradNorm = 0;
-        for (int i = 0; i < gradData.Length; i++)
+        finally
         {
-            double v = Convert.ToDouble(gradData[i]);
-            gradNorm += v * v;
+            SetTrainingMode(false);
         }
-        gradNorm = Math.Sqrt(gradNorm);
-        double maxNorm = Convert.ToDouble(MaxGradNorm);
-        if (gradNorm > maxNorm)
-            gradTensor = Engine.TensorMultiplyScalar(gradTensor, NumOps.FromDouble(maxNorm / gradNorm));
-
-        Backpropagate(gradTensor);
-
-        // Update via optimizer
-        if (_optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradOpt)
-            gradOpt.UpdateParameters(Layers);
-        SetTrainingMode(false);
     }
 
     /// <inheritdoc/>
@@ -1487,17 +1449,40 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        // Collect from Layers directly to avoid duplicate references
         var allParams = new List<T>();
-        foreach (var layer in Layers)
+
+        void AddLayerParams(ILayer<T> layer)
         {
             var p = layer.GetParameters();
             for (int i = 0; i < p.Length; i++)
+            {
                 allParams.Add(p[i]);
+            }
         }
+
+        AddLayerParams(_audioInputProjection);
+        foreach (var layer in _audioEncoderLayers) AddLayerParams(layer);
+        AddLayerParams(_audioOutputProjection);
+
+        AddLayerParams(_visualInputProjection);
+        foreach (var layer in _visualEncoderLayers) AddLayerParams(layer);
+        AddLayerParams(_visualOutputProjection);
+
+        foreach (var layer in _temporalAttentionLayers) AddLayerParams(layer);
+        AddLayerParams(_temporalProposalHead);
+
+        foreach (var layer in _crossModalAttentionLayers) AddLayerParams(layer);
+        AddLayerParams(_eventClassificationHead);
+        AddLayerParams(_temporalBoundaryHead);
+        AddLayerParams(_spatialLocalizationHead);
+        AddLayerParams(_anomalyDetectionHead);
+
         var result = new Vector<T>(allParams.Count);
         for (int i = 0; i < allParams.Count; i++)
+        {
             result[i] = allParams[i];
+        }
+
         return result;
     }
 

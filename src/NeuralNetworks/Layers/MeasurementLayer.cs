@@ -1,7 +1,8 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -220,7 +221,7 @@ public class MeasurementLayer<T> : LayerBase<T>
     /// The measurement layer converts quantum amplitudes to probabilities via the Born rule.
     /// This method uses a specialized CUDA kernel to perform measurement entirely on GPU.
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs == null || inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -280,194 +281,7 @@ public class MeasurementLayer<T> : LayerBase<T>
             outputShape[input.Shape.Length - 1] = stateSize;
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the measurement layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the measurement layer, which is used during training
-    /// to propagate error gradients back through the network. It calculates the gradient of the measurement
-    /// operation with respect to the complex input amplitudes.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how changes in the quantum amplitudes
-    /// affect the final probabilities.
-    /// 
-    /// During the backward pass:
-    /// - The layer receives gradients indicating how the output probabilities should change
-    /// - It calculates how the input quantum amplitudes should change to achieve those probability changes
-    /// - This involves partial derivatives of the Born rule formula
-    /// 
-    /// While quantum measurement in the real world is irreversible, in quantum machine learning
-    /// we can calculate these gradients for training purposes, even though they don't have a direct
-    /// physical interpretation.
-    /// 
-    /// This allows quantum neural networks to learn from data just like classical neural networks.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _originalInputShape == null)
-        {
-            throw new InvalidOperationException("Backward called before Forward.");
-        }
-
-        bool shapeMatches = outputGradient.Shape.Length == _lastOutput.Shape.Length;
-        if (shapeMatches)
-        {
-            for (int i = 0; i < _lastOutput.Shape.Length; i++)
-            {
-                if (outputGradient.Shape[i] != _lastOutput.Shape[i])
-                {
-                    shapeMatches = false;
-                    break;
-                }
-            }
-        }
-
-        Tensor<T> normalizedOutputGradient = outputGradient;
-        if (!shapeMatches)
-        {
-            if (outputGradient.Length == _lastOutput.Length)
-            {
-                normalizedOutputGradient = outputGradient.Reshape(_lastOutput.Shape.ToArray());
-            }
-            else
-            {
-                throw new ArgumentException("Output gradient shape does not match measurement output.");
-            }
-        }
-
-        int batchSize = _lastInput.Shape[0];
-        int stateSize = _lastInput.Shape[1];
-        var inputGradient = new Tensor<T>(new int[] { batchSize, stateSize });
-        var two = NumOps.FromDouble(2.0);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int baseIndex = b * stateSize;
-            T sum = NumOps.Zero;
-            var q = new T[stateSize];
-
-            for (int i = 0; i < stateSize; i++)
-            {
-                var complexValue = Tensor<T>.GetComplex(_lastInput, baseIndex + i);
-                var realSquared = NumOps.Multiply(complexValue.Real, complexValue.Real);
-                var imagSquared = NumOps.Multiply(complexValue.Imaginary, complexValue.Imaginary);
-                var magnitude = NumOps.Add(realSquared, imagSquared);
-                q[i] = magnitude;
-                sum = NumOps.Add(sum, magnitude);
-            }
-
-            if (NumOps.Equals(sum, NumOps.Zero))
-            {
-                continue;
-            }
-
-            T gDotQ = NumOps.Zero;
-            for (int i = 0; i < stateSize; i++)
-            {
-                gDotQ = NumOps.Add(gDotQ, NumOps.Multiply(normalizedOutputGradient[b, i], q[i]));
-            }
-
-            var denom = NumOps.Multiply(sum, sum);
-
-            for (int i = 0; i < stateSize; i++)
-            {
-                var numerator = NumOps.Subtract(NumOps.Multiply(normalizedOutputGradient[b, i], sum), gDotQ);
-                var dLdq = NumOps.Divide(numerator, denom);
-
-                var complexValue = Tensor<T>.GetComplex(_lastInput, baseIndex + i);
-                var dReal = NumOps.Multiply(NumOps.Multiply(two, complexValue.Real), dLdq);
-                var dImag = NumOps.Multiply(NumOps.Multiply(two, complexValue.Imaginary), dLdq);
-
-                inputGradient[b, i] = NumOps.Add(dReal, dImag);
-            }
-        }
-
-        return inputGradient.Reshape(_originalInputShape);
-    }
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. It constructs a computation graph
-    /// that mirrors the forward pass operations (magnitude squared -> Sum -> Normalize) to calculate exact gradients.
-    /// The Forward pass uses GetComplex which treats each element as a complex value. For real-valued tensors (T=float/double),
-    /// the imaginary part is 0, so |z|² = real² + 0² = real². The output shape matches the input shape.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _originalInputShape == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        bool shapeMatches = outputGradient.Shape.Length == _lastOutput.Shape.Length;
-        if (shapeMatches)
-        {
-            for (int i = 0; i < _lastOutput.Shape.Length; i++)
-            {
-                if (outputGradient.Shape[i] != _lastOutput.Shape[i])
-                {
-                    shapeMatches = false;
-                    break;
-                }
-            }
-        }
-
-        Tensor<T> normalizedOutputGradient = outputGradient;
-        if (!shapeMatches)
-        {
-            if (outputGradient.Length == _lastOutput.Length)
-            {
-                normalizedOutputGradient = outputGradient.Reshape(_lastOutput.Shape.ToArray());
-            }
-            else
-            {
-                throw new ArgumentException("Output gradient shape does not match measurement output.");
-            }
-        }
-
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-        var magnitudeSquared = Autodiff.TensorOperations<T>.Square(inputNode);
-        var sumSquared = Autodiff.TensorOperations<T>.Sum(magnitudeSquared, new int[] { 1 }, keepDims: true);
-
-        var epsilonTensor = new Tensor<T>(new int[] { 1 });
-        epsilonTensor[0] = NumOps.FromDouble(1e-10);
-        var epsilonNode = Autodiff.TensorOperations<T>.Constant(epsilonTensor, "epsilon");
-        var safeSum = Autodiff.TensorOperations<T>.Add(sumSquared, epsilonNode);
-
-        var output = Autodiff.TensorOperations<T>.Divide(magnitudeSquared, safeSum);
-
-        output.Gradient = normalizedOutputGradient;
-        output.Backward();
-
-        if (inputNode.Gradient == null)
-        {
-            throw new InvalidOperationException("Gradient computation failed.");
-        }
-
-        return inputNode.Gradient.Reshape(_originalInputShape);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
     /// <summary>
     /// Updates the parameters of the measurement layer using the calculated gradients.
@@ -549,54 +363,5 @@ public class MeasurementLayer<T> : LayerBase<T>
         _lastOutput = null;
         _originalInputShape = null;
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var input = inputNodes[0];
-        int size = InputShape[0];
-
-        // MeasurementLayer computes quantum measurement: probabilities = |amplitude|^2 / sum(|amplitude|^2)
-        // Input is complex-valued stored as [real_0, imag_0, real_1, imag_1, ...] or [real; imag] halves
-        // Assuming interleaved format: extract real and imaginary parts
-
-        // For interleaved format [r0, i0, r1, i1, ...]:
-        // Extract even indices (real) and odd indices (imaginary)
-        var realPart = TensorOperations<T>.Slice(input, 0, size, step: 2, axis: 0);
-        var imagPart = TensorOperations<T>.Slice(input, 1, size, step: 2, axis: 0);
-
-        // Compute |amplitude|^2 = real^2 + imag^2
-        var realSquared = TensorOperations<T>.Square(realPart);
-        var imagSquared = TensorOperations<T>.Square(imagPart);
-        var magnitudeSquared = TensorOperations<T>.Add(realSquared, imagSquared);
-
-        // Compute sum for normalization
-        var totalSum = TensorOperations<T>.Sum(magnitudeSquared);
-
-        // Normalize to get probabilities (add epsilon to avoid division by zero)
-        var epsilonTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(1e-10) }));
-        var epsilon = TensorOperations<T>.Constant(epsilonTensor, "Epsilon");
-        var safeDenom = TensorOperations<T>.Add(totalSum, epsilon);
-        var probabilities = TensorOperations<T>.Divide(magnitudeSquared, safeDenom);
-
-        return probabilities;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> because MeasurementLayer computes quantum measurement using only
-    /// standard arithmetic operations: |amplitude|^2 = real^2 + imag^2, normalized by sum.
-    /// </value>
-    public override bool SupportsJitCompilation => true;
 
 }

@@ -103,96 +103,6 @@ public class iBOT<T> : TeacherStudentSSL<T>
         NumLocalCrops = 0;
     }
 
-    /// <inheritdoc />
-    protected override SSLStepResult<T> TrainStepCore(Tensor<T> batch, SSLAugmentationContext<T>? augmentationContext)
-    {
-        var batchSize = batch.Shape[0];
-
-        // Create two augmented views
-        var (globalViews, _) = CreateMultiCropViews(batch);
-        var view1 = globalViews[0];
-        var view2 = globalViews.Count > 1 ? globalViews[1] : globalViews[0];
-
-        // Teacher forward pass (no masking)
-        var teacherOut1 = ForwardTeacher(view1);
-        var teacherOut2 = ForwardTeacher(view2);
-
-        // Generate random masks for student views
-        var numPatches = EstimateNumPatches(view1);
-        var mask1 = GenerateMask(batchSize, numPatches);
-        var mask2 = GenerateMask(batchSize, numPatches);
-
-        // Student forward pass (full views - masking applied at loss level)
-        var studentOut1 = ForwardStudent(view1);
-        var studentOut2 = ForwardStudent(view2);
-
-        // Compute CLS token loss (DINO-style)
-        var clsLoss1 = _clsLoss.ComputeLoss(studentOut1, teacherOut2);
-        var clsLoss2 = _clsLoss.ComputeLoss(studentOut2, teacherOut1);
-        var clsLoss = NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Add(clsLoss1, clsLoss2));
-
-        // Compute masked patch prediction loss
-        // Apply mask weighting to simulate computing loss only on masked positions
-        var patchLoss1 = ComputeMaskedPatchLoss(studentOut1, teacherOut2, mask1);
-        var patchLoss2 = ComputeMaskedPatchLoss(studentOut2, teacherOut1, mask2);
-        var patchLoss = NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Add(patchLoss1, patchLoss2));
-
-        // Total loss: L_cls + λ * L_mim
-        var mimWeightT = NumOps.FromDouble(_mimWeight);
-        var loss = NumOps.Add(clsLoss, NumOps.Multiply(mimWeightT, patchLoss));
-
-        // Backward pass: compute gradients for the full iBOT objective
-        // L = 0.5*(clsLoss1 + clsLoss2) + λ * 0.5*(patchLoss1 + patchLoss2)
-        var projector = _projector ?? throw new InvalidOperationException("Projector has not been initialized.");
-
-        // Compute CLS gradients for both directions
-        var (_, gradCls1) = _clsLoss.ComputeLossWithGradients(studentOut1, teacherOut2);
-        var (_, gradCls2) = _clsLoss.ComputeLossWithGradients(studentOut2, teacherOut1);
-
-        // Compute masked patch gradients for both directions
-        var gradMim1 = ComputeMaskedPatchGradient(studentOut1, teacherOut2, mask1);
-        var gradMim2 = ComputeMaskedPatchGradient(studentOut2, teacherOut1, mask2);
-
-        // Combine: gradStudent = 0.5 * gradCls + λ * 0.5 * gradMim for each view
-        var gradStudent1 = CombineLossGradients(gradCls1, gradMim1, 0.5, 0.5 * _mimWeight);
-        var gradStudent2 = CombineLossGradients(gradCls2, gradMim2, 0.5, 0.5 * _mimWeight);
-
-        // Replay view1 forward to restore projector caches, then backward
-        projector.Reset();
-        var h1 = _encoder.ForwardWithMemory(view1);
-        projector.Project(h1);
-        var gradH1 = projector.Backward(gradStudent1);
-        var view1ProjGrads = projector.GetParameterGradients();
-        _encoder.Backpropagate(gradH1);
-
-        // Replay view2 forward to restore projector caches, then backward
-        projector.Reset();
-        var h2 = _encoder.ForwardWithMemory(view2);
-        projector.Project(h2);
-        var gradH2 = projector.Backward(gradStudent2);
-        var view2ProjGrads = projector.GetParameterGradients();
-        _encoder.Backpropagate(gradH2);
-
-        // Accumulate projector gradients from both views
-        var combinedProjGrads = Engine.Add(view1ProjGrads, view2ProjGrads);
-
-        // Update networks
-        var learningRate = NumOps.FromDouble(GetEffectiveLearningRate());
-        UpdateStudent(learningRate, combinedProjGrads);
-        UpdateTeacher();
-
-        // Create result
-        var result = CreateStepResult(loss);
-        result.NumPositivePairs = batchSize * 2;
-        result.NumNegativePairs = 0;
-        result.Metrics["momentum"] = NumOps.FromDouble(TeacherEncoder.Momentum);
-        result.Metrics["cls_loss"] = clsLoss;
-        result.Metrics["mim_loss"] = patchLoss;
-        result.Metrics["mask_ratio"] = NumOps.FromDouble(_maskRatio);
-
-        return result;
-    }
-
     private int EstimateNumPatches(Tensor<T> view)
     {
         // Estimate patch count based on tensor shape
@@ -462,5 +372,7 @@ public class iBOT<T> : TeacherStudentSSL<T>
 
         return new iBOT<T>(encoder, teacherEncoder, studentProjector, teacherProjector,
                           outputDim, mimWeight, maskRatio);
-    }
+    
+
+}
 }

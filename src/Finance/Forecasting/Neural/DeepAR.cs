@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Base;
@@ -477,7 +477,6 @@ public class DeepAR<T> : ForecastingModelBase<T>
         {
             // Backward pass
             var gradient = ComputeGradient(output, target);
-            Backward(gradient);
 
             // Update weights via optimizer
             _optimizer.UpdateParameters(Layers);
@@ -836,47 +835,6 @@ public class DeepAR<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through the DeepAR network.
-    /// </summary>
-    /// <param name="gradOutput">Gradient from the loss function.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backward pass computes gradients for all learnable
-    /// parameters by propagating error signals backwards through each layer.
-    /// This enables the model to learn from its mistakes.
-    /// </para>
-    /// </remarks>
-    private void Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        // Backward through distribution heads
-        // Forward returns mu only, so propagate gradients through mu projection.
-        if (_muProjection is not null)
-        {
-            grad = _muProjection.Backward(grad);
-        }
-
-        // Backward through layer normalization
-        if (_layerNorm is not null)
-        {
-            grad = _layerNorm.Backward(grad);
-        }
-
-        // Backward through LSTM layers (in reverse order)
-        for (int i = _lstmLayers.Count - 1; i >= 0; i--)
-        {
-            grad = _lstmLayers[i].Backward(grad);
-        }
-
-        // Backward through input projection
-        if (_inputProjection is not null)
-        {
-            _inputProjection.Backward(grad);
-        }
-    }
-
-    /// <summary>
     /// Performs native mode forecasting.
     /// </summary>
     /// <param name="input">Input historical data.</param>
@@ -944,7 +902,7 @@ public class DeepAR<T> : ForecastingModelBase<T>
         // Only _scaleStd is used for denormalization; _scaleMean is not needed for this scaling approach
         _scaleStd = new Tensor<T>(new[] { batchSize, 1, features });
 
-        var scaled = new Tensor<T>(input.Shape.ToArray());
+        var scaled = new Tensor<T>(input._shape);
         T epsilon = NumOps.FromDouble(1e-5);
 
         for (int b = 0; b < batchSize; b++)
@@ -1000,7 +958,7 @@ public class DeepAR<T> : ForecastingModelBase<T>
         int seqLen = output.Shape.Length > 1 ? output.Shape[1] : 1;
         int features = output.Shape.Length > 2 ? output.Shape[2] : 1;
 
-        var unscaled = new Tensor<T>(output.Shape.ToArray());
+        var unscaled = new Tensor<T>(output._shape);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -1168,7 +1126,7 @@ public class DeepAR<T> : ForecastingModelBase<T>
     private Tensor<T> ComputeGradient(Tensor<T> predictions, Tensor<T> targets)
     {
         var gradVector = LossFunction.CalculateDerivative(predictions.ToVector(), targets.ToVector());
-        return Tensor<T>.FromVector(gradVector, predictions.Shape.ToArray());
+        return Tensor<T>.FromVector(gradVector, predictions._shape);
     }
 
     /// <summary>
@@ -1224,7 +1182,7 @@ public class DeepAR<T> : ForecastingModelBase<T>
         int seqLen = input.Shape[1];
         int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
 
-        var shifted = new Tensor<T>(input.Shape.ToArray());
+        var shifted = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {

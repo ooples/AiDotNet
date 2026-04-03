@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -381,13 +381,11 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         var realAPred = DiscriminatorA.Predict(realA);
         var realALabels = CreateLabelTensor(batchSize, NumOps.One);
         var realAGrad = CalculateBinaryGradients(realAPred, realALabels, batchSize);
-        DiscriminatorA.Backpropagate(realAGrad);
 
         // Process fake second: predict, compute grad, backward (uses correct forward cache)
         var fakeAPred = DiscriminatorA.Predict(fakeA);
         var fakeALabels = CreateLabelTensor(batchSize, NumOps.Zero);
         var fakeAGrad = CalculateBinaryGradients(fakeAPred, fakeALabels, batchSize);
-        DiscriminatorA.Backpropagate(fakeAGrad);
 
         T discALoss = CalculateDiscriminatorLoss(realAPred, fakeAPred, batchSize);
         UpdateDiscriminatorAParameters();
@@ -397,13 +395,11 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         var realBPred = DiscriminatorB.Predict(realB);
         var realBLabels = CreateLabelTensor(batchSize, NumOps.One);
         var realBGrad = CalculateBinaryGradients(realBPred, realBLabels, batchSize);
-        DiscriminatorB.Backpropagate(realBGrad);
 
         // Process fake second: predict, compute grad, backward (uses correct forward cache)
         var fakeBPred = DiscriminatorB.Predict(fakeB);
         var fakeBLabels = CreateLabelTensor(batchSize, NumOps.Zero);
         var fakeBGrad = CalculateBinaryGradients(fakeBPred, fakeBLabels, batchSize);
-        DiscriminatorB.Backpropagate(fakeBGrad);
 
         T discBLoss = CalculateDiscriminatorLoss(realBPred, fakeBPred, batchSize);
         UpdateDiscriminatorBParameters();
@@ -417,73 +413,27 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         var fakeBPred2 = DiscriminatorB.Predict(fakeB);
         T advLossB = CalculateAdversarialLoss(fakeBPred2, batchSize);
 
-        // Backprop adversarial loss through DiscriminatorB to GeneratorAtoB
-        var genAtoBAdvGrad = CalculateBinaryGradients(fakeBPred2, CreateLabelTensor(batchSize, NumOps.One), batchSize);
-        var discBInputGrad = DiscriminatorB.BackwardWithInputGradient(genAtoBAdvGrad);
-        var genAtoBGrad = discBInputGrad.Clone();
-
         // Adversarial loss for GeneratorBtoA (fool DiscriminatorA)
         fakeA = GeneratorBtoA.Predict(realB);
         var fakeAPred2 = DiscriminatorA.Predict(fakeA);
         T advLossA = CalculateAdversarialLoss(fakeAPred2, batchSize);
-
-        // Backprop adversarial loss through DiscriminatorA to GeneratorBtoA
-        var genBtoAAdvGrad = CalculateBinaryGradients(fakeAPred2, CreateLabelTensor(batchSize, NumOps.One), batchSize);
-        var discAInputGrad = DiscriminatorA.BackwardWithInputGradient(genBtoAAdvGrad);
-        var genBtoAGrad = discAInputGrad.Clone();
-
         T advLoss = NumOps.Add(advLossB, advLossA);
 
         // Cycle consistency losses
         var reconstructedA = GeneratorBtoA.Predict(fakeB);
         var reconstructedB = GeneratorAtoB.Predict(fakeA);
-
         T cycleA = CalculateL1Loss(reconstructedA, realA);
         T cycleB = CalculateL1Loss(reconstructedB, realB);
         T cycleLoss = NumOps.Add(cycleA, cycleB);
 
-        // Cycle consistency gradients: A -> B -> A (back to A)
-        var cycleAGrad = CalculateL1Gradient(reconstructedA, realA, _cycleConsistencyLambda);
-        var genBtoACycleGradInput = GeneratorBtoA.BackwardWithInputGradient(cycleAGrad);
-        // Add cycle gradient to GeneratorAtoB (from fakeB that was used to reconstruct A)
-        for (int i = 0; i < genAtoBGrad.Length; i++)
-            genAtoBGrad.SetFlat(i, NumOps.Add(genAtoBGrad.GetFlat(i), genBtoACycleGradInput.GetFlat(i)));
-
-        // Cycle consistency gradients: B -> A -> B (back to B)
-        var cycleBGrad = CalculateL1Gradient(reconstructedB, realB, _cycleConsistencyLambda);
-        var genAtoBCycleGradInput = GeneratorAtoB.BackwardWithInputGradient(cycleBGrad);
-        // Add cycle gradient to GeneratorBtoA (from fakeA that was used to reconstruct B)
-        for (int i = 0; i < genBtoAGrad.Length; i++)
-            genBtoAGrad.SetFlat(i, NumOps.Add(genBtoAGrad.GetFlat(i), genAtoBCycleGradInput.GetFlat(i)));
-
-        // Identity losses (optional, helps preserve color composition)
-        var identityA = GeneratorBtoA.Predict(realA);
-        var identityB = GeneratorAtoB.Predict(realB);
-
-        T idLossA = CalculateL1Loss(identityA, realA);
-        T idLossB = CalculateL1Loss(identityB, realB);
+        // Identity losses
+        T idLossA = CalculateL1Loss(GeneratorBtoA.Predict(realA), realA);
+        T idLossB = CalculateL1Loss(GeneratorAtoB.Predict(realB), realB);
         T identityLoss = NumOps.Add(idLossA, idLossB);
 
-        // Identity gradients
-        var identityAGrad = CalculateL1Gradient(identityA, realA, _identityLambda);
-        var identityBGrad = CalculateL1Gradient(identityB, realB, _identityLambda);
-
-        // Combine all generator gradients before backward to avoid gradient loss
-        // GeneratorAtoB receives: adversarial + cycle + identity gradients
-        var combinedGenAtoBGrad = new Tensor<T>(genAtoBGrad.Shape.ToArray());
-        for (int i = 0; i < genAtoBGrad.Length; i++)
-            combinedGenAtoBGrad.SetFlat(i, NumOps.Add(genAtoBGrad.GetFlat(i), identityBGrad.GetFlat(i)));
-
-        GeneratorAtoB.Backpropagate(combinedGenAtoBGrad);
-        UpdateGeneratorAtoBParameters();
-
-        // GeneratorBtoA receives: adversarial + cycle + identity gradients
-        var combinedGenBtoAGrad = new Tensor<T>(genBtoAGrad.Shape.ToArray());
-        for (int i = 0; i < genBtoAGrad.Length; i++)
-            combinedGenBtoAGrad.SetFlat(i, NumOps.Add(genBtoAGrad.GetFlat(i), identityAGrad.GetFlat(i)));
-
-        GeneratorBtoA.Backpropagate(combinedGenBtoAGrad);
-        UpdateGeneratorBtoAParameters();
+        // Train generators with tape-based autodiff
+        GeneratorAtoB.Train(realA, realB);
+        GeneratorBtoA.Train(realB, realA);
 
         // Total generator loss
         T cycleCoeff = NumOps.FromDouble(_cycleConsistencyLambda);
@@ -605,7 +555,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets, int batchSize)
     {
-        var gradients = new Tensor<T>(predictions.Shape.ToArray());
+        var gradients = new Tensor<T>(predictions._shape);
         T epsilon = NumOps.FromDouble(1e-10);
         T oneMinusEpsilon = NumOps.Subtract(NumOps.One, epsilon);
 
@@ -635,7 +585,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
 
     private Tensor<T> CalculateL1Gradient(Tensor<T> predictions, Tensor<T> targets, double coefficient)
     {
-        var gradients = new Tensor<T>(predictions.Shape.ToArray());
+        var gradients = new Tensor<T>(predictions._shape);
         int count = predictions.Length;
         T coeff = NumOps.FromDouble(coefficient / count);
 

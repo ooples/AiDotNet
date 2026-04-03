@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Attention;
@@ -142,8 +142,6 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
 
     public override bool SupportsTraining => false;
 
-    public override bool SupportsJitCompilation => false;
-
     public override int ParameterCount => 0;
 
     public override Tensor<float>? GetWeights() => null;
@@ -262,9 +260,6 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
         return output.Reshape(outputShape);
     }
 
-    public override Tensor<float> Backward(Tensor<float> outputGradient)
-        => throw new NotSupportedException("QuantizedAttentionLayer is inference-only.");
-
     public override void UpdateParameters(float learningRate)
         => throw new NotSupportedException("QuantizedAttentionLayer is inference-only.");
 
@@ -277,11 +272,6 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
     public override void ResetState()
     {
         // Inference-only; no recurrent state to clear.
-    }
-
-    public override ComputationNode<float> ExportComputationGraph(List<ComputationNode<float>> inputNodes)
-    {
-        throw new NotSupportedException("QuantizedAttentionLayer does not support JIT compilation.");
     }
 
     #region Private Helpers

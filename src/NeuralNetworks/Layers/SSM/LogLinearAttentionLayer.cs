@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -511,241 +511,6 @@ public class LogLinearAttentionLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var lastInput = _lastInput ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastOutput = _lastOutput ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastQuery = _lastQuery ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastKey = _lastKey ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastValue = _lastValue ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastGate = _lastGate ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastGateRaw = _lastGateRaw ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastLogLinearOutput = _lastLogLinearOutput ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastLevelOutputs = _lastLevelOutputs ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastLevelMixSoftmax = _lastLevelMixSoftmax ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = lastInput.Shape[0];
-        int seqLen = lastInput.Shape[1];
-
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        var activationGrad = ApplyActivationDerivative(lastOutput, grad3D);
-
-        // Initialize gradients
-        _queryWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _queryBiasGradient = new Tensor<T>([_modelDimension]);
-        _keyWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _keyBiasGradient = new Tensor<T>([_modelDimension]);
-        _valueWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _valueBiasGradient = new Tensor<T>([_modelDimension]);
-        _levelMixWeightsGradient = new Tensor<T>([_numHeads, _numLevels]);
-        _compressionWeightsGradient = new Tensor<T>([_numLevels, _headDimension, _headDimension]);
-        _outputGateWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputGateBiasGradient = new Tensor<T>([_modelDimension]);
-        _outputProjectionWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputProjectionBiasGradient = new Tensor<T>([_modelDimension]);
-
-        // Step 5 backward: output projection
-        var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
-        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
-
-        var gatedFlat = Engine.TensorMultiply(lastLogLinearOutput, lastGate)
-            .Reshape(batchSize * seqLen, _modelDimension);
-        _outputProjectionWeightsGradient = Engine.TensorMatMul(gatedFlat.Transpose([1, 0]), gradFlat);
-
-        var dGated = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
-            .Reshape(batchSize, seqLen, _modelDimension);
-
-        // Step 4 backward: gating
-        var dLogLinOut = Engine.TensorMultiply(dGated, lastGate);
-        var dGateSwish = Engine.TensorMultiply(dGated, lastLogLinearOutput);
-        var dGateRaw = Engine.TensorMultiply(dGateSwish, ComputeSiLUDerivative(lastGateRaw));
-
-        var inputFlat = lastInput.Reshape(batchSize * seqLen, _modelDimension);
-        var dGateRawFlat = dGateRaw.Reshape(batchSize * seqLen, _modelDimension);
-        _outputGateWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dGateRawFlat);
-        _outputGateBiasGradient = Engine.ReduceSum(dGateRaw, new int[] { 0, 1 });
-
-        var dInputFromGate = Engine.TensorMatMul(dGateRawFlat, _outputGateWeights.Transpose([1, 0]));
-
-        // Step 3 backward: log-linear attention
-        // Output at each step: o = sum_l alpha_l * (S_l * q)
-        // dQ, dK, dV, dLevelMix
-        var dQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
-
-        // Proper backward through the recurrence with recomputed states.
-        // Recompute states during backward to get S_l at each timestep.
-        var statesBwd = new T[batchSize, _numHeads, _numLevels, _headDimension, _headDimension];
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
-
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    // Update level-0 state: S_0 += v*k^T (same as forward)
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        T vVal = lastValue[new[] { bi, t, dimStart + di }];
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            T kVal = NumOps.Multiply(lastKey[new[] { bi, t, dimStart + dj }], keyScale);
-                            statesBwd[bi, hi, 0, di, dj] = NumOps.Add(
-                                statesBwd[bi, hi, 0, di, dj],
-                                NumOps.Multiply(vVal, kVal));
-                        }
-                    }
-
-                    // dLevelMix: gradient of output w.r.t. mixing weights
-                    // o = sum_l alpha_l * levelOut_l
-                    // dalpha_l += dot(dO, levelOut_l)
-                    for (int l = 0; l < _numLevels; l++)
-                    {
-                        T dAlpha = NumOps.Zero;
-                        for (int di = 0; di < _headDimension; di++)
-                        {
-                            int flatDi = dimStart + di;
-                            T dO = dLogLinOut[new[] { bi, t, flatDi }];
-                            T levelOut = lastLevelOutputs[new[] { bi, t, hi, l, di }];
-                            dAlpha = NumOps.Add(dAlpha, NumOps.Multiply(dO, levelOut));
-                        }
-
-                        // Softmax backward for level mix: d_logits_l = alpha_l * (dAlpha_l - sum_m alpha_m * dAlpha_m)
-                        // We accumulate raw gradient first, then apply softmax backward below
-                        _levelMixWeightsGradient[new[] { hi, l }] = NumOps.Add(
-                            _levelMixWeightsGradient[new[] { hi, l }], dAlpha);
-                    }
-
-                    // dQ: from sum_l alpha_l * S_l * q
-                    // dQ += sum_l alpha_l * S_l^T * dO  (simplified: we use level outputs)
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T dO = dLogLinOut[new[] { bi, t, flatDi }];
-
-                        // Correct dQ: dQ[j] += sum_l alpha_l * sum_i S_l[i,j] * dO[i]
-                        // This is S_l^T @ dO, weighted by alpha_l
-                        for (int l = 0; l < _numLevels; l++)
-                        {
-                            T alpha = lastLevelMixSoftmax[new[] { bi, t, hi, l }];
-                            T grad = NumOps.Zero;
-                            for (int dj = 0; dj < _headDimension; dj++)
-                            {
-                                int flatDj = dimStart + dj;
-                                T dOj = dLogLinOut[new[] { bi, t, flatDj }];
-                                grad = NumOps.Add(grad, NumOps.Multiply(statesBwd[bi, hi, l, dj, di], dOj));
-                            }
-                            dQ[new[] { bi, t, flatDi }] = NumOps.Add(
-                                dQ[new[] { bi, t, flatDi }], NumOps.Multiply(alpha, grad));
-                        }
-                    }
-
-                    // dK, dV: from S += v * k^T (Level 0 accumulation)
-                    // Approximate: gradient flows through the most recent accumulation
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T dO = dLogLinOut[new[] { bi, t, flatDi }];
-                        T alpha0 = lastLevelMixSoftmax[new[] { bi, t, hi, 0 }];
-
-                        T qVal = lastQuery[new[] { bi, t, flatDi }];
-
-                        // From S_0 * q: dS_0[i,j] = alpha_0 * dO[i] * q[j]
-                        // From S_0 += v*k^T: dV[i] += dS_0[i,j] * k[j], dK[j] += dS_0[i,j] * v[i]
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            int flatDj = dimStart + dj;
-                            T kVal = NumOps.Multiply(lastKey[new[] { bi, t, flatDj }], keyScale);
-                            T vVal = lastValue[new[] { bi, t, flatDj }];
-
-                            T dS = NumOps.Multiply(alpha0, NumOps.Multiply(dO, qVal));
-                            dV[new[] { bi, t, flatDi }] = NumOps.Add(
-                                dV[new[] { bi, t, flatDi }],
-                                NumOps.Multiply(dS, kVal));
-                            dK[new[] { bi, t, flatDj }] = NumOps.Add(
-                                dK[new[] { bi, t, flatDj }],
-                                NumOps.Multiply(NumOps.Multiply(dS, vVal), keyScale));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Apply softmax backward to level mix gradients
-        // We stored raw dAlpha; need to transform through softmax Jacobian
-        for (int hi = 0; hi < _numHeads; hi++)
-        {
-            // Compute sum_l alpha_l * dAlpha_l
-            T weightedSum = NumOps.Zero;
-            // Use the average softmax values (they are the same across time for fixed weights)
-            // Since softmax is computed once from _levelMixWeights, use those values
-            T maxVal = _levelMixWeights[new[] { hi, 0 }];
-            for (int l = 1; l < _numLevels; l++)
-            {
-                T w = _levelMixWeights[new[] { hi, l }];
-                if (NumOps.GreaterThan(w, maxVal))
-                    maxVal = w;
-            }
-
-            var softmaxVals = new T[_numLevels];
-            T sumExp = NumOps.Zero;
-            for (int l = 0; l < _numLevels; l++)
-            {
-                softmaxVals[l] = NumOps.Exp(NumOps.Subtract(_levelMixWeights[new[] { hi, l }], maxVal));
-                sumExp = NumOps.Add(sumExp, softmaxVals[l]);
-            }
-            for (int l = 0; l < _numLevels; l++)
-                softmaxVals[l] = NumOps.Divide(softmaxVals[l], sumExp);
-
-            for (int l = 0; l < _numLevels; l++)
-                weightedSum = NumOps.Add(weightedSum,
-                    NumOps.Multiply(softmaxVals[l], _levelMixWeightsGradient[new[] { hi, l }]));
-
-            for (int l = 0; l < _numLevels; l++)
-                _levelMixWeightsGradient[new[] { hi, l }] = NumOps.Multiply(softmaxVals[l],
-                    NumOps.Subtract(_levelMixWeightsGradient[new[] { hi, l }], weightedSum));
-        }
-
-        // Q, K, V projection gradients
-        var dQFlat = dQ.Reshape(batchSize * seqLen, _modelDimension);
-        var dKFlat = dK.Reshape(batchSize * seqLen, _modelDimension);
-        var dVFlat = dV.Reshape(batchSize * seqLen, _modelDimension);
-
-        _queryWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dQFlat);
-        _queryBiasGradient = Engine.ReduceSum(dQ, new int[] { 0, 1 });
-        _keyWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dKFlat);
-        _keyBiasGradient = Engine.ReduceSum(dK, new int[] { 0, 1 });
-        _valueWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dVFlat);
-        _valueBiasGradient = Engine.ReduceSum(dV, new int[] { 0, 1 });
-
-        // Input gradient from all projection paths
-        var dInputFromProj = Engine.TensorMatMul(dQFlat, _queryWeights.Transpose([1, 0]));
-        dInputFromProj = Engine.TensorAdd(dInputFromProj,
-            Engine.TensorMatMul(dKFlat, _keyWeights.Transpose([1, 0])));
-        dInputFromProj = Engine.TensorAdd(dInputFromProj,
-            Engine.TensorMatMul(dVFlat, _valueWeights.Transpose([1, 0])));
-
-        var dInputTotal = Engine.TensorAdd(dInputFromProj, dInputFromGate);
-        var dInput3D = dInputTotal.Reshape(batchSize, seqLen, _modelDimension);
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return dInput3D.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return dInput3D.Reshape(_originalInputShape);
-
-        return dInput3D;
-    }
-
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
@@ -816,18 +581,18 @@ public class LogLinearAttentionLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
-            (_queryBiasGradient is not null ? Vector<T>.FromMemory(_queryBiasGradient.Data) : new Vector<T>(0)),
-            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
-            (_keyBiasGradient is not null ? Vector<T>.FromMemory(_keyBiasGradient.Data) : new Vector<T>(0)),
-            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
-            (_valueBiasGradient is not null ? Vector<T>.FromMemory(_valueBiasGradient.Data) : new Vector<T>(0)),
-            (_levelMixWeightsGradient is not null ? Vector<T>.FromMemory(_levelMixWeightsGradient.Data) : new Vector<T>(0)),
-            (_compressionWeightsGradient is not null ? Vector<T>.FromMemory(_compressionWeightsGradient.Data) : new Vector<T>(0)),
-            (_outputGateWeightsGradient is not null ? Vector<T>.FromMemory(_outputGateWeightsGradient.Data) : new Vector<T>(0)),
-            (_outputGateBiasGradient is not null ? Vector<T>.FromMemory(_outputGateBiasGradient.Data) : new Vector<T>(0)),
-            (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)),
-            (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)));
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_queryBiasGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_keyBiasGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_valueBiasGradient!.ToArray()),
+            new Vector<T>(_levelMixWeightsGradient!.ToArray()),
+            new Vector<T>(_compressionWeightsGradient!.ToArray()),
+            new Vector<T>(_outputGateWeightsGradient!.ToArray()),
+            new Vector<T>(_outputGateBiasGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
     }
 
     public override void ClearGradients()
@@ -870,31 +635,6 @@ public class LogLinearAttentionLayer<T> : LayerBase<T>
     }
 
     #endregion
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
-        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
-        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(outWeightsNode);
-        inputNodes.Add(outBiasNode);
-
-        var outT = TensorOperations<T>.Transpose(outWeightsNode);
-        var finalOutput = TensorOperations<T>.MatrixMultiply(xNode, outT);
-        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
-
-        return outputWithBias;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

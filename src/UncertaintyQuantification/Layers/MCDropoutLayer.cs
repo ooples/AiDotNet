@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
@@ -125,31 +125,6 @@ public class MCDropoutLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass of the MC dropout layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient from the next layer.</param>
-    /// <returns>The gradient to pass to the previous layer.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput.Value == null || _dropoutMask.Value == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        if (!IsTrainingMode && !_mcMode)
-            return outputGradient;
-
-        var outputGradientVector = outputGradient.ToVector();
-        var inputGradientVector = new Vector<T>(outputGradientVector.Length);
-
-        for (int i = 0; i < outputGradientVector.Length; i++)
-        {
-            inputGradientVector[i] = NumOps.Multiply(outputGradientVector[i], _dropoutMask.Value[i]);
-        }
-
-        var inputGradientTensor = Tensor<T>.FromVector(inputGradientVector);
-        return _lastInput.Value.Shape.Length > 1 ? inputGradientTensor.Reshape(_lastInput.Value.Shape.ToArray()) : inputGradientTensor;
-    }
-
-    /// <summary>
     /// Updates the parameters (no-op for dropout layers).
     /// </summary>
     public override void UpdateParameters(T learningRate)
@@ -192,11 +167,6 @@ public class MCDropoutLayer<T> : LayerBase<T>
         copy.SetTrainingMode(IsTrainingMode);
         return copy;
     }
-
-    /// <inheritdoc/>
     public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
         => throw new NotSupportedException($"{GetType().Name} does not currently support JIT compilation.");
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
 }

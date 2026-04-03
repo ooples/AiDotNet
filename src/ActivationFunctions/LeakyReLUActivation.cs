@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -194,42 +194,13 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     /// <returns>A new tensor containing the derivatives of the Leaky ReLU function for each input element.</returns>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
-        Tensor<T> output = new Tensor<T>(input.Shape.ToArray());
+        Tensor<T> output = new Tensor<T>(input._shape);
         for (int i = 0; i < input.Length; i++)
         {
             output[i] = Derivative(input[i]);
         }
         return output;
     }
-
-    /// <summary>
-    /// Calculates the backward pass gradient for Leaky ReLU using GPU-accelerated fused operation.
-    /// </summary>
-    /// <param name="input">The input tensor that was used in the forward pass.</param>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method uses a single GPU kernel to compute the gradient,
-    /// which is faster than computing derivative and gradient multiplication separately.
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> input, Tensor<T> outputGradient)
-    {
-        return Engine.LeakyReluBackward(outputGradient, input, NumOps.ToDouble(_alpha));
-    }
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True because gradient computation is fully implemented in TensorOperations.LeakyReLU.</value>
-    /// <remarks>
-    /// <para>
-    /// LeakyReLU supports JIT compilation because:
-    /// - The gradient computation (backward pass) is fully implemented in TensorOperations
-    /// - The operation uses IEngine for GPU acceleration
-    /// - It can be represented as a static computation graph node
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Applies this activation function to a computation graph node.
@@ -275,27 +246,6 @@ public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
     {
         float alpha = (float)NumOps.ToDouble(_alpha);
         backend.LeakyRelu(input, output, alpha, size);
-    }
-
-    /// <summary>
-    /// Calculates the Leaky ReLU backward pass gradient on GPU.
-    /// </summary>
-    /// <param name="backend">The GPU backend to use for execution.</param>
-    /// <param name="gradOutput">The gradient flowing back from the next layer.</param>
-    /// <param name="input">The input buffer from the forward pass.</param>
-    /// <param name="output">Not used for LeakyReLU (can be null). LeakyReLU backward uses forward input.</param>
-    /// <param name="gradInput">The output buffer to store the input gradient.</param>
-    /// <param name="size">The number of elements to process.</param>
-    /// <remarks>
-    /// LeakyReLU backward on GPU: gradInput[i] = gradOutput[i] * (input[i] > 0 ? 1 : alpha)
-    /// </remarks>
-    public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input), "LeakyReLU backward requires the input from forward pass.");
-
-        float alpha = (float)NumOps.ToDouble(_alpha);
-        backend.LeakyReluBackward(gradOutput, input, gradInput, alpha, size);
     }
 
     #endregion

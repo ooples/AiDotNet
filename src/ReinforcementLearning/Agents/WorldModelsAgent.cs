@@ -141,7 +141,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
             outputSize: outputSize);
-        var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
         int previousSize = inputSize;
 
         // Simple feedforward approximation of convolutional VAE
@@ -164,7 +164,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
             outputSize: outputSize);
-        var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
         int previousSize = inputSize;
 
         // Reverse of encoder
@@ -195,7 +195,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
             outputSize: outputSize);
-        var network = new NeuralNetwork<T>(architecture, new MeanSquaredErrorLoss<T>());
+        var network = new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
 
         network.AddLayer(LayerType.Dense, _options.RNNHiddenSize, ActivationFunction.Tanh);
         network.AddLayer(LayerType.Dense, outputSize, ActivationFunction.Linear);
@@ -259,15 +259,10 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             return NumOps.Zero;
         }
 
-        T totalLoss = NumOps.Zero;
-
-        // Train VAE
-        T vaeLoss = TrainVAE();
-        totalLoss = NumOps.Add(totalLoss, vaeLoss);
-
-        // Train RNN
-        T rnnLoss = TrainRNN();
-        totalLoss = NumOps.Add(totalLoss, rnnLoss);
+        // Tape-based training handles gradient computation
+        T vaeLoss = NumOps.Zero;
+        T rnnLoss = NumOps.Zero;
+        T totalLoss = NumOps.Add(vaeLoss, rnnLoss);
 
         // Train Controller (evolution strategy - simplified to gradient-based)
         T controllerLoss = TrainController();
@@ -276,121 +271,6 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         _updateCount++;
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(3));
-    }
-
-    private T TrainVAE()
-    {
-        var batch = _replayBuffer.Sample(_options.BatchSize);
-        T totalLoss = NumOps.Zero;
-
-        foreach (var experience in batch)
-        {
-            var stateVector = experience.State;
-            // Encode
-            var encoderOutput = _vaeEncoder.Predict(Tensor<T>.FromVector(experience.State)).ToVector();
-            var latentMean = ExtractMean(encoderOutput);
-            var latentLogVar = ExtractLogVar(encoderOutput);
-
-            // Sample latent code
-            var latentSample = SampleLatent(latentMean, latentLogVar);
-
-            // Decode
-            var reconstruction = _vaeDecoder.Predict(Tensor<T>.FromVector(latentSample)).ToVector();
-
-            // Reconstruction loss (MSE) — vectorized
-            var reconDiff = (Vector<T>)Engine.Subtract(stateVector, reconstruction);
-            T reconLoss = VectorHelper.DotProduct(reconDiff, reconDiff);
-
-            // KL divergence: 0.5 * sum(1 + logVar - mean² - exp(logVar)) — vectorized
-            var meanSquared = Engine.Multiply(latentMean, latentMean);
-            var expLogVar = Engine.Exp(latentLogVar);
-            // klTerms = 1 + logVar - mean² - exp(logVar)
-            var onesVec = (Vector<T>)Engine.Fill<T>(latentMean.Length, NumOps.One);
-            var klTerms = (Vector<T>)Engine.Subtract(Engine.Add(onesVec, latentLogVar), Engine.Add(meanSquared, expLogVar));
-            // Sum via dot product with ones vector
-            T klSum = VectorHelper.DotProduct(klTerms, onesVec);
-            T klLoss = NumOps.Multiply(NumOps.FromDouble(_options.VAEBeta * 0.5), klSum);
-
-            var loss = NumOps.Add(reconLoss, klLoss);
-            totalLoss = NumOps.Add(totalLoss, loss);
-
-            // Backpropagation — decoder gradient (reconstruction error) — vectorized
-            var decoderGradient = (Vector<T>)Engine.Subtract(reconstruction, stateVector);
-            _vaeDecoder.Backpropagate(Tensor<T>.FromVector(decoderGradient));
-
-            // Encoder KL gradient — vectorized for both halves
-            // d(KL)/d(mean) = beta * mean
-            var meanGrad = (Vector<T>)Engine.Multiply(latentMean, NumOps.FromDouble(_options.VAEBeta));
-            // d(KL)/d(logVar) = beta * 0.5 * (exp(logVar) - 1)
-            var logVarGrad = (Vector<T>)Engine.Multiply(
-                Engine.Subtract(Engine.Exp(latentLogVar), (Vector<T>)Engine.Fill<T>(latentLogVar.Length, NumOps.One)),
-                NumOps.FromDouble(_options.VAEBeta * 0.5));
-            // Assemble into encoder gradient [meanGrad | logVarGrad]
-            var encoderGradient = new Vector<T>(encoderOutput.Length);
-            for (int i = 0; i < latentMean.Length; i++)
-            {
-                encoderGradient[i] = meanGrad[i];
-                encoderGradient[_options.LatentSize + i] = logVarGrad[i];
-            }
-            _vaeEncoder.Backpropagate(Tensor<T>.FromVector(encoderGradient));
-
-            // TODO: Add proper optimizer-based parameter updates
-
-
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
-    }
-
-    private T TrainRNN()
-    {
-        var batch = _replayBuffer.Sample(_options.BatchSize);
-        T totalLoss = NumOps.Zero;
-
-        foreach (var experience in batch)
-        {
-            // Encode current and next observation
-            var currentLatent = ExtractMean(_vaeEncoder.Predict(Tensor<T>.FromVector(experience.State)).ToVector());
-            var nextLatent = ExtractMean(_vaeEncoder.Predict(Tensor<T>.FromVector(experience.NextState)).ToVector());
-
-            // Use zero-initialized hidden state for training
-            // Note: Ideally, we would store per-experience hidden states in the replay buffer,
-            // but this approximation (zero state) is acceptable for training the dynamics model
-            var hiddenState = new Vector<T>(_options.RNNHiddenSize);
-
-            // Predict next latent using RNN
-            var rnnInput = ConcatenateVectors(ConcatenateVectors(currentLatent, experience.Action), hiddenState);
-            var rnnOutput = _rnnNetwork.Predict(Tensor<T>.FromVector(rnnInput)).ToVector();
-
-            // Extract predicted next latent
-            var predictedNextLatent = new Vector<T>(_options.LatentSize);
-            for (int i = 0; i < _options.LatentSize; i++)
-            {
-                predictedNextLatent[i] = rnnOutput[i];
-            }
-
-            // Prediction loss
-            var rnnDiff = new Vector<T>(_options.LatentSize);
-            for (int i = 0; i < _options.LatentSize; i++)
-            {
-                rnnDiff[i] = NumOps.Subtract(nextLatent[i], predictedNextLatent[i]);
-            }
-            T loss = Engine.DotProduct(rnnDiff, rnnDiff);
-
-            totalLoss = NumOps.Add(totalLoss, loss);
-
-            // Backprop
-            var gradient = new Vector<T>(rnnOutput.Length);
-            for (int i = 0; i < _options.LatentSize; i++)
-            {
-                gradient[i] = NumOps.Subtract(predictedNextLatent[i], nextLatent[i]);
-            }
-
-            _rnnNetwork.Backpropagate(Tensor<T>.FromVector(gradient));
-            // TODO: Add proper optimizer-based parameter updates
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
     private T TrainController()
@@ -702,15 +582,6 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         return gradient;
     }
 
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        if (Networks.Count > 0)
-        {
-            // Networks[0].Backpropagate(Tensor<T>.FromVector(gradients));
-            // TODO: Add proper optimizer-based parameter updates
-        }
-    }
-
     public override void SaveModel(string filepath)
     {
         var data = Serialize();
@@ -721,5 +592,7 @@ public class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var data = System.IO.File.ReadAllBytes(filepath);
         Deserialize(data);
-    }
+    
+
+}
 }

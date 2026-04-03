@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
-public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
@@ -50,6 +50,8 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <summary>
     /// Weight tensor for self features. Shape: [inputFeatures, outputFeatures].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _selfWeights;
 
     /// <summary>
@@ -60,6 +62,8 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// <summary>
     /// Bias tensor. Shape: [outputFeatures].
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _bias;
 
     /// <summary>
@@ -187,6 +191,10 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 
         // Initialize bias to zero
         _bias.Fill(NumOps.Zero);
+
+        RegisterTrainableParameter(_selfWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_neighborWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
     }
 
     private void InitializeTensor(Tensor<T> tensor, int fanIn, int fanOut)
@@ -467,86 +475,6 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
         return Engine.TensorDivide(features, normBroadcast);
     }
 
-    /// <inheritdoc/>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass with full gradient computation.
-    /// </summary>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null ||
-            _lastAggregated == null || _lastPreNorm == null || _lastDegrees == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before Backward.");
-        }
-
-        // Reshape outputGradient to match _lastOutput's 3D shape if needed
-        var gradForBackward = outputGradient;
-        if (_originalInputShape != null && _originalInputShape.Length != 3 && outputGradient.Shape.Length != _lastOutput.Shape.Length)
-        {
-            // Reshape gradient to 3D [batch, nodes, features] to match _lastOutput
-            gradForBackward = outputGradient.Reshape(_lastOutput.Shape.ToArray());
-        }
-
-        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, gradForBackward);
-        int batchSize = _lastInput.Shape[0];
-        int numNodes = _lastInput.Shape[1];
-
-        // Backprop through L2 normalization if enabled
-        Tensor<T> preNormGradient;
-        if (_normalize)
-        {
-            preNormGradient = BackpropThroughL2Norm(activationGradient, _lastPreNorm, batchSize, numNodes);
-        }
-        else
-        {
-            preNormGradient = activationGradient;
-        }
-
-        // Bias gradient: sum over batch and nodes
-        _biasGradient = Engine.ReduceSum(preNormGradient, [0, 1], keepDims: false);
-
-        // Self + Neighbor weights gradient: per-batch matmul (Engine.BatchMatMul has issues)
-        _selfWeightsGradient = new Tensor<T>(_selfWeights.Shape.ToArray());
-        _neighborWeightsGradient = new Tensor<T>(_neighborWeights.Shape.ToArray());
-        for (int b = 0; b < batchSize; b++)
-        {
-            var inputB = _lastInput.GetSliceAlongDimension(b, 0);
-            var gradB = preNormGradient.GetSliceAlongDimension(b, 0);
-            var aggB = _lastAggregated.GetSliceAlongDimension(b, 0);
-            _selfWeightsGradient = _selfWeightsGradient.Add(
-                Engine.TensorMatMul(Engine.TensorTranspose(inputB), gradB));
-            _neighborWeightsGradient = _neighborWeightsGradient.Add(
-                Engine.TensorMatMul(Engine.TensorTranspose(aggB), gradB));
-        }
-
-        // Input gradient from self path: preNormGradient @ selfWeights^T
-        var selfWeightsT = Engine.TensorTranspose(_selfWeights);
-        var inputGradientSelf = Engine.TensorMatMul(preNormGradient, selfWeightsT);
-
-        // Input gradient from neighbor path (through aggregation)
-        var neighborWeightsT = Engine.TensorTranspose(_neighborWeights);
-        var aggGradient = Engine.TensorMatMul(preNormGradient, neighborWeightsT);
-        var inputGradientNeighbor = BackpropThroughAggregation(aggGradient, batchSize, numNodes);
-
-        // Combine input gradients
-        var inputGradient = Engine.TensorAdd(inputGradientSelf, inputGradientNeighbor);
-
-        // Reshape back to original input shape if it was not 3D
-        if (_originalInputShape != null && _originalInputShape.Length != 3)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
     /// <summary>
     /// Backpropagates through L2 normalization.
     /// </summary>
@@ -636,156 +564,6 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     }
 
     /// <summary>
-    /// Backward pass using automatic differentiation with computation graph.
-    /// </summary>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null ||
-            _lastAggregated == null || _lastPreNorm == null || _lastDegrees == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before Backward.");
-        }
-
-        // Reshape outputGradient to match _lastOutput's 3D shape if needed
-        var gradForBackward = outputGradient;
-        if (_originalInputShape != null && _originalInputShape.Length != 3 && outputGradient.Shape.Length != _lastOutput.Shape.Length)
-        {
-            gradForBackward = outputGradient.Reshape(_lastOutput.Shape.ToArray());
-        }
-
-        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, gradForBackward);
-        int batchSize = _lastInput.Shape[0];
-        int numNodes = _lastInput.Shape[1];
-
-        // Create computation nodes for autodiff
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-        var selfWeightsNode = Autodiff.TensorOperations<T>.Variable(_selfWeights, "self_weights", requiresGradient: true);
-        var neighborWeightsNode = Autodiff.TensorOperations<T>.Variable(_neighborWeights, "neighbor_weights", requiresGradient: true);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(_bias, "bias", requiresGradient: true);
-
-        var allNodes = new List<Autodiff.ComputationNode<T>>
-        {
-            inputNode, selfWeightsNode, neighborWeightsNode, biasNode
-        };
-
-        // Build computation graph
-
-        // Self transformation: input @ selfWeights
-        var selfTransformed = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, selfWeightsNode);
-        allNodes.Add(selfTransformed);
-
-        // Use cached aggregated features
-        var aggregatedNode = Autodiff.TensorOperations<T>.Variable(_lastAggregated, "aggregated", requiresGradient: true);
-        allNodes.Add(aggregatedNode);
-
-        // Neighbor transformation: aggregated @ neighborWeights
-        var neighborTransformed = Autodiff.TensorOperations<T>.MatrixMultiply(aggregatedNode, neighborWeightsNode);
-        allNodes.Add(neighborTransformed);
-
-        // Combine: self + neighbor
-        var combined = Autodiff.TensorOperations<T>.Add(selfTransformed, neighborTransformed);
-        allNodes.Add(combined);
-
-        // Add bias
-        var biasBroadcast = BroadcastBias(_bias, batchSize, numNodes);
-        var biasBroadcastNode = Autodiff.TensorOperations<T>.Variable(biasBroadcast, "bias_broadcast", requiresGradient: true);
-        allNodes.Add(biasBroadcastNode);
-
-        var withBias = Autodiff.TensorOperations<T>.Add(combined, biasBroadcastNode);
-        allNodes.Add(withBias);
-
-        // Use cached pre-norm output
-        var outputNode = Autodiff.TensorOperations<T>.Variable(_lastPreNorm, "output", requiresGradient: true);
-        allNodes.Add(outputNode);
-
-        // Set gradient on output node (after handling normalization)
-        Tensor<T> gradientToPropagate;
-        if (_normalize)
-        {
-            gradientToPropagate = BackpropThroughL2Norm(activationGradient, _lastPreNorm, batchSize, numNodes);
-        }
-        else
-        {
-            gradientToPropagate = activationGradient;
-        }
-        outputNode.Gradient = gradientToPropagate;
-
-        // Topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-
-        foreach (var node in allNodes)
-        {
-            if (!visited.Contains(node))
-            {
-                stack.Push((node, false));
-
-                while (stack.Count > 0)
-                {
-                    var (currentNode, processed) = stack.Pop();
-                    if (visited.Contains(currentNode)) continue;
-
-                    if (processed)
-                    {
-                        visited.Add(currentNode);
-                        topoOrder.Add(currentNode);
-                    }
-                    else
-                    {
-                        stack.Push((currentNode, true));
-                        if (currentNode.Parents != null)
-                        {
-                            foreach (var parent in currentNode.Parents)
-                            {
-                                if (!visited.Contains(parent))
-                                {
-                                    stack.Push((parent, false));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract gradients
-        _biasGradient = biasNode.Gradient != null
-            ? Engine.ReduceSum(biasNode.Gradient, [0, 1], keepDims: false)
-            : Engine.ReduceSum(gradientToPropagate, [0, 1], keepDims: false);
-
-        _selfWeightsGradient = selfWeightsNode.Gradient ?? new Tensor<T>([_inputFeatures, _outputFeatures]);
-        _neighborWeightsGradient = neighborWeightsNode.Gradient ?? new Tensor<T>([_inputFeatures, _outputFeatures]);
-
-        // If autodiff didn't compute gradients properly, compute them using Engine
-        if (NumOps.Equals(_selfWeightsGradient[0], NumOps.Zero))
-        {
-            ComputeGradientsViaEngine(gradientToPropagate, batchSize, numNodes);
-        }
-
-        // Extract input gradient
-        var inputGradient = inputNode.Gradient ?? new Tensor<T>(_lastInput.Shape.ToArray());
-
-        // Reshape back to original input shape if it was not 3D
-        if (_originalInputShape != null && _originalInputShape.Length != 3)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
     /// Computes gradients using fully vectorized Engine operations as fallback.
     /// </summary>
     private void ComputeGradientsViaEngine(Tensor<T> gradient, int batchSize, int numNodes)
@@ -828,13 +606,13 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     public override Vector<T> GetParameterGradients()
     {
         var selfGrad = _selfWeightsGradient != null
-            ? (_selfWeightsGradient is not null ? Vector<T>.FromMemory(_selfWeightsGradient.Data) : new Vector<T>(0))
+            ? new Vector<T>(_selfWeightsGradient.ToArray())
             : new Vector<T>(_selfWeights.Length);
         var neighborGrad = _neighborWeightsGradient != null
-            ? (_neighborWeightsGradient is not null ? Vector<T>.FromMemory(_neighborWeightsGradient.Data) : new Vector<T>(0))
+            ? new Vector<T>(_neighborWeightsGradient.ToArray())
             : new Vector<T>(_neighborWeights.Length);
         var biasGrad = _biasGradient != null
-            ? (_biasGradient is not null ? Vector<T>.FromMemory(_biasGradient.Data) : new Vector<T>(0))
+            ? new Vector<T>(_biasGradient.ToArray())
             : new Vector<T>(_bias.Length);
 
         return Vector<T>.Concatenate(selfGrad, neighborGrad, biasGrad);
@@ -855,9 +633,9 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_selfWeights.Data),
-            Vector<T>.FromMemory(_neighborWeights.Data),
-            Vector<T>.FromMemory(_bias.Data)
+            new Vector<T>(_selfWeights.ToArray()),
+            new Vector<T>(_neighborWeights.ToArray()),
+            new Vector<T>(_bias.ToArray())
         );
     }
 
@@ -922,7 +700,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     /// Supports Sum, Mean, and MaxPool aggregators on GPU.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs == null || inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -1116,7 +894,7 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             ? [numNodes, _outputFeatures]
             : [batchSize, numNodes, _outputFeatures];
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: false);
     }
 
     #region GPU Helper Methods
@@ -1235,38 +1013,4 @@ public class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     }
 
     #endregion
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => true;
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Export learnable parameters as constants
-        var selfWeightsNode = Autodiff.TensorOperations<T>.Constant(_selfWeights, "self_weights");
-        var biasNode = Autodiff.TensorOperations<T>.Constant(_bias, "bias");
-
-        // Build computation graph for self-loop path (most direct gradient flow)
-        var selfContribution = Autodiff.TensorOperations<T>.MatrixMultiply(inputNode, selfWeightsNode);
-        var output = Autodiff.TensorOperations<T>.Add(selfContribution, biasNode);
-
-        // Apply activation if supported
-        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
-        {
-            return ScalarActivation.ApplyToGraph(output);
-        }
-
-        return output;
-    }
 }

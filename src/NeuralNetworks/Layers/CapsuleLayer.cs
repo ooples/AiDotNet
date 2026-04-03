@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -40,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.Routing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, Cost = ComputeCost.High, UsesSurrogateGradient = true, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 2, 4, 3")]
-public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets whether auxiliary loss (routing entropy regularization) should be used during training.
@@ -101,7 +101,11 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private readonly int _numCapsules;
     private readonly int _capsuleDimension;
     private readonly int _numRoutingIterations;
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _transformationMatrix;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _bias;
     private Tensor<T>? _transformationMatrixGradient;
     private Tensor<T>? _biasGradient;
@@ -201,6 +205,9 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _bias = new Tensor<T>([numCapsules * capsuleDimension]);
 
         InitializeParameters();
+
+        RegisterTrainableParameter(_transformationMatrix, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -612,7 +619,7 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// for maximum performance.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -654,338 +661,6 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         transformed.Dispose();
 
         return output;
-    }
-
-
-    /// <summary>
-    /// Performs the backward pass of the capsule layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the capsule layer, which is used during training to propagate
-    /// error gradients back through the network. It computes the gradients of the loss with respect to the layer's
-    /// parameters (transformation matrix and bias) and the layer's input. The gradients are stored internally and
-    /// used during the parameter update step.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's inputs
-    /// and parameters should change to reduce errors.
-    ///
-    /// The backward pass:
-    /// 1. Takes in gradients (directions of improvement) from the next layer
-    /// 2. Applies the derivative of the activation function
-    /// 3. Calculates how much each parameter (transformation matrix and bias) contributed to the error
-    /// 4. Calculates how the input contributed to the error, to pass gradients to the previous layer
-    ///
-    /// During this process, the method:
-    /// - Creates gradient tensors for the transformation matrix and bias
-    /// - Uses the coupling coefficients (connection strengths) calculated during the forward pass
-    /// - Produces gradients that will be used to update the parameters
-    ///
-    /// This is part of the "backpropagation" algorithm that helps neural networks learn.
-    /// The error flows backward through the network, and each layer determines how it
-    /// should change to reduce that error.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _lastCouplingCoefficients == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = _lastInput.Shape[0];
-        int inputCapsules = _lastInput.Shape[1];
-        int inputDimension = _lastInput.Shape[2];
-
-        // Squash activation is a vector function — need Jacobian per capsule, not scalar derivative.
-        // Output shape: [batch, numCapsules, capsuleDim]
-        // Flatten to [batch*numCapsules, capsuleDim] for per-capsule Jacobian computation.
-        Tensor<T> activationGradient;
-        if (ScalarActivation != null)
-        {
-            int totalCapsules = batchSize * _numCapsules;
-            // Use pre-squash values for Jacobian computation (Squash derivative uses input norms)
-            var preSquash = _lastPreSquash is not null
-                ? _lastPreSquash.Reshape([totalCapsules, _capsuleDimension])
-                : _lastOutput.Reshape([totalCapsules, _capsuleDimension]);
-            var flatGrad = outputGradient.Reshape([totalCapsules, _capsuleDimension]);
-
-            // Get Jacobian: [totalCapsules, capsuleDim, capsuleDim]
-            var jacobians = ScalarActivation.Derivative(preSquash);
-
-            if (jacobians.Shape.Length == 3 && jacobians.Shape[1] == _capsuleDimension && jacobians.Shape[2] == _capsuleDimension)
-            {
-                // Jacobian @ gradient per capsule via BatchMatMul
-                var gradCol = flatGrad.Reshape([totalCapsules, _capsuleDimension, 1]);
-                var resultCol = Engine.BatchMatMul(jacobians, gradCol);
-                activationGradient = resultCol.Reshape([batchSize, _numCapsules, _capsuleDimension]);
-            }
-            else
-            {
-                // Fallback: element-wise (shouldn't happen for Squash)
-                activationGradient = Engine.TensorMultiply(jacobians, flatGrad)
-                    .Reshape([batchSize, _numCapsules, _capsuleDimension]);
-            }
-        }
-        else
-        {
-            activationGradient = outputGradient;
-        }
-
-        // === FULLY VECTORIZED Gradient Computation ===
-
-        // outputGradient: [batchSize, numCapsules, capsuleDimension]
-
-        // Bias gradient: sum over batch dimension
-        // Reshape outputGradient to [batchSize, numCapsules * capsuleDimension]
-        var gradReshaped = outputGradient.Reshape([batchSize, _numCapsules * _capsuleDimension]);
-        // Sum over batch: [numCapsules * capsuleDimension]
-        _biasGradient = Engine.ReduceSum(gradReshaped, new[] { 0 }, keepDims: false);
-
-        // Transformation matrix gradient:
-        // grad_W[i, k, j, d] = sum_b(lastInput[b, i, k] * coupling[b, i, j] * outputGrad[b, j, d])
-        // This requires outer product operations
-
-        // _lastInput: [batchSize, inputCapsules, inputDimension]
-        // _lastCouplingCoefficients: [batchSize, inputCapsules, numCapsules]
-        // outputGradient: [batchSize, numCapsules, capsuleDimension]
-
-        // Transformation matrix gradient:
-        // W[i, k, j, d] maps input capsule i dimension k to output capsule j dimension d
-        // Forward: u_hat[b,i,j,d] = sum_k(W[i,k,j,d] * input[b,i,k])
-        // output[b,j,d] = squash(sum_i(coupling[b,i,j] * u_hat[b,i,j,d]))
-        // dW[i,k,j,d] = sum_b(coupling[b,i,j] * dOutput[b,j,d] * input[b,i,k])
-        // Note: uses activationGradient which already includes Squash derivative
-        var grad3D = activationGradient.Shape.Length == 3
-            ? activationGradient
-            : activationGradient.Reshape([batchSize, _numCapsules, _capsuleDimension]);
-
-        _transformationMatrixGradient = new Tensor<T>([inputCapsules, inputDimension, _numCapsules, _capsuleDimension]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < inputCapsules; i++)
-            {
-                for (int j = 0; j < _numCapsules; j++)
-                {
-                    T coupling = _lastCouplingCoefficients[b, i, j];
-                    for (int k = 0; k < inputDimension; k++)
-                    {
-                        T inputVal = _lastInput[b, i, k];
-                        T coupledInput = NumOps.Multiply(coupling, inputVal);
-                        for (int d = 0; d < _capsuleDimension; d++)
-                        {
-                            T gradVal = grad3D[b, j, d];
-                            _transformationMatrixGradient[i, k, j, d] = NumOps.Add(
-                                _transformationMatrixGradient[i, k, j, d],
-                                NumOps.Multiply(coupledInput, gradVal));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Input gradient:
-        // grad_input[b, i, k] = sum_j,d(coupling[b, i, j] * outputGrad[b, j, d] * W[i, k, j, d])
-        // This is: (coupling * outputGrad) @ W^T summed appropriately
-
-        // Reshape for computation:
-        // coupling: [batchSize, inputCapsules, numCapsules, 1]
-        // grad: [batchSize, 1, numCapsules, capsuleDimension]
-        // W: [inputCapsules, inputDimension, numCapsules, capsuleDimension]
-
-        var coefForInput = _lastCouplingCoefficients.Reshape([batchSize, inputCapsules, _numCapsules, 1]);
-        var gradForInput = outputGradient.Reshape([batchSize, 1, _numCapsules, _capsuleDimension]);
-
-        // Multiply coupling with gradient
-        var coefGrad = Engine.TensorMultiply(coefForInput, gradForInput); // [batchSize, inputCapsules, numCapsules, capsuleDimension]
-
-        // Now multiply with transformation matrix and sum
-        // W: [inputCapsules, inputDimension, numCapsules, capsuleDimension]
-        // coefGrad: [batchSize, inputCapsules, numCapsules, capsuleDimension]
-        // Need: sum over j,d of (coefGrad[b, i, j, d] * W[i, k, j, d])
-
-        // Reshape coefGrad to [batchSize, inputCapsules, 1, numCapsules, capsuleDimension]
-        var coefGradExpanded = coefGrad.Reshape([batchSize, inputCapsules, 1, _numCapsules, _capsuleDimension]);
-        // Reshape W to [1, inputCapsules, inputDimension, numCapsules, capsuleDimension]
-        var wExpanded = _transformationMatrix.Reshape([1, inputCapsules, inputDimension, _numCapsules, _capsuleDimension]);
-
-        // Element-wise multiply
-        var inputGradProduct = Engine.TensorMultiply(coefGradExpanded, wExpanded);
-
-        // Sum over numCapsules and capsuleDimension: [batchSize, inputCapsules, inputDimension]
-        var inputGradient = Engine.ReduceSum(inputGradProduct, new[] { 3, 4 }, keepDims: false);
-
-        // Restore higher-rank gradients to their original shape
-        if (_originalInputShape != null && _originalInputShape.Length != 3)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation with unrolled routing.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // 1. Create variables
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-        var weightsNode = Autodiff.TensorOperations<T>.Variable(_transformationMatrix, "weights", requiresGradient: true);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(_bias, "bias", requiresGradient: true);
-
-        int batchSize = _lastInput.Shape[0];
-        int inputCapsules = _lastInput.Shape[1];
-        int inputDim = _lastInput.Shape[2];
-        int numCapsules = _numCapsules;
-        int capsuleDim = _capsuleDimension;
-
-        // 2. Prepare Weights: [I, D_in, O, D_out] -> [I, O, D_in, D_out]
-        var weightsPermuted = Autodiff.TensorOperations<T>.Permute(weightsNode, 0, 2, 1, 3);
-
-        // 3. Compute Predictions: input @ weights
-        // Input: [B, I, D_in] -> [B, I, 1, D_in]
-        var inputReshaped = Autodiff.TensorOperations<T>.Reshape(inputNode, batchSize, inputCapsules, 1, inputDim);
-
-        // Weights: [I, O, D_in, D_out] -> [1, I, O, D_in, D_out]
-        var weightsReshaped = Autodiff.TensorOperations<T>.Reshape(weightsPermuted, 1, inputCapsules, numCapsules, inputDim, capsuleDim);
-
-        // Result: [B, I, O, 1, D_out]
-        var predictionsRaw = Autodiff.TensorOperations<T>.MatrixMultiply(inputReshaped, weightsReshaped);
-
-        // Reshape to [B, I, O, D_out]
-        var predictions = Autodiff.TensorOperations<T>.Reshape(predictionsRaw, batchSize, inputCapsules, numCapsules, capsuleDim);
-
-        // 4. Dynamic Routing
-        // Initialize couplings to uniform (1/O) as per Forward, but Constant
-        // Note: Forward used Fill(1.0/O). BackwardManual used Softmax(0)=Uniform?
-        // Standard CapsNet starts with 0 logits (softmax(0) = uniform).
-        // Forward uses Fill(1.0/O) which sums to 1.
-        // If we use Softmax in loop, we should start with 0 logits.
-        // If Forward uses fixed coefficients, we should match.
-        // Forward: `couplingCoefficients.Fill(NumOps.FromDouble(1.0 / _numCapsules));`
-        // Loop starts. `weighted = ... * coupling`.
-        // Then `Update coupling`.
-        // It does NOT Softmax the initial couplings in the first iteration?
-        // Let's check Forward logic carefully.
-        // "Initialize coupling coefficients... Perform dynamic routing... for (int i = 0; i < _numRoutingIterations; i++)"
-        // Inside loop: `var weighted = ... couplingCoefficients ...`
-        // `if (i < ... - 1) { ... couplingCoefficients = ApplySoftmax(couplingCoefficients); }`
-        // It applies Softmax AFTER update.
-        // So initial coefficients are used AS IS.
-        // 1/N sums to 1. So it works.
-        // But for autodiff, if we want to learn routing, we usually softmax logits.
-        // Here we have fixed initial values.
-
-        // We'll create a Constant node for initial couplings.
-        var couplingsTensor = new Tensor<T>(new int[] { batchSize, inputCapsules, numCapsules });
-        couplingsTensor.Fill(NumOps.FromDouble(1.0 / numCapsules));
-        var couplings = Autodiff.TensorOperations<T>.Constant(couplingsTensor, "couplings");
-
-        Autodiff.ComputationNode<T> output = predictions; // Placeholder
-
-        for (int iter = 0; iter < _numRoutingIterations; iter++)
-        {
-            // Note: Forward doesn't Softmax at start of loop, only at end of previous.
-            // So use 'couplings' directly.
-
-            // Reshape couplings to [B, I, O, 1]
-            var couplingsBroad = Autodiff.TensorOperations<T>.Reshape(couplings, batchSize, inputCapsules, numCapsules, 1);
-
-            // Weighted predictions
-            var weightedPredictions = Autodiff.TensorOperations<T>.ElementwiseMultiply(predictions, couplingsBroad);
-
-            // Sum over input capsules (axis 1) -> [B, O, D_out]
-            var weightedSum = Autodiff.TensorOperations<T>.Sum(weightedPredictions, new int[] { 1 }, keepDims: false);
-
-            // Add Bias
-            // Bias [O * D]. Reshape to [1, O, D] for broadcast.
-            // Wait, _bias is flattened?
-            // Constructor: _bias = new Tensor<T>([numCapsules * capsuleDimension]);
-            // We need to reshape it to [numCapsules, capsuleDimension] to match weightedSum.
-            var biasReshaped = Autodiff.TensorOperations<T>.Reshape(biasNode, 1, numCapsules, capsuleDim);
-            var withBias = Autodiff.TensorOperations<T>.Add(weightedSum, biasReshaped);
-
-            // Squash activation
-            var s2 = Autodiff.TensorOperations<T>.Square(withBias);
-            var normSq = Autodiff.TensorOperations<T>.Sum(s2, new int[] { 2 }, keepDims: true); // [B, O, 1]
-            var norm = Autodiff.TensorOperations<T>.Sqrt(normSq);
-
-            // Create epsilon constant for numerical stability (prevent division by zero)
-            var epsilon = Autodiff.TensorOperations<T>.Constant(Tensor<T>.CreateDefault(new int[] { 1 }, NumOps.FromDouble(1e-8)));
-            var one = Autodiff.TensorOperations<T>.Constant(Tensor<T>.CreateDefault(new int[] { 1 }, NumOps.One));
-            var scale = Autodiff.TensorOperations<T>.Divide(normSq, Autodiff.TensorOperations<T>.Add(one, normSq));
-            // Use norm + epsilon as denominator to avoid division by zero when norm is zero
-            var stableNorm = Autodiff.TensorOperations<T>.Add(norm, epsilon);
-            var unitVec = Autodiff.TensorOperations<T>.Divide(withBias, stableNorm);
-
-            output = Autodiff.TensorOperations<T>.ElementwiseMultiply(scale, unitVec);
-
-            // Update couplings if not last iteration
-            if (iter < _numRoutingIterations - 1)
-            {
-                // Agreement = predictions . output
-                var outputBroad = Autodiff.TensorOperations<T>.Reshape(output, batchSize, 1, numCapsules, capsuleDim);
-                var agreementRaw = Autodiff.TensorOperations<T>.ElementwiseMultiply(predictions, outputBroad);
-                var agreement = Autodiff.TensorOperations<T>.Sum(agreementRaw, new int[] { 3 }, keepDims: false);
-
-                // Update and Softmax
-                var rawCouplings = Autodiff.TensorOperations<T>.Add(couplings, agreement);
-                couplings = Autodiff.TensorOperations<T>.Softmax(rawCouplings, axis: 2);
-            }
-        }
-
-        // 5. Set Gradient
-        output.Gradient = outputGradient;
-
-        // 6. Backward
-        output.Backward();
-
-        // 7. Store Gradients
-        // _biasGradient is flattened - use default zero tensor if gradient is null
-        _biasGradient = biasNode.Gradient ?? Tensor<T>.CreateDefault(_bias.Shape.ToArray(), NumOps.Zero);
-
-        // _transformationMatrixGradient needs [I, D_in, O, D_out]
-        // weightsPermuted.Gradient is [I, O, D_in, D_out]
-        // Permute back to [I, D_in, O, D_out] (0, 2, 1, 3)
-        var gradPermuted = weightsPermuted.Gradient;
-        if (gradPermuted != null)
-        {
-            _transformationMatrixGradient = gradPermuted.Transpose(new int[] { 0, 2, 1, 3 });
-        }
-        else
-        {
-            _transformationMatrixGradient = Tensor<T>.CreateDefault(_transformationMatrix.Shape.ToArray(), NumOps.Zero);
-        }
-
-        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-
-        // Restore higher-rank gradients to their original shape
-        if (_originalInputShape != null && _originalInputShape.Length != 3)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
     }
 
     /// <summary>
@@ -1085,8 +760,8 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         // Use Vector.Concatenate for production-grade parameter extraction
         return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_transformationMatrix.Data),
-            Vector<T>.FromMemory(_bias.Data)
+            new Vector<T>(_transformationMatrix.ToArray()),
+            new Vector<T>(_bias.ToArray())
         );
     }
 
@@ -1119,10 +794,10 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     public override Vector<T> GetParameterGradients()
     {
         var matGrad = _transformationMatrixGradient != null
-            ? (_transformationMatrixGradient is not null ? Vector<T>.FromMemory(_transformationMatrixGradient.Data) : new Vector<T>(0))
+            ? new Vector<T>(_transformationMatrixGradient.ToArray())
             : new Vector<T>(_transformationMatrix.Length);
         var biasGrad = _biasGradient != null
-            ? (_biasGradient is not null ? Vector<T>.FromMemory(_biasGradient.Data) : new Vector<T>(0))
+            ? new Vector<T>(_biasGradient.ToArray())
             : new Vector<T>(_bias.Length);
         return Vector<T>.Concatenate(matGrad, biasGrad);
     }
@@ -1181,96 +856,4 @@ public class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _transformationMatrixGradient = null;
         _biasGradient = null;
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        var input = inputNodes[0];
-        int inputCapsules = InputShape[0];
-        int inputDimension = InputShape[1];
-
-        // Create weight tensor as constant node
-        var transformTensor = new Tensor<T>(
-            new[] { _transformationMatrix.Shape[0], _transformationMatrix.Shape[1], _transformationMatrix.Shape[2] },
-            Vector<T>.FromMemory(_transformationMatrix.Data));
-        var transformationMatrixNode = TensorOperations<T>.Constant(transformTensor, "CapsuleTransformMatrix");
-
-        // Bias is already a Tensor<T>, use directly
-        var biasNode = TensorOperations<T>.Constant(_bias, "CapsuleBias");
-
-        // Reshape input for matrix multiplication: [batchSize * inputCapsules, inputDimension]
-        var reshapedInput = TensorOperations<T>.Reshape(input, [inputCapsules, inputDimension]);
-
-        // Transform input capsules: predictions = input @ transformationMatrix
-        // This gives us [inputCapsules, numCapsules, capsuleDimension]
-        var predictions = TensorOperations<T>.MatrixMultiply(reshapedInput, transformationMatrixNode);
-
-        // Initialize coupling coefficients as uniform: 1/numCapsules using Fill
-        var uniformCoeff = NumOps.FromDouble(1.0 / _numCapsules);
-        var couplingsTensor = new Tensor<T>(new[] { inputCapsules, _numCapsules });
-        couplingsTensor.Fill(uniformCoeff);
-        var couplings = TensorOperations<T>.Constant(couplingsTensor, "InitialCouplings");
-
-        ComputationNode<T> output = predictions;
-
-        // Unroll routing iterations
-        for (int iter = 0; iter < _numRoutingIterations; iter++)
-        {
-            // Apply softmax to couplings along numCapsules dimension
-            var routingWeights = TensorOperations<T>.Softmax(couplings, axis: 1);
-
-            // Weighted sum: weightedSum[j] = sum_i(couplings[i,j] * predictions[i,j])
-            // This is element-wise multiply then sum over input capsules
-            var weighted = TensorOperations<T>.ElementwiseMultiply(predictions, routingWeights);
-            var weightedSum = TensorOperations<T>.Sum(weighted, [0]); // Sum over inputCapsules
-
-            // Add bias
-            var withBias = TensorOperations<T>.Add(weightedSum, biasNode);
-
-            // Apply squash activation: v = ||s||^2 / (1 + ||s||^2) * s / ||s||
-            // This normalizes vectors to have length <= 1
-            var squaredNorm = TensorOperations<T>.Sum(TensorOperations<T>.Square(withBias), [1]);
-            var oneTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.One }));
-            var oneNode = TensorOperations<T>.Constant(oneTensor, "One");
-            // Create epsilon constant for numerical stability (prevent division by zero)
-            var epsTensor = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(1e-8) }));
-            var epsNode = TensorOperations<T>.Constant(epsTensor, "Epsilon");
-            var normPlusOne = TensorOperations<T>.Add(squaredNorm, oneNode);
-            var scaleFactor = TensorOperations<T>.Divide(squaredNorm, normPlusOne);
-            var norm = TensorOperations<T>.Sqrt(squaredNorm);
-            // Use norm + epsilon as denominator to avoid division by zero when norm is zero
-            var stableNorm = TensorOperations<T>.Add(norm, epsNode);
-            var normalizedVec = TensorOperations<T>.Divide(withBias, stableNorm);
-            output = TensorOperations<T>.ElementwiseMultiply(normalizedVec, scaleFactor);
-
-            // Update couplings if not last iteration
-            if (iter < _numRoutingIterations - 1)
-            {
-                // Agreement: predictions dot output for each input capsule
-                var agreement = TensorOperations<T>.Sum(
-                    TensorOperations<T>.ElementwiseMultiply(predictions, output), [2]);
-                couplings = TensorOperations<T>.Add(couplings, agreement);
-            }
-        }
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> because CapsuleLayer uses dynamic routing with a fixed number of iterations
-    /// that can be unrolled into a static computation graph.
-    /// </value>
-    public override bool SupportsJitCompilation => true;
-
 }

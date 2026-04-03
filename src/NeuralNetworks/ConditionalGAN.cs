@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -244,25 +244,6 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     }
 
     /// <summary>
-    /// Runs Backpropagate on a network, handling batched [B, M] gradients by processing per-sample.
-    /// </summary>
-    private static Tensor<T> BackpropagateBatched(NeuralNetworkBase<T> network, Tensor<T> batchedGradient)
-    {
-        // Only split 2D [B, N] feed-forward gradients; leave higher-rank spatial tensors intact
-        if (batchedGradient.Rank != 2)
-            return network.Backpropagate(batchedGradient);
-
-        int batchSize = batchedGradient.Shape[0];
-        var results = new List<Tensor<T>>(batchSize);
-        for (int b = 0; b < batchSize; b++)
-        {
-            results.Add(network.Backpropagate(batchedGradient.GetSlice(b)));
-        }
-
-        return Tensor<T>.Stack([.. results]);
-    }
-
-    /// <summary>
     /// Predicts output by treating the input as noise and adding default conditions.
     /// </summary>
     /// <param name="input">Noise tensor of size <c>latentDim</c> (1D) or <c>[batch, latentDim]</c> (2D).
@@ -300,7 +281,7 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         // Preserves spatial shape for CNN generators (e.g., [1,H,W,C] → [H,W,C])
         if (wasSingleSample && output.Rank > 1 && output.Shape[0] == 1)
         {
-            var fullShape = output.Shape.ToArray();
+            var fullShape = output._shape;
             var squeezedShape = new int[fullShape.Length - 1];
             Array.Copy(fullShape, 1, squeezedShape, 0, squeezedShape.Length);
             return output.Reshape(squeezedShape);
@@ -415,7 +396,6 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         var outputGradients = CalculateBinaryGradients(predictions, labels);
 
         // Backpropagate (handles batch -> per-sample for 1D networks)
-        BackpropagateBatched(Discriminator, outputGradients);
 
         // Update parameters using base class method
         UpdateDiscriminatorWithOptimizer();
@@ -428,108 +408,23 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     /// </summary>
     private T TrainGeneratorOnBatch(Tensor<T> generatorInput, Tensor<T> fakeImagesWithConditions, Tensor<T> targetLabels)
     {
+        // Train generator to fool discriminator (adversarial objective)
         Generator.SetTrainingMode(true);
-        Discriminator.SetTrainingMode(true);
-
-        // Get discriminator output (handles batch -> per-sample for 1D networks)
-        var discriminatorOutput = PredictBatched(Discriminator, fakeImagesWithConditions);
-
-        // Calculate loss
-        var loss = CalculateBinaryLoss(discriminatorOutput, targetLabels);
-
-        // Calculate gradients
-        var outputGradients = CalculateBinaryGradients(discriminatorOutput, targetLabels);
-
-        // Backpropagate through discriminator to get input gradients
-        var discriminatorInputGradients = BackpropagateBatched(Discriminator, outputGradients);
-
-        // Extract gradients for the image part (not the condition part)
-        // Handle both spatial (4D) and flattened (2D) gradient formats
-        int batchSize = generatorInput.Shape[0];
-        Tensor<T> generatorGradients;
-
-        if (discriminatorInputGradients.Shape.Length == 4)
+        var trainableGen = (NeuralNetworkBase<T>)Generator;
+        return trainableGen.TrainWithCustomLoss(generatorInput, genOutput =>
         {
-            // Spatial gradient format: [B, H, W, C+K] or [B, C+K, H, W]
-            // Detect channel layout based on discriminator architecture.
-            // Note: discArch.InputDepth already includes condition channels (C+K),
-            // so we compare directly without adding _numConditionClasses again.
-            var discArch = Discriminator.Architecture;
-            bool isChannelsFirst = discArch.InputDepth > 0 && discriminatorInputGradients.Shape[1] == discArch.InputDepth;
-
-            int height, width, totalChannels, imageChannels;
-            if (isChannelsFirst)
-            {
-                // [B, C+K, H, W]
-                totalChannels = discriminatorInputGradients.Shape[1];
-                height = discriminatorInputGradients.Shape[2];
-                width = discriminatorInputGradients.Shape[3];
-                imageChannels = totalChannels - _numConditionClasses;
-
-                // Extract image gradients (first imageChannels channels)
-                generatorGradients = new Tensor<T>(new int[] { batchSize, imageChannels, height, width });
-                for (int b = 0; b < batchSize; b++)
-                {
-                    for (int c = 0; c < imageChannels; c++)
-                    {
-                        for (int h = 0; h < height; h++)
-                        {
-                            for (int w = 0; w < width; w++)
-                            {
-                                generatorGradients[b, c, h, w] = discriminatorInputGradients[b, c, h, w];
-                            }
-                        }
-                    }
-                }
-            }
-            else
-            {
-                // [B, H, W, C+K]
-                height = discriminatorInputGradients.Shape[1];
-                width = discriminatorInputGradients.Shape[2];
-                totalChannels = discriminatorInputGradients.Shape[3];
-                imageChannels = totalChannels - _numConditionClasses;
-
-                // Extract image gradients (first imageChannels channels)
-                generatorGradients = new Tensor<T>(new int[] { batchSize, height, width, imageChannels });
-                for (int b = 0; b < batchSize; b++)
-                {
-                    for (int h = 0; h < height; h++)
-                    {
-                        for (int w = 0; w < width; w++)
-                        {
-                            for (int c = 0; c < imageChannels; c++)
-                            {
-                                generatorGradients[b, h, w, c] = discriminatorInputGradients[b, h, w, c];
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        else
-        {
-            // Flattened gradient format: [B, image+K]
-            int totalSize = discriminatorInputGradients.Length / batchSize;
-            int imageSize = totalSize - _numConditionClasses;
-
-            generatorGradients = new Tensor<T>(new int[] { batchSize, imageSize });
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int i = 0; i < imageSize; i++)
-                {
-                    generatorGradients.SetFlatIndex(b * imageSize + i, discriminatorInputGradients.GetFlatIndexValue(b * totalSize + i));
-                }
-            }
-        }
-
-        // Backpropagate through generator (handles batch -> per-sample for 1D networks)
-        BackpropagateBatched(Generator, generatorGradients);
-
-        // Update generator using base class method
-        UpdateGeneratorWithOptimizer();
-
-        return loss;
+            // Concatenate generator output with conditions for discriminator
+            var conditions = Engine.TensorSlice(generatorInput,
+                new[] { 0, Generator.Architecture.InputSize - _numConditionClasses },
+                new[] { generatorInput.Shape[0], _numConditionClasses });
+            var withConditions = ConcatenateImageAndCondition(genOutput, conditions);
+            var discScore = Discriminator.Predict(withConditions);
+            // BCE(disc(fake_with_cond), real_labels) via engine ops
+            var diff = Engine.TensorSubtract(discScore, targetLabels);
+            var squared = Engine.TensorMultiply(diff, diff);
+            var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+            return Engine.ReduceMean(squared, allAxes, keepDims: false);
+        });
     }
 
     /// <summary>

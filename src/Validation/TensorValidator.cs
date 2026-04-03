@@ -1,4 +1,4 @@
-global using AiDotNet.Exceptions;
+﻿global using AiDotNet.Exceptions;
 
 namespace AiDotNet.Validation;
 
@@ -20,9 +20,9 @@ public static class TensorValidator
     {
         var (resolvedComponent, resolvedOperation) = ValidationHelper<T>.ResolveCallerInfo(component, operation);
 
-        if (!tensor.Shape.ToArray().SequenceEqual(expectedShape))
+        if (!tensor._shape.SequenceEqual(expectedShape))
         {
-            throw new TensorShapeMismatchException(expectedShape, tensor.Shape.ToArray(), resolvedComponent, resolvedOperation);
+            throw new TensorShapeMismatchException(expectedShape, tensor._shape, resolvedComponent, resolvedOperation);
         }
     }
 
@@ -76,9 +76,9 @@ public static class TensorValidator
     {
         var (resolvedComponent, resolvedOperation) = ValidationHelper<T>.ResolveCallerInfo(component, operation);
 
-        if (!tensor1.Shape.ToArray().SequenceEqual(tensor2.Shape.ToArray()))
+        if (!tensor1._shape.SequenceEqual(tensor2._shape))
         {
-            throw new TensorShapeMismatchException(tensor1.Shape.ToArray(), tensor2.Shape.ToArray(), resolvedComponent, resolvedOperation);
+            throw new TensorShapeMismatchException(tensor1._shape, tensor2._shape, resolvedComponent, resolvedOperation);
         }
     }
 

@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -126,9 +126,6 @@ public class BASEDLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Gets the model dimension.
@@ -633,144 +630,6 @@ public class BASEDLayer<T> : LayerBase<T>
         return combined;
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _lastLinearQuery == null ||
-            _lastLinearKey == null || _lastLinearValue == null || _lastWindowQuery == null ||
-            _lastWindowKey == null || _lastWindowValue == null || _lastMixingAlpha == null ||
-            _lastMixingAlphaRaw == null || _lastLinearOutput == null || _lastWindowOutput == null ||
-            _lastCombinedOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = _lastInput.Shape[0];
-        int seqLen = _lastInput.Shape[1];
-
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        var activationGrad = ApplyActivationDerivative(_lastOutput, grad3D);
-
-        // Initialize all gradients
-        _linearQueryWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _linearKeyWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _linearValueWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _windowQueryWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _windowKeyWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _windowValueWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _featureMapScaleGradient = new Tensor<T>([_numHeads, _headDimension]);
-        _mixingGateWeightsGradient = new Tensor<T>([_modelDimension, _numHeads]);
-        _mixingGateBiasGradient = new Tensor<T>([_numHeads]);
-        _outputProjectionWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
-
-        // Step 6 backward: output projection
-        var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
-        var combinedFlat = _lastCombinedOutput.Reshape(batchSize * seqLen, _modelDimension);
-        _outputProjectionWeightsGradient = Engine.TensorMatMul(combinedFlat.Transpose([1, 0]), gradFlat);
-
-        var dCombined = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
-            .Reshape(batchSize, seqLen, _modelDimension);
-
-        // Step 5 backward: combine = alpha * linear + (1 - alpha) * window
-        // dLinear = alpha * dCombined
-        // dWindow = (1 - alpha) * dCombined
-        // dAlpha = dCombined * (linear - window)
-        var dLinearOutput = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dWindowOutput = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dAlpha = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    T alphaVal = _lastMixingAlpha[new[] { bi, t, hi }];
-                    T oneMinusAlpha = NumOps.Subtract(NumOps.One, alphaVal);
-                    int dimStart = hi * _headDimension;
-
-                    T dAlphaAccum = NumOps.Zero;
-                    for (int d = 0; d < _headDimension; d++)
-                    {
-                        int flatD = dimStart + d;
-                        T dC = dCombined[new[] { bi, t, flatD }];
-                        T linVal = _lastLinearOutput[new[] { bi, t, flatD }];
-                        T winVal = _lastWindowOutput[new[] { bi, t, flatD }];
-
-                        dLinearOutput[new[] { bi, t, flatD }] = NumOps.Multiply(alphaVal, dC);
-                        dWindowOutput[new[] { bi, t, flatD }] = NumOps.Multiply(oneMinusAlpha, dC);
-                        dAlphaAccum = NumOps.Add(dAlphaAccum,
-                            NumOps.Multiply(dC, NumOps.Subtract(linVal, winVal)));
-                    }
-                    dAlpha[new[] { bi, t, hi }] = dAlphaAccum;
-                }
-            }
-        }
-
-        // Alpha through sigmoid derivative: dAlphaRaw = dAlpha * alpha * (1 - alpha)
-        var alphaSigDeriv = Engine.TensorMultiply(_lastMixingAlpha,
-            Engine.TensorSubtract(CreateOnesLike(_lastMixingAlpha), _lastMixingAlpha));
-        var dAlphaRaw = Engine.TensorMultiply(dAlpha, alphaSigDeriv);
-
-        // Mixing gate weight gradients
-        var inputFlat = _lastInput.Reshape(batchSize * seqLen, _modelDimension);
-        var dAlphaFlat = dAlphaRaw.Reshape(batchSize * seqLen, _numHeads);
-        _mixingGateWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dAlphaFlat);
-        _mixingGateBiasGradient = Engine.ReduceSum(dAlphaRaw, new int[] { 0, 1 });
-
-        // Input gradient from mixing gate path
-        var dInputFromGate = Engine.TensorMatMul(dAlphaFlat, _mixingGateWeights.Transpose([1, 0]));
-
-        // Step 4 backward: sliding window attention gradients
-        var (dWinQ, dWinK, dWinV) = SlidingWindowAttentionBackward(
-            dWindowOutput, batchSize, seqLen);
-
-        // Step 3 backward: linear attention gradients (simplified)
-        var (dLinQ, dLinK, dLinV) = LinearAttentionBackward(
-            dLinearOutput, batchSize, seqLen);
-
-        // Projection weight gradients
-        var dLinQFlat = dLinQ.Reshape(batchSize * seqLen, _modelDimension);
-        var dLinKFlat = dLinK.Reshape(batchSize * seqLen, _modelDimension);
-        var dLinVFlat = dLinV.Reshape(batchSize * seqLen, _modelDimension);
-        var dWinQFlat = dWinQ.Reshape(batchSize * seqLen, _modelDimension);
-        var dWinKFlat = dWinK.Reshape(batchSize * seqLen, _modelDimension);
-        var dWinVFlat = dWinV.Reshape(batchSize * seqLen, _modelDimension);
-
-        _linearQueryWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dLinQFlat);
-        _linearKeyWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dLinKFlat);
-        _linearValueWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dLinVFlat);
-        _windowQueryWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dWinQFlat);
-        _windowKeyWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dWinKFlat);
-        _windowValueWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dWinVFlat);
-
-        // Accumulate input gradient from all paths
-        var dInput = Engine.TensorAdd(dInputFromGate,
-            Engine.TensorMatMul(dLinQFlat, _linearQueryWeights.Transpose([1, 0])));
-        dInput = Engine.TensorAdd(dInput,
-            Engine.TensorMatMul(dLinKFlat, _linearKeyWeights.Transpose([1, 0])));
-        dInput = Engine.TensorAdd(dInput,
-            Engine.TensorMatMul(dLinVFlat, _linearValueWeights.Transpose([1, 0])));
-        dInput = Engine.TensorAdd(dInput,
-            Engine.TensorMatMul(dWinQFlat, _windowQueryWeights.Transpose([1, 0])));
-        dInput = Engine.TensorAdd(dInput,
-            Engine.TensorMatMul(dWinKFlat, _windowKeyWeights.Transpose([1, 0])));
-        dInput = Engine.TensorAdd(dInput,
-            Engine.TensorMatMul(dWinVFlat, _windowValueWeights.Transpose([1, 0])));
-
-        var dInput3D = dInput.Reshape(batchSize, seqLen, _modelDimension);
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return dInput3D.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return dInput3D.Reshape(_originalInputShape);
-
-        return dInput3D;
-    }
-
     /// <summary>
     /// Backward pass for sliding window causal attention.
     /// Uses cached attention weights to compute gradients for Q, K, V.
@@ -1158,17 +1017,17 @@ public class BASEDLayer<T> : LayerBase<T>
     {
         if (_linearQueryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_linearQueryWeightsGradient is not null ? Vector<T>.FromMemory(_linearQueryWeightsGradient.Data) : new Vector<T>(0)),
-            (_linearKeyWeightsGradient is not null ? Vector<T>.FromMemory(_linearKeyWeightsGradient.Data) : new Vector<T>(0)),
-            (_linearValueWeightsGradient is not null ? Vector<T>.FromMemory(_linearValueWeightsGradient.Data) : new Vector<T>(0)),
-            (_windowQueryWeightsGradient is not null ? Vector<T>.FromMemory(_windowQueryWeightsGradient.Data) : new Vector<T>(0)),
-            (_windowKeyWeightsGradient is not null ? Vector<T>.FromMemory(_windowKeyWeightsGradient.Data) : new Vector<T>(0)),
-            (_windowValueWeightsGradient is not null ? Vector<T>.FromMemory(_windowValueWeightsGradient.Data) : new Vector<T>(0)),
-            (_featureMapScaleGradient is not null ? Vector<T>.FromMemory(_featureMapScaleGradient.Data) : new Vector<T>(0)),
-            (_mixingGateWeightsGradient is not null ? Vector<T>.FromMemory(_mixingGateWeightsGradient.Data) : new Vector<T>(0)),
-            (_mixingGateBiasGradient is not null ? Vector<T>.FromMemory(_mixingGateBiasGradient.Data) : new Vector<T>(0)),
-            _outputProjectionWeightsGradient is not null ? (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionWeights.Length),
-            _outputProjectionBiasGradient is not null ? (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionBias.Length));
+            new Vector<T>(_linearQueryWeightsGradient!.ToArray()),
+            new Vector<T>(_linearKeyWeightsGradient!.ToArray()),
+            new Vector<T>(_linearValueWeightsGradient!.ToArray()),
+            new Vector<T>(_windowQueryWeightsGradient!.ToArray()),
+            new Vector<T>(_windowKeyWeightsGradient!.ToArray()),
+            new Vector<T>(_windowValueWeightsGradient!.ToArray()),
+            new Vector<T>(_featureMapScaleGradient!.ToArray()),
+            new Vector<T>(_mixingGateWeightsGradient!.ToArray()),
+            new Vector<T>(_mixingGateBiasGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
     }
 
     public override void ClearGradients()
@@ -1212,28 +1071,6 @@ public class BASEDLayer<T> : LayerBase<T>
     }
 
     #endregion
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
-        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
-        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(outWeightsNode);
-        inputNodes.Add(outBiasNode);
-
-        var outT = TensorOperations<T>.Transpose(outWeightsNode);
-        var finalOutput = TensorOperations<T>.MatrixMultiply(xNode, outT);
-        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
-
-        return outputWithBias;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

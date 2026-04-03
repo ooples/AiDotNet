@@ -1,9 +1,8 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
-using AiDotNet.NeuralNetworks.Layers;
 
-namespace AiDotNet.NeuralNetworks.Tabular;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Gated Feature Learning Unit (GFLU) for GANDALF architecture.
@@ -24,7 +23,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class GatedFeatureLearningUnit<T> : LayerBase<T>
+public class GatedFeatureLearningUnitLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
     private readonly int _outputDim;
@@ -44,9 +43,6 @@ public class GatedFeatureLearningUnit<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc/>
     public override int ParameterCount => _featureTransform.ParameterCount + _gateTransform.ParameterCount;
 
     /// <summary>
@@ -54,7 +50,7 @@ public class GatedFeatureLearningUnit<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputDim">Input dimension.</param>
     /// <param name="outputDim">Output dimension.</param>
-    public GatedFeatureLearningUnit(int inputDim, int outputDim)
+    public GatedFeatureLearningUnitLayer(int inputDim, int outputDim)
         : base([inputDim], [outputDim])
     {
         _inputDim = inputDim;
@@ -89,37 +85,6 @@ public class GatedFeatureLearningUnit<T> : LayerBase<T>
 
         // Apply gate: output = transformed * gate
         return Engine.TensorMultiply(transformed, gate);
-    }
-
-    /// <summary>
-    /// Backward pass through the GFLU.
-    /// </summary>
-    /// <param name="gradient">Gradient from upstream [batchSize, outputDim].</param>
-    /// <returns>Gradient with respect to input [batchSize, inputDim].</returns>
-    public override Tensor<T> Backward(Tensor<T> gradient)
-    {
-        if (_transformedCache == null || _gateCache == null)
-        {
-            throw new InvalidOperationException("Forward must be called before backward");
-        }
-
-        // Gradient for transformed: dL/dtransformed = dL/dout * gate
-        var transformedGrad = Engine.TensorMultiply(gradient, _gateCache);
-
-        // Gradient for gate: dL/dgate = dL/dout * transformed
-        var gateGrad = Engine.TensorMultiply(gradient, _transformedCache);
-
-        // Gradient through sigmoid: dL/dlogits = dL/dgate * gate * (1 - gate)
-        var ones = Tensor<T>.CreateDefault(_gateCache.Shape.ToArray(), NumOps.One);
-        var sigmoidDeriv = Engine.TensorMultiply(_gateCache, Engine.TensorSubtract(ones, _gateCache));
-        var gateLogitsGrad = Engine.TensorMultiply(gateGrad, sigmoidDeriv);
-
-        // Backprop through both layers
-        var inputGrad1 = _featureTransform.Backward(transformedGrad);
-        var inputGrad2 = _gateTransform.Backward(gateLogitsGrad);
-
-        // Sum gradients
-        return Engine.TensorAdd(inputGrad1, inputGrad2);
     }
 
     /// <summary>
@@ -183,18 +148,5 @@ public class GatedFeatureLearningUnit<T> : LayerBase<T>
         for (int i = 0; i < gateParams.Length; i++)
             result[offset++] = gateParams[i];
         return result;
-    }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return inputNode;
     }
 }

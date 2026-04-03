@@ -1,3 +1,4 @@
+#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
@@ -118,15 +119,6 @@ public class CausalTemporalAttention<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (!_hasForwardRun)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        return _causalAttention.Backward(outputGradient);
-    }
-
-    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         _causalAttention.UpdateParameters(learningRate);
@@ -151,12 +143,5 @@ public class CausalTemporalAttention<T> : LayerBase<T>
         _causalAttention.ResetState();
     }
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
 
-    /// <inheritdoc />
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        return _causalAttention.ExportComputationGraph(inputNodes);
-    }
 }

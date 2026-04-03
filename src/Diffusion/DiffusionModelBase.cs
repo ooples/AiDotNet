@@ -1,8 +1,9 @@
-using System.Linq;
+﻿using System.Linq;
 using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -179,6 +180,9 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         if (invalidDims.Length > 0)
             throw new ArgumentOutOfRangeException(nameof(shape), $"All dimensions must be positive, but found {invalidDims[0]}.");
 
+        // Suppress tape recording during inference (like PyTorch torch.no_grad())
+        using var _ = new NoGradScope<T>();
+
         // Set up random generator
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
 
@@ -253,7 +257,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         var noisySample = _scheduler.AddNoise(cleanVector, noiseVector, timesteps[0]);
 
         // Create tensor for noise prediction
-        var noisySampleTensor = new Tensor<T>(cleanSamples.Shape.ToArray(), noisySample);
+        var noisySampleTensor = new Tensor<T>(cleanSamples._shape, noisySample);
 
         // Predict the noise
         var predictedNoise = PredictNoise(noisySampleTensor, timesteps[0]);
@@ -305,7 +309,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         {
             seed = unchecked(seed * 31 + NumOps.ToDouble(input[i]).GetHashCode());
         }
-        return Generate(input.Shape.ToArray(), _options.DefaultInferenceSteps, seed);
+        return Generate(input._shape, _options.DefaultInferenceSteps, seed);
     }
 
     /// <inheritdoc />
@@ -621,56 +625,29 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
         // Add noise to the clean sample using the scheduler
         var noisySample = _scheduler.AddNoise(inputVector, noiseVector, timestep);
-        var noisySampleTensor = new Tensor<T>(input.Shape.ToArray(), noisySample);
+        var noisySampleTensor = new Tensor<T>(input._shape, noisySample);
 
-        // Get current parameters
-        var parameters = GetParameters();
-        var gradients = new Vector<T>(parameters.Length);
-
-        // Autodiff via GradientTape: build computation graph through the noise predictor,
-        // compute loss, then backpropagate for exact gradients in O(1) backward passes.
-        // This is the same approach as PyTorch's autograd.
+        // Primary path: layer-level backpropagation (like PyTorch's autograd).
+        // Forward pass through the noise predictor, compute loss gradient,
+        // then backpropagate through the model's layers for exact gradients.
         try
         {
-            using var tape = new GradientTape<T>();
+            // Forward pass: predict noise from the noisy sample
+            var predicted = PredictNoise(noisySampleTensor, timestep);
 
-            // Create input node (no gradient needed for input data)
-            var inputNode = TensorOperations<T>.Variable(noisySampleTensor, "noisy_input", requiresGradient: false);
+            // Compute loss gradient: d(loss)/d(predicted)
+            var lossGrad = effectiveLossFunction.CalculateDerivative(
+                predicted.ToVector(), noiseVector);
+            var lossGradTensor = new Tensor<T>(predicted._shape, lossGrad);
 
-            // Build the forward computation graph through the noise predictor's layers.
-            // ExportComputationGraph records all operations to the active GradientTape,
-            // creating the full differentiable graph from input through all UNet layers.
-            var outputNode = ExportComputationGraph([inputNode]);
+            // Backpropagate through the noise predictor's layers.
+            // Each layer computes input gradients and stores weight gradients internally.
+            BackpropagateNoise(lossGradTensor, timestep);
 
-            // Compute MSE loss as a graph node: loss = mean((predicted - noise)^2)
-            var targetNode = TensorOperations<T>.Variable(
-                new Tensor<T>(noisySampleTensor.Shape.ToArray(), noiseVector), "target_noise", requiresGradient: false);
-            var diffNode = TensorOperations<T>.Subtract(outputNode, targetNode);
-            var squaredNode = TensorOperations<T>.ElementwiseMultiply(diffNode, diffNode);
-            var lossNode = TensorOperations<T>.Mean(squaredNode);
+            // Extract accumulated parameter gradients from all layers
+            var gradients = GetParameterGradients();
 
-            // Backward pass: compute gradients for all parameter nodes in the graph
-            var gradientDict = tape.Gradient(lossNode);
-
-            // Extract gradients from all nodes that require gradients (parameter nodes).
-            // The layer ExportComputationGraph methods create watched parameter nodes
-            // that accumulate gradients during backprop.
-            int offset = 0;
-            foreach (var kvp in gradientDict)
-            {
-                if (kvp.Key.RequiresGradient && kvp.Value is not null)
-                {
-                    var grad = kvp.Value;
-                    int copyLen = Math.Min(grad.Length, parameters.Length - offset);
-                    for (int i = 0; i < copyLen; i++)
-                    {
-                        gradients[offset + i] = grad[i];
-                    }
-                    offset += copyLen;
-                }
-            }
-
-            // Verify autodiff produced meaningful gradients
+            // Verify backprop produced meaningful gradients
             bool hasValidGradients = false;
             for (int i = 0; i < Math.Min(gradients.Length, 100); i++)
             {
@@ -688,14 +665,17 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         }
         catch (Exception ex)
         {
-            // Fall through to SPSA if autodiff graph construction fails
-            System.Diagnostics.Trace.TraceWarning($"Autodiff gradient failed, falling back to SPSA: {ex.Message}");
+            // Fall through to SPSA if layer backprop is not supported
+            System.Diagnostics.Trace.TraceWarning(
+                $"Layer backpropagation failed, falling back to SPSA: {ex.Message}");
         }
 
         // Fallback: SPSA (Simultaneous Perturbation Stochastic Approximation).
-        // Only used when autodiff fails (e.g., layer doesn't support ExportComputationGraph).
+        // Only used when layer backprop fails (e.g., model doesn't implement BackpropagateNoise).
         // SPSA estimates all N gradients with just 2 forward passes per sample
         // (vs 2N for finite differences). Reference: Spall, J.C., IEEE TAC, 1992.
+        var parameters = GetParameters();
+        var gradients_spsa = new Vector<T>(parameters.Length);
         var epsilon = NumOps.FromDouble(1e-3);
         var twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
         var rng = RandomGenerator;
@@ -722,14 +702,39 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             // Vectorized gradient accumulation: g += (L+ - L-) / (2ε * δ)
             var lossDiff = NumOps.Subtract(lossPlus, lossMinus);
             var scaledDelta = Engine.Multiply(delta, twoEpsilon);
-            gradients = Engine.Add(gradients, Engine.Divide(
+            gradients_spsa = Engine.Add(gradients_spsa, Engine.Divide(
                 Engine.Fill(parameters.Length, lossDiff), scaledDelta));
         }
 
-        gradients = Engine.Multiply(gradients, NumOps.FromDouble(1.0 / numSamples));
+        gradients_spsa = Engine.Multiply(gradients_spsa, NumOps.FromDouble(1.0 / numSamples));
         SetParameters(parameters);
 
-        return gradients;
+        return gradients_spsa;
+    }
+
+    /// <summary>
+    /// Backpropagates the loss gradient through the noise prediction model's layers.
+    /// Override in derived classes to implement layer-by-layer gradient computation.
+    /// </summary>
+    /// <param name="lossGradient">Gradient of the loss w.r.t. the noise predictor output.</param>
+    /// <param name="timestep">The timestep used during the forward pass.</param>
+    protected virtual void BackpropagateNoise(Tensor<T> lossGradient, int timestep)
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement BackpropagateNoise. " +
+            "Override this method to enable layer-level gradient computation.");
+    }
+
+    /// <summary>
+    /// Extracts accumulated parameter gradients from all layers after backpropagation.
+    /// Override in derived classes to collect gradients from the model's layer structure.
+    /// </summary>
+    /// <returns>Flat vector of parameter gradients matching <see cref="GetParameters"/> layout.</returns>
+    protected virtual Vector<T> GetParameterGradients()
+    {
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement GetParameterGradients. " +
+            "Override this method to extract layer-level gradients.");
     }
 
     /// <inheritdoc />

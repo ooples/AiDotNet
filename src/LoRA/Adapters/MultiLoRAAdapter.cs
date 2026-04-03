@@ -349,47 +349,6 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through the current task's adapter.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass only updates the current task's LoRA parameters. Other tasks are unaffected.
-    /// This allows task-specific learning without interference.
-    /// </para>
-    /// <para><b>For Beginners:</b> During training, this updates only the current task's parameters.
-    ///
-    /// Benefits:
-    /// - Training task A doesn't mess up task B's learning
-    /// - Can train tasks one at a time or in batches
-    /// - No "catastrophic forgetting" between tasks
-    ///
-    /// The gradients flow through:
-    /// 1. Current task's LoRA layer (gets updated)
-    /// 2. Base layer (only updated if not frozen)
-    /// 3. Combined gradients flow back to previous layers
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Backward through current task's LoRA layer
-        LoRALayer<T> currentAdapter = _taskAdapters[_currentTask];
-        Tensor<T> loraInputGrad = currentAdapter.Backward(outputGradient);
-
-        // Backward through base layer
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        // Sum input gradients
-        Tensor<T> inputGrad = Engine.TensorAdd(loraInputGrad, baseInputGrad);
-
-        // Update parameter gradients vector
-        UpdateParameterGradientsFromLayers();
-
-        return inputGrad;
-    }
-
-    /// <summary>
     /// Updates parameters for the current task only.
     /// </summary>
     /// <param name="learningRate">The learning rate for parameter updates.</param>

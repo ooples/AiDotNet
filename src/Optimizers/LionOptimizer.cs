@@ -1,5 +1,7 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Optimizers;
 
@@ -316,6 +318,44 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         _m = (Vector<T>)Engine.Add(beta2TimesM, oneMinusBeta2TimesGrad);
 
         return updatedParams;
+    }
+
+    // Per-parameter momentum for tape-based Lion training
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeMomentum = new(TensorReferenceComparer<Tensor<T>>.Instance);
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        var weightDecay = NumOps.FromDouble(_options.WeightDecay);
+        var oneMinusBeta1 = NumOps.Subtract(NumOps.One, _currentBeta1);
+        var oneMinusBeta2 = NumOps.Subtract(NumOps.One, _currentBeta2);
+
+        foreach (var param in context.Parameters)
+        {
+            if (!context.Gradients.TryGetValue(param, out var grad))
+                continue;
+
+            if (!_tapeMomentum.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeMomentum[param] = m; }
+
+            // Interpolate: c = beta1 * m + (1 - beta1) * grad
+            var interpolated = Engine.TensorAdd(Engine.TensorMultiplyScalar(m, _currentBeta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1));
+
+            // Sign update
+            var signUpdate = Engine.TensorSign(interpolated);
+
+            // Weight decay: update += weightDecay * param
+            if (!NumOps.Equals(weightDecay, NumOps.Zero))
+            {
+                var decayTerm = Engine.TensorMultiplyScalar(param, weightDecay);
+                Engine.TensorAddInPlace(signUpdate, decayTerm);
+            }
+
+            // param -= lr * update
+            Engine.TensorSubtractInPlace(param, Engine.TensorMultiplyScalar(signUpdate, CurrentLearningRate));
+
+            // Update momentum: m = beta2 * m + (1 - beta2) * grad
+            Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(m, _currentBeta2), Engine.TensorMultiplyScalar(grad, oneMinusBeta2)), m);
+        }
     }
 
     /// <summary>

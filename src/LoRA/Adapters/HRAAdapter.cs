@@ -1,3 +1,4 @@
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using System.Collections.Generic;
 using AiDotNet.Interfaces;
 
@@ -313,7 +314,7 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
         Tensor<T> sparseOutput = ForwardSparseFullRank(input);
 
         // Sum all three components
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> result = new Tensor<T>(baseOutput._shape);
         for (int i = 0; i < baseOutput.Length; i++)
         {
             T sum = NumOps.Add(baseOutput[i], loraOutput[i]);
@@ -389,61 +390,6 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         return new Tensor<T>(new[] { batchSize, outputSize }, outputData);
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the HRA adapter.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass computes gradients for:
-    /// 1. Low-rank LoRA matrices (A and B)
-    /// 2. Sparse full-rank parameters
-    /// 3. Updates importance scores based on gradient magnitudes
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where HRA learns which parameters are important!
-    /// During backpropagation:
-    /// 1. Compute gradients for low-rank component (standard LoRA)
-    /// 2. Compute gradients for sparse full-rank parameters
-    /// 3. Track which parameters have large gradients (they're important!)
-    /// 4. Periodically reassign sparse budget to most important parameters
-    ///
-    /// This adaptive approach ensures the sparse full-rank budget is always
-    /// allocated to the parameters that need it most.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Backward through LoRA layer
-        Tensor<T> loraInputGrad = _loraLayer.Backward(outputGradient);
-
-        // Backward through sparse full-rank component
-        Tensor<T> sparseInputGrad = BackwardSparseFullRank(outputGradient);
-
-        // Backward through base layer
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        // Update importance scores based on gradients
-        UpdateImportanceScores(outputGradient);
-
-        // Increment step and check if we should reallocate sparse parameters
-        _stepCount++;
-        if (_useDynamicAllocation && _stepCount % _importanceUpdateInterval == 0)
-        {
-            ReallocateSparseParameters();
-        }
-
-        // Sum input gradients
-        Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape.ToArray());
-        for (int i = 0; i < loraInputGrad.Length; i++)
-        {
-            T sum = NumOps.Add(loraInputGrad[i], sparseInputGrad[i]);
-            inputGrad[i] = NumOps.Add(sum, baseInputGrad[i]);
-        }
-
-        return inputGrad;
     }
 
     /// <summary>

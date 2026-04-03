@@ -1,4 +1,5 @@
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
@@ -559,6 +560,26 @@ public class ProximalGradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_PGD_{_options.InitialLearningRate}_{_regularization.GetType().Name}_{_options.Tolerance}_{_iteration}";
+    }
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        foreach (var param in context.Parameters)
+        {
+            if (!context.Gradients.TryGetValue(param, out var grad))
+                continue;
+
+            // Gradient descent step: param -= lr * grad
+            var update = Engine.TensorMultiplyScalar(grad, CurrentLearningRate);
+            Engine.TensorSubtractInPlace(param, update);
+
+            // Apply proximal operator (regularization) via Vector<T> interface
+            var paramVec = param.ToVector();
+            var regularized = _regularization.Regularize(paramVec);
+            for (int i = 0; i < param.Length && i < regularized.Length; i++)
+                param[i] = regularized[i];
+        }
     }
 }
 

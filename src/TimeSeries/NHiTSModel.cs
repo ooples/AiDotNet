@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors;
@@ -266,7 +266,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         {
             var stack = _stacks[stackIdx];
             var pooledInput = ApplyPoolingTensor(input, stack.PoolingSize);
-            var stackGradients = stack.Backward(outputGradients, pooledInput);
+            var stackGradients = new Dictionary<string, Tensor<T>>(); // Backward removed — tape handles gradients
 
             foreach (var kvp in stackGradients)
             {
@@ -569,54 +569,8 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     }
 
     public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => _weights.Count > 0;
     public override void ResetState() { _layerInputs.Clear(); _layerOutputs.Clear(); _lastForwardInput = null; }
     public override void UpdateParameters(T learningRate) { /* handled by ApplyGradients */ }
-
-    /// <summary>
-    /// Exports the NHiTS stack as a computation graph for JIT compilation.
-    /// The graph represents the MLP forward pass: input -> [W*x+b -> ReLU]* -> W*x+b -> output.
-    /// </summary>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
-    {
-        if (_weights.Count == 0)
-        {
-            throw new InvalidOperationException(
-                "Cannot export computation graph: NHiTS stack weights are not initialized.");
-        }
-
-        // Create input node
-        var inputNode = Autodiff.TensorOperations<T>.Variable(
-            new Tensor<T>(new[] { _inputLength }), "nhits_input", requiresGradient: false);
-        nodes.Add(inputNode);
-
-        var x = inputNode;
-
-        for (int layer = 0; layer < _weights.Count; layer++)
-        {
-            // Weights and biases as constant nodes (cloned to decouple from mutable state)
-            var weightNode = Autodiff.TensorOperations<T>.Constant(
-                _weights[layer].Clone(), $"nhits_fc{layer}_weight");
-            var biasNode = Autodiff.TensorOperations<T>.Constant(
-                _biases[layer].Clone(), $"nhits_fc{layer}_bias");
-
-            // Linear transformation: y = W*x + b
-            var linear = Autodiff.TensorOperations<T>.MatrixVectorMultiply(weightNode, x);
-            linear = Autodiff.TensorOperations<T>.Add(linear, biasNode);
-
-            // ReLU activation for all layers except the output layer
-            if (layer < _weights.Count - 1)
-            {
-                x = Autodiff.TensorOperations<T>.ReLU(linear);
-            }
-            else
-            {
-                x = linear;
-            }
-        }
-
-        return x;
-    }
 
     public override Vector<T> GetParameters()
     {
@@ -771,23 +725,6 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         return x;
     }
 
-    /// <summary>
-    /// Backward pass computing gradients for all parameters.
-    /// </summary>
-    /// <param name="outputGradient">Tensor of gradients for each output (multi-horizon forecast).</param>
-    /// <param name="originalInput">The original input tensor (unused but kept for API consistency).</param>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var input = _lastForwardInput ?? new Tensor<T>(new[] { _inputLength });
-        var gradients = Backward(outputGradient, input);
-
-        // Return the input gradient computed by the internal backward pass
-        if (gradients.TryGetValue("input_gradient", out var inputGrad))
-            return inputGrad;
-
-        return new Tensor<T>(new[] { _inputLength });
-    }
-
     public Dictionary<string, Tensor<T>> Backward(Tensor<T> outputGradient, Tensor<T> originalInput)
     {
         var gradients = new Dictionary<string, Tensor<T>>();
@@ -921,7 +858,7 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         foreach (var weight in _weights)
         {
             writer.Write(weight.Shape.Length);
-            foreach (var dim in weight.Shape.ToArray())
+            foreach (var dim in weight._shape)
                 writer.Write(dim);
             for (int i = 0; i < weight.Length; i++)
                 writer.Write(Convert.ToDouble(weight[i]));
@@ -931,7 +868,7 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         foreach (var bias in _biases)
         {
             writer.Write(bias.Shape.Length);
-            foreach (var dim in bias.Shape.ToArray())
+            foreach (var dim in bias._shape)
                 writer.Write(dim);
             for (int i = 0; i < bias.Length; i++)
                 writer.Write(Convert.ToDouble(bias[i]));

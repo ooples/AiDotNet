@@ -124,24 +124,6 @@ public class MotionModule<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Backward through FFN
-        var ffnOutGrad = _ffnOut.Backward(outputGradient);
-        var ffnInGrad = _ffnIn.Backward(ffnOutGrad);
-        var norm2Grad = _norm2.Backward(ffnInGrad);
-        var afterAttnGrad = AddTensors(outputGradient, norm2Grad);
-
-        // Backward through temporal attention
-        var attnGrad = _temporalAttention.Backward(afterAttnGrad);
-        var norm1Grad = _norm1.Backward(attnGrad);
-        return AddTensors(afterAttnGrad, norm1Grad);
-    }
-
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         return AiDotNetEngine.Current.TensorAdd(a, b);
@@ -220,12 +202,5 @@ public class MotionModule<T> : LayerBase<T>
         _norm2.ResetState();
     }
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
 
-    /// <inheritdoc />
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("MotionModule does not support JIT compilation.");
-    }
 }

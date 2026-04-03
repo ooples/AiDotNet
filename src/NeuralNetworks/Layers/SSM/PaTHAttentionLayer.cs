@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -117,9 +117,6 @@ public class PaTHAttentionLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
 
     /// <summary>Gets the sequence length.</summary>
     public int SequenceLength => _sequenceLength;
@@ -451,218 +448,6 @@ public class PaTHAttentionLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var lastInput = _lastInput ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastOutput = _lastOutput ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastQuery = _lastQuery ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastKey = _lastKey ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastValue = _lastValue ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastReflectedQ = _lastReflectedQ ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastReflectedK = _lastReflectedK ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastAttentionWeights = _lastAttentionWeights ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastGate = _lastGate ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastGateRaw = _lastGateRaw ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastAttentionOutput = _lastAttentionOutput ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = lastInput.Shape[0];
-        int seqLen = lastInput.Shape[1];
-
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        var activationGrad = ApplyActivationDerivative(lastOutput, grad3D);
-
-        // Initialize gradients
-        _queryWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _keyWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _valueWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _householderVectorsGradient = new Tensor<T>([_sequenceLength, _numHeads, _headDimension]);
-        _outputGateWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputGateBiasGradient = new Tensor<T>([_modelDimension]);
-        _outputProjectionWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
-
-        // Output projection backward
-        var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
-        var gatedFlat = Engine.TensorMultiply(lastAttentionOutput, lastGate)
-            .Reshape(batchSize * seqLen, _modelDimension);
-        _outputProjectionWeightsGradient = Engine.TensorMatMul(gatedFlat.Transpose([1, 0]), gradFlat);
-
-        var dGated = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
-            .Reshape(batchSize, seqLen, _modelDimension);
-
-        // Gate backward
-        var dAttnOut = Engine.TensorMultiply(dGated, lastGate);
-        var dGateSig = Engine.TensorMultiply(dGated, lastAttentionOutput);
-        var sigDeriv = Engine.TensorMultiply(lastGate,
-            Engine.TensorSubtract(CreateOnesLike(lastGate), lastGate));
-        var dGateRaw = Engine.TensorMultiply(dGateSig, sigDeriv);
-
-        var inputFlat = lastInput.Reshape(batchSize * seqLen, _modelDimension);
-        var dGateRawFlat = dGateRaw.Reshape(batchSize * seqLen, _modelDimension);
-        _outputGateWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dGateRawFlat);
-        _outputGateBiasGradient = Engine.ReduceSum(dGateRaw, new int[] { 0, 1 });
-        var dInputFromGate = Engine.TensorMatMul(dGateRawFlat, _outputGateWeights.Transpose([1, 0]));
-
-        // Attention backward -> get dReflectedQ, dReflectedK, dV
-        var dReflectedQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dReflectedK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        T attnScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
-
-                for (int ti = 0; ti < seqLen; ti++)
-                {
-                    // dV: dV[tj] += attn_weight[ti, tj] * dO[ti]
-                    for (int tj = 0; tj < seqLen; tj++)
-                    {
-                        T weight = lastAttentionWeights[new[] { bi, hi, ti, tj }];
-                        for (int di = 0; di < _headDimension; di++)
-                        {
-                            int flatDi = dimStart + di;
-                            T dO = dAttnOut[new[] { bi, ti, flatDi }];
-                            dV[new[] { bi, tj, flatDi }] = NumOps.Add(
-                                dV[new[] { bi, tj, flatDi }],
-                                NumOps.Multiply(weight, dO));
-                        }
-                    }
-
-                    // Softmax backward
-                    var dAttnWeights = new T[seqLen];
-                    for (int tj = 0; tj < seqLen; tj++)
-                    {
-                        T dAW = NumOps.Zero;
-                        for (int di = 0; di < _headDimension; di++)
-                        {
-                            int flatDi = dimStart + di;
-                            dAW = NumOps.Add(dAW,
-                                NumOps.Multiply(dAttnOut[new[] { bi, ti, flatDi }],
-                                    lastValue[new[] { bi, tj, flatDi }]));
-                        }
-                        dAttnWeights[tj] = dAW;
-                    }
-
-                    T sumAttnDAttn = NumOps.Zero;
-                    for (int tj = 0; tj < seqLen; tj++)
-                    {
-                        T w = lastAttentionWeights[new[] { bi, hi, ti, tj }];
-                        sumAttnDAttn = NumOps.Add(sumAttnDAttn, NumOps.Multiply(w, dAttnWeights[tj]));
-                    }
-
-                    for (int tj = 0; tj < seqLen; tj++)
-                    {
-                        T w = lastAttentionWeights[new[] { bi, hi, ti, tj }];
-                        T dScore = NumOps.Multiply(w, NumOps.Subtract(dAttnWeights[tj], sumAttnDAttn));
-                        dScore = NumOps.Multiply(dScore, attnScale);
-
-                        for (int di = 0; di < _headDimension; di++)
-                        {
-                            int flatDi = dimStart + di;
-                            dReflectedQ[new[] { bi, ti, flatDi }] = NumOps.Add(
-                                dReflectedQ[new[] { bi, ti, flatDi }],
-                                NumOps.Multiply(dScore, lastReflectedK[new[] { bi, tj, flatDi }]));
-                            dReflectedK[new[] { bi, tj, flatDi }] = NumOps.Add(
-                                dReflectedK[new[] { bi, tj, flatDi }],
-                                NumOps.Multiply(dScore, lastReflectedQ[new[] { bi, ti, flatDi }]));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Householder backward: H*x = x - 2*(p^T*x)/(||p||^2) * p
-        // dQ = H * dReflectedQ (Householder is self-inverse, so backward = forward transform)
-        // dP accumulates gradients from both Q and K paths
-        var dQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                int posIndex = Math.Min(t, _sequenceLength - 1);
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    int dimStart = hi * _headDimension;
-
-                    // Apply Householder backward to dReflectedQ -> dQ
-                    var dRQ = new T[_headDimension];
-                    var dRK = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        dRQ[di] = dReflectedQ[new[] { bi, t, flatDi }];
-                        dRK[di] = dReflectedK[new[] { bi, t, flatDi }];
-                    }
-
-                    // H is its own inverse/transpose, so dQ = H * dReflectedQ
-                    var dQHead = new T[_headDimension];
-                    var dKHead = new T[_headDimension];
-                    ApplyHouseholderReflection(dRQ, posIndex, hi, dQHead);
-                    ApplyHouseholderReflection(dRK, posIndex, hi, dKHead);
-
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        dQ[new[] { bi, t, flatDi }] = dQHead[di];
-                        dK[new[] { bi, t, flatDi }] = dKHead[di];
-                    }
-
-                    // Householder vector gradient: d/dp [x - 2*(p^T*x)/||p||^2 * p]
-                    // Accumulated from both Q and K paths
-                    var qHead = new T[_headDimension];
-                    var kHead = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        qHead[di] = lastQuery[new[] { bi, t, flatDi }];
-                        kHead[di] = lastKey[new[] { bi, t, flatDi }];
-                    }
-
-                    // Compute gradient for p from Q path
-                    AccumulateHouseholderGradient(qHead, dRQ, posIndex, hi);
-                    // Compute gradient for p from K path
-                    AccumulateHouseholderGradient(kHead, dRK, posIndex, hi);
-                }
-            }
-        }
-
-        // Projection weight gradients
-        var dQFlat = dQ.Reshape(batchSize * seqLen, _modelDimension);
-        var dKFlat = dK.Reshape(batchSize * seqLen, _modelDimension);
-        var dVFlat = dV.Reshape(batchSize * seqLen, _modelDimension);
-
-        _queryWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dQFlat);
-        _keyWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dKFlat);
-        _valueWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dVFlat);
-
-        // Input gradient
-        var dInputTotal = Engine.TensorMatMul(dQFlat, _queryWeights.Transpose([1, 0]));
-        dInputTotal = Engine.TensorAdd(dInputTotal,
-            Engine.TensorMatMul(dKFlat, _keyWeights.Transpose([1, 0])));
-        dInputTotal = Engine.TensorAdd(dInputTotal,
-            Engine.TensorMatMul(dVFlat, _valueWeights.Transpose([1, 0])));
-        dInputTotal = Engine.TensorAdd(dInputTotal, dInputFromGate);
-
-        var dInput3D = dInputTotal.Reshape(batchSize, seqLen, _modelDimension);
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return dInput3D.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return dInput3D.Reshape(_originalInputShape);
-
-        return dInput3D;
-    }
-
     /// <summary>
     /// Accumulates gradient of the Householder vector from one input vector path.
     /// For H*x = x - 2*(p^T*x)/(||p||^2) * p, the gradient w.r.t. p involves:
@@ -780,14 +565,14 @@ public class PaTHAttentionLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
-            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
-            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
-            (_householderVectorsGradient is not null ? Vector<T>.FromMemory(_householderVectorsGradient.Data) : new Vector<T>(0)),
-            _outputGateWeightsGradient is not null ? (_outputGateWeightsGradient is not null ? Vector<T>.FromMemory(_outputGateWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateWeights.Length),
-            _outputGateBiasGradient is not null ? (_outputGateBiasGradient is not null ? Vector<T>.FromMemory(_outputGateBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateBias.Length),
-            _outputProjectionWeightsGradient is not null ? (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionWeights.Length),
-            _outputProjectionBiasGradient is not null ? (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionBias.Length));
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_householderVectorsGradient!.ToArray()),
+            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
+            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
     }
 
     public override void ClearGradients()
@@ -823,28 +608,6 @@ public class PaTHAttentionLayer<T> : LayerBase<T>
     }
 
     #endregion
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
-        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
-        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(outWeightsNode);
-        inputNodes.Add(outBiasNode);
-
-        var outT = TensorOperations<T>.Transpose(outWeightsNode);
-        var finalOutput = TensorOperations<T>.MatrixMultiply(xNode, outT);
-        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
-
-        return outputWithBias;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

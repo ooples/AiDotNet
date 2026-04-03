@@ -1,5 +1,7 @@
-using AiDotNet.Tensors.Engines.DirectGpu;
+﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.Optimizers;
 
@@ -314,6 +316,53 @@ public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
 
         return updatedParams;
+    }
+
+    // Per-parameter Nadam state for tape-based training
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeM = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeV2 = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private int _tapeStep;
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        _tapeStep++;
+
+        T beta1 = NumOps.FromDouble(_options.Beta1);
+        T beta2 = NumOps.FromDouble(_options.Beta2);
+        T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
+        T oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
+        T epsilon = NumOps.FromDouble(_options.Epsilon);
+        T biasCorrectionM = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _tapeStep));
+        T biasCorrectionV = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _tapeStep));
+        T nesterovFactor = NumOps.Divide(oneMinusBeta1, biasCorrectionM);
+
+        foreach (var param in context.Parameters)
+        {
+            if (!context.Gradients.TryGetValue(param, out var grad))
+                continue;
+
+            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeM[param] = m; }
+            if (!_tapeV2.TryGetValue(param, out var v)) { v = new Tensor<T>(param._shape); _tapeV2[param] = v; }
+
+            // m = beta1 * m + (1 - beta1) * grad
+            Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1)), m);
+
+            // v = beta2 * v + (1 - beta2) * grad^2
+            Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(v, beta2), Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusBeta2)), v);
+
+            // Bias-corrected estimates
+            var mHat = Engine.TensorDivideScalar(m, biasCorrectionM);
+            var vHat = Engine.TensorDivideScalar(v, biasCorrectionV);
+
+            // Nesterov momentum term: mHatNesterov = beta1 * mHat + nesterovFactor * grad
+            var mHatNesterov = Engine.TensorAdd(Engine.TensorMultiplyScalar(mHat, beta1), Engine.TensorMultiplyScalar(grad, nesterovFactor));
+
+            // param -= lr * mHatNesterov / (sqrt(vHat) + epsilon)
+            var denom = Engine.TensorAddScalar(Engine.TensorSqrt(vHat), epsilon);
+            var update = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHatNesterov, denom), CurrentLearningRate);
+            Engine.TensorSubtractInPlace(param, update);
+        }
     }
 
     /// <summary>

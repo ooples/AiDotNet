@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -203,18 +203,6 @@ public class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>, Vector<
     /// Gets or sets the feature names.
     /// </summary>
     public string[]? FeatureNames { get; set; }
-
-    /// <summary>
-    /// Gets whether JIT compilation is supported.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Histogram-based gradient boosting supports JIT compilation
-    /// when we represent the tree traversal using soft (differentiable) splits.
-    /// This allows the entire ensemble to be exported as a computation graph.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
     /// <summary>
     /// Trains the model on the provided data.
@@ -537,80 +525,6 @@ public class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>, Vector<
                 _featureImportances[i] = NumOps.FromDouble(reader.ReadDouble());
             }
         }
-    }
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This exports the entire gradient boosting ensemble as a
-    /// differentiable computation graph. Each tree's decision path is approximated
-    /// using soft (sigmoid) splits to make it differentiable.
-    ///
-    /// The computation graph represents:
-    /// output = initial_prediction + learning_rate * sum(soft_tree_predictions)
-    ///
-    /// The soft tree uses sigmoid functions to approximate hard splits:
-    /// - Hard split: if (x &lt; threshold) then left else right
-    /// - Soft split: sigmoid(temperature * (threshold - x)) * left + (1 - sigmoid(...)) * right
-    ///
-    /// This allows gradient-based optimization and hardware acceleration.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (_trees is null || _trees.Count == 0 || _binThresholds is null)
-        {
-            throw new InvalidOperationException(
-                "Model must be trained before exporting computation graph.");
-        }
-
-        // Create input placeholder for features: [batchSize, numFeatures]
-        var inputTensor = new Tensor<T>(new int[] { 1, _numFeatures });
-        var inputNode = TensorOperations<T>.Variable(inputTensor, "features");
-        inputNodes.Add(inputNode);
-
-        // Create initial prediction constant
-        var initialTensor = new Tensor<T>(new int[] { 1, 1 });
-        initialTensor[0, 0] = _initialPrediction;
-        var initialNode = TensorOperations<T>.Constant(initialTensor, "initial_prediction");
-
-        // Create learning rate constant
-        var lrTensor = new Tensor<T>(new int[] { 1, 1 });
-        lrTensor[0, 0] = NumOps.FromDouble(_options.LearningRate);
-        var lrNode = TensorOperations<T>.Constant(lrTensor, "learning_rate");
-
-        // Export each tree as a soft decision tree
-        ComputationNode<T>? treeSumNode = null;
-        double temperature = 10.0; // Steepness of soft sigmoid splits
-
-        foreach (var tree in _trees)
-        {
-            var treeNode = ExportSoftTree(inputNode, tree, temperature);
-
-            if (treeSumNode is null)
-            {
-                treeSumNode = treeNode;
-            }
-            else
-            {
-                treeSumNode = TensorOperations<T>.Add(treeSumNode, treeNode);
-            }
-        }
-
-        // Multiply by learning rate
-        if (treeSumNode is null)
-        {
-            throw new InvalidOperationException("No trees available for computation graph export.");
-        }
-        var scaledTreesNode = TensorOperations<T>.ElementwiseMultiply(lrNode, treeSumNode);
-
-        // Add initial prediction
-        var outputNode = TensorOperations<T>.Add(initialNode, scaledTreesNode);
-        outputNode.Name = "prediction";
-
-        return outputNode;
     }
 
     /// <summary>

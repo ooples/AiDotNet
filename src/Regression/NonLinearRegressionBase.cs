@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+﻿using AiDotNet.Autodiff;
 using AiDotNet.Serialization;
 using Newtonsoft.Json;
 
@@ -1490,7 +1490,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
 
     private static Tensor<T> CreateFilledTensorLike(ComputationNode<T> referenceNode, T value)
     {
-        var tensor = new Tensor<T>((int[])referenceNode.Value.Shape.ToArray().Clone());
+        var tensor = new Tensor<T>((int[])referenceNode.Value.Shape.ToArray());
         tensor.Fill(value);
         return tensor;
     }

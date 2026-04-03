@@ -1,6 +1,7 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.LossFunctions;
 
@@ -129,7 +130,7 @@ public class HuberLoss<T> : LossFunctionBase<T>
     /// <remarks>
     /// Uses the SmoothL1 kernel which is equivalent to Huber loss with beta = delta.
     /// </remarks>
-    public override (T Loss, IGpuTensor<T> Gradient) CalculateLossAndGradientGpu(IGpuTensor<T> predicted, IGpuTensor<T> actual)
+    public override (T Loss, Tensor<T> Gradient) CalculateLossAndGradientGpu(Tensor<T> predicted, Tensor<T> actual)
     {
         var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
         var backend = engine?.GetBackend();
@@ -140,7 +141,7 @@ public class HuberLoss<T> : LossFunctionBase<T>
             return base.CalculateLossAndGradientGpu(predicted, actual);
         }
 
-        int size = predicted.ElementCount;
+        int size = predicted.Length;
         float beta = (float)NumOps.ToDouble(_delta);
 
         // Compute loss on GPU using SmoothL1 (equivalent to Huber)
@@ -151,8 +152,25 @@ public class HuberLoss<T> : LossFunctionBase<T>
         backend.SmoothL1Backward(predicted.Buffer, actual.Buffer, gradientBuffer, size, beta);
 
         // Create gradient tensor
-        var gradientTensor = new GpuTensor<T>(backend, gradientBuffer, predicted.Shape.ToArray(), GpuTensorRole.Gradient);
+        var gradientTensor = GpuTensorHelper.UploadToGpu<T>(backend, gradientBuffer, predicted._shape, GpuTensorRole.Gradient);
 
         return (NumOps.FromDouble(lossValue), gradientTensor);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Huber: |d| <= delta ? 0.5*d² : delta*(|d| - 0.5*delta)
+        var diff = Engine.TensorSubtract(predicted, target);
+        var absDiff = Engine.TensorAbs(diff);
+        var squared = Engine.TensorMultiply(diff, diff);
+        var quadratic = Engine.TensorMultiplyScalar(squared, NumOps.FromDouble(0.5));
+        double deltaVal = NumOps.ToDouble(_delta);
+        var shifted = Engine.TensorSubtractScalar(absDiff, NumOps.FromDouble(deltaVal * 0.5));
+        var linear = Engine.TensorMultiplyScalar(shifted, _delta);
+        var mask = Engine.TensorLessThan(absDiff, _delta);
+        var result = Engine.TensorWhere(mask, quadratic, linear);
+        var allAxes = Enumerable.Range(0, result.Shape.Length).ToArray();
+        return Engine.ReduceMean(result, allAxes, keepDims: false);
     }
 }

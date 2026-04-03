@@ -1,7 +1,7 @@
-using AiDotNet.Autodiff;
-using AiDotNet.NeuralNetworks.Layers;
+﻿using AiDotNet.Autodiff;
+using AiDotNet.NeuralNetworks.Tabular;
 
-namespace AiDotNet.NeuralNetworks.Tabular;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// Implements the Feature Transformer block used in TabNet architecture.
@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public class FeatureTransformer<T> : LayerBase<T>
+public class FeatureTransformerLayer<T> : LayerBase<T>
 {
     private readonly int _inputDim;
     private readonly int _outputDim;
@@ -58,9 +58,6 @@ public class FeatureTransformer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Initializes a new instance of the FeatureTransformer class.
@@ -87,7 +84,7 @@ public class FeatureTransformer<T> : LayerBase<T>
     /// while step-specific layers allow each step to specialize.
     /// </para>
     /// </remarks>
-    public FeatureTransformer(
+    public FeatureTransformerLayer(
         int inputDim,
         int outputDim,
         List<FullyConnectedLayer<T>>? sharedLayers = null,
@@ -273,34 +270,6 @@ public class FeatureTransformer<T> : LayerBase<T>
         }
 
         return current;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the Feature Transformer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient flowing back from the next layer.</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var currentGrad = outputGradient;
-
-        // Backward through step-specific layers (in reverse order)
-        for (int i = _numStepSpecificLayers - 1; i >= 0; i--)
-        {
-            // TODO: Implement GLU backward and BN backward properly
-            // For now, simplified backward pass
-            currentGrad = _stepBNLayers[i].Backward(currentGrad);
-            currentGrad = _stepFCLayers[i].Backward(currentGrad);
-        }
-
-        // Backward through shared layers (in reverse order)
-        for (int i = _numSharedLayers - 1; i >= 0; i--)
-        {
-            currentGrad = _sharedBNLayers[i].Backward(currentGrad);
-            currentGrad = _sharedFCLayers[i].Backward(currentGrad);
-        }
-
-        return currentGrad;
     }
 
     /// <inheritdoc/>
@@ -492,24 +461,5 @@ public class FeatureTransformer<T> : LayerBase<T>
     {
         foreach (var fc in _sharedFCLayers) fc.SetTrainingMode(isTraining);
         foreach (var fc in _stepFCLayers) fc.SetTrainingMode(isTraining);
-    }
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Chain computation graphs through shared and step-specific FC layers
-        ComputationNode<T> current = _sharedFCLayers.Count > 0
-            ? _sharedFCLayers[0].ExportComputationGraph(inputNodes)
-            : throw new InvalidOperationException("No shared layers initialized.");
-
-        for (int i = 1; i < _sharedFCLayers.Count; i++)
-        {
-            current = _sharedFCLayers[i].ExportComputationGraph(inputNodes);
-        }
-
-        return current;
     }
 }

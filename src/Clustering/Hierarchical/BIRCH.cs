@@ -540,7 +540,7 @@ public class BIRCH<T> : ClusteringBase<T>
     /// </summary>
     public class CFEntry
     {
-        private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+        private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
         /// <summary>
         /// Number of points in the cluster.
@@ -572,10 +572,10 @@ public class BIRCH<T> : ClusteringBase<T>
         /// </summary>
         public static CFEntry FromPoint(T[] point)
         {
-            T ss = Ops.Zero;
+            T ss = NumOps.Zero;
             for (int i = 0; i < point.Length; i++)
             {
-                ss = Ops.Add(ss, Ops.Multiply(point[i], point[i]));
+                ss = NumOps.Add(ss, NumOps.Multiply(point[i], point[i]));
             }
 
             return new CFEntry(1, (T[])point.Clone(), ss);
@@ -588,18 +588,18 @@ public class BIRCH<T> : ClusteringBase<T>
         {
             int d = Math.Max(a.LS.Length, b.LS.Length);
             var ls = new T[d];
-            for (int i = 0; i < d; i++) ls[i] = Ops.Zero;
+            for (int i = 0; i < d; i++) ls[i] = NumOps.Zero;
 
             for (int i = 0; i < a.LS.Length; i++)
             {
-                ls[i] = Ops.Add(ls[i], a.LS[i]);
+                ls[i] = NumOps.Add(ls[i], a.LS[i]);
             }
             for (int i = 0; i < b.LS.Length; i++)
             {
-                ls[i] = Ops.Add(ls[i], b.LS[i]);
+                ls[i] = NumOps.Add(ls[i], b.LS[i]);
             }
 
-            return new CFEntry(a.N + b.N, ls, Ops.Add(a.SS, b.SS));
+            return new CFEntry(a.N + b.N, ls, NumOps.Add(a.SS, b.SS));
         }
 
         /// <summary>
@@ -612,17 +612,17 @@ public class BIRCH<T> : ClusteringBase<T>
             var cb = b.Centroid;
 
             int d = Math.Max(ca.Length, cb.Length);
-            T sum = Ops.Zero;
+            T sum = NumOps.Zero;
 
             for (int i = 0; i < d; i++)
             {
-                T va = i < ca.Length ? ca[i] : Ops.Zero;
-                T vb = i < cb.Length ? cb[i] : Ops.Zero;
-                T diff = Ops.Subtract(va, vb);
-                sum = Ops.Add(sum, Ops.Multiply(diff, diff));
+                T va = i < ca.Length ? ca[i] : NumOps.Zero;
+                T vb = i < cb.Length ? cb[i] : NumOps.Zero;
+                T diff = NumOps.Subtract(va, vb);
+                sum = NumOps.Add(sum, NumOps.Multiply(diff, diff));
             }
 
-            return Ops.Sqrt(sum);
+            return NumOps.Sqrt(sum);
         }
 
         /// <summary>
@@ -633,11 +633,11 @@ public class BIRCH<T> : ClusteringBase<T>
             get
             {
                 if (N == 0) return LS;
-                T nT = Ops.FromDouble(N);
+                T nT = NumOps.FromDouble(N);
                 var result = new T[LS.Length];
                 for (int i = 0; i < LS.Length; i++)
                 {
-                    result[i] = Ops.Divide(LS[i], nT);
+                    result[i] = NumOps.Divide(LS[i], nT);
                 }
                 return result;
             }
@@ -650,19 +650,19 @@ public class BIRCH<T> : ClusteringBase<T>
         {
             get
             {
-                if (N <= 1) return Ops.Zero;
+                if (N <= 1) return NumOps.Zero;
 
                 // Radius = sqrt((SS/N) - ||LS/N||²)
-                T centroidNormSq = Ops.Zero;
+                T centroidNormSq = NumOps.Zero;
                 var c = Centroid;
                 for (int i = 0; i < c.Length; i++)
                 {
-                    centroidNormSq = Ops.Add(centroidNormSq, Ops.Multiply(c[i], c[i]));
+                    centroidNormSq = NumOps.Add(centroidNormSq, NumOps.Multiply(c[i], c[i]));
                 }
 
-                T nT = Ops.FromDouble(N);
-                T variance = Ops.Subtract(Ops.Divide(SS, nT), centroidNormSq);
-                return Ops.GreaterThan(variance, Ops.Zero) ? Ops.Sqrt(variance) : Ops.Zero;
+                T nT = NumOps.FromDouble(N);
+                T variance = NumOps.Subtract(NumOps.Divide(SS, nT), centroidNormSq);
+                return NumOps.GreaterThan(variance, NumOps.Zero) ? NumOps.Sqrt(variance) : NumOps.Zero;
             }
         }
     }

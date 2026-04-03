@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -257,7 +257,7 @@ public class VAEResBlock<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ApplySiLUDerivative(Tensor<T> input, Tensor<T> gradient)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
         var inputSpan = input.AsSpan();
         var gradSpan = gradient.AsSpan();
         var outputSpan = output.AsWritableSpan();
@@ -268,48 +268,6 @@ public class VAEResBlock<T> : LayerBase<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the residual block.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of loss with respect to output.</param>
-    /// <returns>Gradient of loss with respect to input.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _norm1Output == null || _silu1Output == null ||
-            _conv1Output == null || _norm2Output == null || _silu2Output == null ||
-            _conv2Output == null || _skipOutput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        // Gradient flows through both main path and skip connection
-        var mainGradient = outputGradient;
-        var skipGradient = outputGradient;
-
-        // Backward through skip connection
-        Tensor<T> skipInputGrad;
-        if (_skipConv != null)
-        {
-            skipInputGrad = _skipConv.Backward(skipGradient);
-        }
-        else
-        {
-            skipInputGrad = skipGradient;
-        }
-
-        // Backward through main path: conv2 -> SiLU -> norm2 -> conv1 -> SiLU -> norm1
-        var conv2Grad = _conv2.Backward(mainGradient);
-        var silu2Grad = ApplySiLUDerivative(_norm2Output, conv2Grad);
-        var norm2Grad = _norm2.Backward(silu2Grad);
-
-        var conv1Grad = _conv1.Backward(norm2Grad);
-        var silu1Grad = ApplySiLUDerivative(_norm1Output, conv1Grad);
-        var norm1Grad = _norm1.Backward(silu1Grad);
-
-        // Sum gradients from main path and skip connection
-        return Engine.TensorAdd(norm1Grad, skipInputGrad);
     }
 
     /// <summary>
@@ -403,17 +361,6 @@ public class VAEResBlock<T> : LayerBase<T>
         _conv1.ResetState();
         _conv2.ResetState();
         _skipConv?.ResetState();
-    }
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "VAEResBlock JIT compilation is not yet implemented. " +
-            "Use the layer in interpreted mode by setting SupportsJitCompilation = false.");
     }
 
     /// <summary>

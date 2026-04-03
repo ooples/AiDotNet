@@ -1,8 +1,9 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -33,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj });")]
-public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IGraphConvolutionLayer<T>
+public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IGraphConvolutionLayer<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -804,7 +805,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     /// sparse aggregation provides significant speedup over dense operations.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -828,12 +829,12 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
 
         // Determine batch size and reshape if needed
         int batchSize;
-        IGpuTensor<T> processInput;
+        Tensor<T> processInput;
 
         if (rank == 2)
         {
             batchSize = 1;
-            processInput = input.CreateView(0, [1, input.Shape[0], input.Shape[1]]);
+            processInput = input.Reshape([1, input.Shape[0], input.Shape[1]]);
         }
         else if (rank == 3)
         {
@@ -846,7 +847,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
             for (int d = 0; d < rank - 2; d++)
                 flatBatch *= input.Shape[d];
             batchSize = flatBatch;
-            processInput = input.CreateView(0, [flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
+            processInput = input.Reshape([flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
         int numNodes = processInput.Shape[1];
@@ -855,7 +856,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
 
         // Step 1: X * W for all batches
         // Flatten [batch, nodes, inputFeatures] -> [batch*nodes, inputFeatures]
-        var inputFlat = processInput.CreateView(0, [batchSize * numNodes, inputFeatures]);
+        var inputFlat = processInput.Reshape([batchSize * numNodes, inputFeatures]);
 
         // Upload weights
         var weightsGpu = gpuEngine.UploadToGpu(_weights, GpuTensorRole.Weight);
@@ -863,9 +864,9 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         // MatMul: [batch*nodes, inputFeatures] @ [inputFeatures, outputFeatures] -> [batch*nodes, outputFeatures]
         var xwBuffer = backend.AllocateBuffer(batchSize * numNodes * outputFeatures);
         backend.Gemm(inputFlat.Buffer, weightsGpu.Buffer, xwBuffer, batchSize * numNodes, outputFeatures, inputFeatures);
-        var xwFlat = new GpuTensor<T>(backend, xwBuffer, [batchSize * numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
+        var xwFlat = GpuTensorHelper.UploadToGpu<T>(backend, xwBuffer, [batchSize * numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
 
-        IGpuTensor<T> output;
+        Tensor<T> output;
 
         if (_useSparseAggregation && _edgeSourceIndices != null && _edgeTargetIndices != null)
         {
@@ -920,7 +921,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
                 tgtBuffer.Dispose();
             }
 
-            var aggregated = new GpuTensor<T>(backend, outputBuffer, [batchSize, numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
+            var aggregated = GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, [batchSize, numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
             // Add bias: broadcast bias across batch and nodes
             var biasData = DirectGpuEngine.ToFloatArray<T>(_bias.Data.ToArray());
             using var biasBuffer = backend.AllocateBuffer(biasData);
@@ -959,7 +960,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
             var adjGpu = gpuEngine.UploadToGpu(adjForBatch, GpuTensorRole.Weight);
 
             // Reshape xwFlat from [batchSize*numNodes, outputFeatures] to [batchSize, numNodes, outputFeatures]
-            var xwBatched = xwFlat.CreateView(0, [batchSize, numNodes, outputFeatures]);
+            var xwBatched = xwFlat.Reshape([batchSize, numNodes, outputFeatures]);
 
             // GPU batched matmul: A[batch,nodes,nodes] @ XW[batch,nodes,outputFeatures] -> [batch,nodes,outputFeatures]
             // BatchedGemm expects: A[batchCount,M,K], B[batchCount,K,N] -> C[batchCount,M,N]
@@ -967,7 +968,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
             var outputBuffer = backend.AllocateBuffer(batchSize * numNodes * outputFeatures);
             backend.BatchedGemm(adjGpu.Buffer, xwBatched.Buffer, outputBuffer, numNodes, outputFeatures, numNodes, batchSize);
 
-            var matmulResult = new GpuTensor<T>(backend, outputBuffer, [batchSize, numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
+            var matmulResult = GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, [batchSize, numNodes, outputFeatures], GpuTensorRole.Intermediate, ownsBuffer: true);
             // Add bias: broadcast bias across batch and nodes
             var biasData2 = DirectGpuEngine.ToFloatArray<T>(_bias.Data.ToArray());
             using var biasBuffer2 = backend.AllocateBuffer(biasData2);
@@ -979,14 +980,14 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         var fusedActivation = GetFusedActivationType();
         if (fusedActivation != FusedActivationType.None)
         {
-            ApplyGpuActivation(backend, output.Buffer, output.Buffer, output.ElementCount, fusedActivation);
+            ApplyGpuActivation(backend, output.Buffer, output.Buffer, output.Length, fusedActivation);
         }
 
         // Cache for backward pass during training
         if (IsTrainingMode)
         {
-            _lastInput = processInput.ToTensor();
-            _lastOutput = output.ToTensor();
+            _lastInput = processInput;
+            _lastOutput = output;
             _lastNodeFeatures = _lastOutput;
         }
 
@@ -995,7 +996,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         {
             if (_originalInputShape.Length == 2)
             {
-                return output.CreateView(0, [numNodes, outputFeatures]);
+                return output.Reshape([numNodes, outputFeatures]);
             }
             else
             {
@@ -1003,7 +1004,7 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
                 for (int d = 0; d < _originalInputShape.Length - 1; d++)
                     newShape[d] = _originalInputShape[d];
                 newShape[_originalInputShape.Length - 1] = outputFeatures;
-                return output.CreateView(0, newShape);
+                return output.Reshape(newShape);
             }
         }
 
@@ -1042,233 +1043,6 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         var result = Engine.TensorMatMul(flattened, weights2D);
         // Unflatten: [batch * rows, output_cols] -> [batch, rows, output_cols]
         return result.Reshape([batch, rows, outputCols]);
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the graph convolutional layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when Forward has not been called before Backward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the graph convolutional layer, which is used during training
-    /// to propagate error gradients back through the network. It calculates the gradients for the weights and
-    /// biases, and returns the gradient with respect to the input for further backpropagation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
-    /// and parameters should change to reduce errors.
-    /// 
-    /// During the backward pass:
-    /// 1. The layer receives information about how its output should change to reduce the overall error
-    /// 2. It calculates how its weights and biases should change to produce better output
-    /// 3. It calculates how its input should change, which will be used by earlier layers
-    /// 
-    /// This complex calculation considers how information flows through the graph structure
-    /// and ensures that connected nodes properly influence each other during learning.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Reshape outputGradient to match _lastOutput's 3D shape if needed
-        var gradForBackward = outputGradient;
-        if (_originalInputShape != null && _originalInputShape.Length != 3 && outputGradient.Shape.Length != _lastOutput.Shape.Length)
-        {
-            gradForBackward = outputGradient.Reshape(_lastOutput.Shape.ToArray());
-        }
-
-        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, gradForBackward);
-
-        int batchSize = _lastInput.Shape[0];
-        int numNodes = _lastInput.Shape[1];
-        int inputFeatures = _lastInput.Shape[2];
-        int outputFeatures = _weights.Shape[1];
-
-        // Calculate bias gradient using ReduceSum: sum over batch and nodes (axes 0 and 1)
-        _biasGradient = Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
-
-        // Calculate weights gradient: dW = sum_b (X^T @ A^T @ dY)
-        // For batched: we need to transpose adjacency and input, then multiply
-        // dW = sum over batches of: input[b]^T @ (adj[b]^T @ actGrad[b])
-        _weightsGradient = new Tensor<T>([inputFeatures, outputFeatures]);
-        _weightsGradient.Fill(NumOps.Zero);
-
-        // Use the stored reshaped adjacency matrix for backward pass
-        var adjBatched = _adjForBatch ?? _adjacencyMatrix;
-
-        // Transpose adjacency matrix (batched transpose - swap last two dims for each batch element)
-        var adjTransposed = Engine.TensorPermute(adjBatched, [0, 2, 1]);
-
-        // For each batch, compute: input^T @ adj^T @ activationGradient
-        // This equals: (adj @ input)^T @ activationGradient for forward was: A @ X @ W
-        // Gradient: dW = X^T @ A^T @ dY (summed over batches)
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Extract batch slices
-            var inputBatch = Engine.TensorSlice(_lastInput, [b, 0, 0], [1, numNodes, inputFeatures]).Reshape([numNodes, inputFeatures]);
-            var adjTBatch = Engine.TensorSlice(adjTransposed, [b, 0, 0], [1, numNodes, numNodes]).Reshape([numNodes, numNodes]);
-            var gradBatch = Engine.TensorSlice(activationGradient, [b, 0, 0], [1, numNodes, outputFeatures]).Reshape([numNodes, outputFeatures]);
-
-            // inputT @ adjT @ gradBatch
-            var inputT = Engine.TensorTranspose(inputBatch); // [inputFeatures, numNodes]
-            var adjTGrad = Engine.TensorMatMul(adjTBatch, gradBatch); // [numNodes, outputFeatures]
-            var batchWeightGrad = Engine.TensorMatMul(inputT, adjTGrad); // [inputFeatures, outputFeatures]
-
-            _weightsGradient = Engine.TensorAdd(_weightsGradient, batchWeightGrad);
-        }
-
-        // Calculate input gradient: dX = A^T @ dY @ W^T
-        var weightsT = Engine.TensorTranspose(_weights); // [outputFeatures, inputFeatures]
-
-        // For batched computation
-        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
-        inputGradient.Fill(NumOps.Zero);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            var adjTBatch = Engine.TensorSlice(adjTransposed, [b, 0, 0], [1, numNodes, numNodes]).Reshape([numNodes, numNodes]);
-            var gradBatch = Engine.TensorSlice(activationGradient, [b, 0, 0], [1, numNodes, outputFeatures]).Reshape([numNodes, outputFeatures]);
-
-            // adjT @ gradBatch @ weightsT
-            var adjTGrad = Engine.TensorMatMul(adjTBatch, gradBatch); // [numNodes, outputFeatures]
-            var inputGradBatch = Engine.TensorMatMul(adjTGrad, weightsT); // [numNodes, inputFeatures]
-
-            // Set slice in inputGradient
-            inputGradient = Engine.TensorSetSlice(inputGradient, inputGradBatch.Reshape([1, numNodes, inputFeatures]), [b, 0, 0]);
-        }
-
-        // Reshape back to original input shape if it was not 3D
-        if (_originalInputShape != null && _originalInputShape.Length != 3)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation with production-grade pattern:
-    /// - Uses cached forward pass values for activation derivative computation
-    /// - Uses Tensor.FromRowMatrix/FromVector for efficient conversions
-    /// - Builds minimal autodiff graph for gradient routing
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _adjacencyMatrix == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Reshape outputGradient to match _lastOutput's 3D shape if needed
-        var gradForBackward = outputGradient;
-        if (_originalInputShape != null && _originalInputShape.Length != 3 && outputGradient.Shape.Length != _lastOutput.Shape.Length)
-        {
-            gradForBackward = outputGradient.Reshape(_lastOutput.Shape.ToArray());
-        }
-
-        // Production-grade: Compute activation derivative using cached output
-        Tensor<T> preActivationGradient;
-        if (VectorActivation != null)
-        {
-            var actDeriv = VectorActivation.Derivative(_lastOutput);
-            preActivationGradient = Engine.TensorMultiply(gradForBackward, actDeriv);
-        }
-        else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
-        {
-            var activation = ScalarActivation;
-            var activationDerivative = _lastOutput.Transform((x, _) => activation.Derivative(x));
-            preActivationGradient = Engine.TensorMultiply(gradForBackward, activationDerivative);
-        }
-        else
-        {
-            preActivationGradient = gradForBackward;
-        }
-
-        // Create computation nodes (weights/bias already Tensor<T>)
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-        var adjNode = Autodiff.TensorOperations<T>.Variable(_adjacencyMatrix, "adjacency", requiresGradient: false);
-        var weightsNode = Autodiff.TensorOperations<T>.Variable(_weights, "weights", requiresGradient: true);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(_bias, "bias", requiresGradient: true);
-
-        // Build minimal autodiff graph for linear operations (activation derivative already applied)
-        var preActivationNode = Autodiff.TensorOperations<T>.GraphConv(inputNode, adjNode, weightsNode, biasNode);
-
-        // Set gradient on pre-activation node (activation derivative already applied)
-        preActivationNode.Gradient = preActivationGradient;
-
-        // Inline topological sort and backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((preActivationNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract gradients (already Tensor<T>)
-        _weightsGradient = weightsNode.Gradient;
-        _biasGradient = biasNode.Gradient;
-
-        // Return input gradient
-        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-
-        // Reshape back to original input shape if it was not 3D
-        if (_originalInputShape != null && _originalInputShape.Length != 3)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
     }
 
     private Tensor<T>? _weightsVelocity;
@@ -1364,8 +1138,8 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     {
         // Use Vector.Concatenate to efficiently combine all parameters
         return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_weights.Data),
-            Vector<T>.FromMemory(_bias.Data)
+            new Vector<T>(_weights.ToArray()),
+            new Vector<T>(_bias.ToArray())
         );
     }
 
@@ -1429,8 +1203,8 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         }
 
         return Vector<T>.Concatenate(
-            (_weightsGradient is not null ? Vector<T>.FromMemory(_weightsGradient.Data) : new Vector<T>(0)),
-            (_biasGradient is not null ? Vector<T>.FromMemory(_biasGradient.Data) : new Vector<T>(0))
+            new Vector<T>(_weightsGradient.ToArray()),
+            new Vector<T>(_biasGradient.ToArray())
         );
     }
 
@@ -1641,52 +1415,4 @@ public class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
 
         return diagnostics;
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (_weights == null || _bias == null)
-            throw new InvalidOperationException("Layer not initialized. Call Initialize() first.");
-
-        if (_adjacencyMatrix == null)
-            throw new InvalidOperationException("Adjacency matrix not set. Call SetAdjacencyMatrix() first.");
-
-        // Create symbolic input [numNodes, inputFeatures]
-        var symbolicInput = new Tensor<T>([1, .. InputShape]);
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Convert adjacency matrix to constant node
-        var adjNode = TensorOperations<T>.Constant(_adjacencyMatrix, "adjacency");
-
-        // Weights are already Tensor<T>, use them directly
-        var weightsNode = TensorOperations<T>.Constant(_weights, "weights");
-
-        // Use GraphConv operation: output = adjacency @ input @ weights
-        var convOutput = TensorOperations<T>.GraphConv(inputNode, adjNode, weightsNode);
-
-        // Bias is already Tensor<T>, use directly
-        var biasNode = TensorOperations<T>.Constant(_bias, "bias");
-        var output = TensorOperations<T>.Add(convOutput, biasNode);
-
-        // Apply activation if present
-        if (ScalarActivation != null && ScalarActivation.SupportsJitCompilation)
-        {
-            output = ScalarActivation.ApplyToGraph(output);
-        }
-        else if (VectorActivation != null && VectorActivation.SupportsJitCompilation)
-        {
-            output = VectorActivation.ApplyToGraph(output);
-        }
-
-        return output;
-    }
-
-    public override bool SupportsJitCompilation => _weights != null && _bias != null && _adjacencyMatrix != null;
-
 }

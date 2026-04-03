@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
@@ -131,7 +131,6 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
-        EnableDeterministicMode();
         InitializeLayers();
     }
 
@@ -246,75 +245,19 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
         return output;
     }
 
-    /// <summary>
-    /// Performs backward propagation through the network.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the output.</param>
-    /// <returns>The gradient of the loss with respect to the input.</returns>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        Tensor<T> gradient = outputGradient;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-        return gradient;
-    }
-
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // Set eval mode on layers for BN (use running stats, not batch stats)
-        // Per Ioffe & Szegedy 2015: BN with batch_size=1 normalizes variance to 0
+        // Set eval mode on all layers for inference (BN uses running stats)
         foreach (var layer in Layers)
             layer.SetTrainingMode(false);
-        try
-        {
-            return Forward(input);
-        }
-        finally
-        {
-            // Predict leaves layers in eval mode; callers (e.g., Train) set
-            // training mode explicitly before forward/backward passes.
-        }
+        return Forward(input);
     }
 
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        SetTrainingMode(true);
-        // Set training mode for forward/backward computation.
-        // Standalone BN layers need eval mode (batch_size=1 makes BN gradient zero).
-        // Composite layers (DenseBlock, TransitionLayer) stay in training mode
-        // because their internal BN backward pass is needed for gradient flow.
-        foreach (var layer in Layers)
-        {
-            if (layer is BatchNormalizationLayer<T>)
-                layer.SetTrainingMode(false); // Standalone BN: eval mode
-            else
-                layer.SetTrainingMode(true); // Composites: training mode (propagates to internal BN too)
-        }
-        var prediction = ForwardWithMemory(input);
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
-
-        var outputGradient = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-
-        // Gradient clipping per Huang et al. 2017 for stability in deep networks
-        var gradTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-        T gradNorm = NumOps.Sqrt(Engine.DotProduct(outputGradient, outputGradient));
-        double gradNormVal = NumOps.ToDouble(gradNorm);
-        if (gradNormVal > 1.0)
-        {
-            T scale = NumOps.FromDouble(1.0 / gradNormVal);
-            gradTensor = Engine.TensorMultiplyScalar(gradTensor, scale);
-        }
-        Backpropagate(gradTensor);
-
-        // Update parameters with configured optimizer (e.g., Adam)
-        _optimizer.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+        TrainWithTape(input, expectedOutput, _optimizer);
     }
 
     /// <inheritdoc />
@@ -394,8 +337,7 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
             _configuration.InputWidth,
             _configuration.InputChannels,
             _configuration.GrowthRate,
-            _configuration.CompressionFactor,
-            _configuration.GetBlockLayers());
+            _configuration.CompressionFactor);
 
         return new DenseNetNetwork<T>(Architecture, config, _optimizer, _lossFunction);
     }

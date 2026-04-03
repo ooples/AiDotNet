@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -547,228 +547,6 @@ public class MesaNetLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var lastInput = _lastInput ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastOutput = _lastOutput ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastNormalized = _lastNormalized ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastQuery = _lastQuery ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastKey = _lastKey ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastValue = _lastValue ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastGate = _lastGate ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastGateRaw = _lastGateRaw ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastMesaOutput = _lastMesaOutput ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastInnerWeights = _lastInnerWeights ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        var lastPMatrices = _lastPMatrices ?? throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = lastInput.Shape[0];
-        int seqLen = lastInput.Shape[1];
-
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        var activationGrad = ApplyActivationDerivative(lastOutput, grad3D);
-
-        var dResidual = activationGrad;
-        var dProjected = activationGrad;
-
-        // Initialize gradients
-        _queryWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _queryBiasGradient = new Tensor<T>([_modelDimension]);
-        _keyWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _keyBiasGradient = new Tensor<T>([_modelDimension]);
-        _valueWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _valueBiasGradient = new Tensor<T>([_modelDimension]);
-        _innerWeightsInitGradient = new Tensor<T>([_numHeads, _headDimension, _headDimension]);
-        _outputGateWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputGateBiasGradient = new Tensor<T>([_modelDimension]);
-        _outputProjectionWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputProjectionBiasGradient = new Tensor<T>([_modelDimension]);
-        _lnGammaGradient = new Tensor<T>([_modelDimension]);
-        _lnBetaGradient = new Tensor<T>([_modelDimension]);
-
-        // Step 6 backward: output projection
-        var gradFlat = dProjected.Reshape(batchSize * seqLen, _modelDimension);
-        _outputProjectionBiasGradient = Engine.ReduceSum(dProjected, new int[] { 0, 1 });
-
-        var gatedFlat = Engine.TensorMultiply(lastMesaOutput, lastGate)
-            .Reshape(batchSize * seqLen, _modelDimension);
-        _outputProjectionWeightsGradient = Engine.TensorMatMul(gatedFlat.Transpose([1, 0]), gradFlat);
-
-        var dGated = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
-            .Reshape(batchSize, seqLen, _modelDimension);
-
-        // Step 5 backward: gating
-        var dMesaOut = Engine.TensorMultiply(dGated, lastGate);
-        var dGateSwish = Engine.TensorMultiply(dGated, lastMesaOutput);
-        var dGateRaw = Engine.TensorMultiply(dGateSwish, ComputeSiLUDerivative(lastGateRaw));
-
-        var normFlat = lastNormalized.Reshape(batchSize * seqLen, _modelDimension);
-        var dGateRawFlat = dGateRaw.Reshape(batchSize * seqLen, _modelDimension);
-        _outputGateWeightsGradient = Engine.TensorMatMul(normFlat.Transpose([1, 0]), dGateRawFlat);
-        _outputGateBiasGradient = Engine.ReduceSum(dGateRaw, new int[] { 0, 1 });
-
-        var dNormFromGate = Engine.TensorMatMul(dGateRawFlat, _outputGateWeights.Transpose([1, 0]));
-
-        // Step 4 backward: Mesa recurrence (approximate via BPTT through W updates)
-        var dQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dInnerW = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-
-        for (int t = seqLen - 1; t >= 0; t--)
-        {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
-
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    // Output: o = W_t * q -> dW_t += dO * q^T, dQ += W_t^T * dO
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T dO = dMesaOut[new[] { bi, t, flatDi }];
-
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            int flatDj = dimStart + dj;
-                            T qVal = lastQuery[new[] { bi, t, flatDj }];
-                            T wVal = lastInnerWeights[new[] { bi, t + 1, hi, di, dj }];
-
-                            dInnerW[new[] { bi, hi, di, dj }] = NumOps.Add(
-                                dInnerW[new[] { bi, hi, di, dj }],
-                                NumOps.Multiply(dO, qVal));
-
-                            dQ[new[] { bi, t, flatDj }] = NumOps.Add(
-                                dQ[new[] { bi, t, flatDj }],
-                                NumOps.Multiply(wVal, dO));
-                        }
-                    }
-
-                    // Backward through W update: W_t = W_{t-1} - error * kP
-                    // where error = W_{t-1}*k - v and kP = k^T * P_t
-                    var kHead = new T[_headDimension];
-                    var vHead = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        kHead[di] = lastKey[new[] { bi, t, dimStart + di }];
-                        vHead[di] = lastValue[new[] { bi, t, dimStart + di }];
-                    }
-
-                    // Recompute error using W_{t-1}
-                    var error = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        T wk = NumOps.Zero;
-                        for (int dj = 0; dj < _headDimension; dj++)
-                            wk = NumOps.Add(wk,
-                                NumOps.Multiply(lastInnerWeights[new[] { bi, t, hi, di, dj }], kHead[dj]));
-                        error[di] = NumOps.Subtract(wk, vHead[di]);
-                    }
-
-                    // Recompute kP using P_t
-                    var kP = new T[_headDimension];
-                    for (int dj = 0; dj < _headDimension; dj++)
-                    {
-                        kP[dj] = NumOps.Zero;
-                        for (int di = 0; di < _headDimension; di++)
-                            kP[dj] = NumOps.Add(kP[dj],
-                                NumOps.Multiply(kHead[di], lastPMatrices[new[] { bi, t + 1, hi, di, dj }]));
-                    }
-
-                    // Propagate through W_t = W_{t-1} - error * kP^T
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        T dErrorAccum = NumOps.Zero;
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            T dW_ij = dInnerW[new[] { bi, hi, di, dj }];
-
-                            // dK contribution from error*kP term
-                            dK[new[] { bi, t, dimStart + dj }] = NumOps.Subtract(
-                                dK[new[] { bi, t, dimStart + dj }],
-                                NumOps.Multiply(error[di], dW_ij));
-
-                            dErrorAccum = NumOps.Add(dErrorAccum,
-                                NumOps.Multiply(dW_ij, kP[dj]));
-                        }
-
-                        T dError_di = NumOps.Negate(dErrorAccum);
-
-                        // dV from error = Wk - v -> dV = -dError
-                        dV[new[] { bi, t, dimStart + di }] = NumOps.Subtract(
-                            dV[new[] { bi, t, dimStart + di }], dError_di);
-
-                        // dW_{t-1} from error = W*k - v
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            dInnerW[new[] { bi, hi, di, dj }] = NumOps.Add(
-                                dInnerW[new[] { bi, hi, di, dj }],
-                                NumOps.Multiply(dError_di, kHead[dj]));
-                        }
-
-                        // dK from error = W*k - v
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            T wPrev = lastInnerWeights[new[] { bi, t, hi, di, dj }];
-                            dK[new[] { bi, t, dimStart + dj }] = NumOps.Add(
-                                dK[new[] { bi, t, dimStart + dj }],
-                                NumOps.Multiply(dError_di, wPrev));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Accumulate W_0 gradient
-        for (int bi = 0; bi < batchSize; bi++)
-            for (int hi = 0; hi < _numHeads; hi++)
-                for (int di = 0; di < _headDimension; di++)
-                    for (int dj = 0; dj < _headDimension; dj++)
-                        _innerWeightsInitGradient[new[] { hi, di, dj }] = NumOps.Add(
-                            _innerWeightsInitGradient[new[] { hi, di, dj }],
-                            dInnerW[new[] { bi, hi, di, dj }]);
-
-        // Q, K, V projection gradients
-        var dQFlat = dQ.Reshape(batchSize * seqLen, _modelDimension);
-        var dKFlat = dK.Reshape(batchSize * seqLen, _modelDimension);
-        var dVFlat = dV.Reshape(batchSize * seqLen, _modelDimension);
-
-        _queryWeightsGradient = Engine.TensorMatMul(normFlat.Transpose([1, 0]), dQFlat);
-        _queryBiasGradient = Engine.ReduceSum(dQ, new int[] { 0, 1 });
-        _keyWeightsGradient = Engine.TensorMatMul(normFlat.Transpose([1, 0]), dKFlat);
-        _keyBiasGradient = Engine.ReduceSum(dK, new int[] { 0, 1 });
-        _valueWeightsGradient = Engine.TensorMatMul(normFlat.Transpose([1, 0]), dVFlat);
-        _valueBiasGradient = Engine.ReduceSum(dV, new int[] { 0, 1 });
-
-        // Gradient to normalized input
-        var dNormFromQKV = Engine.TensorMatMul(dQFlat, _queryWeights.Transpose([1, 0]));
-        dNormFromQKV = Engine.TensorAdd(dNormFromQKV,
-            Engine.TensorMatMul(dKFlat, _keyWeights.Transpose([1, 0])));
-        dNormFromQKV = Engine.TensorAdd(dNormFromQKV,
-            Engine.TensorMatMul(dVFlat, _valueWeights.Transpose([1, 0])));
-
-        var dNormTotal = Engine.TensorAdd(dNormFromQKV, dNormFromGate);
-        var dNorm3D = dNormTotal.Reshape(batchSize, seqLen, _modelDimension);
-
-        // Layer norm backward
-        var dInput = LayerNormBackward(dNorm3D, lastInput, batchSize, seqLen);
-
-        // Add residual gradient
-        dInput = Engine.TensorAdd(dInput, dResidual);
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return dInput.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return dInput.Reshape(_originalInputShape);
-
-        return dInput;
-    }
-
     private Tensor<T> LayerNormBackward(Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
     {
         var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
@@ -909,15 +687,15 @@ public class MesaNetLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
-            (_queryBiasGradient is not null ? Vector<T>.FromMemory(_queryBiasGradient.Data) : new Vector<T>(0)),
-            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
-            (_keyBiasGradient is not null ? Vector<T>.FromMemory(_keyBiasGradient.Data) : new Vector<T>(0)),
-            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
-            (_valueBiasGradient is not null ? Vector<T>.FromMemory(_valueBiasGradient.Data) : new Vector<T>(0)),
-            (_innerWeightsInitGradient is not null ? Vector<T>.FromMemory(_innerWeightsInitGradient.Data) : new Vector<T>(0)),
-            (_lnGammaGradient is not null ? Vector<T>.FromMemory(_lnGammaGradient.Data) : new Vector<T>(0)),
-            (_lnBetaGradient is not null ? Vector<T>.FromMemory(_lnBetaGradient.Data) : new Vector<T>(0)));
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_queryBiasGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_keyBiasGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_valueBiasGradient!.ToArray()),
+            new Vector<T>(_innerWeightsInitGradient!.ToArray()),
+            new Vector<T>(_lnGammaGradient!.ToArray()),
+            new Vector<T>(_lnBetaGradient!.ToArray()));
     }
 
     public override void ClearGradients()
@@ -957,31 +735,6 @@ public class MesaNetLayer<T> : LayerBase<T>
     }
 
     #endregion
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
-        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
-        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(outWeightsNode);
-        inputNodes.Add(outBiasNode);
-
-        var outT = TensorOperations<T>.Transpose(outWeightsNode);
-        var finalOutput = TensorOperations<T>.MatrixMultiply(xNode, outT);
-        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
-
-        return outputWithBias;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

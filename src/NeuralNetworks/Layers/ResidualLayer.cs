@@ -1,4 +1,5 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Helpers;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -144,7 +145,7 @@ public class ResidualLayer<T> : LayerBase<T>
     /// All operations remain on GPU until explicit download is requested.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -154,7 +155,7 @@ public class ResidualLayer<T> : LayerBase<T>
 
         var input = inputs[0];
 
-        IGpuTensor<T> result;
+        Tensor<T> result;
 
         if (_innerLayer != null && _innerLayer.CanExecuteOnGpu)
         {
@@ -168,14 +169,14 @@ public class ResidualLayer<T> : LayerBase<T>
             // Skip this expensive download during inference (50% overhead reduction)
             if (IsTrainingMode)
             {
-                _lastInput = input.ToTensor();
-                _lastInnerOutput = innerOutput.ToTensor();
+                _lastInput = input;
+                _lastInnerOutput = innerOutput;
             }
         }
         else if (_innerLayer != null)
         {
             // Inner layer doesn't support GPU - must use CPU for inner layer
-            var inputCpu = input.ToTensor();
+            var inputCpu = input;
             var innerOutputCpu = _innerLayer.Forward(inputCpu);
 
             // Cache state for backward pass only during training
@@ -190,10 +191,7 @@ public class ResidualLayer<T> : LayerBase<T>
             if (backend == null)
                 throw new InvalidOperationException("GPU backend is not available");
 
-            var innerOutputGpu = new GpuTensor<T>(
-                backend,
-                innerOutputCpu,
-                GpuTensorRole.Intermediate);
+            var innerOutputGpu = GpuTensorHelper.UploadToGpu(backend, innerOutputCpu, GpuTensorRole.Intermediate);
 
             result = gpuEngine.AddGpu(input, innerOutputGpu);
         }
@@ -205,7 +203,7 @@ public class ResidualLayer<T> : LayerBase<T>
             // Cache state for backward pass only during training
             if (IsTrainingMode)
             {
-                _lastInput = input.ToTensor();
+                _lastInput = input;
                 _lastInnerOutput = null;
             }
         }
@@ -218,82 +216,6 @@ public class ResidualLayer<T> : LayerBase<T>
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Computes the gradient of the loss with respect to the input on the GPU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// For residual connection: output = activation(input + innerLayer(input))
-    /// Gradient flows to both the input directly and through the inner layer.
-    /// </remarks>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend unavailable.");
-
-        // Apply activation backward if needed
-        IGpuTensor<T> gradAfterActivation = outputGradient;
-        var fusedOp = MapActivationToFused();
-        if (fusedOp != FusedActivationType.None && _lastInnerOutput != null)
-        {
-            // Need the sum (input + innerOutput) for activation backward
-            var lastInputGpu = gpuEngine.UploadToGpu<T>(_lastInput, GpuTensorRole.Activation);
-            var lastInnerGpu = gpuEngine.UploadToGpu<T>(_lastInnerOutput, GpuTensorRole.Activation);
-            var sumGpu = gpuEngine.AddGpu(lastInputGpu, lastInnerGpu);
-
-            gradAfterActivation = fusedOp switch
-            {
-                FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(outputGradient, sumGpu),
-                FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(outputGradient, sumGpu),
-                FusedActivationType.Tanh => gpuEngine.TanhBackwardGpu<T>(outputGradient, sumGpu),
-                FusedActivationType.LeakyReLU => gpuEngine.LeakyReluBackwardGpu<T>(outputGradient, sumGpu),
-                FusedActivationType.Swish => gpuEngine.SwishBackwardGpu<T>(outputGradient, sumGpu),
-                _ => outputGradient
-            };
-            lastInputGpu.Dispose();
-            lastInnerGpu.Dispose();
-            sumGpu.Dispose();
-        }
-
-        // For addition, gradient flows equally to both inputs
-        // inputGradient = gradAfterActivation (direct path) + innerLayer.BackwardGpu(gradAfterActivation)
-
-        if (_innerLayer != null)
-        {
-            // Try to call inner layer's BackwardGpu if available
-            var innerLayerType = _innerLayer.GetType();
-            var backwardGpuMethod = innerLayerType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
-            if (backwardGpuMethod != null)
-            {
-                var innerGrad = (IGpuTensor<T>)(backwardGpuMethod.Invoke(_innerLayer, new object[] { gradAfterActivation })
-                    ?? throw new InvalidOperationException("BackwardGpu returned null."));
-                // Total gradient = direct gradient + inner layer gradient
-                var result = gpuEngine.AddGpu(gradAfterActivation, innerGrad);
-                innerGrad.Dispose();
-                return result;
-            }
-            else
-            {
-                // Fallback to CPU backward
-                var cpuGrad = gradAfterActivation.ToTensor();
-                var cpuInnerGrad = _innerLayer.Backward(cpuGrad);
-                var innerGradGpu = gpuEngine.UploadToGpu<T>(cpuInnerGrad, GpuTensorRole.Gradient);
-                var result = gpuEngine.AddGpu(gradAfterActivation, innerGradGpu);
-                innerGradGpu.Dispose();
-                return result;
-            }
-        }
-
-        // No inner layer - gradient passes through directly
-        return gradAfterActivation;
     }
 
     /// <summary>
@@ -454,139 +376,6 @@ public class ResidualLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass of the residual layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the residual layer, which is used during training to propagate
-    /// error gradients back through the network. It computes gradients for the inner layer (if present) and returns
-    /// the gradient with respect to the input.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
-    /// should change to reduce errors.
-    ///
-    /// During the backward pass:
-    /// - The method throws an error if the forward pass hasn't been called first
-    /// - The gradient is computed for the combined output after the addition
-    /// - If there's an inner layer, the gradient is propagated through it
-    /// - The original gradient and the inner layer gradient are combined
-    /// - The combined gradient is returned for further backpropagation
-    ///
-    /// This process ensures that gradient information flows both through the inner layer
-    /// and directly back to earlier layers, preventing the vanishing gradient problem
-    /// in deep networks.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Use cached values from Forward() to avoid recomputing and corrupting inner layer state
-        // Forward does: result = _lastInnerOutput == null ? input : input.Add(_lastInnerOutput)
-        var combinedOutput = _lastInnerOutput == null
-            ? _lastInput
-            : Engine.TensorAdd(_lastInput, _lastInnerOutput);
-
-        // ApplyActivationDerivative already includes the outputGradient multiplication,
-        // so we use the result directly (no additional multiplication needed)
-        var combinedGradient = ApplyActivationDerivative(combinedOutput, outputGradient);
-
-        // When there's no inner layer, forward pass just applies activation to input
-        // So backward pass just applies activation derivative
-        if (_innerLayer == null)
-        {
-            return combinedGradient;
-        }
-
-        var innerGradient = _innerLayer.Backward(combinedGradient);
-        return Engine.TensorAdd(combinedGradient, innerGradient);
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation with production-grade optimizations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses a production-grade pattern for computing gradients:
-    /// - Uses cached values from forward pass (_lastInput, _lastInnerOutput) for locality caching
-    /// - Uses Tensor.Transform for vectorized activation derivative computation
-    /// - Uses Engine.TensorMultiply for GPU/CPU accelerated element-wise operations
-    /// - Builds minimal autodiff graph only for gradient routing
-    /// </para>
-    /// <para>
-    /// For residual: output = activation(input + innerLayer(input))
-    /// Gradient: d(output)/d(input) = activation'(combinedOutput) * (1 + d(innerLayer)/d(input))
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Step 1: Compute combined output from cached values (locality caching)
-        // Forward does: result = _lastInnerOutput == null ? input : input.Add(_lastInnerOutput)
-        var combinedOutput = _lastInnerOutput == null
-            ? _lastInput
-            : Engine.TensorAdd(_lastInput, _lastInnerOutput);
-
-        // Step 2: Compute activation derivative using cached combined output
-        Tensor<T> combinedGradient;
-        if (VectorActivation != null)
-        {
-            // Production-grade: Handle VectorActivation derivative
-            var activationDerivative = VectorActivation.Derivative(combinedOutput);
-            combinedGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
-        }
-        else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
-        {
-            // Production-grade: Use cached combinedOutput for activation derivative
-            var activation = ScalarActivation;
-
-            // Vectorized activation derivative via Tensor.Transform
-            var activationDerivative = combinedOutput.Transform((x, _) => activation.Derivative(x));
-
-            // GPU/CPU accelerated element-wise multiply via Engine.TensorMultiply
-            combinedGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
-        }
-        else
-        {
-            // Identity activation: gradient passes through unchanged
-            combinedGradient = outputGradient;
-        }
-
-        // Step 3: For residual, gradient flows to both skip connection and inner layer
-        // d(input + innerLayer(input))/d(input) = 1 + d(innerLayer)/d(input)
-        if (_innerLayer == null)
-        {
-            // No inner layer: gradient just flows through skip connection
-            return combinedGradient;
-        }
-
-        // Route gradient to inner layer and combine with skip connection gradient
-        var innerGradient = _innerLayer.Backward(combinedGradient);
-
-        // Skip connection gradient + inner branch gradient
-        return Engine.TensorAdd(combinedGradient, innerGradient);
-    }
-
-    /// <summary>
     /// Updates the parameters of the inner layer using the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
@@ -709,83 +498,6 @@ public class ResidualLayer<T> : LayerBase<T>
         _lastInput = null;
         _lastInnerOutput = null;
         _innerLayer?.ResetState();
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> if the activation and inner layer (if present) support JIT compilation; otherwise, <c>false</c>.
-    /// </value>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // Check if activation can be jitted
-            if (!CanActivationBeJitted())
-                return false;
-
-            // Check if inner layer (if present) supports JIT
-            if (_innerLayer is not null && !_innerLayer.SupportsJitCompilation)
-                return false;
-
-            return true;
-        }
-    }
-
-    /// <summary>
-    /// Exports the residual layer's forward pass as a JIT-compilable computation graph.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the residual connection with activation.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph for the residual connection: output = activation(input + innerLayer(input)).
-    /// If there is no inner layer, it simply returns: output = activation(input).
-    /// </para>
-    /// </remarks>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (!CanActivationBeJitted())
-            throw new NotSupportedException("Activation function not supported for JIT compilation.");
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create placeholder for input data
-        var inputPlaceholder = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = Autodiff.TensorOperations<T>.Variable(inputPlaceholder, "input");
-
-        inputNodes.Add(inputNode);
-
-        Autodiff.ComputationNode<T> resultNode;
-
-        if (_innerLayer is not null)
-        {
-            // Build computation graph for inner layer
-            var innerInputNodes = new List<Autodiff.ComputationNode<T>>();
-            var innerOutput = _innerLayer.ExportComputationGraph(innerInputNodes);
-
-            // For the residual connection, we need to pass the same input to the inner layer
-            // This is a simplification - in a full implementation, we would need to properly
-            // connect the input node to the inner layer's computation graph
-
-            // Residual connection: add input + innerLayer(input)
-            resultNode = Autodiff.TensorOperations<T>.Add(inputNode, innerOutput);
-        }
-        else
-        {
-            // No inner layer, just pass through
-            resultNode = inputNode;
-        }
-
-        // Apply activation using LayerBase helper
-        var activatedOutput = ApplyActivationToGraph(resultNode);
-
-        return activatedOutput;
     }
 
     public override void ClearGradients()

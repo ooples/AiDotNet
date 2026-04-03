@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
@@ -172,17 +172,8 @@ public class AutoIntNetwork<T> : NeuralNetworkBase<T>
 
         LastLoss = _lossFunction.CalculateLoss(currentOutput.ToVector(), expectedOutput.ToVector());
         Vector<T> lossGrad = _lossFunction.CalculateDerivative(currentOutput.ToVector(), expectedOutput.ToVector());
-        Tensor<T> error = Tensor<T>.FromVector(lossGrad, currentOutput.Shape.ToArray());
-        BackpropagateError(error);
+        Tensor<T> error = Tensor<T>.FromVector(lossGrad, currentOutput._shape);
         UpdateNetworkParameters();
-    }
-
-    private void BackpropagateError(Tensor<T> error)
-    {
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            error = Layers[i].Backward(error);
-        }
     }
 
     private void UpdateNetworkParameters()

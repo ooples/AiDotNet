@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -289,7 +289,6 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
             for (int b = 0; b < data.Rows; b += batchSize)
             {
                 int end = Math.Min(b + batchSize, data.Rows);
-                TrainMaskedPrediction(transformedData, b, end, lr);
             }
         }
 
@@ -362,64 +361,6 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
     #endregion
 
     #region Training
-
-    private void TrainMaskedPrediction(Matrix<T> data, int startRow, int endRow, T lr)
-    {
-        int embDim = _options.EmbeddingDimension;
-
-        for (int row = startRow; row < endRow; row++)
-        {
-            var x = GetRow(data, row);
-
-            // Create column embeddings
-            var colEmbeds = new List<Vector<T>>();
-            for (int c = 0; c < _numColumns; c++)
-            {
-                var colVals = ExtractColumnValues(x, c);
-                colEmbeds.Add(EmbedColumn(c, colVals));
-            }
-
-            // Determine which columns to mask
-            int numMask = Math.Max(1, (int)(_numColumns * _options.MaskRatio));
-            var maskIndices = new HashSet<int>();
-            while (maskIndices.Count < numMask)
-            {
-                maskIndices.Add(_random.Next(_numColumns));
-            }
-
-            // Replace masked embeddings with noise
-            foreach (int idx in maskIndices)
-            {
-                colEmbeds[idx] = CreateStandardNormalVector(embDim);
-            }
-
-            // Forward through transformer
-            var contextual = ApplyTransformer(colEmbeds);
-
-            // Compute reconstruction loss for masked columns only
-            foreach (int maskedCol in maskIndices)
-            {
-                var decoded = DecoderForward(maskedCol, contextual[maskedCol]);
-                var target = ExtractColumnValues(x, maskedCol);
-                int colWidth = _colWidths[maskedCol];
-
-                // MSE gradient
-                var grad = new Tensor<T>([colWidth]);
-                for (int j = 0; j < colWidth; j++)
-                {
-                    double diff = NumOps.ToDouble(decoded[j]) - NumOps.ToDouble(target[j]);
-                    grad[j] = NumOps.FromDouble(2.0 * diff);
-                }
-
-                // Sanitize and clip gradient
-                grad = SanitizeAndClipGradient(grad, 5.0);
-
-                // Backward through decoder
-                _colDecoders[maskedCol].Backward(grad);
-                _colDecoders[maskedCol].UpdateParameters(lr);
-            }
-        }
-    }
 
     #endregion
 
@@ -792,11 +733,6 @@ public class TabTransformerGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTab
     #endregion
 
     #region IJitCompilable Override
-
-    /// <summary>
-    /// TabTransformerGen uses masked prediction with column-wise attention which cannot be represented as a single computation graph.
-    /// </summary>
-    public override bool SupportsJitCompilation => false;
 
     #endregion
 }

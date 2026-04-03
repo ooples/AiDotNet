@@ -1,4 +1,4 @@
-using AiDotNet.Extensions;
+﻿using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -365,7 +365,7 @@ public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
         Matrix<T> accumulatedOutput = inputMatrix.Multiply(_accumulatedWeight.Transpose());
 
         // Sum all contributions
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> result = new Tensor<T>(baseOutput._shape);
         for (int i = 0; i < batchSize; i++)
         {
             for (int j = 0; j < outputSize; j++)
@@ -380,76 +380,6 @@ public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through all components.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// Gradients flow through:
-    /// 1. Current LoRA layer (always updated)
-    /// 2. Base layer (only if not frozen)
-    /// 3. Accumulated weights (updated to reflect gradient contribution)
-    /// </para>
-    /// <para><b>For Beginners:</b> This is where learning happens! Gradients flow backward:
-    /// - Update current LoRA matrices
-    /// - Update base layer if not frozen
-    /// - Note: Accumulated weights are treated as constants during backprop
-    ///   (they only change during restart, not during normal training)
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Backward through current LoRA layer
-        Tensor<T> loraInputGrad = _loraLayer.Backward(outputGradient);
-
-        // Backward through base layer
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        // Backward through accumulated weights
-        int batchSize = outputGradient.Shape[0];
-        int outputSize = outputGradient.Shape[1];
-        int inputSize = GetInputShape()[0];
-
-        // Convert output gradient to matrix
-        Matrix<T> gradMatrix = new Matrix<T>(batchSize, outputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                gradMatrix[i, j] = outputGradient[i * outputSize + j];
-            }
-        }
-
-        // Compute input gradient from accumulated weights: gradient * AccumulatedWeight
-        Matrix<T> accInputGrad = gradMatrix.Multiply(_accumulatedWeight);
-
-        // Convert back to tensor
-        Vector<T> accInputGradData = new Vector<T>(batchSize * inputSize);
-        int idx = 0;
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                accInputGradData[idx++] = accInputGrad[i, j];
-            }
-        }
-        Tensor<T> accumulatedInputGrad = new Tensor<T>(new[] { batchSize, inputSize }, accInputGradData);
-
-        // Sum all input gradients
-        Tensor<T> inputGrad = new Tensor<T>(loraInputGrad.Shape.ToArray());
-        for (int i = 0; i < loraInputGrad.Length; i++)
-        {
-            inputGrad[i] = NumOps.Add(NumOps.Add(loraInputGrad[i], baseInputGrad[i]), accumulatedInputGrad[i]);
-        }
-
-        // Increment step counter
-        _currentStep++;
-
-        return inputGrad;
     }
 
     /// <summary>

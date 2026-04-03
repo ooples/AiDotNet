@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
@@ -567,7 +567,7 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
             var latentVector = latent.ToVector();
             var noiseVector = noisePrediction.ToVector();
             latentVector = Scheduler.Step(noiseVector, timestep, latentVector, NumOps.Zero);
-            latent = new Tensor<T>(latent.Shape.ToArray(), latentVector);
+            latent = new Tensor<T>(latent._shape, latentVector);
         }
 
         // Unscale latent for VAE decoding
@@ -690,7 +690,7 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
 
         // Add noise at starting timestep
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
-        var noise = SampleNoiseTensor(latent.Shape.ToArray(), rng);
+        var noise = SampleNoiseTensor(latent._shape, rng);
         latent = AddNoiseAtTimestep(latent, noise, startTimestep);
 
         // Denoising loop
@@ -712,7 +712,7 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
             var latentVector = latent.ToVector();
             var noiseVector = noisePrediction.ToVector();
             latentVector = Scheduler.Step(noiseVector, timestep, latentVector, NumOps.Zero);
-            latent = new Tensor<T>(latent.Shape.ToArray(), latentVector);
+            latent = new Tensor<T>(latent._shape, latentVector);
         }
 
         // Decode to audio
@@ -765,8 +765,8 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
             var rng = RandomHelper.CreateSeededRandom(variationSeed);
 
             // Add controlled noise
-            var noise = SampleNoiseTensor(baseLatent.Shape.ToArray(), rng);
-            var noisyLatent = new Tensor<T>(baseLatent.Shape.ToArray());
+            var noise = SampleNoiseTensor(baseLatent._shape, rng);
+            var noisyLatent = new Tensor<T>(baseLatent._shape);
             var noisySpan = noisyLatent.AsWritableSpan();
             var baseSpan = baseLatent.AsSpan();
             var noiseSpan = noise.AsSpan();

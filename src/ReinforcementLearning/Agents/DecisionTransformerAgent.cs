@@ -135,7 +135,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: _options.ActionSize,
             layers: layers
         );
-        _transformerNetwork = new NeuralNetwork<T>(architecture, _options.LossFunction);
+        _transformerNetwork = new NeuralNetwork<T>(architecture, lossFunction: _options.LossFunction);
 
         // Register network with base class
         Networks.Add(_transformerNetwork);
@@ -254,49 +254,31 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         T totalLoss = NumOps.Zero;
 
-        // Sample a batch
+        // Sample a batch and build batched tensors
         var batch = SampleBatch(_options.BatchSize);
+        int inputSize = 1 + _options.StateSize + _options.ActionSize; // returnToGo + state + prevAction
+        int batchCount = batch.Count;
 
-        foreach (var (state, targetAction, reward, returnToGo, previousAction) in batch)
+        var batchInputs = new Tensor<T>([batchCount, inputSize]);
+        var batchTargets = new Tensor<T>([batchCount, _options.ActionSize]);
+
+        for (int b = 0; b < batchCount; b++)
         {
-            // Use actual previous action from trajectory buffer
+            var (state, targetAction, reward, returnToGo, previousAction) = batch[b];
             var input = ConcatenateInputs(returnToGo, state, previousAction);
-
-            // Forward pass
-            var inputTensor = Tensor<T>.FromVector(input);
-            var predictedActionTensor = _transformerNetwork.Predict(inputTensor);
-            var predictedAction = predictedActionTensor.ToVector();
-
-            // Compute loss (MSE between predicted and target action)
-            T loss = NumOps.Zero;
-            for (int i = 0; i < _options.ActionSize; i++)
-            {
-                var diff = NumOps.Subtract(targetAction[i], predictedAction[i]);
-                loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
-            }
-
-            totalLoss = NumOps.Add(totalLoss, loss);
-
-            // Backward pass
-            var gradient = new Vector<T>(_options.ActionSize);
-            for (int i = 0; i < _options.ActionSize; i++)
-            {
-                gradient[i] = NumOps.Subtract(predictedAction[i], targetAction[i]);
-            }
-
-            var gradientTensor = Tensor<T>.FromVector(gradient);
-            _transformerNetwork.Backpropagate(gradientTensor);
-
-            // Vectorized SGD using parameter gradients from backprop
-            var parameters = _transformerNetwork.GetParameters();
-            var paramGrads = _transformerNetwork.GetParameterGradients();
-            var updated = (Vector<T>)Engine.Subtract(parameters, Engine.Multiply(paramGrads, LearningRate));
-            _transformerNetwork.UpdateParameters(updated);
+            for (int j = 0; j < inputSize; j++)
+                batchInputs[b, j] = input[j];
+            for (int j = 0; j < _options.ActionSize; j++)
+                batchTargets[b, j] = targetAction[j];
         }
+
+        // Single batched training step with configured optimizer
+        _transformerNetwork.Train(batchInputs, batchTargets);
+        totalLoss = _transformerNetwork.GetLastLoss();
 
         _updateCount++;
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
+        return totalLoss;
     }
 
     private List<(Vector<T> state, Vector<T> action, T reward, T returnToGo, Vector<T> previousAction)> SampleBatch(int batchSize)
@@ -428,15 +410,6 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
         return gradient;
     }
 
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
-    {
-        var gradientsTensor = Tensor<T>.FromVector(gradients);
-        _transformerNetwork.Backpropagate(gradientsTensor);
-
-        // Optimizer weight update happens via backpropagation in the network
-        // The gradients have already been applied during Backpropagate()
-    }
-
     public override void SaveModel(string filepath)
     {
         var data = Serialize();
@@ -447,6 +420,7 @@ public class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         var data = System.IO.File.ReadAllBytes(filepath);
         Deserialize(data);
-    }
-}
+    
 
+}
+}

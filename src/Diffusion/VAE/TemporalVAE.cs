@@ -895,4 +895,26 @@ public class TemporalVAE<T> : VAEModelBase<T>
     }
 
     #endregion
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var gradients = new List<T>();
+        AddLayerGradients(gradients, _inputConv);
+        foreach (var layer in _encoderSpatialLayers) AddLayerGradients(gradients, layer);
+        foreach (var layer in _encoderTemporalLayers) AddLayerGradients(gradients, layer);
+        AddLayerGradients(gradients, _meanConv);
+        AddLayerGradients(gradients, _logVarConv);
+        AddLayerGradients(gradients, _postQuantConv);
+        foreach (var layer in _decoderSpatialLayers) AddLayerGradients(gradients, layer);
+        foreach (var layer in _decoderTemporalLayers) AddLayerGradients(gradients, layer);
+        AddLayerGradients(gradients, _outputConv);
+        return new Vector<T>(gradients.ToArray());
+    }
+
+    private void AddLayerGradients(List<T> gradients, ILayer<T>? layer)
+    {
+        if (layer == null) return;
+        var g = layer.GetParameterGradients();
+        for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
+    }
 }

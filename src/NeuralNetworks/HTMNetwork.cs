@@ -583,8 +583,8 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Supervised readout training per Ahmad & Hawkins 2015:
-        // After Hebbian SP/TM learning, update the Dense readout layer via backprop
-        // so the full layer chain (SP->TM->Dense) optimizes the supervised loss.
+        // After Hebbian SP/TM learning, update the Dense readout layer via backprop.
+        // SP and TM layers are frozen (Hebbian-only), only readout layers train.
         SetTrainingMode(true);
         // Keep SP and TM layers frozen (Hebbian-only), train only readout layers
         for (int li = 0; li < Layers.Count; li++)
@@ -596,38 +596,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         }
         try
         {
-            var prediction = ForwardWithMemory(input);
-            var predVec = prediction.ToVector();
-            var expVec = expectedOutput.ToVector();
-
-            // Only train readout if shapes match
-            if (predVec.Length == expVec.Length)
-            {
-                var loss = LossFunction.CalculateLoss(predVec, expVec);
-                LastLoss = loss;
-
-                var outputGrad = LossFunction.CalculateDerivative(predVec, expVec);
-
-                // Clip gradient norm for stability
-                T gradNorm = NumOps.Sqrt(Engine.DotProduct(outputGrad, outputGrad));
-                double gradNormVal = NumOps.ToDouble(gradNorm);
-                if (gradNormVal > 1.0)
-                {
-                    T scale = NumOps.FromDouble(1.0 / gradNormVal);
-                    for (int gi = 0; gi < outputGrad.Length; gi++)
-                        outputGrad[gi] = NumOps.Multiply(outputGrad[gi], scale);
-                }
-
-                Backpropagate(new Tensor<T>(prediction.Shape.ToArray(), outputGrad));
-
-                // Only update readout layers (Dense + Softmax), not SP/TM
-                T lr = NumOps.FromDouble(0.01);
-                for (int li = 2; li < Layers.Count; li++)
-                {
-                    Layers[li].UpdateParameters(lr);
-                    Layers[li].ClearGradients();
-                }
-            }
+            TrainWithTape(input, expectedOutput);
         }
         finally
         {

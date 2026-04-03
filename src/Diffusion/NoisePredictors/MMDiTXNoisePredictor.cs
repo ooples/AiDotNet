@@ -195,6 +195,23 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
         return offset + count;
     }
 
+    protected override Vector<T> GetParameterGradients()
+    {
+        var allGrads = new List<T>();
+        AddLayerGrads(allGrads, _patchEmbed);
+        foreach (var block in _jointBlocks) AddLayerGrads(allGrads, block);
+        AddLayerGrads(allGrads, _finalLayer);
+        // _posEmbed is a raw tensor, no gradients from layer backward
+        for (int i = 0; i < _posEmbed.Length; i++) allGrads.Add(NumOps.Zero);
+        return new Vector<T>(allGrads.ToArray());
+    }
+
+    private static void AddLayerGrads(List<T> list, DenseLayer<T> layer)
+    {
+        var g = layer.GetParameterGradients();
+        for (int i = 0; i < g.Length; i++) list.Add(g[i]);
+    }
+
     private static int GetHiddenSize(MMDiTXVariant variant) => variant switch
     {
         MMDiTXVariant.Medium => 2048,

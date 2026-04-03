@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
@@ -667,7 +667,7 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         int height = image.Shape[2];
         int width = image.Shape[3];
 
-        var normalized = new Tensor<T>(image.Shape.ToArray());
+        var normalized = new Tensor<T>(image._shape);
 
         // TrOCR normalization (same as DeiT/BEiT)
         double[] means = [0.5, 0.5, 0.5];
@@ -809,22 +809,10 @@ public class TrOCR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
 
         SetTrainingMode(true);
 
-        var output = Predict(input);
-        LastLoss = LossFunction.CalculateLoss(output.ToVector(), expectedOutput.ToVector());
-
-        var lossGradient = LossFunction.CalculateDerivative(output.ToVector(), expectedOutput.ToVector());
-        var gradient = Tensor<T>.FromVector(lossGradient);
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-
+        TrainWithTape(input, expectedOutput);
         var paramGradients = CollectParameterGradients();
         UpdateParameters(paramGradients);
-
-        SetTrainingMode(false);
-    }
+        SetTrainingMode(false);}
 
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> gradients)

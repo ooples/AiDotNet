@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -174,7 +174,7 @@ public class LiteVAEModel<T> : VAEModelBase<T>
         // Split into mean and log-variance (last encoder layer outputs 2x channels)
         int halfLength = x.AsSpan().Length / 2;
         var meanShape = new int[x.Shape.Length];
-        Array.Copy(x.Shape.ToArray(), meanShape, x.Shape.Length);
+        Array.Copy(x._shape, meanShape, x.Shape.Length);
         if (meanShape.Length > 1)
             meanShape[meanShape.Length - 3] = _latentChannels;
 
@@ -262,4 +262,20 @@ public class LiteVAEModel<T> : VAEModelBase<T>
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var gradients = new List<T>();
+        foreach (var layer in _encoderLayers)
+        {
+            var g = layer.GetParameterGradients();
+            for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
+        }
+        foreach (var layer in _decoderLayers)
+        {
+            var g = layer.GetParameterGradients();
+            for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
+        }
+        return new Vector<T>(gradients.ToArray());
+    }
 }

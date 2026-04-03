@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
@@ -112,7 +112,7 @@ internal class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
             return findings;
         }
 
-        int[] shape = image.Shape.ToArray();
+        int[] shape = image._shape;
         var layout = DetermineImageLayout(shape, span.Length);
 
         if (_detectNSFW)

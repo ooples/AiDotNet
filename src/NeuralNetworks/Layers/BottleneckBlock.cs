@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
@@ -80,9 +80,9 @@ public class BottleneckBlock<T> : LayerBase<T>
     private Tensor<T>? _lastPreActivation;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuBn1Out;
-    private IGpuTensor<T>? _gpuBn2Out;
-    private IGpuTensor<T>? _gpuPreActivation;
+    private Tensor<T>? _gpuBn1Out;
+    private Tensor<T>? _gpuBn2Out;
+    private Tensor<T>? _gpuPreActivation;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -193,6 +193,15 @@ public class BottleneckBlock<T> : LayerBase<T>
 
             _downsampleBn = new BatchNormalizationLayer<T>(outChannels);
         }
+
+        RegisterSubLayer(_conv1);
+        RegisterSubLayer(_bn1);
+        RegisterSubLayer(_conv2);
+        RegisterSubLayer(_bn2);
+        RegisterSubLayer(_conv3);
+        RegisterSubLayer(_bn3);
+        if (_downsampleConv is not null) RegisterSubLayer(_downsampleConv);
+        if (_downsampleBn is not null) RegisterSubLayer(_downsampleBn);
     }
 
     /// <summary>
@@ -239,7 +248,7 @@ public class BottleneckBlock<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">The input tensors (expects single input).</param>
     /// <returns>The output tensor on GPU.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -268,7 +277,7 @@ public class BottleneckBlock<T> : LayerBase<T>
         var bn3Out = _bn3.ForwardGpu(conv3Out);
 
         // Identity/skip branch
-        IGpuTensor<T> identity;
+        Tensor<T> identity;
         if (_hasDownsample && _downsampleConv is not null && _downsampleBn is not null)
         {
             var dsConvOut = _downsampleConv.ForwardGpu(input);
@@ -287,143 +296,6 @@ public class BottleneckBlock<T> : LayerBase<T>
 
         // Final ReLU
         return gpuEngine.ReluGpu(preActivation);
-    }
-
-    /// <summary>
-    /// GPU-accelerated backward pass through the BottleneckBlock.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the output.</param>
-    /// <returns>GPU-resident gradient of the loss with respect to the input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        if (_gpuPreActivation is null || _gpuBn1Out is null || _gpuBn2Out is null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
-
-        // Gradient through final ReLU - uses cached preActivation
-        var gradPreActivation = gpuEngine.ReluBackwardGpu<T>(outputGradient, _gpuPreActivation);
-
-        // The gradient splits to both branches (residual add)
-        var gradMain = gradPreActivation;
-
-        // Backward through main branch: bn3 -> conv3 -> relu2 -> bn2 -> conv2 -> relu1 -> bn1 -> conv1
-        var gradBn3 = CallBackwardGpu(_bn3, gradMain, backend, gpuEngine);
-        var gradConv3 = CallBackwardGpu(_conv3, gradBn3, backend, gpuEngine);
-
-        // ReLU2 backward - uses cached bn2Out (input to ReLU2)
-        var gradRelu2 = gpuEngine.ReluBackwardGpu<T>(gradConv3, _gpuBn2Out);
-
-        var gradBn2 = CallBackwardGpu(_bn2, gradRelu2, backend, gpuEngine);
-        var gradConv2 = CallBackwardGpu(_conv2, gradBn2, backend, gpuEngine);
-
-        // ReLU1 backward - uses cached bn1Out (input to ReLU1)
-        var gradRelu1 = gpuEngine.ReluBackwardGpu<T>(gradConv2, _gpuBn1Out);
-
-        var gradBn1 = CallBackwardGpu(_bn1, gradRelu1, backend, gpuEngine);
-        var gradConv1 = CallBackwardGpu(_conv1, gradBn1, backend, gpuEngine);
-
-        // Backward through identity branch
-        int elementCount = gradConv1.ElementCount;
-        int[] resultShape = (int[])gradConv1.Shape.ToArray().Clone();
-        IGpuTensor<T> gradInput;
-
-        if (_hasDownsample && _downsampleBn is not null && _downsampleConv is not null)
-        {
-            var gradDsBn = CallBackwardGpu(_downsampleBn, gradPreActivation, backend, gpuEngine);
-            var gradDsConv = CallBackwardGpu(_downsampleConv, gradDsBn, backend, gpuEngine);
-
-            // Sum gradients from both branches
-            var resultBuffer = backend.AllocateBuffer(elementCount);
-            backend.Add(gradConv1.Buffer, gradDsConv.Buffer, resultBuffer, elementCount);
-            gradInput = new GpuTensor<T>(backend, resultBuffer, resultShape, GpuTensorRole.Gradient, ownsBuffer: true);
-        }
-        else
-        {
-            // Identity branch: gradient flows directly, sum with main branch
-            var resultBuffer = backend.AllocateBuffer(elementCount);
-            backend.Add(gradConv1.Buffer, gradPreActivation.Buffer, resultBuffer, elementCount);
-            gradInput = new GpuTensor<T>(backend, resultBuffer, resultShape, GpuTensorRole.Gradient, ownsBuffer: true);
-        }
-
-        return gradInput;
-    }
-
-    /// <summary>
-    /// Helper method to call BackwardGpu on inner layers via reflection.
-    /// Falls back to CPU if BackwardGpu is not available.
-    /// </summary>
-    private IGpuTensor<T> CallBackwardGpu(LayerBase<T> layer, IGpuTensor<T> gradient, IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
-    {
-        var layerType = layer.GetType();
-        var backwardGpuMethod = layerType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
-
-        if (backwardGpuMethod is not null)
-        {
-            return (IGpuTensor<T>)(backwardGpuMethod.Invoke(layer, new object[] { gradient })
-                ?? throw new InvalidOperationException("BackwardGpu returned null."));
-        }
-        else
-        {
-            // CPU fallback
-            var gradData = backend.DownloadBuffer(gradient.Buffer);
-            var cpuGrad = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradData), gradient.Shape.ToArray());
-            var cpuResult = layer.Backward(cpuGrad);
-            return gpuEngine.UploadToGpu(cpuResult, GpuTensorRole.Gradient);
-        }
-    }
-
-    /// <summary>
-    /// Performs the backward pass through the BottleneckBlock.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the output.</param>
-    /// <returns>The gradient of the loss with respect to the input.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput is null || _lastPreActivation is null || _lastIdentity is null ||
-            _lastBn3Output is null || _lastConv3Output is null || _lastRelu2Output is null ||
-            _lastBn2Output is null || _lastConv2Output is null || _lastRelu1Output is null ||
-            _lastBn1Output is null || _lastConv1Output is null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        // Gradient through final ReLU
-        var gradPreActivation = ApplyReLUDerivative(_lastPreActivation, outputGradient);
-
-        // The gradient splits to both branches (residual add)
-        var gradMain = gradPreActivation;
-        var gradIdentity = gradPreActivation;
-
-        // Backward through main branch: bn3 -> conv3 -> relu2 -> bn2 -> conv2 -> relu1 -> bn1 -> conv1
-        var gradBn3 = _bn3.Backward(gradMain);
-        var gradConv3 = _conv3.Backward(gradBn3);
-        var gradRelu2 = ApplyReLUDerivative(_lastBn2Output, gradConv3);
-        var gradBn2 = _bn2.Backward(gradRelu2);
-        var gradConv2 = _conv2.Backward(gradBn2);
-        var gradRelu1 = ApplyReLUDerivative(_lastBn1Output, gradConv2);
-        var gradBn1 = _bn1.Backward(gradRelu1);
-        var gradConv1 = _conv1.Backward(gradBn1);
-
-        // Backward through identity branch
-        Tensor<T> gradInput;
-        if (_hasDownsample && _downsampleBn is not null && _downsampleConv is not null)
-        {
-            var gradDsBn = _downsampleBn.Backward(gradIdentity);
-            var gradDsConv = _downsampleConv.Backward(gradDsBn);
-            gradInput = Engine.TensorAdd(gradConv1, gradDsConv);
-        }
-        else
-        {
-            gradInput = Engine.TensorAdd(gradConv1, gradIdentity);
-        }
-
-        return gradInput;
     }
 
     /// <summary>
@@ -532,171 +404,6 @@ public class BottleneckBlock<T> : LayerBase<T>
         _downsampleBn?.ResetState();
     }
 
-    /// <summary>
-    /// Gets whether this layer supports JIT compilation.
-    /// </summary>
-    /// <remarks>
-    /// BottleneckBlock supports JIT compilation when all its sub-layers support JIT.
-    /// This includes conv1, bn1, conv2, bn2, conv3, bn3, and optionally the downsample layers.
-    /// </remarks>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // Check all required layers
-            if (!_conv1.SupportsJitCompilation || !_bn1.SupportsJitCompilation ||
-                !_conv2.SupportsJitCompilation || !_bn2.SupportsJitCompilation ||
-                !_conv3.SupportsJitCompilation || !_bn3.SupportsJitCompilation)
-            {
-                return false;
-            }
-
-            // Check downsample layers if present
-            if (_hasDownsample &&
-                (_downsampleConv is null || !_downsampleConv.SupportsJitCompilation ||
-                 _downsampleBn is null || !_downsampleBn.SupportsJitCompilation))
-            {
-                return false;
-            }
-
-            return true;
-        }
-    }
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the BottleneckBlock.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph representing the BottleneckBlock:
-    /// Input -> Conv1(1x1) -> BN1 -> ReLU -> Conv2(3x3) -> BN2 -> ReLU -> Conv3(1x1) -> BN3 -> (+Identity) -> ReLU -> Output
-    /// </para>
-    /// <para>
-    /// For JIT compilation, we chain the sub-layer computation graphs together
-    /// and add the residual connection using TensorOperations.Add.
-    /// </para>
-    /// </remarks>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes is null)
-        {
-            throw new ArgumentNullException(nameof(inputNodes));
-        }
-
-        if (InputShape is null || InputShape.Length == 0)
-        {
-            throw new InvalidOperationException("Layer input shape not configured.");
-        }
-
-        // Create symbolic input node with batch dimension
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Main branch: conv1 (1x1) -> bn1 -> relu -> conv2 (3x3) -> bn2 -> relu -> conv3 (1x1) -> bn3
-
-        // Conv1 (1x1 reduce)
-        var conv1Biases = _conv1.GetBiases();
-        var conv1Node = Autodiff.TensorOperations<T>.Conv2D(
-            inputNode,
-            Autodiff.TensorOperations<T>.Constant(_conv1.GetFilters(), "conv1_kernel"),
-            conv1Biases is not null ? Autodiff.TensorOperations<T>.Constant(conv1Biases, "conv1_bias") : null,
-            stride: new int[] { _conv1.Stride, _conv1.Stride },
-            padding: new int[] { _conv1.Padding, _conv1.Padding });
-
-        // BN1
-        var bn1Node = Autodiff.TensorOperations<T>.BatchNorm(
-            conv1Node,
-            gamma: Autodiff.TensorOperations<T>.Constant(_bn1.GetGamma(), "bn1_gamma"),
-            beta: Autodiff.TensorOperations<T>.Constant(_bn1.GetBeta(), "bn1_beta"),
-            runningMean: _bn1.GetRunningMean(),
-            runningVar: _bn1.GetRunningVariance(),
-            training: false,
-            epsilon: NumOps.ToDouble(_bn1.GetEpsilon()));
-
-        // ReLU1
-        var relu1Node = Autodiff.TensorOperations<T>.ReLU(bn1Node);
-
-        // Conv2 (3x3 bottleneck)
-        var conv2Biases = _conv2.GetBiases();
-        var conv2Node = Autodiff.TensorOperations<T>.Conv2D(
-            relu1Node,
-            Autodiff.TensorOperations<T>.Constant(_conv2.GetFilters(), "conv2_kernel"),
-            conv2Biases is not null ? Autodiff.TensorOperations<T>.Constant(conv2Biases, "conv2_bias") : null,
-            stride: new int[] { _conv2.Stride, _conv2.Stride },
-            padding: new int[] { _conv2.Padding, _conv2.Padding });
-
-        // BN2
-        var bn2Node = Autodiff.TensorOperations<T>.BatchNorm(
-            conv2Node,
-            gamma: Autodiff.TensorOperations<T>.Constant(_bn2.GetGamma(), "bn2_gamma"),
-            beta: Autodiff.TensorOperations<T>.Constant(_bn2.GetBeta(), "bn2_beta"),
-            runningMean: _bn2.GetRunningMean(),
-            runningVar: _bn2.GetRunningVariance(),
-            training: false,
-            epsilon: NumOps.ToDouble(_bn2.GetEpsilon()));
-
-        // ReLU2
-        var relu2Node = Autodiff.TensorOperations<T>.ReLU(bn2Node);
-
-        // Conv3 (1x1 expand)
-        var conv3Biases = _conv3.GetBiases();
-        var conv3Node = Autodiff.TensorOperations<T>.Conv2D(
-            relu2Node,
-            Autodiff.TensorOperations<T>.Constant(_conv3.GetFilters(), "conv3_kernel"),
-            conv3Biases is not null ? Autodiff.TensorOperations<T>.Constant(conv3Biases, "conv3_bias") : null,
-            stride: new int[] { _conv3.Stride, _conv3.Stride },
-            padding: new int[] { _conv3.Padding, _conv3.Padding });
-
-        // BN3
-        var bn3Node = Autodiff.TensorOperations<T>.BatchNorm(
-            conv3Node,
-            gamma: Autodiff.TensorOperations<T>.Constant(_bn3.GetGamma(), "bn3_gamma"),
-            beta: Autodiff.TensorOperations<T>.Constant(_bn3.GetBeta(), "bn3_beta"),
-            runningMean: _bn3.GetRunningMean(),
-            runningVar: _bn3.GetRunningVariance(),
-            training: false,
-            epsilon: NumOps.ToDouble(_bn3.GetEpsilon()));
-
-        // Identity/skip branch
-        Autodiff.ComputationNode<T> identityNode;
-        if (_hasDownsample && _downsampleConv is not null && _downsampleBn is not null)
-        {
-            // Downsample: conv1x1 -> bn
-            var dsConvBiases = _downsampleConv.GetBiases();
-            var dsConvNode = Autodiff.TensorOperations<T>.Conv2D(
-                inputNode,
-                Autodiff.TensorOperations<T>.Constant(_downsampleConv.GetFilters(), "ds_conv_kernel"),
-                dsConvBiases is not null ? Autodiff.TensorOperations<T>.Constant(dsConvBiases, "ds_conv_bias") : null,
-                stride: new int[] { _downsampleConv.Stride, _downsampleConv.Stride },
-                padding: new int[] { _downsampleConv.Padding, _downsampleConv.Padding });
-
-            identityNode = Autodiff.TensorOperations<T>.BatchNorm(
-                dsConvNode,
-                gamma: Autodiff.TensorOperations<T>.Constant(_downsampleBn.GetGamma(), "ds_bn_gamma"),
-                beta: Autodiff.TensorOperations<T>.Constant(_downsampleBn.GetBeta(), "ds_bn_beta"),
-                runningMean: _downsampleBn.GetRunningMean(),
-                runningVar: _downsampleBn.GetRunningVariance(),
-                training: false,
-                epsilon: NumOps.ToDouble(_downsampleBn.GetEpsilon()));
-        }
-        else
-        {
-            // Identity shortcut - just use input directly
-            identityNode = inputNode;
-        }
-
-        // Residual connection: add main branch and identity
-        var addNode = Autodiff.TensorOperations<T>.Add(bn3Node, identityNode);
-
-        // Final ReLU
-        var outputNode = Autodiff.TensorOperations<T>.ReLU(addNode);
-
-        return outputNode;
-    }
-
     private Tensor<T> ApplyReLU(Tensor<T> input)
     {
         return input.Transform((x, _) => _relu.Activate(x));
@@ -708,4 +415,5 @@ public class BottleneckBlock<T> : LayerBase<T>
         var derivative = preActivation.Transform((x, _) => _relu.Derivative(x));
         return Engine.TensorMultiply(gradient, derivative);
     }
+
 }

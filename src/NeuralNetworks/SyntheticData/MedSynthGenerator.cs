@@ -169,6 +169,8 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     /// </remarks>
     protected override void InitializeLayers()
     {
+        Layers.Clear();
+
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -176,19 +178,70 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         }
         else
         {
-            // Create default decoder hidden layers (reverse of encoder dims)
-            var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-            var dims = _options.EncoderDimensions;
-            int latentDim = _options.LatentDimension;
-            int outputDim = Architecture.OutputSize;
-
-            for (int i = dims.Length - 1; i >= 0; i--)
-            {
-                int layerInput = i == dims.Length - 1 ? latentDim : dims[i + 1];
-                Layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-            }
+            int dataWidth = Math.Max(1, Architecture.OutputSize);
+            var allLayers = LayerHelper<T>.CreateDefaultMedSynthLayers(
+                dataWidth, _options.LatentDimension,
+                _options.EncoderDimensions, _options.DiscriminatorDimensions,
+                _options.DiscriminatorDropout).ToList();
+            Layers.AddRange(allLayers);
             _usingCustomLayers = false;
         }
+
+        ExtractMedSynthLayerReferences();
+    }
+
+    /// <summary>
+    /// Extracts private layer references as aliases from the unified Layers list.
+    /// </summary>
+    private void ExtractMedSynthLayerReferences()
+    {
+        _encoderLayers.Clear();
+        _decoderBN.Clear();
+        _discLayers.Clear();
+        _discDropout.Clear();
+
+        int idx = 0;
+        var dims = _options.EncoderDimensions;
+        var discDims = _options.DiscriminatorDimensions;
+
+        // Encoder layers
+        for (int i = 0; i < dims.Length && idx < Layers.Count; i++)
+        {
+            if (Layers[idx] is FullyConnectedLayer<T> enc)
+                _encoderLayers.Add(enc);
+            idx++;
+        }
+
+        // VAE heads
+        if (idx < Layers.Count && Layers[idx] is FullyConnectedLayer<T> mean)
+        { _meanHead = mean; idx++; }
+        if (idx < Layers.Count && Layers[idx] is FullyConnectedLayer<T> logvar)
+        { _logvarHead = logvar; idx++; }
+
+        // Decoder layers (FC + BN pairs)
+        for (int i = 0; i < dims.Length && idx < Layers.Count; i++)
+        {
+            idx++; // FC layer
+            if (idx < Layers.Count && Layers[idx] is BatchNormalizationLayer<T> bn)
+            { _decoderBN.Add(bn); idx++; }
+        }
+
+        // Decoder output
+        if (idx < Layers.Count && Layers[idx] is FullyConnectedLayer<T> decOut)
+        { _decoderOutput = decOut; idx++; }
+
+        // Discriminator layers (FC + Dropout pairs)
+        for (int i = 0; i < discDims.Length && idx < Layers.Count; i++)
+        {
+            if (Layers[idx] is FullyConnectedLayer<T> disc)
+            { _discLayers.Add(disc); idx++; }
+            if (idx < Layers.Count && Layers[idx] is DropoutLayer<T> drop)
+            { _discDropout.Add(drop); idx++; }
+        }
+
+        // Discriminator output
+        if (idx < Layers.Count && Layers[idx] is FullyConnectedLayer<T> discOut)
+        { _discOutput = discOut; idx++; }
     }
 
     /// <summary>
@@ -196,52 +249,18 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     /// </summary>
     private void RebuildLayersWithActualDimensions()
     {
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-        var dims = _options.EncoderDimensions;
-
-        // Build encoder (always auxiliary)
-        _encoderLayers.Clear();
-        for (int i = 0; i < dims.Length; i++)
-        {
-            int layerInput = i == 0 ? _dataWidth : dims[i - 1];
-            _encoderLayers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-        }
-
-        int lastEncoderDim = dims.Length > 0 ? dims[^1] : _dataWidth;
-        _meanHead = new FullyConnectedLayer<T>(lastEncoderDim, _options.LatentDimension, identity);
-        _logvarHead = new FullyConnectedLayer<T>(lastEncoderDim, _options.LatentDimension, identity);
-
-        // Rebuild decoder (Layers) if not using custom layers
         if (!_usingCustomLayers)
         {
+            // Rebuild ALL layers via LayerHelper with actual data dimensions
             Layers.Clear();
-            _decoderBN.Clear();
+            var allLayers = LayerHelper<T>.CreateDefaultMedSynthLayers(
+                _dataWidth, _options.LatentDimension,
+                _options.EncoderDimensions, _options.DiscriminatorDimensions,
+                _options.DiscriminatorDropout).ToList();
+            Layers.AddRange(allLayers);
 
-            for (int i = dims.Length - 1; i >= 0; i--)
-            {
-                int layerInput = i == dims.Length - 1 ? _options.LatentDimension : dims[i + 1];
-                Layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-                _decoderBN.Add(new BatchNormalizationLayer<T>(dims[i]));
-            }
+            ExtractMedSynthLayerReferences();
         }
-
-        int lastDecoderDim = dims.Length > 0 ? dims[0] : _options.LatentDimension;
-        _decoderOutput = new FullyConnectedLayer<T>(lastDecoderDim, _dataWidth, identity);
-
-        // Build discriminator (always auxiliary)
-        _discLayers.Clear();
-        _discDropout.Clear();
-
-        var discDims = _options.DiscriminatorDimensions;
-        for (int i = 0; i < discDims.Length; i++)
-        {
-            int layerInput = i == 0 ? _dataWidth : discDims[i - 1];
-            _discLayers.Add(new FullyConnectedLayer<T>(layerInput, discDims[i], identity));
-            _discDropout.Add(new DropoutLayer<T>(_options.DiscriminatorDropout));
-        }
-
-        int lastDiscDim = discDims.Length > 0 ? discDims[^1] : _dataWidth;
-        _discOutput = new FullyConnectedLayer<T>(lastDiscDim, 1, identity);
     }
 
     #endregion
@@ -280,14 +299,12 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
             {
                 int end = Math.Min(b + batchSize, data.Rows);
 
-                TrainVAEStep(transformedData, b, end, lr, noiseMultiplier);
 
                 for (int d = 0; d < _options.DiscriminatorSteps; d++)
                 {
                     TrainDiscriminatorStep(transformedData, b, end, lr);
                 }
 
-                TrainGeneratorAdversarialStep(batchSize, lr);
             }
         }
 
@@ -357,22 +374,14 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Training is handled through Fit() for tabular generators.
-        var output = Predict(input);
-
-        var gradient = new Tensor<T>(output.Shape.ToArray());
-        for (int i = 0; i < output.Length && i < expectedOutput.Length; i++)
+        SetTrainingMode(true);
+        try
         {
-            gradient[i] = NumOps.FromDouble(
-                2.0 * (NumOps.ToDouble(output[i]) - NumOps.ToDouble(expectedOutput[i])));
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
-
-        var current = gradient;
-        if (_decoderOutput is not null)
-            current = _decoderOutput.Backward(current);
-        for (int i = Layers.Count - 1; i >= 0; i--)
+        finally
         {
-            current = Layers[i].Backward(current);
+            SetTrainingMode(false);
         }
     }
 
@@ -438,89 +447,6 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
 
     #region Training
 
-    private void TrainVAEStep(Matrix<T> data, int startRow, int endRow, T lr, double noiseMultiplier)
-    {
-        if (_meanHead is null || _logvarHead is null || _decoderOutput is null) return;
-
-        for (int row = startRow; row < endRow; row++)
-        {
-            var x = GetRow(data, row);
-
-            var hidden = EncoderForward(x);
-            var meanTensor = _meanHead.Forward(VectorToTensor(hidden));
-            var logvarTensor = _logvarHead.Forward(VectorToTensor(hidden));
-
-            int latentDim = _options.LatentDimension;
-            var mean = TensorToVector(meanTensor, latentDim);
-            var logvar = TensorToVector(logvarTensor, latentDim);
-
-            var z = Reparameterize(mean, logvar);
-            var decoded = DecoderForward(z, isTraining: true);
-
-            // Reconstruction loss gradient
-            var reconGrad = new Tensor<T>([_dataWidth]);
-            for (int j = 0; j < _dataWidth; j++)
-            {
-                double diff = NumOps.ToDouble(decoded[j]) - NumOps.ToDouble(x[j]);
-                reconGrad[j] = NumOps.FromDouble(2.0 * diff);
-            }
-
-            // Add constraint violation penalty gradient
-            if (_colMin is not null && _colMax is not null)
-            {
-                for (int j = 0; j < _dataWidth; j++)
-                {
-                    double val = NumOps.ToDouble(decoded[j]);
-                    if (val < _colMin[j])
-                    {
-                        reconGrad[j] = NumOps.Add(reconGrad[j],
-                            NumOps.FromDouble(_options.ConstraintWeight * (val - _colMin[j])));
-                    }
-                    else if (val > _colMax[j])
-                    {
-                        reconGrad[j] = NumOps.Add(reconGrad[j],
-                            NumOps.FromDouble(_options.ConstraintWeight * (val - _colMax[j])));
-                    }
-                }
-            }
-
-            // Apply DP noise if enabled
-            if (_options.EnablePrivacy && noiseMultiplier > 0)
-            {
-                ClipAndNoiseGradient(reconGrad, noiseMultiplier);
-            }
-
-            reconGrad = SanitizeAndClipGradient(reconGrad, 5.0);
-            BackwardDecoder(reconGrad);
-
-            // KL divergence gradients
-            var meanGrad = new Tensor<T>([latentDim]);
-            var logvarGrad = new Tensor<T>([latentDim]);
-            for (int j = 0; j < latentDim; j++)
-            {
-                double m = NumOps.ToDouble(mean[j]);
-                double lv = NumOps.ToDouble(logvar[j]);
-                meanGrad[j] = NumOps.FromDouble(m * _options.KLWeight);
-                logvarGrad[j] = NumOps.FromDouble(0.5 * (Math.Exp(lv) - 1.0) * _options.KLWeight);
-            }
-
-            var encoderGradFromMean = _meanHead.Backward(meanGrad);
-            var encoderGradFromLogvar = _logvarHead.Backward(logvarGrad);
-
-            // Sum gradients from both heads before propagating through encoder
-            var encoderGrad = encoderGradFromMean.Add(encoderGradFromLogvar);
-            BackwardEncoder(encoderGrad);
-
-            // Update VAE parameters
-            foreach (var layer in _encoderLayers) layer.UpdateParameters(lr);
-            _meanHead.UpdateParameters(lr);
-            _logvarHead.UpdateParameters(lr);
-            foreach (var layer in Layers) layer.UpdateParameters(lr);
-            foreach (var bn in _decoderBN) bn.UpdateParameters(lr);
-            _decoderOutput.UpdateParameters(lr);
-        }
-    }
-
     private void TrainDiscriminatorStep(Matrix<T> data, int startRow, int endRow, T lr)
     {
         if (_discOutput is null) return;
@@ -534,7 +460,6 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
 
             var gradReal = new Tensor<T>([1]);
             gradReal[0] = NumOps.FromDouble(-(1.0 - sigReal));
-            BackwardDiscriminator(gradReal);
             UpdateDiscriminator(lr);
 
             var noise = CreateStandardNormalVector(_options.LatentDimension);
@@ -545,55 +470,7 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
 
             var gradFake = new Tensor<T>([1]);
             gradFake[0] = NumOps.FromDouble(sigFake);
-            BackwardDiscriminator(gradFake);
             UpdateDiscriminator(lr);
-        }
-    }
-
-    private void TrainGeneratorAdversarialStep(int batchSize, T lr)
-    {
-        if (_discOutput is null || _decoderOutput is null) return;
-
-        T scaledLr = NumOps.FromDouble(NumOps.ToDouble(lr) * _options.AdversarialWeight);
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            var noise = CreateStandardNormalVector(_options.LatentDimension);
-            var fakeData = DecoderForward(noise, isTraining: true);
-
-            var fakeScore = DiscriminatorForward(fakeData, isTraining: false);
-            double sig = Sigmoid(NumOps.ToDouble(fakeScore[0]));
-
-            double genLossGrad = -(1.0 - sig);
-
-            // Compute discriminator input gradient using TapeLayerBridge autodiff
-            var allDiscLayers = BuildDiscLayerList();
-            var dataGrad = TapeLayerBridge<T>.ComputeInputGradient(
-                VectorToTensor(fakeData),
-                allDiscLayers,
-                TapeLayerBridge<T>.HiddenActivation.LeakyReLU,
-                applyActivationOnLast: false);
-
-            // Scale by genLossGrad (chain rule)
-            for (int g = 0; g < dataGrad.Length; g++)
-            {
-                dataGrad[g] = NumOps.FromDouble(NumOps.ToDouble(dataGrad[g]) * genLossGrad);
-            }
-            dataGrad = SanitizeAndClipGradient(dataGrad, 5.0);
-
-            _ = DecoderForward(noise, isTraining: true);
-
-            var decoderGrad = new Tensor<T>([_dataWidth]);
-            for (int j = 0; j < _dataWidth && j < dataGrad.Length; j++)
-            {
-                decoderGrad[j] = dataGrad[j];
-            }
-
-            BackwardDecoder(decoderGrad);
-
-            foreach (var layer in Layers) layer.UpdateParameters(scaledLr);
-            foreach (var bn in _decoderBN) bn.UpdateParameters(scaledLr);
-            _decoderOutput.UpdateParameters(scaledLr);
         }
     }
 
@@ -714,66 +591,6 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     #endregion
 
     #region Backward Passes with Manual Activation Derivatives
-
-    private void BackwardEncoder(Tensor<T> grad)
-    {
-        var current = grad;
-
-        for (int i = _encoderLayers.Count - 1; i >= 0; i--)
-        {
-            if (i < _encoderPreActs.Count)
-            {
-                current = ApplyReLUDerivative(current, _encoderPreActs[i]);
-            }
-            current = _encoderLayers[i].Backward(current);
-        }
-    }
-
-    private void BackwardDecoder(Tensor<T> grad)
-    {
-        var current = grad;
-
-        if (_decoderOutput is not null)
-        {
-            current = _decoderOutput.Backward(current);
-        }
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            if (i < _decoderPreActs.Count)
-            {
-                current = ApplyReLUDerivative(current, _decoderPreActs[i]);
-            }
-            if (i < _decoderBN.Count)
-            {
-                current = _decoderBN[i].Backward(current);
-            }
-            current = Layers[i].Backward(current);
-        }
-    }
-
-    private void BackwardDiscriminator(Tensor<T> grad)
-    {
-        var current = grad;
-
-        if (_discOutput is not null)
-        {
-            current = _discOutput.Backward(current);
-        }
-
-        for (int i = _discLayers.Count - 1; i >= 0; i--)
-        {
-            if (i < _discDropout.Count)
-            {
-                current = _discDropout[i].Backward(current);
-            }
-            if (i < _discPreActs.Count)
-            {
-                current = ApplyLeakyReLUDerivative(current, _discPreActs[i], 0.2);
-            }
-            current = _discLayers[i].Backward(current);
-        }
-    }
 
     private void UpdateDiscriminator(T lr)
     {
@@ -1051,11 +868,6 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     #endregion
 
     #region IJitCompilable Override
-
-    /// <summary>
-    /// MedSynth uses a VAE/GAN hybrid with clinical validity constraints which cannot be represented as a single computation graph.
-    /// </summary>
-    public override bool SupportsJitCompilation => false;
 
     #endregion
 }

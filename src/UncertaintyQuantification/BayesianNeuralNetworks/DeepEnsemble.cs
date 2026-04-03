@@ -1,4 +1,4 @@
-using AiDotNet.Enums;
+﻿using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Results;
 using AiDotNet.UncertaintyQuantification.Interfaces;
@@ -111,7 +111,7 @@ public class DeepEnsemble<T> : IUncertaintyEstimator<T>
     /// </remarks>
     public Tensor<T> EstimateAleatoricUncertainty(Tensor<T> input)
     {
-        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input.Shape.ToArray());
+        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input._shape);
         var aleatoric = new Tensor<T>(totalUncertainty.Shape.ToArray());
         for (int i = 0; i < aleatoric.Length; i++)
         {
@@ -133,7 +133,7 @@ public class DeepEnsemble<T> : IUncertaintyEstimator<T>
     /// </remarks>
     public Tensor<T> EstimateEpistemicUncertainty(Tensor<T> input)
     {
-        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input.Shape.ToArray());
+        var totalUncertainty = PredictWithUncertainty(input).Variance ?? new Tensor<T>(input._shape);
         return totalUncertainty;
     }
 

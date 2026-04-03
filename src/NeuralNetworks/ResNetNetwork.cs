@@ -480,7 +480,7 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     private static Tensor<T> AddBatchDimension(Tensor<T> input)
     {
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int[] resultShape = new int[inputShape.Length + 1];
         resultShape[0] = 1;
         for (int i = 0; i < inputShape.Length; i++)
@@ -488,20 +488,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
             resultShape[i + 1] = inputShape[i];
         }
         return input.Reshape(resultShape);
-    }
-
-    /// <summary>
-    /// Performs a backward pass through the network to calculate gradients.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the network's output.</param>
-    /// <returns>The gradient of the loss with respect to the network's input.</returns>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            outputGradient = Layers[i].Backward(outputGradient);
-        }
-        return outputGradient;
     }
 
     /// <summary>
@@ -537,26 +523,15 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
     /// <param name="expectedOutput">The expected output tensor (one-hot encoded class labels).</param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass
-        var prediction = Predict(input);
-
-        // Calculate loss
-        var loss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        LastLoss = loss;
-
-        // Calculate output gradient
-        var outputGradient = CalculateOutputGradient(prediction, expectedOutput);
-        var outputGradientTensor = new Tensor<T>(prediction.Shape.ToArray(), outputGradient);
-
-        // Backpropagation
-        var currentGradient = outputGradientTensor;
-        for (int i = Layers.Count - 1; i >= 0; i--)
+        SetTrainingMode(true);
+        try
         {
-            currentGradient = Layers[i].Backward(currentGradient);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
-
-        // Update parameters using the optimizer
-        ApplyParameterUpdates();
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

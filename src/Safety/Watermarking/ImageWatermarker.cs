@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -156,7 +156,7 @@ public class ImageWatermarker<T> : ImageSafetyModuleBase<T>
     /// </remarks>
     private T DetectWatermarkFrequencyDomain(Tensor<T> image)
     {
-        int[] shape = image.Shape.ToArray();
+        int[] shape = image._shape;
         var span = image.Data.Span;
 
         // Determine image dimensions

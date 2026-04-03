@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
@@ -335,7 +335,7 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
         var effectiveMotionBucket = motionBucketId ?? MotionBucketId;
 
         // Get image dimensions
-        var imageShape = inputImage.Shape.ToArray();
+        var imageShape = inputImage._shape;
         var height = imageShape[2];
         var width = imageShape[3];
 
@@ -422,10 +422,10 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
         if (noiseAugStrength > 0)
         {
             var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
-            var noise = DiffusionNoiseHelper<T>.SampleGaussian(image.Shape.ToArray(), rng);
+            var noise = DiffusionNoiseHelper<T>.SampleGaussian(image._shape, rng);
             var scaledNoise = DiffusionNoiseHelper<T>.ScaleNoise(noise, noiseAugStrength);
 
-            augmentedImage = new Tensor<T>(image.Shape.ToArray());
+            augmentedImage = new Tensor<T>(image._shape);
             var augSpan = augmentedImage.AsWritableSpan();
             var imgSpan = image.AsSpan();
             var noiseSpan = scaledNoise.AsSpan();
@@ -547,7 +547,7 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
             seed: seed);
 
         // Replace first frame with exact input
-        var videoShape = video.Shape.ToArray();
+        var videoShape = video._shape;
         var channels = videoShape[2];
         var height = videoShape[3];
         var width = videoShape[4];
@@ -590,7 +590,7 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
         var endLatent = EncodeToLatent(endImage, sampleMode: false);
 
         // Get dimensions
-        var imageShape = startImage.Shape.ToArray();
+        var imageShape = startImage._shape;
         var height = imageShape[2];
         var width = imageShape[3];
         var latentHeight = height / _temporalVAE.DownsampleFactor;
@@ -634,13 +634,13 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
         int timestep,
         int numFrames)
     {
-        var result = new Tensor<T>(latents.Shape.ToArray());
+        var result = new Tensor<T>(latents._shape);
         var resultSpan = result.AsWritableSpan();
         var latentSpan = latents.AsSpan();
         var startSpan = startLatent.AsSpan();
         var endSpan = endLatent.AsSpan();
 
-        var latentShape = latents.Shape.ToArray();
+        var latentShape = latents._shape;
         // Video latent shape: [batch, frames, channels, height, width]
         var videoChannels = latentShape[2];
         var videoHeight = latentShape[3];
@@ -648,7 +648,7 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
         var frameSize = videoChannels * videoHeight * videoWidth;
 
         // Start/end latent shape: [batch, channels, height, width] (4D)
-        var startShape = startLatent.Shape.ToArray();
+        var startShape = startLatent._shape;
         var startChannels = startShape[1];
         var startHeight = startShape[2];
         var startWidth = startShape[3];

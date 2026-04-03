@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -113,8 +113,19 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
-        EnableDeterministicMode();
+        // Per Howard et al. ICCV 2019: ensure deterministic BLAS for reproducible
+        // inference. MKL single-threaded is deterministic and still fast.
+        EnsureDeterministicBlas();
+
         InitializeLayers();
+    }
+
+    private static bool _determinismSet;
+    private static void EnsureDeterministicBlas()
+    {
+        if (_determinismSet) return;
+        _determinismSet = true;
+        AiDotNet.Tensors.Helpers.BlasProvider.SetDeterministicMode(true);
     }
 
     /// <summary>
@@ -166,6 +177,15 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
             Layers.AddRange(LayerHelper<T>.CreateDefaultMobileNetV3Layers(Architecture, _configuration));
         }
 
+        // Set eval mode: BN with constant spatial input in training mode normalizes to zero
+        // (variance=0), destroying information. Eval mode uses running stats which preserves input.
+        SetAllLayersEvalMode();
+    }
+
+    private void SetAllLayersEvalMode()
+    {
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(false);
     }
 
     /// <summary>
@@ -186,66 +206,29 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
         return output;
     }
 
-    /// <summary>
-    /// Performs backward propagation through the network.
-    /// </summary>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        Tensor<T> gradient = outputGradient;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-        return gradient;
-    }
-
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
         // Set eval mode on all layers for inference (BN uses running stats)
         foreach (var layer in Layers)
             layer.SetTrainingMode(false);
-        try
-        {
-            return Forward(input);
-        }
-        finally
-        {
-            // Predict leaves layers in eval mode; callers (e.g., Train) set
-            // training mode explicitly before forward/backward passes.
-        }
+        return Forward(input);
     }
 
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Enable training mode first per Howard et al. 2019
         SetTrainingMode(true);
-
-        // ALL BN layers must use eval mode (running stats) for batch_size=1.
-        // Per Ioffe & Szegedy 2015: BN gradient is exactly zero for N=1 in
-        // training mode (I - 1/N*11^T = 0). This kills gradient flow.
-        // Per Howard et al. 2019: paper uses batch_size=4096 where BN works normally.
-        // BN eval mode for batch_size=1 (training mode gives zero gradient)
+        // BN layers must use eval mode (running stats) for batch_size=1.
+        // Per Ioffe & Szegedy 2015: BN gradient is exactly zero for N=1
+        // in training mode (variance=0). Eval mode preserves information flow.
         foreach (var layer in Layers)
         {
             if (layer is BatchNormalizationLayer<T>)
                 layer.SetTrainingMode(false);
         }
-
-        // Forward + loss
-        var prediction = ForwardWithMemory(input);
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        // Backward
-        var outputGrad = _lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-        var gradTensor = Tensor<T>.FromVector(outputGrad);
-        if (gradTensor.Rank < prediction.Rank)
-            gradTensor = gradTensor.Reshape(prediction.Shape.ToArray());
-        Backpropagate(gradTensor);
-
-        // Update via optimizer
-        _optimizer.UpdateParameters(Layers);
+        TrainWithTape(input, expectedOutput, _optimizer);
+        SetTrainingMode(false);
     }
 
     /// <inheritdoc />
@@ -324,6 +307,14 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
             _configuration.InputChannels);
 
         return new MobileNetV3Network<T>(Architecture, config, _optimizer, _lossFunction);
+    }
+
+    /// <inheritdoc />
+    public override void Deserialize(byte[] data)
+    {
+        base.Deserialize(data);
+        // Restore eval mode after deserialization (training/eval state is not serialized).
+        SetAllLayersEvalMode();
     }
 
     /// <inheritdoc />

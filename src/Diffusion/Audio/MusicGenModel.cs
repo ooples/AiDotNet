@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Attributes;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
@@ -669,7 +669,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
             var latentVector = latent.ToVector();
             var noiseVector = noisePrediction.ToVector();
             latentVector = Scheduler.Step(noiseVector, timestep, latentVector, NumOps.Zero);
-            latent = new Tensor<T>(latent.Shape.ToArray(), latentVector);
+            latent = new Tensor<T>(latent._shape, latentVector);
         }
 
         return _musicVAE.UnscaleLatent(latent);
@@ -762,7 +762,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
             var latentVector = latent.ToVector();
             var noiseVector = noisePrediction.ToVector();
             latentVector = Scheduler.Step(noiseVector, timestep, latentVector, NumOps.Zero);
-            latent = new Tensor<T>(latent.Shape.ToArray(), latentVector);
+            latent = new Tensor<T>(latent._shape, latentVector);
         }
 
         return _musicVAE.UnscaleLatent(latent);
@@ -862,7 +862,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
     private Tensor<T> BlendConditions(Tensor<T> primary, Tensor<T> secondary, double secondaryStrength)
     {
         // Resize secondary to match primary if needed, then blend
-        var result = new Tensor<T>(primary.Shape.ToArray());
+        var result = new Tensor<T>(primary._shape);
         var resultSpan = result.AsWritableSpan();
         var primarySpan = primary.AsSpan();
         var secondarySpan = secondary.AsSpan();

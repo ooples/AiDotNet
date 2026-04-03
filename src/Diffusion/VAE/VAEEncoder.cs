@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.ModelLoading;
@@ -367,9 +367,9 @@ public class VAEEncoder<T> : LayerBase<T>
     private Tensor<T> Sample(Tensor<T> mean, Tensor<T> logVar, int? seed)
     {
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var epsilon = SampleNoise(mean.Shape.ToArray(), rng);
+        var epsilon = SampleNoise(mean._shape, rng);
 
-        var result = new Tensor<T>(mean.Shape.ToArray());
+        var result = new Tensor<T>(mean._shape);
         var meanSpan = mean.AsSpan();
         var logVarSpan = logVar.AsSpan();
         var epsilonSpan = epsilon.AsSpan();
@@ -417,7 +417,7 @@ public class VAEEncoder<T> : LayerBase<T>
 
     private (Tensor<T> First, Tensor<T> Second) SplitChannels(Tensor<T> combined, int splitChannels)
     {
-        var shape = combined.Shape.ToArray();
+        var shape = combined._shape;
         int batch = shape.Length > 3 ? shape[0] : 1;
         int totalChannels = shape.Length > 3 ? shape[1] : shape[0];
         int height = shape.Length > 3 ? shape[2] : shape[1];
@@ -450,45 +450,9 @@ public class VAEEncoder<T> : LayerBase<T>
         return (first, second);
     }
 
-    /// <summary>
-    /// Performs the backward pass through the encoder.
-    /// </summary>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Split gradient for mean and logVar paths
-        var (meanGrad, logVarGrad) = SplitChannels(outputGradient, _latentChannels);
-
-        // Backward through quant conv (mean path only)
-        meanGrad = _quantConv.Backward(meanGrad);
-
-        // Backward through mean and logVar convs
-        var normGradMean = _meanConv.Backward(meanGrad);
-        var normGradLogVar = _logVarConv.Backward(logVarGrad);
-
-        // Combine gradients
-        var normGrad = Engine.TensorAdd(normGradMean, normGradLogVar);
-
-        // Backward through SiLU and normalization
-        normGrad = ApplySiLUDerivative(_normOutOutput!, normGrad);
-        normGrad = _normOut.Backward(normGrad);
-
-        // Backward through middle blocks
-        normGrad = _midBlocks[1].Backward(normGrad);
-        normGrad = _midBlocks[0].Backward(normGrad);
-
-        // Backward through down blocks
-        for (int i = _downBlocks.Length - 1; i >= 0; i--)
-        {
-            normGrad = _downBlocks[i].Backward(normGrad);
-        }
-
-        // Backward through input conv
-        return _inputConv.Backward(normGrad);
-    }
-
     private Tensor<T> ApplySiLUDerivative(Tensor<T> input, Tensor<T> gradient)
     {
-        var output = new Tensor<T>(input.Shape.ToArray());
+        var output = new Tensor<T>(input._shape);
         var inputSpan = input.AsSpan();
         var gradSpan = gradient.AsSpan();
         var outputSpan = output.AsWritableSpan();
@@ -627,15 +591,6 @@ public class VAEEncoder<T> : LayerBase<T>
         _meanConv.ResetState();
         _logVarConv.ResetState();
         _quantConv.ResetState();
-    }
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc />
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("VAEEncoder JIT compilation is not yet implemented.");
     }
 
     /// <summary>

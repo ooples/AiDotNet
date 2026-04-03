@@ -45,7 +45,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.Projection)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 8")]
-public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets whether auxiliary loss (weight regularization) should be used during training.
@@ -144,6 +144,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// and weights close to zero mean the connection is weak or unimportant.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
@@ -166,6 +168,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// while a negative bias would require stronger input signals to activate.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -233,9 +237,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _lastOutput; // Pre-activation output for proper gradient computation
 
     // GPU-resident cached tensors for GPU training pipeline
-    private IGpuTensor<T>? _lastInputGpu;
-    private IGpuTensor<T>? _lastPreActivationGpu; // Pre-activation for GPU backward pass
-    private IGpuTensor<T>? _lastOutputGpu; // Post-activation for sigmoid/tanh backward
+    private Tensor<T>? _lastInputGpu;
+    private Tensor<T>? _lastPreActivationGpu; // Pre-activation for GPU backward pass
+    private Tensor<T>? _lastOutputGpu; // Post-activation for sigmoid/tanh backward
     private int[]? _gpuOriginalInputShape;
 
 
@@ -894,7 +898,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <param name="inputs">GPU-resident input tensors (uses first input). Last dimension is features.</param>
     /// <returns>GPU-resident output tensor with same batch dimensions, outputSize as last dim.</returns>
     /// <exception cref="InvalidOperationException">Thrown if GPU execution is not available.</exception>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -954,14 +958,14 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Reshape ND input to 2D [totalBatch, features] for matrix multiply
-        IGpuTensor<T> input2D = input;
+        Tensor<T> input2D = input;
         if (needsReshape && input.Shape.Length > 2)
         {
-            input2D = input.CreateView(0, [batchDim, actualInputSize]);
+            input2D = input.Reshape([batchDim, actualInputSize]);
         }
         else if (needsReshape && input.Shape.Length == 1)
         {
-            input2D = input.CreateView(0, [1, actualInputSize]);
+            input2D = input.Reshape([1, actualInputSize]);
         }
 
         // Get the fused activation type
@@ -991,15 +995,15 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             }
 
             // Also download to CPU for hybrid CPU/GPU backward compatibility
-            _lastInput = input.ToTensor();
-            _lastOutput = _lastPreActivationGpu.ToTensor();
+            _lastInput = input;
+            _lastOutput = _lastPreActivationGpu;
         }
 
         // Reshape output back to original batch dimensions if needed
         if (input.Shape.Length == 1)
         {
             // 1D input -> 1D output [outputSize]
-            result = result.CreateView(0, [outputSize]);
+            result = result.Reshape([outputSize]);
         }
         else if (input.Shape.Length > 2)
         {
@@ -1010,7 +1014,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 outputShape[i] = originalBatchDims[i];
             }
             outputShape[^1] = outputSize;
-            result = result.CreateView(0, outputShape);
+            result = result.Reshape(outputShape);
         }
         // 2D input: result is already [batch, outputSize]
 
@@ -1018,85 +1022,9 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
-    /// Performs GPU-resident backward pass for the dense layer.
-    /// Computes gradients for weights, biases, and input entirely on GPU - no CPU roundtrip.
-    /// </summary>
-    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
-    /// <returns>GPU-resident gradient to pass to the previous layer.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
-
-        if (_lastInputGpu == null || _lastPreActivationGpu == null || _gpuOriginalInputShape == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
-
-        // Ensure gradient is 2D for computation
-        int batchDim = _lastInputGpu.Shape[0];
-        int outputSize = OutputShape[0];
-        int inputSize = _weights.Shape[0];
-
-        IGpuTensor<T> gradient2D;
-        if (outputGradient.Shape.Length == 1)
-        {
-            gradient2D = outputGradient.CreateView(0, [1, outputSize]);
-        }
-        else if (outputGradient.Shape.Length == 2)
-        {
-            gradient2D = outputGradient;
-        }
-        else
-        {
-            // Flatten ND gradient to 2D
-            int flatBatch = 1;
-            for (int i = 0; i < outputGradient.Shape.Length - 1; i++)
-                flatBatch *= outputGradient.Shape[i];
-            gradient2D = outputGradient.CreateView(0, [flatBatch, outputSize]);
-        }
-
-        // Step 1: Compute activation gradient using GPU-resident activation backward
-        IGpuTensor<T> activationGradient = ComputeActivationGradientGpu(gpuEngine, gradient2D);
-
-        // Step 2: Compute weight gradient: dW = input^T @ activationGrad
-        // input: [batchDim, inputSize], activationGrad: [batchDim, outputSize]
-        // input^T: [inputSize, batchDim], result: [inputSize, outputSize]
-        var inputTransposed = gpuEngine.TransposeGpu<T>(_lastInputGpu);
-        var weightsGradGpu = gpuEngine.MatMulGpuTensors<T>(inputTransposed, activationGradient);
-
-        // Download weight gradient to CPU for UpdateParameters
-        _weightsGradient = weightsGradGpu.ToTensor();
-
-        // Step 3: Compute bias gradient: dB = sum(activationGrad, axis=0)
-        // Result: [1, outputSize] -> reshape to [outputSize]
-        var biasGradGpu = gpuEngine.SumAxisGpu<T>(activationGradient, 0);
-        var biasGradTensor = biasGradGpu.ToTensor();
-        _biasesGradient = biasGradTensor.Reshape([outputSize]);
-
-        // Step 4: Compute input gradient: dX = activationGrad @ W^T
-        // activationGrad: [batchDim, outputSize], W: [inputSize, outputSize]
-        // W^T: [outputSize, inputSize], result: [batchDim, inputSize]
-        var weightsGpu = gpuEngine.UploadToGpu(_weights, GpuTensorRole.Weight);
-        var weightsTransposed = gpuEngine.TransposeGpu<T>(weightsGpu);
-        var inputGradient = gpuEngine.MatMulGpuTensors<T>(activationGradient, weightsTransposed);
-
-        // Reshape input gradient back to original shape if needed
-        if (_gpuOriginalInputShape.Length == 1)
-        {
-            return inputGradient.CreateView(0, [inputSize]);
-        }
-        else if (_gpuOriginalInputShape.Length > 2)
-        {
-            return inputGradient.CreateView(0, _gpuOriginalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
     /// Computes activation gradient using GPU-resident backward operations.
     /// </summary>
-    private IGpuTensor<T> ComputeActivationGradientGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> gradOutput)
+    private Tensor<T> ComputeActivationGradientGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> gradOutput)
     {
         // Determine activation type and apply appropriate backward
         var fusedActivation = GetFusedActivationType();
@@ -1152,333 +1080,6 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _weights = resizedWeights;
         _weightsGradient = null;
         UpdateInputShape([actualInputSize]);
-    }
-
-    /// <summary>
-    /// Calculates gradients for the input, weights, and biases during backpropagation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method performs the backward pass of the dense layer during training. It calculates
-    /// the gradient of the loss with respect to the input, weights, and biases. The calculated
-    /// gradients for weights and biases are stored for the subsequent parameter update, and the
-    /// input gradient is returned for propagation to earlier layers.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method helps the layer learn from its mistakes.
-    ///
-    /// During the backward pass:
-    /// - The layer receives information about how wrong its output was
-    /// - It calculates how to adjust its weights and biases to be more accurate
-    /// - It prepares the adjustments but doesn't apply them yet
-    /// - It passes information back to previous layers so they can learn too
-    ///
-    /// This is where the actual "learning" happens. The layer figures out which connections
-    /// should be strengthened and which should be weakened based on the error in its output.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // 1. Calculate activation gradient: dL/dz = dL/dy * f'(z)
-        // The activation was applied to _lastOutput (pre-activation), so use it for derivative computation
-        bool shapeMatches = outputGradient.Rank == _lastOutput.Rank;
-        if (shapeMatches)
-        {
-            for (int i = 0; i < _lastOutput.Shape.Length; i++)
-            {
-                if (_lastOutput.Shape[i] != outputGradient.Shape[i])
-                {
-                    shapeMatches = false;
-                    break;
-                }
-            }
-        }
-
-        // Ensure output gradient matches _lastOutput shape for activation backward
-        if (!shapeMatches)
-        {
-            if (outputGradient.Length == _lastOutput.Length)
-            {
-                outputGradient = outputGradient.Reshape(_lastOutput.Shape.ToArray());
-            }
-            else
-            {
-                // Pad or truncate gradient to match _lastOutput for activation backward
-                var gradData = new T[_lastOutput.Length];
-                int copyLen = Math.Min(outputGradient.Length, gradData.Length);
-                outputGradient.Data.Span.Slice(0, copyLen).CopyTo(gradData.AsSpan());
-                outputGradient = new Tensor<T>(_lastOutput.Shape.ToArray(), new Vector<T>(gradData));
-            }
-        }
-
-        Tensor<T> activationGradient;
-
-        if (UsingVectorActivation && VectorActivation != null)
-        {
-            activationGradient = VectorActivation.Backward(_lastOutput, outputGradient);
-        }
-        else if (ScalarActivation != null)
-        {
-            activationGradient = ScalarActivation.Backward(_lastOutput, outputGradient);
-        }
-        else
-        {
-            activationGradient = outputGradient; // Identity
-        }
-
-        // Compute sizes for 2D reshaping
-        int inputSize = _lastInput.Shape[^1];
-        int outputSize = OutputShape[0];
-
-        // Compute batch dimension from input (the ground truth for backward pass)
-        int batchDim = _lastInput.Length / inputSize;
-
-        // Flatten input to 2D [batchDim, inputSize] for gradient computation
-        Tensor<T> flattenedInput;
-        if (_lastInput.Rank == 2)
-        {
-            flattenedInput = _lastInput;
-        }
-        else
-        {
-            flattenedInput = _lastInput.Reshape(batchDim, inputSize);
-        }
-
-        // Flatten gradient to 2D for tensor operations
-        // The gradient should have batchDim * outputSize elements
-        // If it doesn't, reshape to match expected dimensions as best we can
-        Tensor<T> flattenedGradient;
-        int expectedGradientSize = batchDim * outputSize;
-
-        if (activationGradient.Length == expectedGradientSize)
-        {
-            // Normal case: gradient has expected size
-            if (activationGradient.Rank == 2 && activationGradient.Shape[0] == batchDim)
-            {
-                flattenedGradient = activationGradient;
-            }
-            else
-            {
-                flattenedGradient = activationGradient.Reshape(batchDim, outputSize);
-            }
-        }
-        else
-        {
-            // Gradient size mismatch - compute effective batch dim from gradient
-            // This handles edge cases in complex architectures
-            if (activationGradient.Length % outputSize == 0)
-            {
-                int gradBatchDim = activationGradient.Length / outputSize;
-                flattenedGradient = activationGradient.Reshape(gradBatchDim, outputSize);
-
-                // Also reshape input to match gradient batch dimension for consistency
-                if (_lastInput.Length % inputSize == 0)
-                {
-                    int inputBatchDim = _lastInput.Length / inputSize;
-                    // Use the smaller of the two batch dims to avoid out-of-bounds
-                    int effectiveBatch = Math.Min(gradBatchDim, inputBatchDim);
-
-                    if (effectiveBatch == gradBatchDim && effectiveBatch == inputBatchDim)
-                    {
-                        flattenedInput = _lastInput.Reshape(effectiveBatch, inputSize);
-                    }
-                    else
-                    {
-                        // Batch dims differ - use gradient batch and truncate/pad input if needed
-                        var inputData = new T[gradBatchDim * inputSize];
-                        int copyLen = Math.Min(_lastInput.Length, inputData.Length);
-                        _lastInput.Data.Span.Slice(0, copyLen).CopyTo(inputData.AsSpan());
-                        flattenedInput = new Tensor<T>(new[] { gradBatchDim, inputSize }, new Vector<T>(inputData));
-                    }
-                }
-                else
-                {
-                    // Input doesn't reshape cleanly - use gradient batch dim
-                    var inputData = new T[gradBatchDim * inputSize];
-                    int copyLen = Math.Min(_lastInput.Length, inputData.Length);
-                    _lastInput.Data.Span.Slice(0, copyLen).CopyTo(inputData.AsSpan());
-                    flattenedInput = new Tensor<T>(new[] { gradBatchDim, inputSize }, new Vector<T>(inputData));
-                }
-                batchDim = gradBatchDim;
-            }
-            else
-            {
-                // Gradient doesn't divide evenly by outputSize - use original batch dim
-                // Pad or truncate gradient to match expected size
-                var gradData = new T[batchDim * outputSize];
-                int copyLen = Math.Min(activationGradient.Length, gradData.Length);
-                activationGradient.Data.Span.Slice(0, copyLen).CopyTo(gradData.AsSpan());
-                flattenedGradient = new Tensor<T>(new[] { batchDim, outputSize }, new Vector<T>(gradData));
-            }
-        }
-
-        // 2. Compute Weight Gradients: dW = input^T @ dL/dz
-        // Weights are [inputSize, outputSize], so gradient must have same shape
-        // [inputSize, batchDim] @ [batchDim, outputSize] -> [inputSize, outputSize]
-        var inputTransposed = Engine.TensorTranspose(flattenedInput);
-        _weightsGradient = Engine.TensorMatMul(inputTransposed, flattenedGradient);
-
-        // 3. Compute Bias Gradients: dB = sum(dL/dz, axis=0)
-        // Sum gradients across the batch dimension
-        _biasesGradient = flattenedGradient.Sum([0]);
-
-        // 4. Compute Input Gradient: dX = dL/dz @ W^T
-        // Weights are [inputSize, outputSize], need transpose for backward pass
-        // [batchDim, outputSize] @ [outputSize, inputSize] -> [batchDim, inputSize]
-        var weightsTransposed = Engine.TensorTranspose(_weights);
-        var inputGradient = Engine.TensorMatMul(flattenedGradient, weightsTransposed);
-
-        // Reshape back to original input shape
-        return inputGradient.Reshape(_originalInputShape);
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. It's slower than the
-    /// manual implementation but can be useful for:
-    /// - Verifying gradient correctness
-    /// - Rapid prototyping with custom modifications
-    /// - Research and experimentation
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Handle any-rank input: flatten to 2D for gradient computation
-        int inputSize = _lastInput.Shape[^1];
-        int batchDim;
-
-        if (_lastInput.Rank == 1)
-        {
-            batchDim = 1;
-        }
-        else if (_lastInput.Rank == 2)
-        {
-            batchDim = _lastInput.Shape[0];
-        }
-        else
-        {
-            batchDim = 1;
-            for (int i = 0; i < _lastInput.Rank - 1; i++)
-            {
-                batchDim *= _lastInput.Shape[i];
-            }
-        }
-
-        var flattenedInput = _lastInput.Reshape(batchDim, inputSize);
-
-        // Create computation nodes directly from tensors
-        var input = Autodiff.TensorOperations<T>.Variable(flattenedInput, "input", requiresGradient: true);
-        var weights = Autodiff.TensorOperations<T>.Variable(_weights, "weights", requiresGradient: true);
-        var biases = Autodiff.TensorOperations<T>.Variable(_biases, "biases", requiresGradient: true);
-
-        // Forward computation using autodiff ops
-        // output = input @ weights + biases (industry standard: no transpose needed)
-        // Weights are [inputSize, outputSize]
-        var matmul = Autodiff.TensorOperations<T>.MatrixMultiply(input, weights);
-
-        // Add biases directly - autodiff Add operation handles broadcasting and gradient reduction
-        // matmul is [batchSize, outputSize], biases is [outputSize]
-        // Add broadcasts biases and reduces gradients automatically
-        var output = Autodiff.TensorOperations<T>.Add(matmul, biases);
-
-        // Apply activation using autodiff
-        var activated = ApplyActivationAutodiff(output);
-
-        // Manually propagate gradients using the output gradient we received
-        // Flatten gradient to 2D for computation
-        Tensor<T> flattenedOutputGradient;
-        if (outputGradient.Rank == 1)
-        {
-            flattenedOutputGradient = outputGradient.Reshape(1, OutputShape[0]);
-        }
-        else if (outputGradient.Rank == 2)
-        {
-            flattenedOutputGradient = outputGradient;
-        }
-        else
-        {
-            flattenedOutputGradient = outputGradient.Reshape(batchDim, OutputShape[0]);
-        }
-        activated.Gradient = flattenedOutputGradient;
-
-        // Inline topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((activated, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract gradients
-        if (weights.Gradient == null)
-            throw new InvalidOperationException("Weights gradient is null after backward pass");
-        if (biases.Gradient == null)
-            throw new InvalidOperationException("Biases gradient is null after backward pass");
-        if (input.Gradient == null)
-            throw new InvalidOperationException("Input gradient is null after backward pass");
-
-        _weightsGradient = weights.Gradient;
-        _biasesGradient = biases.Gradient;
-
-        // Reshape back to original input shape
-        return input.Gradient.Reshape(_originalInputShape);
     }
 
     /// <summary>
@@ -1559,10 +1160,10 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
         else
         {
-            // SGD update using Engine tensor ops for SIMD acceleration
-            _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightsGradient, learningRate));
-            _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasesGradient, learningRate));
+            _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
+            _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
 
+            // Notify engine that weights/biases have changed (for GPU cache invalidation)
             Engine.InvalidatePersistentTensor(_weights);
             Engine.InvalidatePersistentTensor(_biases);
         }
@@ -1596,7 +1197,7 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         // Ensure weights and biases are initialized (supports lazy initialization)
         EnsureInitialized();
-        return Vector<T>.Concatenate(Vector<T>.FromMemory(_weights.Data), Vector<T>.FromMemory(_biases.Data));
+        return Vector<T>.Concatenate(new Vector<T>(_weights.ToArray()), new Vector<T>(_biases.ToArray()));
     }
 
     /// <summary>
@@ -1610,8 +1211,8 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         return Vector<T>.Concatenate(
-            (_weightsGradient is not null ? Vector<T>.FromMemory(_weightsGradient.Data) : new Vector<T>(0)),
-            (_biasesGradient is not null ? Vector<T>.FromMemory(_biasesGradient.Data) : new Vector<T>(0)));
+            new Vector<T>(_weightsGradient.ToArray()),
+            new Vector<T>(_biasesGradient.ToArray()));
     }
 
     /// <summary>
@@ -1802,96 +1403,6 @@ public class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         copy.SetParameters(GetParameters());
         return copy;
     }
-
-    /// <summary>
-    /// Exports the dense layer's forward pass as a JIT-compilable computation graph.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes (input data, weights, biases).</param>
-    /// <returns>The output computation node representing the layer's prediction.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method builds a computation graph that mirrors the layer's forward pass logic.
-    /// The graph uses TensorOperations which now integrates with IEngine for GPU acceleration
-    /// where supported (e.g., Add operations use IEngine.TensorAdd).
-    /// </para>
-    /// <para>
-    /// Current IEngine integration status:
-    /// - Addition operations: Fully GPU-accelerated via IEngine.TensorAdd
-    /// - Matrix multiplication: Uses Tensor.MatrixMultiply (pending IEngine integration)
-    /// - Transpose operations: Uses Tensor.Transpose (pending IEngine integration)
-    /// </para>
-    /// <para>
-    /// The computation graph enables:
-    /// - JIT compilation for optimized inference
-    /// - Operation fusion and dead code elimination
-    /// - Automatic differentiation via backpropagation
-    /// - Deferred execution with GPU acceleration
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        // Validate parameters
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Ensure weights and biases are initialized (supports lazy initialization)
-        EnsureInitialized();
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (!CanActivationBeJitted())
-        {
-            var activationType = ScalarActivation?.GetType().Name ?? VectorActivation?.GetType().Name ?? "unknown";
-            throw new NotSupportedException(
-                $"Activation function '{activationType}' is not supported for JIT compilation yet. " +
-                "Supported activations: ReLU, Sigmoid, Tanh, Softmax");
-        }
-
-        // Input shape: [batchSize, inputSize]
-        // Weights are [inputSize, outputSize] in industry standard convention
-        int inputSize = _weights.Shape[0];
-
-        // Create placeholder for input data
-        // Note: Using batch size 1 for placeholder; actual batch size is determined at runtime
-        var inputPlaceholder = new Tensor<T>(new int[] { 1, inputSize });
-        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "input");
-
-        // Create constant nodes for weights and biases
-        // Weights shape: [inputSize, outputSize] (industry standard - no transpose needed)
-        var weightsNode = TensorOperations<T>.Variable(_weights, "weights");
-
-        // Biases shape: [outputSize]
-        var biasesNode = TensorOperations<T>.Variable(_biases, "biases");
-
-        // Add input nodes in order: input, weights, biases
-        inputNodes.Add(inputNode);
-        inputNodes.Add(weightsNode);
-        inputNodes.Add(biasesNode);
-
-        // Build computation graph: output = (input x weights) + biases
-        // Industry standard: no transpose needed with [inputSize, outputSize] weights
-
-        // Step 1: Matrix multiply: input x weights
-        var matmulResult = TensorOperations<T>.MatrixMultiply(inputNode, weightsNode);
-
-        // Step 2: Add biases (uses IEngine.TensorAdd for GPU acceleration!)
-        var outputNode = TensorOperations<T>.Add(matmulResult, biasesNode);
-
-        // Step 3: Apply activation function
-        var activatedOutput = ApplyActivationToGraph(outputNode);
-
-        return activatedOutput;
-    }
-
-    /// <summary>
-    /// Gets whether this layer currently supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// True if the layer's activation function is supported for JIT compilation.
-    /// Supported activations: ReLU, Sigmoid, Tanh, Softmax, Identity.
-    /// </value>
-    public override bool SupportsJitCompilation => CanActivationBeJitted();
 
     /// <summary>
     /// Releases resources used by this layer, including GPU tensor handles.

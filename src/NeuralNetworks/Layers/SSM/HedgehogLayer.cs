@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -128,9 +128,6 @@ public class HedgehogLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Gets the model dimension.
@@ -494,252 +491,6 @@ public class HedgehogLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null ||
-            _lastQuery == null || _lastKey == null || _lastValue == null ||
-            _lastPhiQ == null || _lastPhiK == null ||
-            _lastPhiQHidden == null || _lastPhiKHidden == null ||
-            _lastPhiQPreActivation == null || _lastPhiKPreActivation == null ||
-            _lastAttnOutput == null || _lastAttnDenominators == null ||
-            _lastGate == null || _lastGateRaw == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = _lastInput.Shape[0];
-        int seqLen = _lastInput.Shape[1];
-
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        var activationGrad = ApplyActivationDerivative(_lastOutput, grad3D);
-
-        // Initialize gradients
-        _queryWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _keyWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _valueWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _featureMapW1Gradient = new Tensor<T>([_numHeads, _headDimension, _featureMapHiddenDim]);
-        _featureMapB1Gradient = new Tensor<T>([_numHeads, _featureMapHiddenDim]);
-        _featureMapW2Gradient = new Tensor<T>([_numHeads, _featureMapHiddenDim, _headDimension]);
-        _featureMapB2Gradient = new Tensor<T>([_numHeads, _headDimension]);
-        _outputGateWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputGateBiasGradient = new Tensor<T>([_modelDimension]);
-        _outputProjectionWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
-
-        // Step 6 backward: output projection
-        var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
-        var gatedOutput = Engine.TensorMultiply(_lastGate, _lastAttnOutput);
-        var gatedFlat = gatedOutput.Reshape(batchSize * seqLen, _modelDimension);
-        _outputProjectionWeightsGradient = Engine.TensorMatMul(gatedFlat.Transpose([1, 0]), gradFlat);
-
-        var dGated = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
-            .Reshape(batchSize, seqLen, _modelDimension);
-
-        // Step 5 backward: gating
-        var dAttnOutput = Engine.TensorMultiply(dGated, _lastGate);
-        var dGateSwish = Engine.TensorMultiply(dGated, _lastAttnOutput);
-
-        var dGateRaw = Engine.TensorMultiply(dGateSwish, ComputeSiLUDerivative(_lastGateRaw));
-        var inputFlat = _lastInput.Reshape(batchSize * seqLen, _modelDimension);
-        var dGateRawFlat = dGateRaw.Reshape(batchSize * seqLen, _modelDimension);
-        _outputGateWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dGateRawFlat);
-        _outputGateBiasGradient = Engine.ReduceSum(dGateRaw, new int[] { 0, 1 });
-        var dInputFromGate = Engine.TensorMatMul(dGateRawFlat, _outputGateWeights.Transpose([1, 0]));
-
-        // Step 4 backward: linear attention
-        // We need dPhiQ, dPhiK, dV from the linear attention backward
-        var dPhiQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dPhiK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        T epsilon = NumOps.FromDouble(1e-6);
-
-        // Reverse-mode recurrence for linear attention backward
-        var dS = new T[batchSize, _numHeads, _headDimension, _headDimension];
-        var dZ = new T[batchSize, _numHeads, _headDimension];
-
-        // Recompute forward states
-        var stateS = new T[batchSize, _numHeads, _headDimension, _headDimension];
-        var stateZ = new T[batchSize, _numHeads, _headDimension];
-
-        // Forward pass to rebuild states at each timestep
-        var statesAtT = new T[seqLen + 1, batchSize, _numHeads, _headDimension, _headDimension];
-        var normsAtT = new T[seqLen + 1, batchSize, _numHeads, _headDimension];
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    int dimStart = hi * _headDimension;
-
-                    // Copy previous state
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        normsAtT[t + 1, bi, hi, di] = normsAtT[t, bi, hi, di];
-                        for (int dj = 0; dj < _headDimension; dj++)
-                            statesAtT[t + 1, bi, hi, di, dj] = statesAtT[t, bi, hi, di, dj];
-                    }
-
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        T phiKVal = _lastPhiK[new[] { bi, t, dimStart + di }];
-                        normsAtT[t + 1, bi, hi, di] = NumOps.Add(normsAtT[t + 1, bi, hi, di], phiKVal);
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            T vVal = _lastValue[new[] { bi, t, dimStart + dj }];
-                            statesAtT[t + 1, bi, hi, di, dj] = NumOps.Add(
-                                statesAtT[t + 1, bi, hi, di, dj],
-                                NumOps.Multiply(phiKVal, vVal));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Backward through time
-        for (int t = seqLen - 1; t >= 0; t--)
-        {
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    int dimStart = hi * _headDimension;
-                    T denom = _lastAttnDenominators[new[] { bi, t, hi }];
-                    T denomSq = NumOps.Multiply(denom, denom);
-
-                    // o_di = sum_dj(S[di,dj] * phiQ[dj]) / denom
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        T dO = dAttnOutput[new[] { bi, t, dimStart + di }];
-
-                        // Numerator for this dim
-                        T numVal = NumOps.Zero;
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            T phiQVal = _lastPhiQ[new[] { bi, t, dimStart + dj }];
-                            numVal = NumOps.Add(numVal,
-                                NumOps.Multiply(statesAtT[t + 1, bi, hi, di, dj], phiQVal));
-                        }
-
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            T phiQVal = _lastPhiQ[new[] { bi, t, dimStart + dj }];
-
-                            // dS[di,dj] += dO * phiQ[dj] / denom
-                            dS[bi, hi, di, dj] = NumOps.Add(dS[bi, hi, di, dj],
-                                NumOps.Divide(NumOps.Multiply(dO, phiQVal), denom));
-
-                            // dPhiQ[dj] += dO * (S[di,dj]/denom - numVal*z[dj]/denomSq)
-                            T term1 = NumOps.Divide(
-                                NumOps.Multiply(dO, statesAtT[t + 1, bi, hi, di, dj]), denom);
-                            T term2 = NumOps.Divide(
-                                NumOps.Multiply(NumOps.Multiply(dO, numVal),
-                                    normsAtT[t + 1, bi, hi, dj]), denomSq);
-                            dPhiQ[new[] { bi, t, dimStart + dj }] = NumOps.Add(
-                                dPhiQ[new[] { bi, t, dimStart + dj }],
-                                NumOps.Subtract(term1, term2));
-                        }
-                    }
-
-                    // Propagate through S += phiK * v^T
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            T dSVal = dS[bi, hi, di, dj];
-                            T phiKVal = _lastPhiK[new[] { bi, t, dimStart + di }];
-                            T vVal = _lastValue[new[] { bi, t, dimStart + dj }];
-
-                            dPhiK[new[] { bi, t, dimStart + di }] = NumOps.Add(
-                                dPhiK[new[] { bi, t, dimStart + di }],
-                                NumOps.Multiply(dSVal, vVal));
-
-                            dV[new[] { bi, t, dimStart + dj }] = NumOps.Add(
-                                dV[new[] { bi, t, dimStart + dj }],
-                                NumOps.Multiply(dSVal, phiKVal));
-                        }
-
-                        // dZ contribution from normalizer
-                        T dZVal = NumOps.Zero;
-                        for (int di2 = 0; di2 < _headDimension; di2++)
-                        {
-                            T dO = dAttnOutput[new[] { bi, t, dimStart + di2 }];
-                            T numVal2 = NumOps.Zero;
-                            for (int dj = 0; dj < _headDimension; dj++)
-                                numVal2 = NumOps.Add(numVal2,
-                                    NumOps.Multiply(statesAtT[t + 1, bi, hi, di2, dj],
-                                        _lastPhiQ[new[] { bi, t, dimStart + dj }]));
-
-                            T phiQi = _lastPhiQ[new[] { bi, t, dimStart + di }];
-                            dZVal = NumOps.Subtract(dZVal,
-                                NumOps.Divide(
-                                    NumOps.Multiply(NumOps.Multiply(dO, numVal2), phiQi),
-                                    denomSq));
-                        }
-
-                        dPhiK[new[] { bi, t, dimStart + di }] = NumOps.Add(
-                            dPhiK[new[] { bi, t, dimStart + di }], dZVal);
-                    }
-                }
-            }
-        }
-
-        // Step 2 backward: feature map MLP backward for both phi(Q) and phi(K)
-        var dQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    int dimStart = hi * _headDimension;
-
-                    // Backward through phi(Q) feature map
-                    FeatureMapBackward(
-                        dPhiQ, _lastQuery!, _lastPhiQHidden!, _lastPhiQPreActivation!,
-                        dQ, bi, t, hi, dimStart);
-
-                    // Backward through phi(K) feature map
-                    FeatureMapBackward(
-                        dPhiK, _lastKey!, _lastPhiKHidden!, _lastPhiKPreActivation!,
-                        dK, bi, t, hi, dimStart);
-                }
-            }
-        }
-
-        // Step 1 backward: Q, K, V projection weight gradients
-        var dQFlat = dQ.Reshape(batchSize * seqLen, _modelDimension);
-        var dKFlat = dK.Reshape(batchSize * seqLen, _modelDimension);
-        var dVFlat = dV.Reshape(batchSize * seqLen, _modelDimension);
-
-        _queryWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dQFlat);
-        _keyWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dKFlat);
-        _valueWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dVFlat);
-
-        // Accumulate input gradients
-        var dInput = Engine.TensorAdd(dInputFromGate,
-            Engine.TensorMatMul(dQFlat, _queryWeights.Transpose([1, 0])));
-        dInput = Engine.TensorAdd(dInput,
-            Engine.TensorMatMul(dKFlat, _keyWeights.Transpose([1, 0])));
-        dInput = Engine.TensorAdd(dInput,
-            Engine.TensorMatMul(dVFlat, _valueWeights.Transpose([1, 0])));
-
-        var dInput3D = dInput.Reshape(batchSize, seqLen, _modelDimension);
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return dInput3D.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return dInput3D.Reshape(_originalInputShape);
-
-        return dInput3D;
-    }
-
     /// <summary>
     /// Backward through the feature map MLP: phi(x) = W2 * GELU(W1 * x + b1) + b2.
     /// Accumulates gradients for W1, b1, W2, b2 and propagates to input.
@@ -888,17 +639,17 @@ public class HedgehogLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
-            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
-            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
-            (_featureMapW1Gradient is not null ? Vector<T>.FromMemory(_featureMapW1Gradient.Data) : new Vector<T>(0)),
-            (_featureMapB1Gradient is not null ? Vector<T>.FromMemory(_featureMapB1Gradient.Data) : new Vector<T>(0)),
-            (_featureMapW2Gradient is not null ? Vector<T>.FromMemory(_featureMapW2Gradient.Data) : new Vector<T>(0)),
-            (_featureMapB2Gradient is not null ? Vector<T>.FromMemory(_featureMapB2Gradient.Data) : new Vector<T>(0)),
-            _outputGateWeightsGradient is not null ? (_outputGateWeightsGradient is not null ? Vector<T>.FromMemory(_outputGateWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateWeights.Length),
-            _outputGateBiasGradient is not null ? (_outputGateBiasGradient is not null ? Vector<T>.FromMemory(_outputGateBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateBias.Length),
-            _outputProjectionWeightsGradient is not null ? (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionWeights.Length),
-            _outputProjectionBiasGradient is not null ? (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionBias.Length));
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_featureMapW1Gradient!.ToArray()),
+            new Vector<T>(_featureMapB1Gradient!.ToArray()),
+            new Vector<T>(_featureMapW2Gradient!.ToArray()),
+            new Vector<T>(_featureMapB2Gradient!.ToArray()),
+            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
+            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
     }
 
     public override void ClearGradients()
@@ -941,28 +692,6 @@ public class HedgehogLayer<T> : LayerBase<T>
     }
 
     #endregion
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
-        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
-        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(outWeightsNode);
-        inputNodes.Add(outBiasNode);
-
-        var outT = TensorOperations<T>.Transpose(outWeightsNode);
-        var finalOutput = TensorOperations<T>.MatrixMultiply(xNode, outT);
-        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
-
-        return outputWithBias;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

@@ -58,37 +58,6 @@ namespace AiDotNet.Autodiff
             }
         }
 
-        /// <summary>
-        /// Computes first derivatives (Jacobian) for a network output with autodiff-first fallback.
-        /// </summary>
-        public static T[,] ComputeGradient(
-            NeuralNetworkBase<T> network,
-            T[] inputs,
-            int outputDim)
-        {
-            if (network == null)
-            {
-                throw new ArgumentNullException(nameof(network));
-            }
-
-            if (inputs == null)
-            {
-                throw new ArgumentNullException(nameof(inputs));
-            }
-
-            if (TryComputeGradientViaAutodiff(network, inputs, outputDim, out var gradients))
-            {
-                return gradients;
-            }
-
-            var derivatives = ComputeDerivatives(network, inputs, outputDim);
-            if (derivatives.FirstDerivatives == null)
-            {
-                throw new InvalidOperationException("First derivatives were not computed.");
-            }
-
-            return derivatives.FirstDerivatives;
-        }
 
         /// <summary>
         /// Computes the Hessian for a scalar output index.
@@ -254,90 +223,11 @@ namespace AiDotNet.Autodiff
             return new AutoDiffResult(activations, first, second);
         }
 
-        private static bool TryComputeGradientViaAutodiff(
-            NeuralNetworkBase<T> network,
-            T[] inputs,
-            int outputDim,
-            out T[,] gradients)
-        {
-            gradients = new T[outputDim, inputs.Length];
-
-            if (!SupportsAutodiffGraph(network))
-            {
-                return false;
-            }
-
-            try
-            {
-                var inputTensor = CreateInputTensor(inputs);
-                var inputNode = TensorOperations<T>.Variable(inputTensor, "input", requiresGradient: true);
-                var outputNode = BuildGraph(network, inputNode);
-                var outputShape = outputNode.Value.Shape.ToArray();
-
-                // Handle 1D output [outputDim] or 2D batched output [1, outputDim]
-                bool is1D = outputShape.Length == 1 && outputShape[0] == outputDim;
-                bool is2DBatched = outputShape.Length == 2 && outputShape[0] == 1 && outputShape[1] == outputDim;
-
-                if (!is1D && !is2DBatched)
-                {
-                    return false;
-                }
-
-                var numOps = MathHelper.GetNumericOperations<T>();
-
-                for (int outIdx = 0; outIdx < outputDim; outIdx++)
-                {
-                    var maskTensor = new Tensor<T>(outputShape);
-                    maskTensor.Fill(numOps.Zero);
-                    if (is1D)
-                    {
-                        maskTensor[outIdx] = numOps.One;
-                    }
-                    else
-                    {
-                        maskTensor[0, outIdx] = numOps.One;
-                    }
-                    var maskNode = TensorOperations<T>.Constant(maskTensor, $"mask_{outIdx}");
-                    var masked = TensorOperations<T>.ElementwiseMultiply(outputNode, maskNode);
-                    var scalar = TensorOperations<T>.Sum(masked);
-
-                    scalar.Backward();
-
-                    if (inputNode.Gradient == null)
-                    {
-                        return false;
-                    }
-
-                    // Read gradient from 1D tensor
-                    for (int i = 0; i < inputs.Length; i++)
-                    {
-                        gradients[outIdx, i] = inputNode.Gradient[i];
-                    }
-                }
-
-                return true;
-            }
-            catch (InvalidOperationException)
-            {
-                return false;
-            }
-            catch (NotSupportedException)
-            {
-                return false;
-            }
-        }
-
         private static bool SupportsAutodiffGraph(NeuralNetworkBase<T> network)
         {
-            foreach (var layer in network.Layers)
-            {
-                if (layer is LayerBase<T> layerBase && !layerBase.SupportsJitCompilation)
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            // GradientTape-based autodiff works for all layers via Forward() recording.
+            // Only fail if network has zero layers (nothing to differentiate).
+            return network.Layers.Count > 0;
         }
 
         private static ComputationNode<T> BuildGraph(

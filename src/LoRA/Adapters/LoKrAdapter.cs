@@ -1,4 +1,4 @@
-using AiDotNet.Extensions;
+﻿using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -354,7 +354,7 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Convert LoKr output to tensor and add to base output
-        Tensor<T> result = new Tensor<T>(baseOutput.Shape.ToArray());
+        Tensor<T> result = new Tensor<T>(baseOutput._shape);
         for (int i = 0; i < batchSize; i++)
         {
             for (int j = 0; j < outputSize; j++)
@@ -365,88 +365,6 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Performs the backward pass through both layers.
-    /// </summary>
-    /// <param name="outputGradient">Gradient flowing back from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass computes gradients through the Kronecker product using the vec-trick
-    /// for efficient gradient computation. The gradients are:
-    /// - dL/dA uses the Kronecker structure to extract A-specific gradients
-    /// - dL/dB uses the Kronecker structure to extract B-specific gradients
-    /// - Input gradients flow through both paths and are summed
-    /// </para>
-    /// <para><b>For Beginners:</b> This figures out how to improve both the base layer and the
-    /// LoKr matrices (A and B). It uses the special structure of the Kronecker product to
-    /// efficiently compute gradients without having to work with the full Kronecker product matrix.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass");
-        }
-
-        // Backward through base layer
-        Tensor<T> baseInputGrad = _baseLayer.Backward(outputGradient);
-
-        // Compute gradients for LoKr matrices using Kronecker product properties
-        int batchSize = _lastInput.Shape[0];
-        int inputSize = _lastInput.Shape.Length > 1 ? _lastInput.Shape[1] : _lastInput.Length;
-        int outputSize = outputGradient.Shape.Length > 1 ? outputGradient.Shape[1] : outputGradient.Length;
-
-        // Convert tensors to matrices
-        Matrix<T> inputMatrix = new Matrix<T>(batchSize, inputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                inputMatrix[i, j] = _lastInput[i * inputSize + j];
-            }
-        }
-
-        Matrix<T> gradMatrix = new Matrix<T>(batchSize, outputSize);
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                gradMatrix[i, j] = outputGradient[i * outputSize + j];
-            }
-        }
-
-        // Use vec-trick for Kronecker gradient computation
-        // For ΔW = A ⊗ B, the gradients are computed by reshaping and using Kronecker properties
-        _gradientA = KroneckerGradientA(inputMatrix, gradMatrix, _matrixB);
-        _gradientB = KroneckerGradientB(inputMatrix, gradMatrix, _matrixA);
-
-        // Scale gradients
-        _gradientA = _gradientA.Multiply(_scaling);
-        _gradientB = _gradientB.Multiply(_scaling);
-
-        // Compute input gradients through Kronecker product
-        Matrix<T> kronDelta = KroneckerProduct(_matrixA, _matrixB);
-        Matrix<T> loraInputGrad = gradMatrix.Multiply(kronDelta).Multiply(_scaling);
-
-        // Sum input gradients from both paths
-        Tensor<T> inputGrad = new Tensor<T>(baseInputGrad.Shape.ToArray());
-        for (int i = 0; i < batchSize; i++)
-        {
-            for (int j = 0; j < inputSize; j++)
-            {
-                int idx = i * inputSize + j;
-                inputGrad[idx] = NumOps.Add(baseInputGrad[idx], loraInputGrad[i, j]);
-            }
-        }
-
-        // Update parameter gradients vector
-        UpdateParameterGradientsFromMatrices();
-
-        return inputGrad;
     }
 
     /// <summary>

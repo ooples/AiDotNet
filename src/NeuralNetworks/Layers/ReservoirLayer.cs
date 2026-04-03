@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -300,13 +300,29 @@ public class ReservoirLayer<T> : LayerBase<T>
                 stepInput[j] = NumOps.Multiply(stepInput[j], inputScale);
             }
 
-            // Input contribution: W_in @ x — vectorized matmul
-            var stepCol = stepInput.Reshape(_inputSize, 1);
-            var inputContribution = Engine.TensorMatMul(_inputWeights, stepCol).Reshape(_reservoirSize);
+            // Manual matmul for input contribution
+            var inputContribution = new Tensor<T>([_reservoirSize]);
+            for (int r = 0; r < _reservoirSize; r++)
+            {
+                T sum = NumOps.Zero;
+                for (int c = 0; c < _inputSize; c++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(_inputWeights[r, c], stepInput[c]));
+                }
+                inputContribution[r] = sum;
+            }
 
-            // Weighted state: W_res @ state — vectorized matmul
-            var stateCol = _reservoirState.Reshape(_reservoirSize, 1);
-            var weightedState = Engine.TensorMatMul(_reservoirWeights, stateCol).Reshape(_reservoirSize);
+            // Manual matmul for weighted state
+            var weightedState = new Tensor<T>([_reservoirSize]);
+            for (int r = 0; r < _reservoirSize; r++)
+            {
+                T sum = NumOps.Zero;
+                for (int c = 0; c < _reservoirSize; c++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(_reservoirWeights[r, c], _reservoirState[c]));
+                }
+                weightedState[r] = sum;
+            }
 
             var reservoirInput = Engine.TensorAdd(weightedState, inputContribution);
 
@@ -360,7 +376,7 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// - Scale and Add for leaking rate blending
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs == null || inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -511,99 +527,7 @@ public class ReservoirLayer<T> : LayerBase<T>
             outputShape[rank - 1] = _reservoirSize;
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the reservoir layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>This method does not return; it throws an exception.</returns>
-    /// <exception cref="InvalidOperationException">Always thrown because backward pass is not supported for ReservoirLayer.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method is not supported because Echo State Networks do not train the reservoir through backpropagation.
-    /// In ESNs, only the output layer (typically a separate layer after the reservoir) is trained, while the
-    /// reservoir weights remain fixed. Therefore, there is no need to compute gradients with respect to the
-    /// reservoir parameters or inputs.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method throws an error because reservoir layers don't do backward passes.
-    ///
-    /// In a standard neural network, the backward pass:
-    /// - Calculates how to adjust weights to reduce error
-    /// - Propagates error signals backward through the network
-    ///
-    /// But in Echo State Networks:
-    /// - The reservoir weights are fixed and never change
-    /// - There's no need to calculate gradients or propagate errors backward
-    /// - Only the output layer (after the reservoir) is trained
-    ///
-    /// If you try to call this method, you'll get an error. Instead, you should:
-    /// 1. Collect reservoir states for your entire dataset
-    /// 2. Train a simple readout layer (like a linear regression) on these states
-    /// 3. Use the trained readout layer to make predictions
-    ///
-    /// This is what makes Echo State Networks faster and simpler to train than traditional RNNs.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation - not supported for ReservoirLayer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>This method does not return; it throws an exception.</returns>
-    /// <exception cref="InvalidOperationException">Always thrown because backward pass is not supported for ReservoirLayer.</exception>
-    /// <remarks>
-    /// In Echo State Networks (ESNs), the reservoir weights are randomly initialized
-    /// and remain fixed during training. Only the readout layer (placed after the reservoir)
-    /// is trained to interpret the reservoir states.
-    /// </remarks>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        // ReservoirLayer weights are fixed (not trained), but gradients must pass through
-        // for downstream layers to train. Compute input gradient via W_input^T * outputGrad
-        // to properly backpropagate through the fixed reservoir.
-        if (outputGradient.Length != _inputSize)
-        {
-            // Map from reservoir space back to input space
-            var inputGrad = TensorAllocator.Rent<T>([_inputSize]);
-            int minLen = Math.Min(outputGradient.Length, _inputSize);
-            for (int i = 0; i < minLen; i++)
-                inputGrad[i] = outputGradient[i];
-            return inputGrad;
-        }
-
-        return outputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation - not supported for ReservoirLayer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>This method does not return; it throws an exception.</returns>
-    /// <exception cref="InvalidOperationException">Always thrown because backward pass is not supported for ReservoirLayer.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method is provided for API consistency but is not supported for ReservoirLayer.
-    /// Echo State Networks do not train the reservoir weights through backpropagation.
-    /// </para>
-    /// <para>
-    /// Autodiff Note: Since the reservoir itself is not trained, there is no gradient
-    /// computation required for this layer. All training occurs in the separate readout layer.
-    /// If gradient flow verification is needed for research purposes, this method could be
-    /// implemented to compute gradients without applying them to the fixed reservoir weights.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        // Pass gradient through without updating fixed reservoir weights
-        return BackwardManual(outputGradient);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -676,7 +600,7 @@ public class ReservoirLayer<T> : LayerBase<T>
     /// </remarks>
     public Vector<T> GetState()
     {
-        return Vector<T>.FromMemory(_reservoirState.Data);
+        return new Vector<T>(_reservoirState.ToArray());
     }
 
     /// <summary>
@@ -908,105 +832,5 @@ public class ReservoirLayer<T> : LayerBase<T>
     {
         return VectorHelper.DotProduct(a.ToVector(), b.ToVector());
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
-
-        // ReservoirLayer JIT provides single-step update with frozen reservoir weights:
-        // new_state = (1 - leakingRate) * prev_state + leakingRate * tanh(W_res @ prev_state + input * inputScaling)
-        //
-        // For JIT compilation, we export the computation assuming prev_state is provided as a second input
-        // or initialized to zeros. The reservoir weights are fixed (not trainable).
-
-        var input = inputNodes[0];
-
-        // Reservoir weights are already Tensor<T>, use directly
-        var weightsNode = TensorOperations<T>.Constant(_reservoirWeights, "reservoir_weights");
-
-        // Get previous state from second input or use current state
-        ComputationNode<T> prevState;
-        if (inputNodes.Count > 1)
-        {
-            prevState = inputNodes[1];
-        }
-        else
-        {
-            // Use current reservoir state as initial state (reshape to column vector)
-            var stateTensor = _reservoirState.Reshape([_reservoirSize, 1]);
-            prevState = TensorOperations<T>.Constant(stateTensor, "reservoir_state");
-        }
-
-        // Scale input
-        var scalingFactor = TensorOperations<T>.Constant(
-            new Tensor<T>([1]) { [0] = NumOps.FromDouble(_inputScaling) },
-            "input_scaling");
-        var scaledInput = TensorOperations<T>.ElementwiseMultiply(input, scalingFactor);
-
-        // Reshape for matrix multiplication
-        var prevStateReshaped = TensorOperations<T>.Reshape(prevState, _reservoirSize, 1);
-
-        // W_res @ prev_state
-        var reservoirContrib = TensorOperations<T>.MatrixMultiply(weightsNode, prevStateReshaped);
-
-        // W_res @ prev_state + scaled_input
-        var scaledInputReshaped = TensorOperations<T>.Reshape(scaledInput, _reservoirSize, 1);
-        var preActivation = TensorOperations<T>.Add(reservoirContrib, scaledInputReshaped);
-
-        // tanh activation
-        var activated = TensorOperations<T>.Tanh(preActivation);
-
-        // Apply leaking rate: (1 - leakingRate) * prev_state + leakingRate * activated
-        ComputationNode<T> newState;
-        if (Math.Abs(_leakingRate - 1.0) < 1e-10)
-        {
-            // No leaking, use activated directly
-            newState = activated;
-        }
-        else
-        {
-            var keepRate = TensorOperations<T>.Constant(
-                new Tensor<T>([1]) { [0] = NumOps.FromDouble(1.0 - _leakingRate) },
-                "keep_rate");
-            var leakRate = TensorOperations<T>.Constant(
-                new Tensor<T>([1]) { [0] = NumOps.FromDouble(_leakingRate) },
-                "leak_rate");
-
-            var keptPrev = TensorOperations<T>.ElementwiseMultiply(prevStateReshaped, keepRate);
-            var scaledNew = TensorOperations<T>.ElementwiseMultiply(activated, leakRate);
-            newState = TensorOperations<T>.Add(keptPrev, scaledNew);
-        }
-
-        // Reshape output
-        var output = TensorOperations<T>.Reshape(newState, _reservoirSize);
-
-        // Apply layer activation if present
-        output = ApplyActivationToGraph(output);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c>. ReservoirLayer exports single-step computation with frozen weights.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// JIT compilation for ReservoirLayer exports a single-step state update. The reservoir
-    /// weights remain frozen (not trainable) during both forward and backward passes, which
-    /// is the standard behavior for Echo State Networks. The computation graph represents
-    /// one time step of the reservoir dynamics.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
 }

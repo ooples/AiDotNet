@@ -157,35 +157,6 @@ public class STDiTBlock<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Backward through FFN residual: output = afterCross + ffn(norm(afterCross))
-        // Gradient flows both through the FFN branch and the skip connection
-        var ffnOutGrad = _ffnOut.Backward(outputGradient);
-        var ffnInGrad = _ffnIn.Backward(ffnOutGrad);
-        var ffnNormGrad = _ffnNorm.Backward(ffnInGrad);
-        var afterCrossGrad = AddTensors(outputGradient, ffnNormGrad);
-
-        // Backward through cross-attention residual: afterCross = afterTemporal + cross(norm(afterTemporal))
-        var crossGrad = _crossAttention.Backward(afterCrossGrad);
-        var crossNormGrad = _crossNorm.Backward(crossGrad);
-        var afterTemporalGrad = AddTensors(afterCrossGrad, crossNormGrad);
-
-        // Backward through temporal attention residual: afterTemporal = afterSpatial + temporal(norm(afterSpatial))
-        var temporalGrad = _temporalAttention.Backward(afterTemporalGrad);
-        var temporalNormGrad = _temporalNorm.Backward(temporalGrad);
-        var afterSpatialGrad = AddTensors(afterTemporalGrad, temporalNormGrad);
-
-        // Backward through spatial attention residual: afterSpatial = input + spatial(norm(input))
-        var spatialGrad = _spatialAttention.Backward(afterSpatialGrad);
-        var spatialNormGrad = _spatialNorm.Backward(spatialGrad);
-        return AddTensors(afterSpatialGrad, spatialNormGrad);
-    }
-
-    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         _spatialAttention.UpdateParameters(learningRate);
@@ -275,12 +246,5 @@ public class STDiTBlock<T> : LayerBase<T>
         _ffnNorm.ResetState();
     }
 
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
 
-    /// <inheritdoc />
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException("STDiTBlock does not support JIT compilation.");
-    }
 }

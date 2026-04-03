@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -521,7 +521,6 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
 
         // Backward pass
         var gradient = _lossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, output.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -804,28 +803,6 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass for gradient computation.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of the loss with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The backward pass computes gradients for all trainable
-    /// parameters (embedding, transformer layers, generation head) to update them.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var current = outputGradient;
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            current = Layers[i].Backward(current);
-        }
-
-        return current;
-    }
-
-    /// <summary>
     /// Performs ONNX-based inference for forecasting.
     /// </summary>
     /// <param name="input">Input tensor with historical data.</param>
@@ -847,7 +824,7 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -929,7 +906,7 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
             throw new InvalidOperationException(
                 $"Autoregressive generation currently supports a single univariate series with shape [context_length], " +
                 $"[1, context_length], [context_length, features], or [1, context_length, features]. " +
-                $"Got input shape [{string.Join(", ", input.Shape.ToArray())}].");
+                $"Got input shape [{string.Join(", ", input._shape)}].");
         }
 
         // Validate that normalized input sequence length matches _contextLength
@@ -998,7 +975,7 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
             // Shift input and append generated value - currentInput is [1, seqLen, features]
             if (step < steps - 1)
             {
-                var shifted = new Tensor<T>(currentInput.Shape.ToArray());
+                var shifted = new Tensor<T>(currentInput._shape);
                 int actualSeqLen = currentInput.Shape[1];
                 int actualFeatures = currentInput.Shape[2];
 
@@ -1086,7 +1063,7 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
             }
 
             // Apply temperature scaling
-            var scaled = new Tensor<T>(sample.Shape.ToArray());
+            var scaled = new Tensor<T>(sample._shape);
             for (int i = 0; i < sample.Length; i++)
             {
                 double val = NumOps.ToDouble(sample.Data.Span[i]);
@@ -1160,7 +1137,7 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
         }
 
         // Apply mask to input
-        var maskedInput = new Tensor<T>(input.Shape.ToArray());
+        var maskedInput = new Tensor<T>(input._shape);
         for (int i = 0; i < input.Length; i++)
         {
             var maskVal = i < mask.Length ? NumOps.ToDouble(mask.Data.Span[i]) : 1.0;
@@ -1183,7 +1160,7 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     private Tensor<T> GenerateRandomMask(Tensor<T> input)
     {
-        var mask = new Tensor<T>(input.Shape.ToArray());
+        var mask = new Tensor<T>(input._shape);
         var rand = RandomHelper.CreateSecureRandom();
 
         for (int i = 0; i < input.Length; i++)
@@ -1215,7 +1192,7 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
         {
             throw new InvalidOperationException(
                 $"ShiftInputWithPredictions currently supports a single univariate series with shape [context_length]. " +
-                $"Got input shape [{string.Join(", ", input.Shape.ToArray())}] with numFeatures={_numFeatures}.");
+                $"Got input shape [{string.Join(", ", input._shape)}] with numFeatures={_numFeatures}.");
         }
 
         // Validate input length matches expected _contextLength
@@ -1226,7 +1203,7 @@ public class Timer<T> : TimeSeriesFoundationModelBase<T>
                 $"context length ({_contextLength}). Ensure input tensor has shape [_contextLength].");
         }
 
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         int contextLen = _contextLength;
         int steps = Math.Min(stepsUsed, contextLen);
 

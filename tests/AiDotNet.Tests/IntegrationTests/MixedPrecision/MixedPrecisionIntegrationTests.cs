@@ -1659,11 +1659,6 @@ public class MixedPrecisionIntegrationTests
             return input;
         }
 
-        public override Tensor<float> Backward(Tensor<float> outputGradient)
-        {
-            return outputGradient;
-        }
-
         public override void UpdateParameters(float learningRate) { }
 
         public override Vector<float> GetParameters() => new Vector<float>(0);

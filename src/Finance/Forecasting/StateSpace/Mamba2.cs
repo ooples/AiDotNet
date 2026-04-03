@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -274,7 +274,6 @@ public class Mamba2<T> : ForecastingModelBase<T>
             fullGradient[i] = gradient[i];
 
         var gradTensor = new Tensor<T>(new[] { 1, output.Length }, new Vector<T>(fullGradient));
-        Backward(gradTensor);
         _optimizer.UpdateParameters(Layers);
         SetTrainingMode(false);
     }
@@ -483,34 +482,6 @@ public class Mamba2<T> : ForecastingModelBase<T>
         return input.Reshape(new[] { batchDims, input.Shape[input.Rank - 2], input.Shape[input.Rank - 1] });
     }
 
-    private Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var current = outputGradient;
-        if (current.Rank == 1) current = current.Reshape(new[] { 1, current.Length });
-        int batchSize = _lastForwardBatchSize;
-
-        if (_outputProjectionLayers is not null)
-        {
-            for (int i = _outputProjectionLayers.Count - 1; i >= 0; i--)
-                current = _outputProjectionLayers[i].Backward(current);
-        }
-
-        current = current.Reshape(new[] { batchSize, _lastForwardSeqLen, _modelDimension });
-
-        if (_mamba2Blocks is not null)
-        {
-            for (int i = _mamba2Blocks.Count - 1; i >= 0; i--)
-                current = _mamba2Blocks[i].Backward(current);
-        }
-
-        int seqLen = current.Shape[1];
-        current = current.Reshape(new[] { batchSize * seqLen, _modelDimension });
-        if (_inputEmbedding is not null)
-            current = _inputEmbedding.Backward(current);
-        current = current.Reshape(new[] { batchSize, seqLen, _numFeatures });
-        return current;
-    }
-
     /// <inheritdoc/>
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
@@ -520,7 +491,7 @@ public class Mamba2<T> : ForecastingModelBase<T>
         for (int i = 0; i < input.Length; i++)
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = OnnxSession.InputMetadata.Keys.First();
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
 
@@ -563,7 +534,7 @@ public class Mamba2<T> : ForecastingModelBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int stepsUsed)
     {
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         for (int i = 0; i < _contextLength - stepsUsed; i++)
             result.Data.Span[i] = input.Data.Span[i + stepsUsed];
         for (int i = 0; i < stepsUsed && i < predictions.Length; i++)

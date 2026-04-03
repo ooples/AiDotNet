@@ -1,4 +1,5 @@
 using AiDotNet.NeuralNetworks.Attention;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -144,31 +145,6 @@ public class FlashAttentionTests
         }
     }
 
-    [Fact]
-    public void FlashAttention_Backward_ProducesCorrectGradientShapes()
-    {
-        // Arrange
-        int batchSize = 2;
-        int seqLen = 4;
-        int headDim = 8;
-
-        var query = CreateRandomTensor(batchSize, seqLen, headDim, seed: 42);
-        var key = CreateRandomTensor(batchSize, seqLen, headDim, seed: 43);
-        var value = CreateRandomTensor(batchSize, seqLen, headDim, seed: 44);
-        var gradOutput = CreateRandomTensor(batchSize, seqLen, headDim, seed: 45);
-
-        // Forward pass
-        var (output, _) = FlashAttention<float>.Forward(query, key, value);
-
-        // Act - Backward pass
-        var (gradQuery, gradKey, gradValue) = FlashAttention<float>.Backward(
-            gradOutput, query, key, value, output);
-
-        // Assert - Gradient shapes match input shapes
-        Assert.Equal(query.Shape.ToArray(), gradQuery.Shape.ToArray());
-        Assert.Equal(key.Shape.ToArray(), gradKey.Shape.ToArray());
-        Assert.Equal(value.Shape.ToArray(), gradValue.Shape.ToArray());
-    }
 
     [Fact]
     public void FlashAttention_DifferentBlockSizes_ProduceSameResult()
@@ -217,64 +193,7 @@ public class FlashAttentionTests
         Assert.Equal(embDim, output.Shape[2]);
     }
 
-    [Fact]
-    public void FlashAttentionLayer_Backward_ProducesCorrectShape()
-    {
-        // Arrange
-        int seqLen = 8;
-        int embDim = 64;
-        int numHeads = 4;
-        int batchSize = 2;
 
-        var layer = new FlashAttentionLayer<float>(seqLen, embDim, numHeads);
-        var input = CreateRandomTensor(batchSize, seqLen, embDim, seed: 42);
-        var gradOutput = CreateRandomTensor(batchSize, seqLen, embDim, seed: 43);
-
-        // Forward pass
-        layer.Forward(input);
-
-        // Act - Backward pass
-        var gradInput = layer.Backward(gradOutput);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), gradInput.Shape.ToArray());
-    }
-
-    [Fact]
-    public void FlashAttentionLayer_UpdateParameters_ChangesWeights()
-    {
-        // Arrange
-        int seqLen = 8;
-        int embDim = 32;
-        int numHeads = 2;
-        int batchSize = 1;
-
-        var layer = new FlashAttentionLayer<float>(seqLen, embDim, numHeads);
-        var input = CreateRandomTensor(batchSize, seqLen, embDim, seed: 42);
-        var gradOutput = CreateRandomTensor(batchSize, seqLen, embDim, seed: 43);
-
-        var paramsBefore = layer.GetParameters().ToArray();
-
-        // Forward and backward
-        layer.Forward(input);
-        layer.Backward(gradOutput);
-
-        // Act
-        layer.UpdateParameters(0.01f);
-        var paramsAfter = layer.GetParameters().ToArray();
-
-        // Assert - Parameters should have changed
-        bool anyChanged = false;
-        for (int i = 0; i < paramsBefore.Length; i++)
-        {
-            if (Math.Abs(paramsBefore[i] - paramsAfter[i]) > 1e-10)
-            {
-                anyChanged = true;
-                break;
-            }
-        }
-        Assert.True(anyChanged, "Parameters should change after update");
-    }
 
     [Fact]
     public void FlashAttentionLayer_GetSetParameters_RoundTrip()

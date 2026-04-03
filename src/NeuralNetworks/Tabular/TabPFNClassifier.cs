@@ -254,36 +254,6 @@ public class TabPFNClassifier<T> : TabPFNBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass.
-    /// </summary>
-    public Tensor<T> Backward(Vector<int> targets)
-    {
-        if (_probabilitiesCache == null || _logitsCache == null || _backboneOutputCache == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int batchSize = _probabilitiesCache.Shape[0];
-
-        var logitsGrad = new Tensor<T>(_logitsCache.Shape.ToArray());
-        var scale = NumOps.FromDouble(1.0 / batchSize);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < _numClasses; c++)
-            {
-                var prob = _probabilitiesCache[b * _numClasses + c];
-                var oneHot = targets[b] == c ? NumOps.One : NumOps.Zero;
-                logitsGrad[b * _numClasses + c] = NumOps.Multiply(
-                    NumOps.Subtract(prob, oneHot), scale);
-            }
-        }
-
-        var backboneGrad = _classificationHead.Backward(logitsGrad);
-        return BackwardBackbone(backboneGrad);
-    }
-
-    /// <summary>
     /// Performs a single training step (for fine-tuning).
     /// </summary>
     /// <remarks>
@@ -296,7 +266,6 @@ public class TabPFNClassifier<T> : TabPFNBase<T>
     {
         var probabilities = PredictProbabilities(numericalFeatures, categoricalIndices);
         var loss = ComputeCrossEntropyLoss(probabilities, targets);
-        _ = Backward(targets);
         UpdateParameters(learningRate);
         ResetState();
 

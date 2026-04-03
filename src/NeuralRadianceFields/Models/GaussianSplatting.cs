@@ -1726,19 +1726,6 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
         return new Tensor<T>(output, [numPoints, 4]);
     }
 
-    public override Tensor<T> Backpropagate(Tensor<T> outputGradient)
-    {
-        if (_lastQueryPositions == null || _lastQueryDirections == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward.");
-        }
-
-        ApplyQueryGradients(_lastQueryPositions, _lastQueryDirections, outputGradient);
-
-        int numPoints = _lastQueryPositions.Shape[0];
-        return new Tensor<T>(new T[numPoints * 6], [numPoints, 6]);
-    }
-
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (LossFunction == null)

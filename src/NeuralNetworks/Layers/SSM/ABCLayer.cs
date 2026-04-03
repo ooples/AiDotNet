@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -120,9 +120,6 @@ public class ABCLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Gets the model dimension.
@@ -476,248 +473,6 @@ public class ABCLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null ||
-            _lastQuery == null || _lastKey == null || _lastValue == null ||
-            _lastForgetGate == null || _lastWriteWeights == null ||
-            _lastReadWeights == null || _lastSlotStates == null ||
-            _lastOutputGate == null || _lastOutputGateRaw == null ||
-            _lastSlotReadOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = _lastInput.Shape[0];
-        int seqLen = _lastInput.Shape[1];
-
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        var activationGrad = ApplyActivationDerivative(_lastOutput, grad3D);
-
-        // Initialize all gradients
-        _queryWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _keyWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _valueWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _slotKeysGradient = new Tensor<T>([_numHeads, _numSlots, _headDimension]);
-        _forgetGateWeightsGradient = new Tensor<T>([_modelDimension, _numHeads]);
-        _forgetGateBiasGradient = new Tensor<T>([_numHeads]);
-        _outputGateWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputGateBiasGradient = new Tensor<T>([_modelDimension]);
-        _outputProjectionWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
-
-        // Step 6 backward: output projection
-        var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
-        var gatedFlat = Engine.TensorMultiply(_lastSlotReadOutput, _lastOutputGate)
-            .Reshape(batchSize * seqLen, _modelDimension);
-        _outputProjectionWeightsGradient = Engine.TensorMatMul(gatedFlat.Transpose([1, 0]), gradFlat);
-
-        var dGated = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
-            .Reshape(batchSize, seqLen, _modelDimension);
-
-        // Step 5 backward: gating
-        var dSlotRead = Engine.TensorMultiply(dGated, _lastOutputGate);
-        var dGateSwish = Engine.TensorMultiply(dGated, _lastSlotReadOutput);
-
-        var dGateRaw = Engine.TensorMultiply(dGateSwish, ComputeSiLUDerivative(_lastOutputGateRaw));
-
-        var inputFlat = _lastInput.Reshape(batchSize * seqLen, _modelDimension);
-        var dGateRawFlat = dGateRaw.Reshape(batchSize * seqLen, _modelDimension);
-        _outputGateWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dGateRawFlat);
-        _outputGateBiasGradient = Engine.ReduceSum(dGateRaw, new int[] { 0, 1 });
-
-        var dInputFromGate = Engine.TensorMatMul(dGateRawFlat, _outputGateWeights.Transpose([1, 0]));
-
-        // Steps 4-1 backward: slot competition backward through time
-        var dQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dForgetGate = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
-
-        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
-
-        // Gradient of slot values, propagated backward through time
-        var dSlotValues = new Tensor<T>(new[] { batchSize, _numHeads, _numSlots, _headDimension });
-
-        for (int t = seqLen - 1; t >= 0; t--)
-        {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
-
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    T fGate = _lastForgetGate[new[] { bi, t, hi }];
-
-                    // Backward through read: o_t[di] = sum_s readWeight[s] * slot[s,di]
-                    // dSlot[s,di] += readWeight[s] * dO[di]
-                    // dReadWeight[s] += sum_di dO[di] * slot[s,di]
-                    var dReadW = new T[_numSlots];
-                    for (int si = 0; si < _numSlots; si++)
-                    {
-                        T rWeight = _lastReadWeights[new[] { bi, t, hi, si }];
-                        T dRW = NumOps.Zero;
-
-                        for (int di = 0; di < _headDimension; di++)
-                        {
-                            int flatDi = dimStart + di;
-                            T dO = dSlotRead[new[] { bi, t, flatDi }];
-                            T slotVal = _lastSlotStates[new[] { bi, t + 1, hi, si, di }];
-
-                            dSlotValues[new[] { bi, hi, si, di }] = NumOps.Add(
-                                dSlotValues[new[] { bi, hi, si, di }],
-                                NumOps.Multiply(rWeight, dO));
-
-                            dRW = NumOps.Add(dRW, NumOps.Multiply(dO, slotVal));
-                        }
-                        dReadW[si] = dRW;
-                    }
-
-                    // Backward through read softmax
-                    T dotRW = NumOps.Zero;
-                    for (int si = 0; si < _numSlots; si++)
-                    {
-                        T rWeight = _lastReadWeights[new[] { bi, t, hi, si }];
-                        dotRW = NumOps.Add(dotRW, NumOps.Multiply(rWeight, dReadW[si]));
-                    }
-
-                    for (int si = 0; si < _numSlots; si++)
-                    {
-                        T rWeight = _lastReadWeights[new[] { bi, t, hi, si }];
-                        T dScore = NumOps.Multiply(rWeight, NumOps.Subtract(dReadW[si], dotRW));
-                        T dScoreScaled = NumOps.Multiply(dScore, scale);
-
-                        // dQ += dScore * slot[s], dSlot[s] += dScore * q
-                        for (int d = 0; d < _headDimension; d++)
-                        {
-                            int flatD = dimStart + d;
-                            T slotVal = _lastSlotStates[new[] { bi, t + 1, hi, si, d }];
-                            T qVal = _lastQuery[new[] { bi, t, flatD }];
-
-                            dQ[new[] { bi, t, flatD }] = NumOps.Add(
-                                dQ[new[] { bi, t, flatD }],
-                                NumOps.Multiply(dScoreScaled, slotVal));
-
-                            dSlotValues[new[] { bi, hi, si, d }] = NumOps.Add(
-                                dSlotValues[new[] { bi, hi, si, d }],
-                                NumOps.Multiply(dScoreScaled, qVal));
-                        }
-                    }
-
-                    // Backward through slot update:
-                    // slot[s] = fGate * prevSlot[s] + writeWeight[s] * v
-                    // dPrevSlot[s] = fGate * dSlot[s]
-                    // dForgetGate += sum_{s,d} dSlot[s,d] * prevSlot[s,d]
-                    // dWriteWeight[s] += sum_d dSlot[s,d] * v[d]
-                    // dV[d] += sum_s dSlot[s,d] * writeWeight[s]
-                    var dWriteW = new T[_numSlots];
-
-                    for (int si = 0; si < _numSlots; si++)
-                    {
-                        T wWeight = _lastWriteWeights[new[] { bi, t, hi, si }];
-                        T dWW = NumOps.Zero;
-
-                        for (int di = 0; di < _headDimension; di++)
-                        {
-                            int flatDi = dimStart + di;
-                            T dS = dSlotValues[new[] { bi, hi, si, di }];
-                            T prevSlot = _lastSlotStates[new[] { bi, t, hi, si, di }];
-                            T vVal = _lastValue[new[] { bi, t, flatDi }];
-
-                            // dForgetGate
-                            dForgetGate[new[] { bi, t, hi }] = NumOps.Add(
-                                dForgetGate[new[] { bi, t, hi }],
-                                NumOps.Multiply(dS, prevSlot));
-
-                            // dV
-                            dV[new[] { bi, t, flatDi }] = NumOps.Add(
-                                dV[new[] { bi, t, flatDi }],
-                                NumOps.Multiply(dS, wWeight));
-
-                            // dWriteWeight accumulation
-                            dWW = NumOps.Add(dWW, NumOps.Multiply(dS, vVal));
-
-                            // Propagate to previous timestep
-                            dSlotValues[new[] { bi, hi, si, di }] = NumOps.Multiply(fGate, dS);
-                        }
-                        dWriteW[si] = dWW;
-                    }
-
-                    // Backward through write softmax
-                    T dotWW = NumOps.Zero;
-                    for (int si = 0; si < _numSlots; si++)
-                    {
-                        T wWeight = _lastWriteWeights[new[] { bi, t, hi, si }];
-                        dotWW = NumOps.Add(dotWW, NumOps.Multiply(wWeight, dWriteW[si]));
-                    }
-
-                    for (int si = 0; si < _numSlots; si++)
-                    {
-                        T wWeight = _lastWriteWeights[new[] { bi, t, hi, si }];
-                        T dScore = NumOps.Multiply(wWeight, NumOps.Subtract(dWriteW[si], dotWW));
-                        T dScoreScaled = NumOps.Multiply(dScore, scale);
-
-                        // dK += dScore * slotKey[s], dSlotKey[s] += dScore * k
-                        for (int d = 0; d < _headDimension; d++)
-                        {
-                            int flatD = dimStart + d;
-                            T slotKeyVal = _slotKeys[new[] { hi, si, d }];
-                            T kVal = _lastKey[new[] { bi, t, flatD }];
-
-                            dK[new[] { bi, t, flatD }] = NumOps.Add(
-                                dK[new[] { bi, t, flatD }],
-                                NumOps.Multiply(dScoreScaled, slotKeyVal));
-
-                            _slotKeysGradient[new[] { hi, si, d }] = NumOps.Add(
-                                _slotKeysGradient[new[] { hi, si, d }],
-                                NumOps.Multiply(dScoreScaled, kVal));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Forget gate through sigmoid derivative
-        var forgetSigDeriv = Engine.TensorMultiply(_lastForgetGate,
-            Engine.TensorSubtract(CreateOnesLike(_lastForgetGate), _lastForgetGate));
-        var dForgetGateRaw = Engine.TensorMultiply(dForgetGate, forgetSigDeriv);
-
-        var dForgetFlat = dForgetGateRaw.Reshape(batchSize * seqLen, _numHeads);
-        _forgetGateWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dForgetFlat);
-        _forgetGateBiasGradient = Engine.ReduceSum(dForgetGateRaw, new int[] { 0, 1 });
-
-        // Q, K, V weight gradients
-        var dQFlat = dQ.Reshape(batchSize * seqLen, _modelDimension);
-        var dKFlat = dK.Reshape(batchSize * seqLen, _modelDimension);
-        var dVFlat = dV.Reshape(batchSize * seqLen, _modelDimension);
-
-        _queryWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dQFlat);
-        _keyWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dKFlat);
-        _valueWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dVFlat);
-
-        // Input gradient from all paths
-        var dInput = Engine.TensorAdd(dInputFromGate,
-            Engine.TensorMatMul(dQFlat, _queryWeights.Transpose([1, 0])));
-        dInput = Engine.TensorAdd(dInput,
-            Engine.TensorMatMul(dKFlat, _keyWeights.Transpose([1, 0])));
-        dInput = Engine.TensorAdd(dInput,
-            Engine.TensorMatMul(dVFlat, _valueWeights.Transpose([1, 0])));
-        dInput = Engine.TensorAdd(dInput,
-            Engine.TensorMatMul(dForgetFlat, _forgetGateWeights.Transpose([1, 0])));
-
-        var dInput3D = dInput.Reshape(batchSize, seqLen, _modelDimension);
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return dInput3D.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return dInput3D.Reshape(_originalInputShape);
-
-        return dInput3D;
-    }
-
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {
         var sig = Engine.Sigmoid(x);
@@ -795,16 +550,16 @@ public class ABCLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
-            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
-            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
-            (_slotKeysGradient is not null ? Vector<T>.FromMemory(_slotKeysGradient.Data) : new Vector<T>(0)),
-            (_forgetGateWeightsGradient is not null ? Vector<T>.FromMemory(_forgetGateWeightsGradient.Data) : new Vector<T>(0)),
-            (_forgetGateBiasGradient is not null ? Vector<T>.FromMemory(_forgetGateBiasGradient.Data) : new Vector<T>(0)),
-            _outputGateWeightsGradient is not null ? (_outputGateWeightsGradient is not null ? Vector<T>.FromMemory(_outputGateWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateWeights.Length),
-            _outputGateBiasGradient is not null ? (_outputGateBiasGradient is not null ? Vector<T>.FromMemory(_outputGateBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputGateBias.Length),
-            _outputProjectionWeightsGradient is not null ? (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionWeights.Length),
-            _outputProjectionBiasGradient is not null ? (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionBias.Length));
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_slotKeysGradient!.ToArray()),
+            new Vector<T>(_forgetGateWeightsGradient!.ToArray()),
+            new Vector<T>(_forgetGateBiasGradient!.ToArray()),
+            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? new T[_outputGateWeights.Length]),
+            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? new T[_outputGateBias.Length]),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
     }
 
     public override void ClearGradients()
@@ -843,28 +598,6 @@ public class ABCLayer<T> : LayerBase<T>
     }
 
     #endregion
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
-        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
-        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(outWeightsNode);
-        inputNodes.Add(outBiasNode);
-
-        var outT = TensorOperations<T>.Transpose(outWeightsNode);
-        var finalOutput = TensorOperations<T>.MatrixMultiply(xNode, outT);
-        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
-
-        return outputWithBias;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

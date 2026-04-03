@@ -1,9 +1,9 @@
-
+﻿
 using AiDotNet.Enums;
-using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.Tensors.Engines;
 
-namespace AiDotNet.NeuralNetworks.Attention;
+namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
 /// A multi-head attention layer using the Flash Attention algorithm for memory-efficient computation.
@@ -263,7 +263,7 @@ public class FlashAttentionLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _originalInputShape = input.Shape.ToArray();
+        _originalInputShape = input._shape;
         var input3D = NormalizeTo3D(input, out int batchSize, out int sequenceLength, out int embeddingDimension);
         _lastInput = input3D;
 
@@ -341,96 +341,6 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         }
 
         return _lastOutput.Reshape(_originalInputShape);
-    }
-
-    /// <summary>
-    /// </summary>
-    /// <param name="outputGradient">Gradient from the next layer.</param>
-    /// <returns>Gradient to pass to the previous layer.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _lastQuery == null ||
-            _lastKey == null || _lastValue == null || _lastAttentionOutput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        if (_lastSoftmaxStats == null)
-        {
-            throw new InvalidOperationException("Softmax statistics were not computed during the forward pass.");
-        }
-
-        var normalizedGrad = NormalizeOutputGradient(outputGradient, out int batchSize, out int sequenceLength, out int embeddingDimension);
-
-        // Apply activation derivative
-        var activationGradient = ApplyActivationDerivative(_lastOutput, normalizedGrad);
-
-        // Gradient through output projection
-        var attentionOutputGradient = activationGradient.Multiply(_outputWeights.Transpose());
-
-        // Compute output weights gradient
-        var attentionOutputFlat = _lastAttentionOutput.Transpose([0, 2, 1, 3]).Reshape(batchSize, sequenceLength, embeddingDimension);
-        _outputWeightsGradient = ComputeWeightGradient(attentionOutputFlat, activationGradient);
-        _outputBiasGradient = activationGradient.Sum([0, 1]).ToVector();
-
-        // Reshape gradient for attention backward
-        attentionOutputGradient = attentionOutputGradient.Reshape(batchSize, sequenceLength, _headCount, _headDimension).Transpose([0, 2, 1, 3]);
-
-        // Flash Attention backward pass using IEngine for GPU acceleration
-        // Pass the cached ALiBi bias so the backward kernel accounts for the bias gradient
-        Engine.FlashAttentionBackward(
-            attentionOutputGradient,
-            _lastQuery,
-            _lastKey,
-            _lastValue,
-            _lastAttentionOutput,
-            _lastSoftmaxStats,
-            _lastScale,
-            _config.UseCausalMask,
-            out var gradQuery,
-            out var gradKey,
-            out var gradValue,
-            attentionBias: _lastAlibiBias);
-
-        // Inverse-rotate Q/K gradients out of rotated space before computing weight gradients.
-        // Forward rotated Q/K via RoPE, so gradients from attention are in rotated space.
-        // Weight gradients need un-rotated gradients to match the un-rotated _lastInput.
-        if (_ropeLayer != null)
-        {
-            (gradQuery, gradKey) = _ropeLayer.ApplyInverseRoPE(gradQuery, gradKey, startPosition: 0);
-        }
-
-        // Reshape gradients back to [batch, seq, embedding]
-        gradQuery = gradQuery.Transpose([0, 2, 1, 3]).Reshape(batchSize, sequenceLength, embeddingDimension);
-        gradKey = gradKey.Transpose([0, 2, 1, 3]).Reshape(batchSize, sequenceLength, embeddingDimension);
-        gradValue = gradValue.Transpose([0, 2, 1, 3]).Reshape(batchSize, sequenceLength, embeddingDimension);
-
-        // Compute projection weight gradients
-        _queryWeightsGradient = ComputeWeightGradient(_lastInput, gradQuery);
-        _keyWeightsGradient = ComputeWeightGradient(_lastInput, gradKey);
-        _valueWeightsGradient = ComputeWeightGradient(_lastInput, gradValue);
-
-        // Compute input gradient
-        var inputGradient = gradQuery.Multiply(_queryWeights.Transpose())
-            .Add(gradKey.Multiply(_keyWeights.Transpose()))
-            .Add(gradValue.Multiply(_valueWeights.Transpose()));
-
-        if (_originalInputShape == null || _originalInputShape.Length == 3)
-        {
-            return inputGradient;
-        }
-
-        if (_originalInputShape.Length == 2)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        if (_originalInputShape.Length == 1)
-        {
-            return inputGradient.Reshape([embeddingDimension]);
-        }
-
-        return inputGradient.Reshape(_originalInputShape);
     }
 
     private Tensor<T> NormalizeTo3D(Tensor<T> input, out int batchSize, out int sequenceLength, out int embeddingDimension)
@@ -619,62 +529,6 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         _valueWeightsGradient = null;
         _outputWeightsGradient = null;
         _outputBiasGradient = null;
-    }
-
-    /// <summary>
-    /// Gets whether this layer supports JIT compilation.
-    /// </summary>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            return _queryWeights != null && _keyWeights != null &&
-                   _valueWeights != null && _outputWeights != null &&
-                   _queryWeights.Rows > 0;
-        }
-    }
-
-    /// <summary>
-    /// Exports the computation graph for JIT compilation.
-    /// </summary>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Create symbolic input
-        var seqLen = InputShape[0];
-        var embDim = InputShape[1];
-        var symbolicInput = new Tensor<T>(new[] { 1, seqLen, embDim });
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Convert weights to tensors
-        var wqTensor = MatrixToTensor(_queryWeights);
-        var wkTensor = MatrixToTensor(_keyWeights);
-        var wvTensor = MatrixToTensor(_valueWeights);
-        var woTensor = MatrixToTensor(_outputWeights);
-
-        var wqNode = Autodiff.TensorOperations<T>.Constant(wqTensor, "Wq");
-        var wkNode = Autodiff.TensorOperations<T>.Constant(wkTensor, "Wk");
-        var wvNode = Autodiff.TensorOperations<T>.Constant(wvTensor, "Wv");
-        var woNode = Autodiff.TensorOperations<T>.Constant(woTensor, "Wo");
-
-        // Multi-head attention using TensorOperations
-        var output = Autodiff.TensorOperations<T>.MultiHeadAttention(
-            query: inputNode,
-            key: inputNode,
-            value: inputNode,
-            numHeads: _headCount,
-            wQ: wqNode,
-            wK: wkNode,
-            wV: wvNode,
-            wO: woNode);
-
-        return output;
     }
 
     private Tensor<T> MatrixToTensor(Matrix<T> matrix)

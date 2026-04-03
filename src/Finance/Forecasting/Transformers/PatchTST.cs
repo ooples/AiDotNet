@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Base;
@@ -533,7 +533,6 @@ public class PatchTST<T> : ForecastingModelBase<T>
 
         // Backward pass
         var outputGradient = LossFunction.CalculateDerivative(output.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(outputGradient, output.Shape.ToArray()));
 
         // Update parameters
         _optimizer.UpdateParameters(Layers);
@@ -963,42 +962,6 @@ public class PatchTST<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass to compute gradients for training.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of the loss with respect to the output.</param>
-    /// <returns>Gradient of the loss with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The backward pass is how neural networks learn. After making
-    /// a prediction (forward pass), we measure how wrong it was (the loss). The backward
-    /// pass then calculates how much each parameter in the network contributed to that error.
-    /// </para>
-    /// <para>
-    /// In PatchTST, gradients flow backward through:
-    /// <list type="number">
-    /// <item>Output projection layer</item>
-    /// <item>Layer normalization</item>
-    /// <item>Each transformer encoder layer (in reverse order)</item>
-    /// <item>Patch embedding layer</item>
-    /// </list>
-    /// </para>
-    /// <para>
-    /// Each layer receives the gradient from the layer above it, computes how its parameters
-    /// affected the error, and passes the gradient to the layer below. This is called
-    /// "backpropagation" and is the foundation of how neural networks train.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var gradient = outputGradient;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-        return gradient;
-    }
-
-    /// <summary>
     /// Generates forecasts using native C# layers.
     /// </summary>
     /// <param name="input">Input tensor containing time series data.</param>
@@ -1065,7 +1028,7 @@ public class PatchTST<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1403,7 +1366,7 @@ public class PatchTST<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ApplyRevIN(Tensor<T> input, bool normalize)
     {
-        var result = new Tensor<T>(input.Shape.ToArray());
+        var result = new Tensor<T>(input._shape);
         T epsilon = NumOps.FromDouble(1e-5);
 
         if (normalize)
@@ -1544,7 +1507,7 @@ public class PatchTST<T> : ForecastingModelBase<T>
         Array.Copy(input.Data.ToArray(), shiftAmount, newData, 0, input.Length - shiftAmount);
         Array.Copy(predictions.Data.ToArray(), 0, newData, input.Length - shiftAmount, shiftAmount);
 
-        return new Tensor<T>(input.Shape.ToArray(), new Vector<T>(newData));
+        return new Tensor<T>(input._shape, new Vector<T>(newData));
     }
 
     /// <summary>

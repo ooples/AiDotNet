@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.LossFunctions;
 
@@ -152,5 +153,46 @@ public class PerceptualLoss<T> : LossFunctionBase<T>
         throw new NotSupportedException(
             "Perceptual Loss requires image matrices and is typically calculated using automatic differentiation."
         );
+    }
+
+    /// <summary>
+    /// Optional neural network feature extractor for tape-based training.
+    /// Set via <see cref="SetFeatureExtractorNetwork"/> before calling <see cref="ComputeTapeLoss"/>.
+    /// </summary>
+    private INeuralNetwork<T>? _featureExtractorNetwork;
+
+    /// <summary>
+    /// Sets the neural network used for tape-differentiable feature extraction.
+    /// The network should be pre-trained and frozen (its weights won't be updated).
+    /// Its output is treated as the feature representation for perceptual comparison.
+    /// </summary>
+    public void SetFeatureExtractorNetwork(INeuralNetwork<T> network)
+    {
+        _featureExtractorNetwork = network ?? throw new ArgumentNullException(nameof(network));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Computes perceptual loss by passing both predicted and target through the feature
+    /// extractor network, then computing MSE between the feature representations.
+    /// The feature extractor's output is detached via StopGradient on the target features
+    /// so only the predicted path contributes gradients.
+    /// Requires <see cref="SetFeatureExtractorNetwork"/> to be called first.
+    /// </remarks>
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        if (_featureExtractorNetwork is null)
+            throw new InvalidOperationException(
+                "Feature extractor network not set. Call SetFeatureExtractorNetwork() before training.");
+
+        // Extract features from predicted (tape-tracked) and target (detached)
+        var predFeatures = _featureExtractorNetwork.Predict(predicted);
+        var targetFeatures = Engine.StopGradient(_featureExtractorNetwork.Predict(target));
+
+        // MSE between feature representations
+        var diff = Engine.TensorSubtract(predFeatures, targetFeatures);
+        var sq = Engine.TensorMultiply(diff, diff);
+        var allAxes = Enumerable.Range(0, sq.Shape.Length).ToArray();
+        return Engine.ReduceMean(sq, allAxes, keepDims: false);
     }
 }

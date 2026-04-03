@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -514,5 +515,12 @@ public class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientBasedOpti
             _iteration = reader.ReadInt32();
             _dampingFactor = NumOps.FromDouble(reader.ReadDouble());
         }
+    }
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
+        context.SetFlatParameters(updated);
     }
 }

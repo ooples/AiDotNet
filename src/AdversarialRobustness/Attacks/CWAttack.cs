@@ -177,70 +177,10 @@ public class CWAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TOu
         // Check if the model supports analytic gradients
         if (targetModel is IInputGradientComputable<T> gradientComputable)
         {
-            return (objective, ComputeAnalyticGradient(w, original, output, trueLabel, c, gradientComputable));
         }
 
         // Fallback: approximate gradient in w-space using finite differences
         return (objective, ComputeFiniteDifferenceGradient(w, original, trueLabel, c, referenceInput, targetModel));
-    }
-
-    /// <summary>
-    /// Computes the gradient analytically using the model's backpropagation capabilities.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The C and W objective is: L = ||delta||^2 + c * f(x_adv)
-    /// where delta = x_adv - x_orig and f is the attack loss.
-    /// </para>
-    /// <para>
-    /// The gradient in w-space uses the chain rule:
-    /// dL/dw = dL/dx_adv * dx_adv/dw
-    /// where dx_adv/dw = (1 - tanh^2(w))/2 due to the tanh parameterization.
-    /// </para>
-    /// </remarks>
-    private double[] ComputeAnalyticGradient(
-        double[] w,
-        Vector<T> original,
-        Vector<T> output,
-        int trueLabel,
-        double c,
-        IInputGradientComputable<T> gradientComputable)
-    {
-        var n = w.Length;
-        var gradient = new double[n];
-
-        // Compute adversarial example and intermediate values
-        var adversarial = new Vector<T>(n);
-        var tanhW = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            tanhW[i] = Math.Tanh(w[i]);
-            adversarial[i] = NumOps.FromDouble((tanhW[i] + 1.0) / 2.0);
-        }
-
-        // Compute gradient of L2 perturbation term using vectorized operations:
-        // d(||x_adv - x_orig||^2)/dx_adv = 2 * (x_adv - x_orig)
-        var perturbation = Engine.Subtract<T>(adversarial, original);
-        var two = NumOps.FromDouble(2.0);
-        var perturbGrad = Engine.Multiply<T>(perturbation, two);
-
-        // Compute gradient of attack loss term: df/dx_adv
-        var outputGradient = ComputeAttackLossGradient(output, trueLabel);
-        var inputGradient = gradientComputable.ComputeInputGradient(adversarial, outputGradient);
-
-        // Combine gradients: dL/dx_adv = perturbGrad + c * inputGradient
-        var scaledInputGrad = Engine.Multiply<T>(inputGradient, NumOps.FromDouble(c));
-        var totalGrad = Engine.Add<T>(perturbGrad, scaledInputGrad);
-
-        // Apply chain rule: dx_adv/dw = (1 - tanh^2(w))/2
-        for (int i = 0; i < n; i++)
-        {
-            var dLdx = NumOps.ToDouble(totalGrad[i]);
-            var dxdw = (1.0 - tanhW[i] * tanhW[i]) / 2.0;
-            gradient[i] = dLdx * dxdw;
-        }
-
-        return gradient;
     }
 
     /// <summary>

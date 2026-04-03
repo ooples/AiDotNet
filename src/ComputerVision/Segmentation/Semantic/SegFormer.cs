@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -326,13 +326,15 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
                 "Training is not supported in ONNX mode. Use the native mode constructor for training.");
         }
 
-        var predicted = Forward(input);
-        var lossGradient = predicted.Transform((v, idx) =>
-            NumOps.Subtract(v, expectedOutput.Data.Span[idx]));
-
-        BackwardPass(lossGradient);
-
-        _optimizer?.UpdateParameters(Layers);
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     #endregion
@@ -452,7 +454,7 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         }
 
         // Create ONNX input tensor
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = _onnxSession.InputMetadata;
 
         string inputName = inputMeta.Keys.FirstOrDefault() ?? "pixel_values";
@@ -481,35 +483,6 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Propagates gradients backward through all layers from decoder to encoder.
-    /// </summary>
-    /// <param name="gradient">The loss gradient tensor computed from the difference between
-    /// predicted and expected outputs.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Backpropagation is how neural networks learn. After comparing the model's
-    /// prediction to the correct answer, this method works backward through every layer — from the
-    /// decoder output all the way back to the first encoder layer — calculating how much each weight
-    /// contributed to the error. These gradients are then used by the optimizer to adjust the weights
-    /// and improve future predictions.
-    /// </para>
-    /// </remarks>
-    private void BackwardPass(Tensor<T> gradient)
-    {
-        if (!_useNativeMode || Layers.Count == 0)
-        {
-            return;
-        }
-
-        if (gradient.Rank == 3) gradient = AddBatchDimension(gradient);
-
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
     }
 
     /// <summary>

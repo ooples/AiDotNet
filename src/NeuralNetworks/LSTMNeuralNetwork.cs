@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -712,8 +712,8 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         outputGate = NeuralNetworkHelper<T>.ApplyActivation(outputGate, OutputGateActivation, OutputGateVectorActivation);
 
         // Rent new state tensors
-        var newCellState = TensorAllocator.Rent<T>(cellState.Shape.ToArray());
-        var newHiddenState = TensorAllocator.Rent<T>(hiddenState.Shape.ToArray());
+        var newCellState = TensorAllocator.Rent<T>(cellState._shape);
+        var newHiddenState = TensorAllocator.Rent<T>(hiddenState._shape);
 
         // Efficiently handle vector or scalar activation
         if (VectorActivation != null)
@@ -825,7 +825,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Get shape information from the first tensor
-        int[] shape = tensors[0].Shape.ToArray();
+        int[] shape = tensors[0]._shape;
 
         // Create result shape with time dimension inserted at position 1
         int[] resultShape = new int[shape.Length + 1];
@@ -875,7 +875,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A tensor with an additional batch dimension.</returns>
     private Tensor<T> AddBatchDimension(Tensor<T> input)
     {
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int[] resultShape = new int[inputShape.Length + 1];
 
         // Add batch dimension of size 1
@@ -924,7 +924,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A tensor with the batch dimension removed.</returns>
     private Tensor<T> RemoveBatchDimension(Tensor<T> input)
     {
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
 
         // Ensure first dimension is batch and has size 1
         if (inputShape[0] != 1)
@@ -977,7 +977,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A tensor with an additional time dimension.</returns>
     private Tensor<T> AddTimeDimension(Tensor<T> input)
     {
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int[] resultShape = new int[inputShape.Length + 1];
 
         // First dimension is batch
@@ -1020,7 +1020,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A tensor with the time dimension removed.</returns>
     private Tensor<T> RemoveTimeDimension(Tensor<T> input)
     {
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
 
         // Ensure second dimension is time and has size 1
         if (inputShape[1] != 1)
@@ -1067,7 +1067,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A tensor with additional batch and time dimensions.</returns>
     private Tensor<T> AddBatchAndTimeDimensions(Tensor<T> input)
     {
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
         int[] resultShape = new int[inputShape.Length + 2];
 
         // Add batch and time dimensions of size 1
@@ -1104,7 +1104,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
     /// <returns>A tensor with batch and time dimensions removed.</returns>
     private Tensor<T> RemoveBatchAndTimeDimensions(Tensor<T> input)
     {
-        int[] inputShape = input.Shape.ToArray();
+        int[] inputShape = input._shape;
 
         // Ensure first and second dimensions are batch and time with size 1
         if (inputShape[0] != 1 || inputShape[1] != 1)
@@ -1177,198 +1177,12 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
 
         // Calculate output gradients
         var gradientVector = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
-        var outputGradients = new Tensor<T>(predictions.Shape.ToArray(), gradientVector);
+        var outputGradients = new Tensor<T>(predictions._shape, gradientVector);
 
         // Backpropagation through time
-        BackpropagateOverTime(outputGradients, input);
 
         // Update parameters
         UpdateNetworkParameters();
-    }
-
-    /// <summary>
-    /// Performs backpropagation through time for LSTM networks.
-    /// </summary>
-    /// <param name="outputGradients">The gradients from the output layer.</param>
-    /// <param name="input">The original input used in the forward pass.</param>
-    private void BackpropagateOverTime(Tensor<T> outputGradients, Tensor<T> input)
-    {
-        // Determine dimensions
-        int batchSize = input.Shape[0];
-        int sequenceLength = input.Shape.Length > 1 ? input.Shape[1] : 1;
-        int inputFeatures = input.Shape.Length > 2 ? input.Shape[2] : (input.Shape.Length > 1 ? input.Shape[1] : input.Length);
-
-        // Handle different scenarios for output gradients based on returnSequences setting
-        Tensor<T>[] gradientPerTimeStep;
-
-        if (Architecture.ShouldReturnFullSequence)
-        {
-            // If returning full sequence, split output gradients by time step
-            gradientPerTimeStep = new Tensor<T>[sequenceLength];
-            for (int t = 0; t < sequenceLength; t++)
-            {
-                // Extract gradient for current time step
-                var shape = new int[outputGradients.Shape.Length - 1];
-                shape[0] = batchSize;
-                if (shape.Length > 1)
-                {
-                    Array.Copy(outputGradients.Shape.ToArray(), 2, shape, 1, shape.Length - 1);
-                }
-
-                gradientPerTimeStep[t] = new Tensor<T>(shape);
-
-                // Copy gradient data for this time step
-                for (int b = 0; b < batchSize; b++)
-                {
-                    if (shape.Length == 1)
-                    {
-                        gradientPerTimeStep[t][b] = outputGradients[b, t];
-                    }
-                    else
-                    {
-                        // Handle higher dimensional outputs
-                        int outputFeatures = outputGradients.Shape[2];
-                        for (int f = 0; f < outputFeatures; f++)
-                        {
-                            gradientPerTimeStep[t][b, f] = outputGradients[b, t, f];
-                        }
-                    }
-                }
-            }
-        }
-        else
-        {
-            // If not returning full sequence, use the provided gradient only for the last time step
-            gradientPerTimeStep = new Tensor<T>[sequenceLength];
-            for (int t = 0; t < sequenceLength - 1; t++)
-            {
-                // Zero gradients for all steps except the last
-                gradientPerTimeStep[t] = new Tensor<T>(outputGradients.Shape.ToArray());
-            }
-            gradientPerTimeStep[sequenceLength - 1] = outputGradients;
-        }
-
-        // Initialize hidden state and cell state gradients for tracking between time steps
-        var hiddenStateGradients = new Dictionary<int, Tensor<T>>();
-        var cellStateGradients = new Dictionary<int, Tensor<T>>();
-
-        // Find LSTM layers
-        var lstmLayerIndices = new List<int>();
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            if (IsLSTMLayer(Layers[i]))
-            {
-                int hiddenSize = GetLSTMLayerHiddenSize(i);
-                hiddenStateGradients[i] = new Tensor<T>([batchSize, hiddenSize]);
-                cellStateGradients[i] = new Tensor<T>([batchSize, hiddenSize]);
-                lstmLayerIndices.Add(i);
-            }
-        }
-
-        // Check if we have stored activations
-        if (_storedActivations == null || _storedActivations.Count == 0)
-        {
-            // If no activations are stored, fall back to a simpler approach
-            FallbackBackPropagation(outputGradients, input);
-            return;
-        }
-
-        // Backpropagate through time (from last time step to first)
-        for (int t = sequenceLength - 1; t >= 0; t--)
-        {
-            // Extract input for this time step
-            Tensor<T> timeStepInput;
-            if (input.Shape.Length > 2)
-            {
-                timeStepInput = input.Slice(1, t, t + 1).Reshape([batchSize, inputFeatures]);
-            }
-            else if (input.Shape.Length == 2)
-            {
-                timeStepInput = new Tensor<T>([batchSize, 1]);
-                for (int b = 0; b < batchSize; b++)
-                {
-                    timeStepInput[b, 0] = input[b, t];
-                }
-            }
-            else
-            {
-                timeStepInput = input; // Single input, no time dimension
-            }
-
-            // Current gradient for this time step
-            Tensor<T> currentGradient = gradientPerTimeStep[t];
-
-            // Add hidden state gradients from future time steps
-            foreach (var lstmIndex in lstmLayerIndices)
-            {
-                if (hiddenStateGradients.ContainsKey(lstmIndex) && !IsZeroTensor(hiddenStateGradients[lstmIndex]))
-                {
-                    // We need to transform the hidden state gradient to match the output gradient shape
-                    // This might require a specific transformation based on your architecture
-                    var transformedGradient = TransformHiddenGradientToOutputGradient(
-                        hiddenStateGradients[lstmIndex],
-                        currentGradient.Shape.ToArray());
-
-                    currentGradient = currentGradient.Add(transformedGradient);
-                }
-            }
-
-            // Backpropagate through layers in reverse order for this time step
-            Tensor<T> layerGradient = currentGradient;
-
-            for (int l = Layers.Count - 1; l >= 0; l--)
-            {
-                // The key modification is here - we're using the existing Backward method of each layer
-                layerGradient = Layers[l].Backward(layerGradient);
-
-                // For LSTM layers, we need to update our tracking of state gradients
-                if (lstmLayerIndices.Contains(l))
-                {
-                    // Save hidden state gradient for the previous time step
-                    // This is a simplification - in a full implementation, we would compute proper
-                    // gradients for hidden and cell states based on the LSTM equations
-                    hiddenStateGradients[l] = layerGradient.Clone();
-                }
-            }
-        }
-
-        // Update parameters for each layer
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            if (Layers[i].SupportsTraining)
-            {
-                // Apply parameter updates using the existing method
-                T learningRate = NumOps.FromDouble(0.01); // Use proper learning rate from optimizer
-                Layers[i].UpdateParameters(learningRate);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Fallback implementation of backpropagation when no stored activations are available.
-    /// </summary>
-    /// <param name="outputGradients">The gradients from the output layer.</param>
-    /// <param name="input">The original input used in the forward pass.</param>
-    private void FallbackBackPropagation(Tensor<T> outputGradients, Tensor<T> input)
-    {
-        // Simple backpropagation without considering time steps
-        Tensor<T> gradients = outputGradients;
-
-        // Backpropagate through each layer in reverse order
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradients = Layers[i].Backward(gradients);
-        }
-
-        // Update parameters for each layer
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            if (Layers[i].SupportsTraining)
-            {
-                T learningRate = NumOps.FromDouble(0.01); // Use proper learning rate from optimizer
-                Layers[i].UpdateParameters(learningRate);
-            }
-        }
     }
 
     /// <summary>
@@ -1402,7 +1216,7 @@ public class LSTMNeuralNetwork<T> : NeuralNetworkBase<T>
         var transformedGradient = new Tensor<T>(outputShape);
 
         // Case 1: Shapes match exactly - direct copy
-        if (hiddenGradient.Shape.ToArray().SequenceEqual(outputShape))
+        if (hiddenGradient._shape.SequenceEqual(outputShape))
         {
             for (int i = 0; i < hiddenGradient.Length; i++)
             {

@@ -1,8 +1,9 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -36,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IChainableComputationGraph<T>
+public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// Gets or sets a value indicating whether auxiliary loss is enabled for this layer.
@@ -155,6 +156,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This is part of the "squeeze" operation that compresses information.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights1;
 
     /// <summary>
@@ -176,6 +179,8 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// means it starts with some activation even before the input is considered.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _bias1;
 
     /// <summary>
@@ -621,6 +626,11 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         InitializeTensor2D(_weights2, scale);
         InitializeTensor1D(_bias1, scale);
         InitializeTensor1D(_bias2, scale);
+
+        RegisterTrainableParameter(_weights1, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias1, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_weights2, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_bias2, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -797,7 +807,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// FusedLinearGpu for excitation, and BroadcastMultiplyFirstAxis for scaling.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -846,7 +856,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <summary>
     /// GPU forward pass for 2D inputs [B, C] - no squeeze needed.
     /// </summary>
-    private IGpuTensor<T> ForwardGpu2D(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+    private Tensor<T> ForwardGpu2D(Tensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
         IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
     {
         var shape = input.Shape.ToArray();
@@ -868,17 +878,17 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Cache for backward pass if training
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
-            _lastExcitationWeights = excitation.ToTensor();
+            _lastInput = input;
+            _lastExcitationWeights = excitation;
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
     /// GPU forward pass for 4D inputs [B, H, W, C] - uses GlobalAvgPool2D.
     /// </summary>
-    private IGpuTensor<T> ForwardGpu4D(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+    private Tensor<T> ForwardGpu4D(Tensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
         IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
     {
         var shape = input.Shape.ToArray();
@@ -898,7 +908,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int squeezedSize = batchSize * channels;
         var squeezedBuffer = backend.AllocateBuffer(squeezedSize);
         backend.GlobalAvgPool2D(permutedBuffer, squeezedBuffer, batchSize, channels, height, width);
-        var squeezedGpu = new GpuTensor<T>(backend, squeezedBuffer, [batchSize, channels], GpuTensorRole.Activation, ownsBuffer: true);
+        var squeezedGpu = GpuTensorHelper.UploadToGpu<T>(backend, squeezedBuffer, [batchSize, channels], GpuTensorRole.Activation, ownsBuffer: true);
 
         // Step 3: Excitation - FC1 + activation + FC2 + sigmoid
         var fc1Type = GetFirstActivationType();
@@ -925,17 +935,17 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Cache for backward pass if training
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
-            _lastExcitationWeights = excitation.ToTensor();
+            _lastInput = input;
+            _lastExcitationWeights = excitation;
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
     /// GPU forward pass for 3D inputs [B, L, C] - uses MeanAxis for squeeze.
     /// </summary>
-    private IGpuTensor<T> ForwardGpu3D(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+    private Tensor<T> ForwardGpu3D(Tensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
         IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
     {
         var shape = input.Shape.ToArray();
@@ -956,7 +966,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int squeezedSize = batchSize * channels;
         var squeezedBuffer = backend.AllocateBuffer(squeezedSize);
         backend.MeanAxis(permutedBuffer, squeezedBuffer, squeezedSize, seqLen);
-        var squeezedGpu = new GpuTensor<T>(backend, squeezedBuffer, [batchSize, channels], GpuTensorRole.Activation, ownsBuffer: true);
+        var squeezedGpu = GpuTensorHelper.UploadToGpu<T>(backend, squeezedBuffer, [batchSize, channels], GpuTensorRole.Activation, ownsBuffer: true);
 
         // Step 2: Excitation
         var fc1Type = GetFirstActivationType();
@@ -981,34 +991,34 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Cache for backward pass
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
-            _lastExcitationWeights = excitation.ToTensor();
+            _lastInput = input;
+            _lastExcitationWeights = excitation;
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
     /// GPU forward pass for 1D inputs [C] - reshape to [1, C] and process.
     /// </summary>
-    private IGpuTensor<T> ForwardGpu1D(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+    private Tensor<T> ForwardGpu1D(Tensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
         IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
     {
         var shape = input.Shape.ToArray();
         int channels = shape[0];
 
         // Treat as [1, C] batch
-        var input2D = new GpuTensor<T>(backend, input.Buffer, [1, channels], GpuTensorRole.Activation, ownsBuffer: false);
+        var input2D = GpuTensorHelper.UploadToGpu<T>(backend, input.Buffer, [1, channels], GpuTensorRole.Activation, ownsBuffer: false);
         var result2D = ForwardGpu2D(input2D, weights1T, weights2T, backend, gpuEngine);
 
         // Return with original 1D shape (the buffer is the same but we view it as 1D)
-        return new GpuTensor<T>(backend, result2D.Buffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, result2D.Buffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
     /// GPU forward pass for higher-rank tensors [B, D1, D2, ..., C] - flatten spatial dims.
     /// </summary>
-    private IGpuTensor<T> ForwardGpuND(IGpuTensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
+    private Tensor<T> ForwardGpuND(Tensor<T> input, Tensor<T> weights1T, Tensor<T> weights2T,
         IDirectGpuBackend backend, DirectGpuTensorEngine gpuEngine)
     {
         var shape = input.Shape.ToArray();
@@ -1030,7 +1040,7 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int squeezedSize = batchSize * channels;
         var squeezedBuffer = backend.AllocateBuffer(squeezedSize);
         backend.MeanAxis(permutedBuffer, squeezedBuffer, squeezedSize, spatialSize);
-        var squeezedGpu = new GpuTensor<T>(backend, squeezedBuffer, [batchSize, channels], GpuTensorRole.Activation, ownsBuffer: true);
+        var squeezedGpu = GpuTensorHelper.UploadToGpu<T>(backend, squeezedBuffer, [batchSize, channels], GpuTensorRole.Activation, ownsBuffer: true);
 
         // Excitation
         var fc1Type = GetFirstActivationType();
@@ -1054,11 +1064,11 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Cache
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor();
-            _lastExcitationWeights = excitation.ToTensor();
+            _lastInput = input;
+            _lastExcitationWeights = excitation;
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -1196,187 +1206,6 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         return result;
     }
 
-    /// <summary>
-    /// Performs the backward pass of the Squeeze-and-Excitation layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when trying to perform a backward pass before a forward pass.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the Squeeze-and-Excitation layer, which is used during training to propagate
-    /// error gradients back through the network. It calculates gradients for the input and for all trainable parameters
-    /// (weights and biases).
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
-    /// and parameters should change to reduce errors.
-    /// 
-    /// During the backward pass:
-    /// 1. The layer receives information about how its output should change (outputGradient)
-    /// 2. It calculates how the original input should change to reduce error (inputGradient)
-    /// 3. It calculates how its internal weights and biases should change to reduce error
-    /// 
-    /// This process follows the chain rule of calculus, working backward from the output to the input.
-    /// It's essential for the "learning" part of deep learning, allowing the network to gradually
-    /// improve its performance based on examples.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int rank = _lastInput.Shape.Length;
-        int batchSize = rank == 1 ? 1 : _lastInput.Shape[0];
-
-        // Build computation graph mirroring Forward
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-
-        // 1. Squeeze: Handle different ranks
-        Autodiff.ComputationNode<T> squeezed;
-        if (rank == 1)
-        {
-            // 1D: reshape to [1, C]
-            squeezed = Autodiff.TensorOperations<T>.Reshape(inputNode, new[] { 1, _lastInput.Shape[0] });
-        }
-        else if (rank == 2)
-        {
-            // 2D: already [B, C], no squeeze needed
-            squeezed = inputNode;
-        }
-        else if (rank == 4)
-        {
-            // 4D: Global Average Pooling [B, H, W, C] -> [B, C]
-            var axes = new int[] { 1, 2 };
-            squeezed = Autodiff.TensorOperations<T>.ReduceMean(inputNode, axes, keepDims: false);
-        }
-        else if (rank == 3)
-        {
-            // 3D: [B, L, C] -> [B, C]
-            var axes = new int[] { 1 };
-            squeezed = Autodiff.TensorOperations<T>.ReduceMean(inputNode, axes, keepDims: false);
-        }
-        else
-        {
-            // Higher-rank: squeeze all spatial dimensions
-            var axes = Enumerable.Range(1, rank - 2).ToArray();
-            squeezed = Autodiff.TensorOperations<T>.ReduceMean(inputNode, axes, keepDims: false);
-        }
-
-        // 2. Excitation FC1
-        var w1Node = Autodiff.TensorOperations<T>.Variable(_weights1, "w1", requiresGradient: true);
-        var b1Node = Autodiff.TensorOperations<T>.Variable(_bias1, "b1", requiresGradient: true);
-        var fc1 = Autodiff.TensorOperations<T>.MatrixMultiply(squeezed, w1Node);
-
-        // Broadcast bias (assumed supported by Add)
-        var fc1Biased = Autodiff.TensorOperations<T>.Add(fc1, b1Node);
-
-        // Activation 1
-        var act1 = ApplyActivationToGraphNode(fc1Biased, true);
-
-        // Excitation FC2
-        var w2Node = Autodiff.TensorOperations<T>.Variable(_weights2, "w2", requiresGradient: true);
-        var b2Node = Autodiff.TensorOperations<T>.Variable(_bias2, "b2", requiresGradient: true);
-        var fc2 = Autodiff.TensorOperations<T>.MatrixMultiply(act1, w2Node);
-        var fc2Biased = Autodiff.TensorOperations<T>.Add(fc2, b2Node);
-
-        // Activation 2
-        var excitation = ApplyActivationToGraphNode(fc2Biased, false);
-
-        // 3. Scale: reshape excitation to match input rank
-        int[] reshapeShape;
-        if (rank == 1)
-        {
-            reshapeShape = new int[] { _channels };
-        }
-        else if (rank == 2)
-        {
-            reshapeShape = new int[] { batchSize, _channels };
-        }
-        else if (rank == 4)
-        {
-            reshapeShape = new int[] { batchSize, 1, 1, _channels };
-        }
-        else if (rank == 3)
-        {
-            reshapeShape = new int[] { batchSize, 1, _channels };
-        }
-        else
-        {
-            reshapeShape = new int[rank];
-            reshapeShape[0] = batchSize;
-            for (int i = 1; i < rank - 1; i++)
-                reshapeShape[i] = 1;
-            reshapeShape[rank - 1] = _channels;
-        }
-        var excitationReshaped = Autodiff.TensorOperations<T>.Reshape(excitation, reshapeShape);
-
-        var outputNode = Autodiff.TensorOperations<T>.ElementwiseMultiply(inputNode, excitationReshaped);
-
-        // Backward
-        outputNode.Gradient = outputGradient;
-
-        // Inline topological sort
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract gradients
-        if (w1Node.Gradient != null) _weights1Gradient = w1Node.Gradient;
-        if (b1Node.Gradient != null) _bias1Gradient = b1Node.Gradient;
-        if (w2Node.Gradient != null) _weights2Gradient = w2Node.Gradient;
-        if (b2Node.Gradient != null) _bias2Gradient = b2Node.Gradient;
-
-        return inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-    }
-
     private Autodiff.ComputationNode<T> ApplyActivationToGraphNode(Autodiff.ComputationNode<T> input, bool isFirst)
     {
         if (isFirst)
@@ -1394,98 +1223,6 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 return _secondActivation.ApplyToGraph(input);
         }
         return input;
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _lastExcitationWeights == null || _lastSqueezed == null || _lastFc1Biased == null || _lastFc1Activated == null || _lastFc2Biased == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int rank = _lastInput.Shape.Length;
-        int batchSize = rank == 1 ? 1 : _lastInput.Shape[0];
-
-        // Reshape excitation weights to match input shape for broadcasting
-        Tensor<T> excitationReshaped;
-        int[] spatialAxes;
-        if (rank == 1)
-        {
-            excitationReshaped = _lastExcitationWeights.Reshape([_channels]);
-            spatialAxes = Array.Empty<int>();
-        }
-        else if (rank == 2)
-        {
-            excitationReshaped = _lastExcitationWeights;
-            spatialAxes = Array.Empty<int>();
-        }
-        else if (rank == 4)
-        {
-            excitationReshaped = _lastExcitationWeights.Reshape([batchSize, 1, 1, _channels]);
-            spatialAxes = new[] { 1, 2 };
-        }
-        else if (rank == 3)
-        {
-            excitationReshaped = _lastExcitationWeights.Reshape([batchSize, 1, _channels]);
-            spatialAxes = new[] { 1 };
-        }
-        else
-        {
-            var shape = new int[rank];
-            shape[0] = batchSize;
-            for (int i = 1; i < rank - 1; i++)
-                shape[i] = 1;
-            shape[rank - 1] = _channels;
-            excitationReshaped = _lastExcitationWeights.Reshape(shape);
-            spatialAxes = Enumerable.Range(1, rank - 2).ToArray();
-        }
-
-        // Broadcast multiply: excitationReshaped [1,1,1,C] * outputGradient [B,H,W,C]
-        var inputGradientDirect = BroadcastElementwiseMultiply(outputGradient, excitationReshaped);
-
-        var excitationGradientSpatial = Engine.TensorMultiply(outputGradient, _lastInput!);
-        Tensor<T> excitationGradient;
-        if (spatialAxes.Length > 0)
-        {
-            excitationGradient = Engine.ReduceSum(excitationGradientSpatial, spatialAxes, keepDims: false);
-        }
-        else
-        {
-            // For 1D and 2D, excitation gradient is already in correct shape
-            excitationGradient = excitationGradientSpatial;
-            if (rank == 1)
-            {
-                excitationGradient = excitationGradientSpatial.Reshape([1, _channels]);
-            }
-        }
-
-        var secondActivationDerivative = ApplyTensorActivationDerivative(_lastFc2Biased, isFirstActivation: false);
-        var fc2OutputGradient = Engine.TensorMultiply(excitationGradient, secondActivationDerivative);
-
-        _weights2Gradient = Engine.TensorMatMul(Engine.TensorTranspose(_lastFc1Activated), fc2OutputGradient);
-        _bias2Gradient = Engine.ReduceSum(fc2OutputGradient, new[] { 0 }, keepDims: false);
-
-        var fc1OutputGradient = Engine.TensorMatMul(fc2OutputGradient, Engine.TensorTranspose(_weights2));
-
-        var firstActivationDerivative = ApplyTensorActivationDerivative(_lastFc1Biased, isFirstActivation: true);
-        var fc1Gradient = Engine.TensorMultiply(fc1OutputGradient, firstActivationDerivative);
-
-        _weights1Gradient = Engine.TensorMatMul(Engine.TensorTranspose(_lastSqueezed), fc1Gradient);
-        _bias1Gradient = Engine.ReduceSum(fc1Gradient, new[] { 0 }, keepDims: false);
-
-        var squeezedGradient = Engine.TensorMatMul(fc1Gradient, Engine.TensorTranspose(_weights1));
-
-        Tensor<T> squeezeBackprop = spatialAxes.Length > 0
-            ? Engine.ReduceMeanBackward(squeezedGradient, _lastInput.Shape.ToArray(), spatialAxes)
-            : (rank == 1
-                ? squeezedGradient.Reshape([_channels])
-                : squeezedGradient);
-
-        var inputGradient = Engine.TensorAdd(inputGradientDirect, squeezeBackprop);
-        return inputGradient;
     }
 
     /// <summary>
@@ -1848,26 +1585,6 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         return diagnostics;
     }
 
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (_weights1 == null || _weights2 == null || _bias1 == null || _bias2 == null)
-            throw new InvalidOperationException("Layer weights not initialized. Initialize the layer before compiling.");
-
-        // Create symbolic input tensor with batch dimension
-        // SE blocks operate on [batch, height, width, channels] tensors
-        var symbolicInput = new Tensor<T>(new int[] { 1, 1, 1, _channels });
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        return BuildComputationGraph(inputNode, "");
-    }
-
     /// <inheritdoc />
     public ComputationNode<T> BuildComputationGraph(ComputationNode<T> inputNode, string namePrefix)
     {
@@ -1919,9 +1636,6 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         return scaledOutput;
     }
 
-    public override bool SupportsJitCompilation =>
-        _weights1 != null && _weights2 != null && _bias1 != null && _bias2 != null;
-
     public override void ClearGradients()
     {
         base.ClearGradients();
@@ -1938,9 +1652,9 @@ public class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         if (a.Length == b.Length) return Engine.TensorMultiply(a, b);
 
-        // Ensure a is the larger tensor, and make contiguous for Memory access
-        var large = (a.Length >= b.Length ? a : b).Contiguous();
-        var small = (a.Length >= b.Length ? b : a).Contiguous();
+        // Ensure a is the larger tensor
+        var large = a.Length >= b.Length ? a : b;
+        var small = a.Length >= b.Length ? b : a;
 
         // Ensure contiguous before accessing raw data
         large = large.IsContiguous ? large : large.Contiguous();

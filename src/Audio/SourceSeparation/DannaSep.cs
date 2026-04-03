@@ -215,12 +215,14 @@ public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
     {
         if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
         SetTrainingMode(true);
-        var output = Predict(input);
-        var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-        var gt = Tensor<T>.FromVector(grad);
-        for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer?.UpdateParameters(Layers);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -291,7 +293,7 @@ public class DannaSep<T> : AudioNeuralNetworkBase<T>, IMusicSourceSeparator<T>
         int numBins = magnitude.Shape[1];
         for (int s = 0; s < _options.NumSources; s++)
         {
-            var maskedMag = new Tensor<T>(magnitude.Shape.ToArray());
+            var maskedMag = new Tensor<T>(magnitude._shape);
             for (int f = 0; f < numFrames; f++)
                 for (int b = 0; b < numBins; b++)
                 {

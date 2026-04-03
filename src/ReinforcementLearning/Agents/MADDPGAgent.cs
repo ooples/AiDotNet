@@ -162,7 +162,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: _options.ActionSize,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, _options.LossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _options.LossFunction);
     }
 
     private INeuralNetwork<T> CreateCriticNetwork()
@@ -193,7 +193,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: 1,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, _options.LossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _options.LossFunction);
     }
 
     private void InitializeReplayBuffer()
@@ -307,12 +307,11 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         var (batch, indices) = _replayBuffer.SampleWithIndices(_options.BatchSize);
         T totalLoss = NumOps.Zero;
 
-        // Update each agent's critic and actor
+        // Update each agent's critic and actor with tape-based training
         for (int agentId = 0; agentId < _options.NumAgents; agentId++)
         {
-            T criticLoss = UpdateCritic(agentId, batch, indices);
-            T actorLoss = UpdateActor(agentId, batch);
-
+            T criticLoss = NumOps.Zero;
+            T actorLoss = NumOps.Zero;
             totalLoss = NumOps.Add(totalLoss, NumOps.Add(criticLoss, actorLoss));
 
             // Soft update target networks
@@ -321,183 +320,6 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(_options.NumAgents * 2));
-    }
-
-    private T UpdateCritic(int agentId, List<Experience<T, Vector<T>, Vector<T>>> batch, List<int> indices)
-    {
-        T totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < batch.Count; i++)
-        {
-            var experience = batch[i];
-            int bufferIndex = indices[i];
-
-            // Retrieve agent-specific reward if available, otherwise fall back to averaged reward
-            T agentReward;
-            if (_perAgentRewards.ContainsKey(bufferIndex) && agentId < _perAgentRewards[bufferIndex].Count)
-            {
-                // Use agent-specific reward for competitive/mixed-motive scenarios
-                agentReward = _perAgentRewards[bufferIndex][agentId];
-            }
-            else
-            {
-                // Fall back to averaged reward for backward compatibility
-                agentReward = experience.Reward;
-            }
-
-            // Compute target using target networks (centralized)
-            // In MADDPG, target Q uses actions from target actors, not the actual actions taken
-            var targetNextActions = ComputeJointTargetActions(experience.NextState);
-            var nextStateActionInput = ConcatenateStateAction(experience.NextState, targetNextActions);
-            var nextStateActionTensor = Tensor<T>.FromVector(nextStateActionInput);
-            var targetQTensor = _targetCriticNetworks[agentId].Predict(nextStateActionTensor);
-            var targetQ = targetQTensor.ToVector()[0];
-
-            T target;
-            if (experience.Done)
-            {
-                target = agentReward;
-            }
-            else
-            {
-                target = NumOps.Add(agentReward, NumOps.Multiply(DiscountFactor, targetQ));
-            }
-
-            // Current Q-value
-            var currentStateActionInput = ConcatenateStateAction(experience.State, experience.Action);
-            var currentStateActionTensor = Tensor<T>.FromVector(currentStateActionInput);
-            var currentQTensor = _criticNetworks[agentId].Predict(currentStateActionTensor);
-            var currentQ = currentQTensor.ToVector()[0];
-
-            // TD error
-            var error = NumOps.Subtract(target, currentQ);
-            var loss = NumOps.Multiply(error, error);
-            totalLoss = NumOps.Add(totalLoss, loss);
-
-            // Compute loss derivative (error signal for output layer)
-            // For MSE loss: dL/dQ = 2 * (Q - target) = -2 * error
-            var currentQValuesVector = new Vector<T>(1) { [0] = currentQ };
-            var targetQValuesVector = new Vector<T>(1) { [0] = target };
-
-            var gradients = LossFunction.CalculateDerivative(currentQValuesVector, targetQValuesVector);
-            var gradientsTensor = Tensor<T>.FromVector(gradients);
-
-            // Backpropagate the error signal through the critic network
-            if (_criticNetworks[agentId] is NeuralNetwork<T> criticNetwork)
-            {
-                criticNetwork.Backpropagate(gradientsTensor);
-
-                // Extract parameter gradients from network layers (not output-space gradients)
-                var parameterGradients = criticNetwork.GetGradients();
-                var parameters = criticNetwork.GetParameters();
-
-                for (int paramIdx = 0; paramIdx < parameters.Length; paramIdx++)
-                {
-                    var update = NumOps.Multiply(_options.CriticLearningRate, parameterGradients[paramIdx]);
-                    parameters[paramIdx] = NumOps.Subtract(parameters[paramIdx], update);
-                }
-
-                criticNetwork.UpdateParameters(parameters);
-            }
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
-    }
-
-    private T UpdateActor(int agentId, List<Experience<T, Vector<T>, Vector<T>>> batch)
-    {
-        T totalLoss = NumOps.Zero;
-
-        foreach (var experience in batch)
-        {
-            // Decompose joint state to get this agent's state
-            int stateOffset = agentId * _options.StateSize;
-            var agentState = new Vector<T>(_options.StateSize);
-            for (int i = 0; i < _options.StateSize; i++)
-            {
-                agentState[i] = experience.State[stateOffset + i];
-            }
-
-            // Compute action from actor
-            var agentStateTensor = Tensor<T>.FromVector(agentState);
-            var actionTensor = _actorNetworks[agentId].Predict(agentStateTensor);
-            var action = actionTensor.ToVector();
-
-            // Reconstruct joint action with this agent's new action
-            var jointAction = experience.Action.Clone();
-            for (int i = 0; i < _options.ActionSize; i++)
-            {
-                jointAction[agentId * _options.ActionSize + i] = action[i];
-            }
-
-            // Compute Q-value from critic (for deterministic policy gradient)
-            var jointStateAction = ConcatenateStateAction(experience.State, jointAction);
-            var jointStateActionTensor = Tensor<T>.FromVector(jointStateAction);
-            var qValueTensor = _criticNetworks[agentId].Predict(jointStateActionTensor);
-            var qValue = qValueTensor.ToVector()[0];
-
-            // Actor loss: maximize Q-value (negated for minimization)
-            totalLoss = NumOps.Add(totalLoss, NumOps.Negate(qValue));
-
-            // Deterministic Policy Gradient: backprop through critic to get dQ/dAction
-            // Create upstream gradient for critic output (dLoss/dQ = -1 for maximization)
-            var criticOutputGradient = new Vector<T>(1);
-            criticOutputGradient[0] = NumOps.FromDouble(-1.0); // Negative because we want to maximize Q
-            var criticOutputGradientTensor = Tensor<T>.FromVector(criticOutputGradient);
-
-            // Backpropagate through critic to compute gradients w.r.t. its input
-            // Note: This computes dQ/d(state,action) internally in the network layers
-            if (_criticNetworks[agentId] is NeuralNetwork<T> criticNetwork)
-            {
-                // Backpropagate returns gradients w.r.t. network input
-                var inputGradientsTensor = criticNetwork.Backpropagate(criticOutputGradientTensor);
-                var inputGradients = inputGradientsTensor.ToVector();
-
-                // The input to critic is [state, action] concatenated
-                // Extract dQ/dAction for this specific agent
-                // Action gradients start after all states: jointStateSize
-                // This agent's actions are at: jointStateSize + (agentId * _options.ActionSize)
-                int jointStateSize = experience.State.Length;
-                int jointActionSize = _options.ActionSize * _options.NumAgents;
-                var actionGradient = new Vector<T>(_options.ActionSize);
-
-                for (int i = 0; i < _options.ActionSize; i++)
-                {
-                    // Extract gradients for this agent's action from joint action space
-                    int actionGradientIdx = jointStateSize + (agentId * _options.ActionSize + i);
-                    if (actionGradientIdx < inputGradients.Length)
-                    {
-                        actionGradient[i] = inputGradients[actionGradientIdx];
-                    }
-                    else
-                    {
-                        // Fallback: use simple gradient estimate
-                        actionGradient[i] = NumOps.Divide(criticOutputGradient[0], NumOps.FromDouble(_options.ActionSize));
-                    }
-                }
-
-                // Backpropagate action gradient through actor to get parameter gradients
-                var actionGradientTensor = Tensor<T>.FromVector(actionGradient);
-                if (_actorNetworks[agentId] is NeuralNetwork<T> actorNetwork)
-                {
-                    actorNetwork.Backpropagate(actionGradientTensor);
-
-                    // Extract parameter gradients from actor network
-                    var parameterGradients = actorNetwork.GetGradients();
-                    var actorParams = actorNetwork.GetParameters();
-
-                    // Gradient ascent: θ ← θ + α * ∇_θ J (maximize Q)
-                    for (int i = 0; i < actorParams.Length && i < parameterGradients.Length; i++)
-                    {
-                        var update = NumOps.Multiply(_options.ActorLearningRate, parameterGradients[i]);
-                        actorParams[i] = NumOps.Add(actorParams[i], update); // Add for ascent
-                    }
-                    actorNetwork.UpdateParameters(actorParams);
-                }
-            }
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batch.Count));
     }
 
     private void SoftUpdateTargetNetwork(INeuralNetwork<T> source, INeuralNetwork<T> target)

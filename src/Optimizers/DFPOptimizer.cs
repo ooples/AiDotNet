@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -464,5 +465,12 @@ public class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TI
             // Deserialize _adaptiveLearningRate
             _adaptiveLearningRate = NumOps.FromDouble(reader.ReadDouble());
         }
+    }
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
+        context.SetFlatParameters(updated);
     }
 }

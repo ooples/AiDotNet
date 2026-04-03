@@ -202,59 +202,6 @@ public class TabMClassifier<T> : TabMBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass for the classification loss.
-    /// </summary>
-    /// <param name="targets">Target class indices [batch_size].</param>
-    /// <returns>Gradient with respect to input features [batch_size, num_features].</returns>
-    public Tensor<T> Backward(int[] targets)
-    {
-        if (_probabilitiesCache == null || _logitsCache == null || _backboneOutputCache == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int batchSize = _probabilitiesCache.Shape[0];
-        int expandedBatchSize = batchSize * Options.NumEnsembleMembers;
-
-        // Gradient of cross-entropy + softmax w.r.t averaged logits
-        var avgLogitsGrad = new Tensor<T>([batchSize, _numClasses]);
-        var scale = NumOps.FromDouble(1.0 / batchSize);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < _numClasses; c++)
-            {
-                var prob = _probabilitiesCache[b * _numClasses + c];
-                var oneHot = targets[b] == c ? NumOps.One : NumOps.Zero;
-                avgLogitsGrad[b * _numClasses + c] = NumOps.Multiply(
-                    NumOps.Subtract(prob, oneHot), scale);
-            }
-        }
-
-        // Expand gradient back to all members (each member gets the same gradient / num_members)
-        var memberLogitsGrad = new Tensor<T>([expandedBatchSize, _numClasses]);
-        var memberScale = NumOps.FromDouble(1.0 / Options.NumEnsembleMembers);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int m = 0; m < Options.NumEnsembleMembers; m++)
-            {
-                for (int c = 0; c < _numClasses; c++)
-                {
-                    memberLogitsGrad[(b * Options.NumEnsembleMembers + m) * _numClasses + c] =
-                        NumOps.Multiply(avgLogitsGrad[b * _numClasses + c], memberScale);
-                }
-            }
-        }
-
-        // Backward through classification head
-        var backboneGrad = _classificationHead.Backward(memberLogitsGrad);
-
-        // Backward through backbone
-        return BackwardBackbone(backboneGrad);
-    }
-
-    /// <summary>
     /// Performs a single training step.
     /// </summary>
     /// <param name="features">Input features tensor [batch_size, num_features].</param>
@@ -270,7 +217,6 @@ public class TabMClassifier<T> : TabMBase<T>
         var loss = ComputeCrossEntropyLoss(probabilities, targets);
 
         // Backward pass
-        _ = Backward(targets);
 
         // Update parameters
         UpdateParameters(learningRate);

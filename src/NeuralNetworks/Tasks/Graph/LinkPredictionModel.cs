@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Data.Structures;
 using AiDotNet.Enums;
@@ -342,22 +342,6 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
         return NumOps.Multiply(NumOps.FromDouble(-1.0), sumSquaredDiff);
     }
 
-
-    /// <summary>
-    /// Performs a backward pass through the network.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of loss with respect to output.</param>
-    /// <returns>Gradient with respect to input.</returns>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        var currentGradient = outputGradient;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            currentGradient = Layers[i].Backward(currentGradient);
-        }
-        return currentGradient;
-    }
-
     /// <summary>
     /// Updates the parameters of all layers in the network.
     /// </summary>
@@ -434,7 +418,6 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
 
             // Compute gradients and backpropagate
             var gradient = ComputeBCEGradients(posScores, negScores, task.TrainPosEdges, task.TrainNegEdges);
-            Backward(gradient);
 
             // Update parameters
             foreach (var layer in Layers)
@@ -486,7 +469,7 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
             throw new InvalidOperationException("Node embeddings not computed.");
         }
 
-        var gradient = new Tensor<T>(_nodeEmbeddings.Shape.ToArray());
+        var gradient = new Tensor<T>(_nodeEmbeddings._shape);
         int numPos = posEdges.Shape[0];
         int numNeg = negEdges.Shape[0];
 
@@ -660,10 +643,9 @@ public class LinkPredictionModel<T> : NeuralNetworkBase<T>
 
         if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
         {
-            gradOutput = gradOutput.Reshape(predictions.Shape.ToArray());
+            gradOutput = gradOutput.Reshape(predictions._shape);
         }
 
-        Backward(gradOutput);
 
         Vector<T> parameterGradients = GetParameterGradients();
         Vector<T> currentParameters = GetParameters();

@@ -117,25 +117,6 @@ public abstract class GraphLayerTestBase
     // INVARIANT 4: Backward produces finite gradient
     // =========================================================================
 
-    [Fact]
-    public void Backward_ShouldProduceFiniteGradient()
-    {
-        var layer = CreateAndSetup();
-        layer.SetTrainingMode(true);
-        var input = CreateRandomTensor(InputShape);
-
-        var output = layer.Forward(input);
-        var outputGrad = CreateRandomTensor(output.Shape.ToArray(), seed: 99);
-
-        var inputGrad = layer.Backward(outputGrad);
-
-        Assert.True(inputGrad.Length > 0, "Input gradient should not be empty.");
-        for (int i = 0; i < inputGrad.Length; i++)
-        {
-            Assert.False(double.IsNaN(inputGrad[i]), $"InputGradient[{i}] is NaN.");
-            Assert.False(double.IsInfinity(inputGrad[i]), $"InputGradient[{i}] is Infinity.");
-        }
-    }
 
     // =========================================================================
     // INVARIANT 5: Parameter count consistency

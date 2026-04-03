@@ -1,3 +1,4 @@
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -296,13 +297,13 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     private void InitializeVariationalWeights()
     {
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (HiddenDim + LatentDim)));
-        var randomTensor = Tensor<T>.CreateRandom(_meanWeights.Shape.ToArray());
-        var halfTensor = new Tensor<T>(_meanWeights.Shape.ToArray());
+        var randomTensor = Tensor<T>.CreateRandom(_meanWeights._shape);
+        var halfTensor = new Tensor<T>(_meanWeights._shape);
         Engine.TensorFill(halfTensor, NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
         _meanWeights = Engine.TensorMultiplyScalar(shifted, scale);
 
-        randomTensor = Tensor<T>.CreateRandom(_logVarWeights.Shape.ToArray());
+        randomTensor = Tensor<T>.CreateRandom(_logVarWeights._shape);
         shifted = Engine.TensorSubtract(randomTensor, halfTensor);
         _logVarWeights = Engine.TensorMultiplyScalar(shifted, scale);
     }
@@ -353,7 +354,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     {
         // z = mean + std * epsilon, where epsilon ~ N(0, 1)
         // Clamp logVar to prevent exp() overflow (exp(20) ≈ 5e8, exp(40) ≈ 2e17)
-        var clampedLogVar = new Tensor<T>(logVar.Shape.ToArray());
+        var clampedLogVar = new Tensor<T>(logVar._shape);
         for (int i = 0; i < logVar.Length; i++)
         {
             double v = NumOps.ToDouble(logVar.GetFlat(i));
@@ -363,7 +364,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         var std = Engine.TensorSqrt(Engine.TensorExp(clampedLogVar));
 
         // Generate standard normal samples
-        var epsilon = new Tensor<T>(mean.Shape.ToArray());
+        var epsilon = new Tensor<T>(mean._shape);
         for (int i = 0; i < epsilon.Length; i++)
         {
             epsilon.SetFlat(i, NumOps.FromDouble(_random.NextGaussian()));
@@ -485,94 +486,6 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs backward pass through the model.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of the loss with respect to reconstructed adjacency.</param>
-    /// <returns>Gradient with respect to input features.</returns>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastLatent == null || _lastMean == null || _lastLogVar == null ||
-            _lastEncoderOutput == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before Backward.");
-        }
-
-        int numNodes = _lastLatent.Shape[0];
-
-        // Gradient through decoder (inner product)
-        // d(z_i^T * z_j)/d(z) = sum_j(grad_ij * z_j) for each i
-        var latentGrad = new Tensor<T>(_lastLatent.Shape.ToArray());
-        for (int i = 0; i < numNodes; i++)
-        {
-            for (int k = 0; k < LatentDim; k++)
-            {
-                var grad = NumOps.Zero;
-                for (int j = 0; j < numNodes; j++)
-                {
-                    // Gradient through sigmoid: grad * p * (1-p)
-                    T logit = NumOps.Zero;
-                    for (int l = 0; l < LatentDim; l++)
-                    {
-                        logit = NumOps.Add(logit, NumOps.Multiply(_lastLatent[i, l], _lastLatent[j, l]));
-                    }
-                    T negLogit = NumOps.Negate(logit);
-                    T expNeg = NumOps.Exp(negLogit);
-                    T onePlusExp = NumOps.Add(NumOps.One, expNeg);
-                    T p = NumOps.Divide(NumOps.One, onePlusExp);
-                    T sigmoidDeriv = NumOps.Multiply(p, NumOps.Subtract(NumOps.One, p));
-
-                    T gradFromJ = NumOps.Multiply(NumOps.Multiply(outputGradient[i, j], sigmoidDeriv), _lastLatent[j, k]);
-                    grad = NumOps.Add(grad, gradFromJ);
-
-                    // Symmetric contribution
-                    if (i != j)
-                    {
-                        T gradFromI = NumOps.Multiply(NumOps.Multiply(outputGradient[j, i], sigmoidDeriv), _lastLatent[i, k]);
-                        grad = NumOps.Add(grad, gradFromI);
-                    }
-                }
-                latentGrad[i, k] = grad;
-            }
-        }
-
-        // Gradient through reparameterization
-        // z = mean + std * epsilon
-        // d(loss)/d(mean) = d(loss)/d(z)
-        // d(loss)/d(logvar) = d(loss)/d(z) * epsilon * 0.5 * exp(0.5 * logvar)
-        var meanGrad = latentGrad;
-
-        // Gradient through mean projection: encoder_output @ mean_weights = mean
-        // d(loss)/d(mean_weights) = encoder_output^T @ mean_grad
-        var encoderT = Engine.TensorTranspose(_lastEncoderOutput);
-        _meanWeightsGradient = Engine.TensorMatMul(encoderT, meanGrad);
-
-        // Add KL gradient for mean: d(KL)/d(mean) = mean
-        var klMeanGrad = _lastMean;
-        var totalMeanGrad = Engine.TensorAdd(meanGrad, Engine.TensorMultiplyScalar(klMeanGrad, NumOps.FromDouble(KLWeight)));
-
-        // === Vectorized KL log-variance gradient using IEngine (Phase B: US-GPU-015) ===
-        // d(KL)/d(logvar) = 0.5 * KLWeight * (exp(logvar) - 1)
-        var expLogVar = Engine.TensorExp(_lastLogVar);
-        var expMinusOne = Engine.TensorSubtractScalar(expLogVar, NumOps.One);
-        var klLogVarGrad = Engine.TensorMultiplyScalar(expMinusOne, NumOps.FromDouble(0.5 * KLWeight));
-
-        _logVarWeightsGradient = Engine.TensorMatMul(encoderT, klLogVarGrad);
-
-        // Gradient to encoder output
-        var encoderGrad = Engine.TensorMatMul(totalMeanGrad, Engine.TensorTranspose(_meanWeights));
-        var encoderGradFromLogVar = Engine.TensorMatMul(klLogVarGrad, Engine.TensorTranspose(_logVarWeights));
-        encoderGrad = Engine.TensorAdd(encoderGrad, encoderGradFromLogVar);
-
-        // Backward through encoder layers
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            encoderGrad = Layers[i].Backward(encoderGrad);
-        }
-
-        return encoderGrad;
-    }
-
-    /// <summary>
     /// Updates the parameters of all layers in the network.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters for the network.</param>
@@ -597,11 +510,11 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         if (index + meanCount + logVarCount <= parameters.Length)
         {
             _meanWeights = Tensor<T>.FromVector(parameters.SubVector(index, meanCount))
-                .Reshape(_meanWeights.Shape.ToArray());
+                .Reshape(_meanWeights._shape);
             index += meanCount;
 
             _logVarWeights = Tensor<T>.FromVector(parameters.SubVector(index, logVarCount))
-                .Reshape(_logVarWeights.Shape.ToArray());
+                .Reshape(_logVarWeights._shape);
         }
     }
 
@@ -635,7 +548,6 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
             var reconGrad = ComputeReconstructionGradient(reconstructed, adjacencyMatrix);
 
             // Backward pass
-            Backward(reconGrad);
 
             // Update encoder parameters
             foreach (var layer in Layers)
@@ -816,7 +728,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
             double alpha = (double)step / numSteps;
 
             // Linear interpolation in latent space
-            var interpolated = new Tensor<T>(latent1.Shape.ToArray());
+            var interpolated = new Tensor<T>(latent1._shape);
             for (int i = 0; i < latent1.Length; i++)
             {
                 T val1 = latent1.GetFlat(i);
@@ -832,7 +744,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
 
             // Threshold
             T threshold = NumOps.FromDouble(0.5);
-            var adjacency = new Tensor<T>(reconstructed.Shape.ToArray());
+            var adjacency = new Tensor<T>(reconstructed._shape);
             for (int i = 0; i < reconstructed.Length; i++)
             {
                 adjacency.SetFlat(i, NumOps.GreaterThan(reconstructed.GetFlat(i), threshold)
@@ -997,7 +909,6 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         var reconGrad = ComputeReconstructionGradient(reconstructed, adjacencyMatrix);
 
         // Backward pass
-        Backward(reconGrad);
 
         // Collect all parameter gradients (encoder layers + variational weights)
         Vector<T> parameterGradients = GetParameterGradients();
@@ -1102,13 +1013,13 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         var meanData = new T[meanCount];
         for (int i = 0; i < meanCount; i++)
             meanData[i] = NumOps.FromDouble(reader.ReadDouble());
-        _meanWeights = Tensor<T>.FromVector(new Vector<T>(meanData)).Reshape(_meanWeights.Shape.ToArray());
+        _meanWeights = Tensor<T>.FromVector(new Vector<T>(meanData)).Reshape(_meanWeights._shape);
 
         int logVarCount = reader.ReadInt32();
         var logVarData = new T[logVarCount];
         for (int i = 0; i < logVarCount; i++)
             logVarData[i] = NumOps.FromDouble(reader.ReadDouble());
-        _logVarWeights = Tensor<T>.FromVector(new Vector<T>(logVarData)).Reshape(_logVarWeights.Shape.ToArray());
+        _logVarWeights = Tensor<T>.FromVector(new Vector<T>(logVarData)).Reshape(_logVarWeights._shape);
     }
 
     /// <summary>

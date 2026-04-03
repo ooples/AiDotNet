@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -264,7 +264,7 @@ public class SplitLayer<T> : LayerBase<T>
     /// No data is downloaded to CPU during inference.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -279,7 +279,7 @@ public class SplitLayer<T> : LayerBase<T>
         // Determine batch size and input size
         int batchSize;
         int inputSize;
-        IGpuTensor<T> processInput;
+        Tensor<T> processInput;
 
         if (rank == 1)
         {
@@ -306,7 +306,7 @@ public class SplitLayer<T> : LayerBase<T>
         // Cache for backward pass during training
         if (IsTrainingMode)
         {
-            _lastInput = processInput.ToTensor();
+            _lastInput = processInput;
             _originalInputShape = shape;
         }
 
@@ -331,165 +331,6 @@ public class SplitLayer<T> : LayerBase<T>
         }
 
         return output;
-    }
-
-    /// <inheritdoc/>
-
-    /// <summary>
-    /// Computes the gradient of the loss with respect to the input on the GPU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// Since split is a reshape operation, backward is also just a reshape to restore the original shape.
-    /// </remarks>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        if (_originalInputShape == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Split is a reshape, so backward is just reshaping gradient to original input shape
-        return gpuEngine.ReshapeGpu(outputGradient, _originalInputShape);
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the split layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the split layer, which is used during training to propagate
-    /// error gradients back through the network. It recombines the gradients from all splits into a single
-    /// gradient tensor matching the original input shape.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method reverses the splitting process for training.
-    /// 
-    /// During the backward pass:
-    /// 1. The method throws an error if the forward pass hasn't been called first
-    /// 2. It calculates how big each split is
-    /// 3. It creates a gradient tensor matching the original input shape
-    /// 4. It copies the gradient values from each split back to their original positions
-    /// 
-    /// This process ensures that error information flows backward through the network properly,
-    /// allowing layers before the split to learn from the training process.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        int batchSize = _lastInput.Shape[0];
-        int inputSize = _lastInput.Shape[1];
-        var inputGradient = Engine.Reshape(outputGradient, new[] { batchSize, inputSize });
-
-        // Restore gradient to original input shape
-        if (_originalInputShape != null && _originalInputShape.Length != 2)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients using the Reshape operation.
-    /// The split layer is effectively a reshape operation that adds a new dimension by dividing
-    /// one dimension into two.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Create computation node
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-
-        // Split is effectively a reshape: [batch, inputSize] -> [batch, numSplits, splitSize]
-        int batchSize = _lastInput.Shape[0];
-        int inputSize = _lastInput.Shape[1];
-        int splitSize = inputSize / _numSplits;
-        var outputShape = new int[] { batchSize, _numSplits, splitSize };
-
-        var outputNode = Autodiff.TensorOperations<T>.Reshape(inputNode, outputShape);
-
-        // Perform backward pass with inline topological sort
-        outputNode.Gradient = outputGradient;
-
-        // Production-grade: Inline topological sort for backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-
-            if (visited.Contains(node))
-                continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract input gradient
-        var inputGradient = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-
-        // Restore gradient to original input shape
-        if (_originalInputShape != null && _originalInputShape.Length != 2)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
     }
 
     /// <summary>
@@ -568,39 +409,4 @@ public class SplitLayer<T> : LayerBase<T>
         // Clear cached values from forward pass
         _lastInput = null;
     }
-
-    /// <summary>
-    /// Exports the split layer as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to which the input node will be added.</param>
-    /// <returns>The output computation node representing the split operation.</returns>
-    /// <remarks>
-    /// <para>
-    /// The split layer is implemented as a reshape operation that adds a new dimension.
-    /// Input shape [batch, inputSize] is reshaped to [batch, numSplits, splitSize].
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        // Input shape: [batch, inputSize]
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "split_input");
-        inputNodes.Add(inputNode);
-
-        // Split is implemented as a reshape: [batch, inputSize] → [batch, numSplits, splitSize]
-        // This matches the Forward() implementation which creates a tensor with shape [batchSize, _numSplits, splitSize]
-        int inputSize = InputShape[0];
-        int splitSize = inputSize / _numSplits;
-        var outputShape = new int[] { 1, _numSplits, splitSize };
-
-        return TensorOperations<T>.Reshape(inputNode, outputShape);
-    }
-
-    public override bool SupportsJitCompilation => true;
 }

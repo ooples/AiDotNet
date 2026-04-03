@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -151,7 +152,7 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: 1,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, _a2cOptions.ValueLossFunction);
+        return new NeuralNetwork<T>(architecture, lossFunction: _a2cOptions.ValueLossFunction);
     }
 
     /// <inheritdoc/>
@@ -265,82 +266,75 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Compute returns and advantages
         ComputeAdvantages();
 
-        // Update networks
-        T policyLoss = NumOps.Zero;
-        T valueLoss = NumOps.Zero;
-        T entropy = NumOps.Zero;
+        // Build batched tensors from trajectory
+        int stateSize = _a2cOptions.StateSize;
+        int trajLen = _trajectory.Length;
+        var advantages = _trajectory.Advantages ?? throw new InvalidOperationException("Advantages not initialized.");
+        var returns = _trajectory.Returns ?? throw new InvalidOperationException("Returns not initialized.");
 
-        for (int i = 0; i < _trajectory.Length; i++)
+        var batchStates = new Tensor<T>([trajLen, stateSize]);
+        var batchReturns = new Tensor<T>([trajLen, 1]);
+
+        for (int i = 0; i < trajLen; i++)
         {
             var state = _trajectory.States[i];
-            var action = _trajectory.Actions[i];
-            var advantage = (_trajectory.Advantages ?? throw new InvalidOperationException("Advantages has not been initialized."))[i];
-            var targetReturn = (_trajectory.Returns ?? throw new InvalidOperationException("Returns has not been initialized."))[i];
-
-            // Policy loss: -log_prob * advantage
-            var logProb = ComputeLogProb(state, action);
-            policyLoss = NumOps.Subtract(policyLoss,
-                NumOps.Multiply(logProb, advantage));
-
-            // Value loss: (V - return)^2
-            var stateTensor = Tensor<T>.FromVector(state);
-            var valueTensor = _valueNetwork.Predict(stateTensor);
-            var predictedValue = valueTensor.ToVector()[0];
-            var valueDiff = NumOps.Subtract(predictedValue, targetReturn);
-            valueLoss = NumOps.Add(valueLoss,
-                NumOps.Multiply(valueDiff, valueDiff));
-
-            // Entropy for exploration
-            entropy = NumOps.Add(entropy, ComputeEntropy(state));
+            for (int j = 0; j < stateSize; j++)
+                batchStates[i, j] = state[j];
+            batchReturns[i, 0] = returns[i];
         }
 
-        // Average losses
-        var batchSize = NumOps.FromDouble(_trajectory.Length);
-        policyLoss = NumOps.Divide(policyLoss, batchSize);
-        valueLoss = NumOps.Divide(valueLoss, batchSize);
-        entropy = NumOps.Divide(entropy, batchSize);
+        // --- Update value network (MSE regression on returns) ---
+        _valueNetwork.Train(batchStates, batchReturns);
+        T valueLoss = _valueNetwork.GetLastLoss();
 
-        // Combined loss
+        // Build advantages tensor and action data for engine ops
+        var advantagesTensor = new Tensor<T>([trajLen]);
+        for (int i = 0; i < trajLen; i++)
+            advantagesTensor[i] = advantages[i];
+
+        int[] actionIndices = _a2cOptions.IsContinuous ? Array.Empty<int>() : new int[trajLen];
+        Tensor<T>? actionsTensor = null;
+
+        if (_a2cOptions.IsContinuous)
+        {
+            actionsTensor = new Tensor<T>([trajLen, _a2cOptions.ActionSize]);
+            for (int i = 0; i < trajLen; i++)
+                for (int j = 0; j < _a2cOptions.ActionSize; j++)
+                    actionsTensor[i, j] = _trajectory.Actions[i][j];
+        }
+        else
+        {
+            for (int i = 0; i < trajLen; i++)
+                actionIndices[i] = ArgMax(_trajectory.Actions[i]);
+        }
+
+        // --- Update policy network (policy gradient via engine ops) ---
+        var trainablePolicy = (NeuralNetworkBase<T>)_policyNetwork;
+        T policyLoss = trainablePolicy.TrainWithCustomLoss(batchStates, policyOutput =>
+        {
+            Tensor<T> logProbs;
+            if (_a2cOptions.IsContinuous)
+            {
+                int actSize = _a2cOptions.ActionSize;
+                var means = Engine.TensorSlice(policyOutput, [0, 0], [trajLen, actSize]);
+                var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [trajLen, actSize * 2]);
+                logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(means, logStds, actionsTensor!);
+            }
+            else
+            {
+                logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(policyOutput, actionIndices);
+            }
+
+            // loss = -mean(logProbs * advantages)
+            var weighted = Engine.TensorMultiply(logProbs, advantagesTensor);
+            var allAxes = Enumerable.Range(0, weighted.Shape.Length).ToArray();
+            var mean = Engine.ReduceMean(weighted, allAxes, keepDims: false);
+            return Engine.TensorNegate(mean);
+        });
+
+        // Combined loss for monitoring
         var totalLoss = NumOps.Add(policyLoss,
-            NumOps.Add(
-                NumOps.Multiply(_a2cOptions.ValueLossCoefficient, valueLoss),
-                NumOps.Multiply(_a2cOptions.EntropyCoefficient, NumOps.Negate(entropy))
-            )
-        );
-
-        // Backpropagate through policy and value networks
-        // We accumulate gradients over the batch before updating
-        for (int i = 0; i < _trajectory.Length; i++)
-        {
-            var state = _trajectory.States[i];
-            var action = _trajectory.Actions[i];
-            var advantage = (_trajectory.Advantages ?? throw new InvalidOperationException("Advantages has not been initialized."))[i];
-            var targetReturn = (_trajectory.Returns ?? throw new InvalidOperationException("Returns has not been initialized."))[i];
-
-            // Policy gradient: compute ∇ loss w.r.t. policy output
-            var stateTensor1 = Tensor<T>.FromVector(state);
-            var policyOutputTensor = _policyNetwork.Predict(stateTensor1);
-            var policyOutput = policyOutputTensor.ToVector();
-            var policyGradient = ComputePolicyOutputGradient(policyOutput, action, advantage);
-            var policyGradientTensor = Tensor<T>.FromVector(policyGradient);
-            _policyNetwork.Backpropagate(policyGradientTensor);
-
-            // Value gradient: ∇ MSE w.r.t. value output = 2 * (V - target) / batchSize
-            var stateTensor2 = Tensor<T>.FromVector(state);
-            var valueTensor = _valueNetwork.Predict(stateTensor2);
-            var predictedValue = valueTensor.ToVector()[0];
-            var valueDiff = NumOps.Subtract(predictedValue, targetReturn);
-            var valueGradient = new Vector<T>(1);
-            valueGradient[0] = NumOps.Divide(
-                NumOps.Multiply(NumOps.FromDouble(2.0), valueDiff),
-                NumOps.FromDouble(_trajectory.Length));
-            var valueGradientTensor = Tensor<T>.FromVector(valueGradient);
-            _valueNetwork.Backpropagate(valueGradientTensor);
-        }
-
-        // Now update network parameters using accumulated gradients
-        UpdatePolicyNetwork();
-        UpdateValueNetwork();
+            NumOps.Multiply(_a2cOptions.ValueLossCoefficient, valueLoss));
 
         LossHistory.Add(totalLoss);
         _trajectory.Clear();
@@ -393,27 +387,8 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
         _trajectory.Returns = returns;
     }
 
-    private void UpdatePolicyNetwork()
-    {
-        // Gradients have been accumulated via Backpropagate() calls in the training loop
-        var params_ = _policyNetwork.GetParameters();
-        var grads = _policyNetwork.GetParameterGradients();
-
-        // Apply gradient ascent (vectorized: maximize J, so add scaled gradients)
-        params_ = (Vector<T>)Engine.Add(params_, Engine.Multiply(grads, _a2cOptions.PolicyLearningRate));
-        _policyNetwork.UpdateParameters(params_);
-    }
-
-    private void UpdateValueNetwork()
-    {
-        var params_ = _valueNetwork.GetParameters();
-        var grads = _valueNetwork.GetParameterGradients();
-
-        // Apply gradient descent (vectorized: minimize loss, so subtract scaled gradients)
-        params_ = (Vector<T>)Engine.Subtract(params_, Engine.Multiply(grads, _a2cOptions.ValueLearningRate));
-        _valueNetwork.UpdateParameters(params_);
-        // Gradients are managed internally by the network
-    }
+    // UpdateValueNetwork removed — value network now trained via _valueNetwork.Train()
+    // which uses the configured optimizer and tape-based gradient computation.
 
     private T ComputeEntropy(Vector<T> state)
     {

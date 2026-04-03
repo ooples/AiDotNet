@@ -124,4 +124,20 @@ public class JaccardLoss<T> : LossFunctionBase<T>
 
         return derivative;
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+    {
+        // Jaccard = 1 - (intersection + smooth) / (union + smooth)
+        var intersection = Engine.TensorMultiply(predicted, target);
+        var allAxes = Enumerable.Range(0, intersection.Shape.Length).ToArray();
+        var interSum = Engine.ReduceSum(intersection, allAxes, keepDims: false);
+        var predSum = Engine.ReduceSum(predicted, allAxes, keepDims: false);
+        var targSum = Engine.ReduceSum(target, allAxes, keepDims: false);
+        var union = Engine.TensorSubtract(Engine.TensorAdd(predSum, targSum), interSum);
+        var numerator = Engine.TensorAddScalar(interSum, NumOps.One);
+        var denominator = Engine.TensorAddScalar(union, NumOps.One);
+        var iou = Engine.TensorDivide(numerator, denominator);
+        return Engine.ScalarMinusTensor(NumOps.One, iou);
+    }
 }

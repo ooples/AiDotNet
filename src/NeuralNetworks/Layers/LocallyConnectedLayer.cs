@@ -1,8 +1,10 @@
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -38,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 4, 4, 1", TestConstructorArgs = "4, 4, 1, 2, 3, 1, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class LocallyConnectedLayer<T> : LayerBase<T>
+public partial class LocallyConnectedLayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The weight tensors for the locally connected filters.
@@ -67,6 +69,8 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// This complex structure allows each position to have its own specialized filter.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _weights;
 
     /// <summary>
@@ -87,6 +91,8 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// They're like a "starting point" that the network can adjust during learning.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _biases;
 
     /// <summary>
@@ -120,30 +126,30 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     private Tensor<T>? _biasGradients;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuOutput;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuOutput;
     private int[]? _gpuInputShape4D;
     private bool _gpuAddedBatchDimension;
 
     #region GPU Weight Storage Fields
 
     // GPU weight tensors for GPU-resident training
-    private GpuTensor<T>? _gpuWeights;
-    private GpuTensor<T>? _gpuBiases;
+    private Tensor<T>? _gpuWeights;
+    private Tensor<T>? _gpuBiases;
 
     // GPU gradient tensors from BackwardGpu
-    private GpuTensor<T>? _gpuWeightGradient;
-    private GpuTensor<T>? _gpuBiasGradient;
+    private Tensor<T>? _gpuWeightGradient;
+    private Tensor<T>? _gpuBiasGradient;
 
     // Optimizer state tensors for SGD/NAG/LARS (velocity)
-    private GpuTensor<T>? _gpuWeightVelocity;
-    private GpuTensor<T>? _gpuBiasVelocity;
+    private Tensor<T>? _gpuWeightVelocity;
+    private Tensor<T>? _gpuBiasVelocity;
 
     // Optimizer state tensors for Adam/AdamW/LAMB (M and V)
-    private GpuTensor<T>? _gpuWeightM;
-    private GpuTensor<T>? _gpuWeightV;
-    private GpuTensor<T>? _gpuBiasM;
-    private GpuTensor<T>? _gpuBiasV;
+    private Tensor<T>? _gpuWeightM;
+    private Tensor<T>? _gpuWeightV;
+    private Tensor<T>? _gpuBiasM;
+    private Tensor<T>? _gpuBiasV;
 
     #endregion
 
@@ -636,7 +642,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
     /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.</para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -660,11 +666,11 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         int rank = input.Shape.Length;
 
         // Reshape input to 4D NCHW [B, C, H, W] for locally connected operation
-        IGpuTensor<T> input4D;
+        Tensor<T> input4D;
         if (rank == 3)
         {
             // 3D [C, H, W] -> 4D [1, C, H, W]
-            input4D = input.CreateView(0, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+            input4D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
         }
         else if (rank == 4)
         {
@@ -679,7 +685,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
             {
                 flatBatch *= input.Shape[d];
             }
-            input4D = input.CreateView(0, [flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
+            input4D = input.Reshape([flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
         // Validate input channels
@@ -725,156 +731,30 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
             outputShape[_originalInputShape.Length - 3] = _outputChannels;
             outputShape[_originalInputShape.Length - 2] = result.Shape[2];
             outputShape[_originalInputShape.Length - 1] = result.Shape[3];
-            return result.CreateView(0, outputShape);
+            return result.Reshape(outputShape);
         }
 
         if (rank == 3)
         {
             // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
-            return result.CreateView(0, [_outputChannels, result.Shape[2], result.Shape[3]]);
+            return result.Reshape([_outputChannels, result.Shape[2], result.Shape[3]]);
         }
 
         return result;
     }
 
     /// <summary>
-    /// Performs the backward pass using GPU-resident tensors.
-    /// </summary>
-    /// <param name="outputGradient">GPU-resident gradient tensor.</param>
-    /// <returns>GPU-resident input gradient tensor.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        if (_gpuInput == null || _gpuInputShape4D == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
-
-        // Ensure gradient is 4D for computation
-        IGpuTensor<T> gradient4D;
-        if (outputGradient.Shape.Length == 3)
-        {
-            // 3D [C, H, W] -> 4D [1, C, H, W]
-            gradient4D = outputGradient.CreateView(0, [1, outputGradient.Shape[0], outputGradient.Shape[1], outputGradient.Shape[2]]);
-        }
-        else if (outputGradient.Shape.Length == 4)
-        {
-            gradient4D = outputGradient;
-        }
-        else
-        {
-            // Flatten ND gradient to 4D
-            int flatBatch = 1;
-            for (int d = 0; d < outputGradient.Shape.Length - 3; d++)
-                flatBatch *= outputGradient.Shape[d];
-            gradient4D = outputGradient.CreateView(0, [flatBatch, outputGradient.Shape[^3], outputGradient.Shape[^2], outputGradient.Shape[^1]]);
-        }
-
-        // Apply activation backward if we have a fused activation
-        var fusedActivation = MapActivationToFused();
-        IGpuTensor<T> activationGradient;
-        if (fusedActivation != FusedActivationType.None && _gpuOutput != null)
-        {
-            activationGradient = ComputeActivationGradientGpu(gpuEngine, gradient4D, _gpuOutput, fusedActivation);
-        }
-        else
-        {
-            activationGradient = gradient4D;
-        }
-
-        // Get dimensions for backward pass
-        int batch = _gpuInputShape4D[0];
-        int inChannels = _gpuInputShape4D[1];
-        int inHeight = _gpuInputShape4D[2];
-        int inWidth = _gpuInputShape4D[3];
-        int outHeight = activationGradient.Shape[2];
-        int outWidth = activationGradient.Shape[3];
-
-        // Weights shape is [oh, ow, oc, kh, kw, ic] -> need [oh, ow, oc, ic, kh, kw] for backend
-        var weightsPermuted = _weights.Transpose([0, 1, 2, 5, 3, 4]);
-        float[] weightsData = DirectGpuEngine.ToFloatArray<T>(weightsPermuted.Data.ToArray());
-        using var weightsBuffer = backend.AllocateBuffer(weightsData);
-
-        // Step 1: Compute input gradient
-        int inputGradSize = batch * inChannels * inHeight * inWidth;
-        var inputGradBuffer = backend.AllocateBuffer(inputGradSize);
-
-        backend.LocallyConnectedConv2DBackwardInput(
-            activationGradient.Buffer,
-            weightsBuffer,
-            inputGradBuffer,
-            batch, inChannels, inHeight, inWidth,
-            _outputChannels, outHeight, outWidth,
-            _kernelSize, _kernelSize,
-            _stride, _stride);
-
-        // Step 2: Compute weight gradients
-        int weightGradSize = weightsPermuted.Length;
-        var weightGradBuffer = backend.AllocateBuffer(weightGradSize);
-
-        backend.LocallyConnectedConv2DBackwardWeights(
-            activationGradient.Buffer,
-            _gpuInput.Buffer,
-            weightGradBuffer,
-            batch, inChannels, inHeight, inWidth,
-            _outputChannels, outHeight, outWidth,
-            _kernelSize, _kernelSize,
-            _stride, _stride);
-
-        // Download and permute weight gradients back to [oh, ow, oc, kh, kw, ic]
-        float[] weightGradData = backend.DownloadBuffer(weightGradBuffer);
-        weightGradBuffer.Dispose();
-        var weightGradPermuted = new Tensor<T>(weightsPermuted.Shape.ToArray(),
-            new Vector<T>(DirectGpuEngine.FromFloatArray<T>(weightGradData)));
-        _weightGradients = weightGradPermuted.Transpose([0, 1, 2, 4, 5, 3]);
-
-        // Step 3: Compute bias gradients
-        int biasGradSize = _outputChannels;
-        var biasGradBuffer = backend.AllocateBuffer(biasGradSize);
-
-        backend.LocallyConnectedConv2DBackwardBias(
-            activationGradient.Buffer,
-            biasGradBuffer,
-            batch, _outputChannels, outHeight, outWidth);
-
-        float[] biasGradData = backend.DownloadBuffer(biasGradBuffer);
-        biasGradBuffer.Dispose();
-        _biasGradients = new Tensor<T>([_outputChannels],
-            new Vector<T>(DirectGpuEngine.FromFloatArray<T>(biasGradData)));
-
-        // Store gradients as GPU tensors for UpdateParametersGpu
-        _gpuWeightGradient = new GpuTensor<T>(backend, _weightGradients, GpuTensorRole.Gradient);
-        _gpuBiasGradient = new GpuTensor<T>(backend, _biasGradients, GpuTensorRole.Gradient);
-
-        // Create input gradient tensor
-        var inputGradient = new GpuTensor<T>(backend, inputGradBuffer, _gpuInputShape4D, GpuTensorRole.Gradient, ownsBuffer: true);
-
-        // Reshape input gradient back to original shape if needed
-        if (_gpuAddedBatchDimension)
-        {
-            // Input was 3D [C, H, W], gradient should also be 3D
-            return inputGradient.CreateView(0, [inChannels, inHeight, inWidth]);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
     /// Computes the activation gradient on GPU for locally connected layer backward pass.
     /// </summary>
-    private IGpuTensor<T> ComputeActivationGradientGpu(DirectGpuTensorEngine gpuEngine, IGpuTensor<T> gradOutput, IGpuTensor<T> output, FusedActivationType activation)
+    private Tensor<T> ComputeActivationGradientGpu(DirectGpuTensorEngine gpuEngine, Tensor<T> gradOutput, Tensor<T> output, FusedActivationType activation)
     {
         // Flatten tensors for element-wise activation backward
-        int totalElements = gradOutput.ElementCount;
+        int totalElements = gradOutput.Length;
         var flat2DShape = new[] { totalElements, 1 };
-        var flatGrad = gradOutput.CreateView(0, flat2DShape);
-        var flatOutput = output.CreateView(0, flat2DShape);
+        var flatGrad = gradOutput.Reshape(flat2DShape);
+        var flatOutput = output.Reshape(flat2DShape);
 
-        IGpuTensor<T> flatResult = activation switch
+        Tensor<T> flatResult = activation switch
         {
             FusedActivationType.ReLU => gpuEngine.ReluBackwardGpu<T>(flatGrad, flatOutput),
             FusedActivationType.Sigmoid => gpuEngine.SigmoidBackwardGpu<T>(flatGrad, flatOutput),
@@ -886,227 +766,7 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         };
 
         // Reshape back to 4D
-        return flatResult.CreateView(0, gradOutput.Shape.ToArray());
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the locally connected layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when Forward has not been called before Backward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the locally connected layer, which is used during training
-    /// to propagate error gradients back through the network. It calculates the gradients for the weights and
-    /// biases, and returns the gradient with respect to the input for further backpropagation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
-    /// and parameters should change to reduce errors.
-    ///
-    /// During the backward pass:
-    /// 1. The layer receives information about how its output contributed to errors
-    /// 2. It calculates how the weights and biases should change to reduce errors
-    /// 3. It calculates how the input should change, which will be used by earlier layers
-    ///
-    /// This process involves:
-    /// - Applying the derivative of the activation function
-    /// - Computing gradients for each unique filter
-    /// - Computing gradients for biases
-    /// - Computing how the input should change
-    ///
-    /// The method will throw an error if you try to run it before performing a forward pass.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when Forward has not been called before Backward.</exception>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // === GPU-Accelerated LocallyConnectedConv2D Backward ===
-        // Apply activation derivative
-        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput!, outputGradient);
-
-        // Transpose output gradient from NHWC to NCHW for Engine operations
-        // NHWC [batch, height, width, channels] -> NCHW [batch, channels, height, width]
-        var gradNCHW = activationGradient.Transpose([0, 3, 1, 2]);
-
-        // Transpose input from NHWC to NCHW
-        var inputNCHW = _lastInput.Transpose([0, 3, 1, 2]);
-
-        // Permute weights from [oh, ow, oc, kh, kw, ic] to [oh, ow, oc, ic, kh, kw] for Engine
-        var weightsPermuted = _weights.Transpose([0, 1, 2, 5, 3, 4]);
-
-        int[] strideArr = [_stride, _stride];
-
-        // Compute input gradient using Engine operation
-        var inputGradNCHW = Engine.LocallyConnectedConv2DBackwardInput(
-            gradNCHW, weightsPermuted, inputNCHW.Shape.ToArray(), strideArr);
-
-        // Compute weight gradients using Engine operation
-        // Result is [oh, ow, oc, ic, kh, kw]
-        var weightGradsPermuted = Engine.LocallyConnectedConv2DBackwardWeights(
-            gradNCHW, inputNCHW, weightsPermuted.Shape.ToArray(), strideArr);
-
-        // Permute weight gradients back from [oh, ow, oc, ic, kh, kw] to [oh, ow, oc, kh, kw, ic]
-        _weightGradients = weightGradsPermuted.Transpose([0, 1, 2, 4, 5, 3]);
-
-        // Compute bias gradients - sum over batch and spatial dimensions
-        // gradNCHW shape is [batch, channels, height, width]
-        // We need bias gradient of shape [channels] - sum over dims [0, 2, 3]
-        var biasGradTensor = Engine.LocallyConnectedConv2DBackwardBias(gradNCHW);
-        // biasGradTensor should be [oh, ow, oc], sum to get per-channel [oc]
-        // Guard: if engine returns 1D tensor, it's already reduced
-        if (biasGradTensor.Rank <= 1)
-        {
-            _biasGradients = biasGradTensor;
-        }
-        else
-        {
-            var axes = Enumerable.Range(0, biasGradTensor.Rank - 1).ToArray();
-            _biasGradients = Engine.ReduceSum(biasGradTensor, axes, keepDims: false);
-        }
-
-        // Transpose input gradient back from NCHW to NHWC
-        var inputGradient = inputGradNCHW.Transpose([0, 2, 3, 1]);
-
-        // Restore gradient shape to match original input shape
-        if (_originalInputShape != null && _originalInputShape.Length != 4)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation with production-grade pattern:
-    /// - Uses cached forward pass values for activation derivative computation
-    /// - Uses Tensor.FromVector for efficient conversions
-    /// - Builds minimal autodiff graph for gradient routing
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // Production-grade: Compute activation derivative using cached output
-        Tensor<T> preActivationGradient;
-        if (VectorActivation != null)
-        {
-            var actDeriv = VectorActivation.Derivative(_lastOutput);
-            preActivationGradient = Engine.TensorMultiply(outputGradient, actDeriv);
-        }
-        else if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
-        {
-            var activation = ScalarActivation;
-            var activationDerivative = _lastOutput.Transform((x, _) => activation.Derivative(x));
-            preActivationGradient = Engine.TensorMultiply(outputGradient, activationDerivative);
-        }
-        else
-        {
-            preActivationGradient = outputGradient;
-        }
-
-        // Convert from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W]
-        var inputNCHW = _lastInput.Transpose([0, 3, 1, 2]);
-        var weightsNCHW = _weights.Transpose([0, 1, 2, 5, 3, 4]);
-
-        // Create computation nodes with efficient conversions
-        var inputNode = Autodiff.TensorOperations<T>.Variable(inputNCHW, "input", requiresGradient: true);
-        var weightsNode = Autodiff.TensorOperations<T>.Variable(weightsNCHW, "weights", requiresGradient: true);
-        var biasNode = Autodiff.TensorOperations<T>.Variable(_biases, "bias", requiresGradient: true);
-
-        // Build minimal autodiff graph for linear operations (activation derivative already applied)
-        var preActivationNode = Autodiff.TensorOperations<T>.LocallyConnectedConv2D(
-            inputNode,
-            weightsNode,
-            biasNode,
-            stride: new int[] { _stride, _stride });
-
-        // Convert pre-activation gradient from NHWC to NCHW
-        var preActivationGradientNCHW = preActivationGradient.Transpose([0, 3, 1, 2]);
-
-        // Set gradient on pre-activation node (activation derivative already applied)
-        preActivationNode.Gradient = preActivationGradientNCHW;
-
-        // Inline topological sort and backward pass
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((preActivationNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Update parameter gradients using efficient conversion
-        if (weightsNode.Gradient != null)
-            _weightGradients = weightsNode.Gradient.Transpose([0, 1, 2, 4, 5, 3]);
-
-        if (biasNode.Gradient != null)
-            _biasGradients = biasNode.Gradient;
-
-        // Convert input gradient from NCHW back to NHWC
-        var inputGradientNCHW = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-        var inputGradient = inputGradientNCHW.Transpose([0, 2, 3, 1]);
-
-        // Restore gradient shape to match original input shape
-        if (_originalInputShape != null && _originalInputShape.Length != 4)
-        {
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
+        return flatResult.Reshape(gradOutput.Shape.ToArray());
     }
 
     /// <summary>
@@ -1177,10 +837,10 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Get weight parameters as vector
-        var weightVector = Vector<T>.FromMemory(_weights.Data);
+        var weightVector = new Vector<T>(_weights.ToArray());
 
         // Get bias parameters as vector
-        var biasVector = Vector<T>.FromMemory(_biases.Data);
+        var biasVector = new Vector<T>(_biases.ToArray());
 
         // Concatenate weights and biases
         return Vector<T>.Concatenate(weightVector, biasVector);
@@ -1215,10 +875,10 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         var wGrad = _weightGradients != null
-            ? Vector<T>.FromMemory(_weightGradients.Data)
+            ? new Vector<T>(_weightGradients.ToArray())
             : new Vector<T>(_weights.Length);
         var bGrad = _biasGradients != null
-            ? Vector<T>.FromMemory(_biasGradients.Data)
+            ? new Vector<T>(_biasGradients.ToArray())
             : new Vector<T>(_biases.Length);
         return Vector<T>.Concatenate(wGrad, bGrad);
     }
@@ -1290,80 +950,6 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         _gpuAddedBatchDimension = false;
     }
 
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> when weights are initialized and activation function supports JIT.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// Locally connected layers support JIT compilation using the LocallyConnectedConv2D operation
-    /// from TensorOperations. The layer applies different filters to different spatial locations.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation =>
-        _weights != null && _biases != null && CanActivationBeJitted();
-
-    /// <summary>
-    /// Exports the locally connected layer's forward pass as a JIT-compilable computation graph.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the locally connected layer output.</returns>
-    /// <remarks>
-    /// <para>
-    /// The locally connected layer computation graph implements:
-    /// output = activation(LocallyConnectedConv2D(input, weights) + bias)
-    /// </para>
-    /// <para><b>For Beginners:</b> This creates an optimized version of the locally connected layer.
-    /// Unlike convolution which shares filters, locally connected layers use unique filters for each position.
-    /// </para>
-    /// </remarks>
-    public override Autodiff.ComputationNode<T> ExportComputationGraph(List<Autodiff.ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (_weights == null || _biases == null)
-            throw new InvalidOperationException("Weights and biases not initialized.");
-
-        if (InputShape == null || InputShape.Length < 3)
-            throw new InvalidOperationException("Layer input shape not configured. Expected [height, width, channels].");
-
-        // Validate activation can be JIT compiled
-        if (!CanActivationBeJitted())
-        {
-            var activationType = (ScalarActivation?.GetType() ?? VectorActivation?.GetType())?.Name ?? "Unknown";
-            throw new NotSupportedException(
-                $"Activation function '{activationType}' is not supported for JIT compilation. " +
-                "Supported activations: ReLU, Sigmoid, Tanh, Softmax, Identity");
-        }
-
-        // Create symbolic input node in NHWC format [batch, height, width, channels]
-        var symbolicInput = new Tensor<T>(new int[] { 1, _inputHeight, _inputWidth, _inputChannels });
-        var inputNode = Autodiff.TensorOperations<T>.Variable(symbolicInput, "locally_connected_input");
-        inputNodes.Add(inputNode);
-
-        // Convert weights to NCHW format for LocallyConnectedConv2D
-        var weightsNCHW = _weights.Transpose([0, 1, 2, 5, 3, 4]);
-        var weightsNode = Autodiff.TensorOperations<T>.Constant(weightsNCHW, "locally_connected_weights");
-
-        // Use bias tensor directly
-        var biasNode = Autodiff.TensorOperations<T>.Constant(_biases, "locally_connected_bias");
-
-        // Apply LocallyConnectedConv2D operation
-        var convOutput = Autodiff.TensorOperations<T>.LocallyConnectedConv2D(
-            inputNode,
-            weightsNode,
-            biasNode,
-            stride: new int[] { _stride, _stride });
-
-        // Apply activation function using base class helper
-        var output = ApplyActivationToGraph(convOutput);
-
-        return output;
-    }
-
     #region GPU Parameter Updates
 
     /// <summary>
@@ -1381,8 +967,8 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
             throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
 
         // Ensure GPU weight tensors exist
-        _gpuWeights ??= new GpuTensor<T>(backend, _weights, GpuTensorRole.Weight);
-        _gpuBiases ??= new GpuTensor<T>(backend, _biases, GpuTensorRole.Bias);
+        _gpuWeights ??= GpuTensorHelper.UploadToGpu<T>(backend, _weights, GpuTensorRole.Weight);
+        _gpuBiases ??= GpuTensorHelper.UploadToGpu<T>(backend, _biases, GpuTensorRole.Bias);
 
         // Ensure optimizer state buffers exist
         EnsureLocallyConnectedOptimizerState(backend, config.OptimizerType);
@@ -1392,8 +978,8 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
         config.ApplyUpdate(backend, _gpuBiases.Buffer, _gpuBiasGradient.Buffer, BuildLocallyConnectedOptimizerState("biases"), _biases.Length);
 
         // Sync back to CPU tensors for compatibility
-        _weights = _gpuWeights.ToTensor();
-        _biases = _gpuBiases.ToTensor();
+        _weights = _gpuWeights;
+        _biases = _gpuBiases;
     }
 
     /// <summary>
@@ -1410,25 +996,25 @@ public class LocallyConnectedLayer<T> : LayerBase<T>
             case GpuOptimizerType.Nag:
             case GpuOptimizerType.Lars:
                 // Velocity buffers
-                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
 
             case GpuOptimizerType.Adam:
             case GpuOptimizerType.AdamW:
             case GpuOptimizerType.Lamb:
                 // M and V buffers for Adam-family
-                _gpuWeightM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuWeightV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
 
             case GpuOptimizerType.RmsProp:
             case GpuOptimizerType.Adagrad:
                 // Squared average buffers (reuse velocity fields)
-                _gpuWeightVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-                _gpuBiasVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuWeightVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([weightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+                _gpuBiasVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
                 break;
         }
     }

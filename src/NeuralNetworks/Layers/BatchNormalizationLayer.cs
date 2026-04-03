@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Normalization)]
 [LayerTask(LayerTask.ActivationNormalization)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, HasTrainingMode = true, IsStateful = true, TestInputShape = "1, 4", TestConstructorArgs = "4")]
-public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
+public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     /// <summary>
     /// A small constant added to the variance for numerical stability.
@@ -70,6 +70,8 @@ public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtra
     /// Also known as gamma. This learnable parameter allows the network to scale
     /// each normalized feature. Initialized to ones.
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
+
     private Tensor<T> _gamma;
 
     /// <summary>
@@ -155,7 +157,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtra
     private Tensor<T>? _betaGradient;
 
     // GPU-resident cached tensors for GPU training pipeline
-    private IGpuTensor<T>? _lastInputGpu;
+    private Tensor<T>? _lastInputGpu;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training mode.
@@ -447,9 +449,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtra
             // Handle any tensor rank (2D, 3D, 4D, 5D, etc.)
             // Dimension 0 is batch, dimension 1 is features/channels
             // Dimensions 2+ are spatial dimensions
-            var inferenceScale = _cachedInferenceScale ?? throw new InvalidOperationException("Inference scale not initialized.");
-            var inferenceShift = _cachedInferenceShift ?? throw new InvalidOperationException("Inference shift not initialized.");
-            var result = ApplyInferenceAnyRank(input, inferenceScale, inferenceShift);
+            var result = ApplyInferenceAnyRank(input, _cachedInferenceScale, _cachedInferenceShift);
 
             // Preserve original rank
             if (_inputWas1D)
@@ -529,7 +529,7 @@ public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtra
     /// and then downloaded back to CPU for persistence.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -570,382 +570,11 @@ public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtra
         return output;
     }
 
-    /// <summary>
-    /// Performs GPU-resident backward pass for the batch normalization layer.
-    /// Computes gradients for input, gamma, and beta entirely on GPU.
-    /// </summary>
-    /// <param name="outputGradient">GPU-resident gradient from the next layer.</param>
-    /// <returns>GPU-resident gradient to pass to the previous layer.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if ForwardGpu was not called first.</exception>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine");
-
-        if (_lastInputGpu == null || _lastMean == null || _lastVariance == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu");
-
-        float epsilon = (float)NumOps.ToDouble(_epsilon);
-
-        // Upload saved mean and variance to GPU
-        var saveMeanGpu = gpuEngine.UploadToGpu(_lastMean, GpuTensorRole.Intermediate);
-        var saveVarGpu = gpuEngine.UploadToGpu(_lastVariance, GpuTensorRole.Intermediate);
-
-        // Compute backward using GPU-resident operation
-        var (gradInput, gradGamma, gradBeta) = gpuEngine.BatchNormBackwardGpu<T>(
-            outputGradient,
-            _lastInputGpu,
-            _gamma,
-            saveMeanGpu,
-            saveVarGpu,
-            epsilon);
-
-        // Download gradients for parameter update
-        _gammaGradient = gradGamma.ToTensor();
-        _betaGradient = gradBeta.ToTensor();
-
-        return gradInput;
-    }
-
-    /// <summary>
-    /// Performs the backward pass of batch normalization.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass computes three types of gradients:
-    /// 1. Gradients for the input (to pass to previous layers)
-    /// 2. Gradients for gamma (scale parameter)
-    /// 3. Gradients for beta (shift parameter)
-    /// </para>
-    /// <para>
-    /// This is a complex calculation that accounts for how each input affects:
-    /// - The normalized value directly
-    /// - The batch mean
-    /// - The batch variance
-    /// </para>
-    /// <para>
-    /// The implementation follows the chain rule of calculus to properly backpropagate
-    /// through all operations in the forward pass.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method calculates how the error gradients flow backward through this layer.
-    ///
-    /// During backpropagation, this method:
-    ///
-    /// 1. Checks that Forward() was called first
-    /// 2. Creates tensors to hold the gradients for inputs and parameters
-    /// 3. Calculates the inverse standard deviation (1/sqrt(variance + epsilon))
-    /// 4. For each feature:
-    ///    - Sums the output gradients across the batch
-    ///    - Sums the product of output gradients and normalized values
-    ///    - Calculates gradients for gamma and beta parameters
-    ///    - Calculates gradients for each input value
-    ///
-    /// The calculation is complex because in batch normalization, each input affects:
-    /// - Its own normalized value directly
-    /// - The mean of the batch (which affects all normalized values)
-    /// - The variance of the batch (which affects all normalized values)
-    ///
-    /// The formula accounts for all these dependencies using the chain rule of calculus.
-    ///
-    /// This method stores the gradients for gamma and beta to use during parameter updates,
-    /// and returns the gradient for the input to pass to previous layers.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastMean == null || _lastVariance == null)
-            throw new InvalidOperationException("Backward cannot be called before Forward. No cached input/statistics available.");
-
-        // Reshape rank-1 gradient to [1, N] to match the forward pass reshape of 1D inputs
-        if (_inputWas1D && outputGradient.Shape.Length == 1)
-        {
-            outputGradient = outputGradient.Reshape(1, outputGradient.Length);
-        }
-
-        // Save original shape for restoring at the end
-        int[] originalInputShape = _lastInput.Shape.ToArray();
-
-        // Ensure shapes match for backward pass
-        var adjustedGradient = outputGradient;
-        var adjustedInput = _lastInput;
-        var adjustedMean = _lastMean;
-        var adjustedVariance = _lastVariance;
-
-        // Handle shape mismatches - use gamma shape as the reference
-        int numFeatures = _gamma.Length;
-
-        // For CNN inputs with rank > 2 (e.g., [N, C, H, W]), BN normalizes per-channel
-        // across batch and spatial dimensions. Reshape to [N*H*W, C] for backward computation.
-        bool isHigherRank = _lastInput.Shape.Length > 2;
-        int batchSize;
-
-        if (isHigherRank)
-        {
-            // For [N, C, H, W] or higher: flatten batch and spatial dims, keep channels as features
-            // Result shape: [N*H*W, C] where C = numFeatures
-            int n = _lastInput.Shape[0];
-            int spatialSize = 1;
-            for (int d = 2; d < _lastInput.Shape.Length; d++)
-                spatialSize *= _lastInput.Shape[d];
-            batchSize = n * spatialSize;
-
-            // Transpose from [N, C, H, W] to [N, H, W, C] then reshape to [N*H*W, C]
-            // Since we need to group spatial elements per channel for BN backward,
-            // we permute so channels are last, then flatten the leading dims
-            int[] permuteOrder = new int[_lastInput.Shape.Length];
-            permuteOrder[0] = 0; // N stays first
-            for (int d = 2; d < _lastInput.Shape.Length; d++)
-                permuteOrder[d - 1] = d; // spatial dims
-            permuteOrder[_lastInput.Shape.Length - 1] = 1; // C goes last
-
-            // Clone after transpose to ensure contiguous memory layout before reshape.
-            // Transpose may return a non-contiguous view, and Reshape on non-contiguous
-            // data produces incorrect results (data elements are read in wrong order).
-            adjustedGradient = outputGradient.Transpose(permuteOrder).Clone().Reshape(batchSize, numFeatures);
-            adjustedInput = _lastInput.Transpose(permuteOrder).Clone().Reshape(batchSize, numFeatures);
-        }
-        else
-        {
-            // The Engine.BatchNormBackward expects 2D tensors [batch, features]
-            batchSize = _lastInput.Shape.Length > 1 ? _lastInput.Shape[0] : 1;
-        }
-
-        int[] targetShape2D = new[] { batchSize, numFeatures };
-        int totalElements = batchSize * numFeatures;
-
-        // Adjust gradient to 2D [batch, features] shape (only for 2D case; higher rank already handled)
-        if (!isHigherRank)
-        {
-            if (adjustedGradient.Length != totalElements)
-            {
-                var gradData = new T[totalElements];
-                int copyLen = Math.Min(adjustedGradient.Length, totalElements);
-                for (int i = 0; i < copyLen; i++)
-                {
-                    gradData[i] = adjustedGradient.Data.Span[i];
-                }
-                for (int i = copyLen; i < totalElements; i++)
-                {
-                    gradData[i] = NumOps.Zero;
-                }
-                adjustedGradient = new Tensor<T>(targetShape2D, new Vector<T>(gradData));
-            }
-            else if (adjustedGradient.Rank != 2 || adjustedGradient.Shape[0] != batchSize || adjustedGradient.Shape[1] != numFeatures)
-            {
-                adjustedGradient = adjustedGradient.Reshape(targetShape2D);
-            }
-
-            // Adjust input to 2D [batch, features] shape
-            if (adjustedInput.Length != totalElements)
-            {
-                var inputData = new T[totalElements];
-                int copyLen = Math.Min(adjustedInput.Length, totalElements);
-                for (int i = 0; i < copyLen; i++)
-                {
-                    inputData[i] = adjustedInput.Data.Span[i];
-                }
-                T fillValue = copyLen > 0 ? inputData[0] : NumOps.Zero;
-                for (int i = copyLen; i < totalElements; i++)
-                {
-                    inputData[i] = fillValue;
-                }
-                adjustedInput = new Tensor<T>(targetShape2D, new Vector<T>(inputData));
-            }
-            else if (adjustedInput.Rank != 2 || adjustedInput.Shape[0] != batchSize || adjustedInput.Shape[1] != numFeatures)
-            {
-                adjustedInput = adjustedInput.Reshape(targetShape2D);
-            }
-        }
-
-        if (adjustedMean.Length != numFeatures)
-        {
-            var meanData = new T[numFeatures];
-            T meanFillValue = adjustedMean.Length > 0 ? adjustedMean.Data.Span[0] : NumOps.Zero;
-            int copyLen = Math.Min(adjustedMean.Length, numFeatures);
-            for (int i = 0; i < numFeatures; i++)
-            {
-                meanData[i] = i < copyLen ? adjustedMean.Data.Span[i] : meanFillValue;
-            }
-            adjustedMean = new Tensor<T>(_gamma.Shape.ToArray(), new Vector<T>(meanData));
-        }
-
-        if (adjustedVariance.Length != numFeatures)
-        {
-            var varData = new T[numFeatures];
-            T varFillValue = adjustedVariance.Length > 0 ? adjustedVariance.Data.Span[0] : NumOps.One;
-            int copyLen = Math.Min(adjustedVariance.Length, numFeatures);
-            for (int i = 0; i < numFeatures; i++)
-            {
-                varData[i] = i < copyLen ? adjustedVariance.Data.Span[i] : varFillValue;
-            }
-            adjustedVariance = new Tensor<T>(_gamma.Shape.ToArray(), new Vector<T>(varData));
-        }
-
-        // Use Engine for GPU/CPU accelerated Batch Normalization Backward
-        var inputGradient = Engine.BatchNormBackward(
-            adjustedGradient,
-            adjustedInput,
-            _gamma,
-            adjustedMean,
-            adjustedVariance,
-            NumOps.ToDouble(_epsilon),
-            out var gradGamma,
-            out var gradBeta);
-
-        _gammaGradient = gradGamma;
-        _betaGradient = gradBeta;
-
-        // Restore original tensor shape
-        if (isHigherRank)
-        {
-            // Result is [N*H*W, C], need to go back to [N, C, H, W]
-            // First reshape to [N, H, W, C]
-            int n = originalInputShape[0];
-            int[] spatialPlusC = new int[originalInputShape.Length];
-            spatialPlusC[0] = n;
-            for (int d = 2; d < originalInputShape.Length; d++)
-                spatialPlusC[d - 1] = originalInputShape[d];
-            spatialPlusC[originalInputShape.Length - 1] = numFeatures;
-            inputGradient = inputGradient.Reshape(spatialPlusC);
-
-            // Transpose back from [N, H, W, C] to [N, C, H, W]
-            int[] inverseOrder = new int[originalInputShape.Length];
-            inverseOrder[0] = 0; // N
-            inverseOrder[1] = originalInputShape.Length - 1; // C was last, goes to dim 1
-            for (int d = 2; d < originalInputShape.Length; d++)
-                inverseOrder[d] = d - 1; // spatial dims shift right
-            inputGradient = inputGradient.Transpose(inverseOrder).Clone();
-        }
-        else if (_inputWas1D && inputGradient.Shape.Length > 1)
-        {
-            inputGradient = inputGradient.Reshape(inputGradient.Length);
-        }
-
-        return inputGradient;
-    }
-
     private static int ComputeTotalElements(int[] shape)
     {
         int total = 1;
         for (int i = 0; i < shape.Length; i++) total *= shape[i];
         return total;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients. It recreates the forward
-    /// computation graph for normalization, scaling, and shifting, then propagates gradients through it.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Backward cannot be called before Forward. No cached input available.");
-
-        // Reshape rank-1 gradient to [1, N] to match the forward pass reshape of 1D inputs
-        if (_inputWas1D && outputGradient.Shape.Length == 1)
-        {
-            outputGradient = outputGradient.Reshape(1, outputGradient.Length);
-        }
-
-        // Convert to computation nodes
-        var inputNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "input", requiresGradient: true);
-
-        // Use gamma and beta tensors directly
-        var gammaNode = Autodiff.TensorOperations<T>.Variable(_gamma, "gamma", requiresGradient: true);
-        var betaNode = Autodiff.TensorOperations<T>.Variable(_beta, "beta", requiresGradient: true);
-
-        // Forward pass using autodiff BatchNorm operation
-        var outputNode = Autodiff.TensorOperations<T>.BatchNorm(
-            inputNode,
-            gammaNode,
-            betaNode,
-            _runningMean,
-            _runningVariance,
-            IsTrainingMode,
-            NumOps.ToDouble(_epsilon)
-        );
-
-        // Set output gradient
-        outputNode.Gradient = outputGradient;
-
-        // Inline topological sort
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract gradients directly
-        _gammaGradient = gammaNode.Gradient ?? throw new InvalidOperationException("Gamma gradient is null.");
-        _betaGradient = betaNode.Gradient ?? throw new InvalidOperationException("Beta gradient is null.");
-
-        var inputGrad = inputNode.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-
-        // Restore original input shape so gradient rank matches the forward input rank
-        if (_originalInputShape != null && inputGrad.Length == ComputeTotalElements(_originalInputShape))
-        {
-            inputGrad = inputGrad.Reshape(_originalInputShape);
-        }
-        else if (_inputWas1D && inputGrad.Shape.Length > 1)
-        {
-            inputGrad = inputGrad.Reshape(inputGrad.Length);
-        }
-
-        return inputGrad;
     }
 
     /// <summary>
@@ -1060,7 +689,10 @@ public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtra
     {
         int featureSize = InputShape[0];
         if (extraParameters.Length != featureSize * 2)
-            return; // graceful no-op for legacy data without extras
+            throw new ArgumentException(
+                $"BatchNormalization extra parameters must have length {featureSize * 2} " +
+                $"(mean + variance for {featureSize} features), but got {extraParameters.Length}.",
+                nameof(extraParameters));
 
         var meanVec = extraParameters.Slice(0, featureSize);
         var varVec = extraParameters.Slice(featureSize, featureSize);
@@ -1134,12 +766,16 @@ public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtra
 
             gpuEngine.SgdMomentumUpdateGpu(_gamma, _gammaGradient, _gammaVelocity, lr, 0.0f, 0.0f);
             gpuEngine.SgdMomentumUpdateGpu(_beta, _betaGradient, _betaVelocity, lr, 0.0f, 0.0f);
+            _inferenceScaleDirty = true;
         }
         else
         {
             // Production-grade: Use Engine operations instead of manual loops
             _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
             _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
+
+            // Invalidate cached inference terms since gamma/beta changed
+            _inferenceScaleDirty = true;
 
             // Notify GPU that tensor data has changed
             Engine.InvalidatePersistentTensor(_gamma);
@@ -1213,111 +849,5 @@ public class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializationExtra
 
         // Clear GPU cached tensors
         _lastInputGpu = null;
-    }
-
-    /// <summary>
-    /// Exports the batch normalization layer as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to which the input node will be added.</param>
-    /// <returns>The output computation node representing the batch normalization operation.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a symbolic computation graph for JIT compilation:
-    /// 1. Creates a symbolic input node with shape [batch=1, features]
-    /// 2. Creates constant nodes for gamma (scale) and beta (shift) parameters
-    /// 3. Uses running statistics (mean and variance) for inference mode
-    /// 4. Applies the batch normalization operation: gamma * ((x - mean) / sqrt(variance + epsilon)) + beta
-    /// </para>
-    /// <para><b>For Beginners:</b> This method builds a symbolic representation of batch normalization for JIT.
-    ///
-    /// JIT compilation converts the batch normalization operation into optimized native code.
-    /// During inference (prediction), batch normalization uses:
-    /// - Running mean and variance collected during training (not batch statistics)
-    /// - Learned scale (gamma) and shift (beta) parameters
-    ///
-    /// The symbolic graph allows the JIT compiler to:
-    /// - Optimize the normalization formula: (x - mean) / sqrt(variance + epsilon)
-    /// - Fuse the scale and shift operations: result * gamma + beta
-    /// - Generate SIMD-optimized code for better performance
-    ///
-    /// This typically provides 5-10x speedup compared to interpreted execution.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when layer shape or parameters are not initialized.</exception>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured. Call InitializeWeights() or Forward() first.");
-
-        if (_gamma == null || _beta == null)
-            throw new InvalidOperationException("Layer parameters not initialized. Gamma and beta must be initialized before JIT compilation.");
-
-        if (_runningMean == null || _runningVariance == null)
-            throw new InvalidOperationException("Running statistics not initialized. Train the model first before using JIT compilation.");
-
-        // Create symbolic input node (shape definition only, batch size adapts at runtime)
-        // BatchNormalizationLayer expects input shape: [featureSize]
-        // BatchNorm expects: [batch, features]
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Create constant nodes for gamma (scale) and beta (shift) parameters
-        // Use tensors directly - no conversion needed
-        var gammaNode = TensorOperations<T>.Constant(_gamma, "gamma");
-        var betaNode = TensorOperations<T>.Constant(_beta, "beta");
-
-        // Convert epsilon from T to double for BatchNorm call
-        var epsilonDouble = NumOps.ToDouble(_epsilon);
-
-        // Apply BatchNorm operation (inference mode with running statistics)
-        // Use running statistics tensors directly - no conversion needed
-        var batchNormNode = TensorOperations<T>.BatchNorm(
-            inputNode,
-            gamma: gammaNode,
-            beta: betaNode,
-            runningMean: _runningMean,
-            runningVar: _runningVariance,
-            training: false,  // Inference mode for JIT compilation
-            epsilon: epsilonDouble);
-
-        return batchNormNode;
-    }
-
-    /// <summary>
-    /// Gets whether this batch normalization layer supports JIT compilation.
-    /// </summary>
-    /// <value>True if the layer parameters and running statistics are initialized.</value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the layer can be JIT compiled. The layer supports JIT if:
-    /// - Gamma (scale) and beta (shift) parameters are initialized
-    /// - Running mean and variance statistics are initialized (from training)
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you if this layer can use JIT compilation for faster inference.
-    ///
-    /// The layer can be JIT compiled if:
-    /// - The layer has been initialized with learnable parameters (gamma and beta)
-    /// - The model has been trained, so running statistics are available
-    ///
-    /// Batch normalization during inference requires running statistics collected during training,
-    /// so JIT compilation is only supported after the model has been trained at least once.
-    ///
-    /// Once these conditions are met, JIT compilation can provide significant speedup (5-10x)
-    /// by optimizing the normalization, scaling, and shifting operations.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // BatchNormalization supports JIT if parameters and running statistics are initialized
-            return _gamma != null && _beta != null &&
-                   _runningMean != null && _runningVariance != null;
-        }
     }
 }

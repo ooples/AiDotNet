@@ -48,24 +48,6 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void AttentionLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int inputSize = 32;
-        int attentionSize = 16;
-        var layer = new AttentionLayer<float>(inputSize, attentionSize, (IActivationFunction<float>?)null);
-        var input = CreateRandomTensor<float>([4, 8, inputSize]);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGradient));
-    }
 
     [Fact]
     public void AttentionLayer_CrossAttention_ProducesValidOutput()
@@ -178,24 +160,6 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void SelfAttentionLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int seqLen = 8;
-        int embedDim = 32;
-        var layer = new SelfAttentionLayer<float>(seqLen, embedDim, headCount: 4, (IActivationFunction<float>?)null);
-        var input = CreateRandomTensor<float>([2, seqLen, embedDim]);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGradient));
-    }
 
     [Fact]
     public void SelfAttentionLayer_MultiHeadConfiguration_Works()
@@ -289,24 +253,6 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void MultiHeadAttentionLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int seqLen = 8;
-        int embedDim = 32;
-        var layer = new MultiHeadAttentionLayer<float>(seqLen, embedDim, headCount: 4);
-        var input = CreateRandomTensor<float>([2, seqLen, embedDim]);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGradient));
-    }
 
     [Fact]
     public void MultiHeadAttentionLayer_CrossAttention_ProducesValidOutput()
@@ -385,25 +331,6 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void FlashAttentionLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int seqLen = 8;
-        int embedDim = 32;
-        int headCount = 4;
-        var layer = new FlashAttentionLayer<float>(seqLen, embedDim, headCount);
-        var input = CreateRandomTensor<float>([2, seqLen, embedDim]);
-
-        // Act
-        var output = layer.Forward(input);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(input.Shape.ToArray(), inputGradient.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGradient));
-    }
 
     #endregion
 
@@ -448,25 +375,6 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void CrossAttentionLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int dim = 32;
-        int seqLen = 8;
-        var layer = new CrossAttentionLayer<float>(dim, dim, headCount: 4, sequenceLength: seqLen);
-        var query = CreateRandomTensor<float>([2, seqLen, dim]);
-        var context = CreateRandomTensor<float>([2, seqLen, dim]);
-
-        // Act
-        var output = layer.Forward(query, context);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(query.Shape.ToArray(), inputGradient.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGradient));
-    }
 
     [Fact]
     public void CrossAttentionLayer_Clone_CreatesIndependentCopy()
@@ -533,27 +441,6 @@ public class AttentionLayersIntegrationTests
         Assert.False(ContainsNaN(output));
     }
 
-    [Fact]
-    public void GraphAttentionLayer_BackwardPass_ProducesValidGradients()
-    {
-        // Arrange
-        int inputFeatures = 16;
-        int outputFeatures = 8;
-        int numNodes = 6;
-        var layer = new GraphAttentionLayer<float>(inputFeatures, outputFeatures, numHeads: 2);
-        var nodeFeatures = CreateRandomTensor<float>([numNodes, inputFeatures]);
-        var adjacency = CreateRandomAdjacencyMatrix(numNodes);
-        layer.SetAdjacencyMatrix(adjacency);
-
-        // Act
-        var output = layer.Forward(nodeFeatures);
-        var outputGradient = CreateRandomTensor<float>(output.Shape.ToArray());
-        var inputGradient = layer.Backward(outputGradient);
-
-        // Assert
-        Assert.Equal(nodeFeatures.Shape.ToArray(), inputGradient.Shape.ToArray());
-        Assert.False(ContainsNaN(inputGradient));
-    }
 
     [Fact]
     public void GraphAttentionLayer_Clone_CreatesIndependentCopy()

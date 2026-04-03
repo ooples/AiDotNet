@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -191,39 +191,6 @@ public class MLPProjector<T> : IProjectorHead<T>
         }
 
         return _preActivation2;
-    }
-
-    /// <inheritdoc />
-    public Tensor<T> Backward(Tensor<T> gradients)
-    {
-        if (gradients is null) throw new ArgumentNullException(nameof(gradients));
-        if (_lastInput is null) throw new InvalidOperationException("Forward must be called before Backward");
-
-        var grad = gradients;
-
-        // Backward through optional BatchNorm 2
-        if (_useBatchNormOnOutput && _preActivation2 is not null)
-        {
-            var gamma2 = _gamma2 ?? throw new InvalidOperationException("Gamma2 has not been initialized.");
-            (grad, _gradGamma2, _gradBeta2) = BatchNormBackward(grad, _preActivation2, gamma2);
-        }
-
-        // Backward through Layer 2
-        var postRelu1 = _postRelu1 ?? throw new InvalidOperationException("Post-ReLU activations not available. Forward must be called before Backward.");
-        (grad, _gradWeight2, _gradBias2) = LinearBackward(grad, postRelu1, _weight2);
-
-        // Backward through ReLU
-        var postBatchNorm1 = _postBatchNorm1 ?? throw new InvalidOperationException("Post-BatchNorm activations not available. Forward must be called before Backward.");
-        grad = ReLUBackward(grad, postBatchNorm1);
-
-        // Backward through BatchNorm 1
-        var preActivation1 = _preActivation1 ?? throw new InvalidOperationException("Pre-activation values not available. Forward must be called before Backward.");
-        (grad, _gradGamma1, _gradBeta1) = BatchNormBackward(grad, preActivation1, _gamma1);
-
-        // Backward through Layer 1
-        (grad, _gradWeight1, _gradBias1) = LinearBackward(grad, _lastInput, _weight1);
-
-        return grad;
     }
 
     /// <inheritdoc />
@@ -585,14 +552,14 @@ public class MLPProjector<T> : IProjectorHead<T>
             result[i] = NumOps.GreaterThan(input.Data.Span[i], NumOps.Zero) ? input.Data.Span[i] : NumOps.Zero;
         }
 
-        return new Tensor<T>(result, input.Shape.ToArray());
+        return new Tensor<T>(result, input._shape);
     }
 
     private Tensor<T> ReLUBackward(Tensor<T> outputGrad, Tensor<T> input)
     {
         // Vectorized ReLU backward: grad * (input > 0)
         var mask = Engine.TensorGreaterThan(input, NumOps.Zero);
-        var zeros = Tensor<T>.CreateDefault(outputGrad.Shape.ToArray(), NumOps.Zero);
+        var zeros = Tensor<T>.CreateDefault(outputGrad._shape, NumOps.Zero);
         return Engine.TensorWhere(mask, outputGrad, zeros);
     }
 

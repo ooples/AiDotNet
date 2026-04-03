@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Tensors;
@@ -292,7 +292,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         T dLdScaleRaw = NumOps.Multiply(dLdScale, dSoftplus);
 
         // Compute gradients for mean weights
-        var meanWeightGrad = new Tensor<T>(_meanWeights.Shape.ToArray());
+        var meanWeightGrad = new Tensor<T>(_meanWeights._shape);
         for (int j = 0; j < _meanWeights.Shape[1]; j++)
         {
             meanWeightGrad[0, j] = NumOps.Multiply(dLdMean, hidden[j]);
@@ -304,7 +304,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         gradients["mean_bias"] = meanBiasGrad;
 
         // Compute gradients for scale weights
-        var scaleWeightGrad = new Tensor<T>(_scaleWeights.Shape.ToArray());
+        var scaleWeightGrad = new Tensor<T>(_scaleWeights._shape);
         for (int j = 0; j < _scaleWeights.Shape[1]; j++)
         {
             scaleWeightGrad[0, j] = NumOps.Multiply(dLdScaleRaw, hidden[j]);
@@ -327,7 +327,6 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
 
         for (int layer = _lstmLayers.Count - 1; layer >= 0; layer--)
         {
-            var dInput = _lstmLayers[layer].Backward(dHidden);
             var lstmGradients = _lstmLayers[layer].LastGradients;
             if (lstmGradients is not null)
             {
@@ -585,7 +584,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
     {
         writer.Write(tensor.Shape.Length);
-        foreach (var dim in tensor.Shape.ToArray())
+        foreach (var dim in tensor._shape)
             writer.Write(dim);
         for (int i = 0; i < tensor.Length; i++)
             writer.Write(Convert.ToDouble(tensor[i]));
@@ -671,12 +670,6 @@ internal class DeepARLstmCellTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     public override int ParameterCount => _weights.Length + _bias.Length;
 
     public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
-    {
-        return Autodiff.TensorOperations<T>.Variable(new Tensor<T>(new[] { _hiddenSize }), "lstm_cell_output");
-    }
 
     public override Vector<T> GetParameters()
     {
@@ -813,14 +806,6 @@ internal class DeepARLstmCellTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     /// </summary>
     public Dictionary<string, Tensor<T>>? LastGradients { get; private set; }
 
-    public override Tensor<T> Backward(Tensor<T> dHidden)
-    {
-        LastGradients = BackwardInternal(dHidden);
-        if (LastGradients.TryGetValue("input_gradient", out var dInput))
-            return dInput;
-        return new Tensor<T>(new[] { _inputSize });
-    }
-
     private Dictionary<string, Tensor<T>> BackwardInternal(Tensor<T> dHidden)
     {
         var gradients = new Dictionary<string, Tensor<T>>();
@@ -933,13 +918,13 @@ internal class DeepARLstmCellTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         writer.Write(_hiddenSize);
 
         writer.Write(_weights.Shape.Length);
-        foreach (var dim in _weights.Shape.ToArray())
+        foreach (var dim in _weights._shape)
             writer.Write(dim);
         for (int i = 0; i < _weights.Length; i++)
             writer.Write(Convert.ToDouble(_weights[i]));
 
         writer.Write(_bias.Shape.Length);
-        foreach (var dim in _bias.Shape.ToArray())
+        foreach (var dim in _bias._shape)
             writer.Write(dim);
         for (int i = 0; i < _bias.Length; i++)
             writer.Write(Convert.ToDouble(_bias[i]));

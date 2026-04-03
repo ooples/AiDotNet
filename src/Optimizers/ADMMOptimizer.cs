@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -423,5 +424,12 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     {
         var baseKey = base.GenerateGradientCacheKey(model, X, y);
         return $"{baseKey}_ADMM_{_options.Rho}_{_regularization?.GetType().Name}_{_options.AbsoluteTolerance}_{_iteration}";
+    }
+
+    /// <inheritdoc />
+    public override void Step(TapeStepContext<T> context)
+    {
+        var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
+        context.SetFlatParameters(updated);
     }
 }

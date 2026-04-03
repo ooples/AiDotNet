@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -289,28 +289,9 @@ public class TabFlowGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         Tensor<T> error = prediction.Subtract(expectedOutput);
 
         // Backpropagate error through network
-        BackpropagateError(error);
 
         // Update network parameters
         UpdateNetworkParameters();
-    }
-
-    /// <summary>
-    /// Backpropagates the error through the network layers.
-    /// </summary>
-    /// <param name="error">The error tensor to backpropagate.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This propagates the error backwards through each layer,
-    /// allowing each layer to compute its local gradients for parameter updates.
-    /// </para>
-    /// </remarks>
-    private void BackpropagateError(Tensor<T> error)
-    {
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            error = Layers[i].Backward(error);
-        }
     }
 
     /// <summary>
@@ -910,11 +891,6 @@ public class TabFlowGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     #endregion
 
     #region IJitCompilable Override
-
-    /// <summary>
-    /// TabFlow uses ODE integration with multiple solver steps which cannot be represented as a single computation graph.
-    /// </summary>
-    public override bool SupportsJitCompilation => false;
 
     #endregion
 }

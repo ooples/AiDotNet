@@ -1,8 +1,9 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -114,9 +115,9 @@ public class BidirectionalLayer<T> : LayerBase<T>
         _forwardLayer.SupportsGpuTraining && _backwardLayer.SupportsGpuTraining;
 
     #region GPU Training Fields
-    private IGpuTensor<T>? _gpuLastInput;
-    private IGpuTensor<T>? _gpuLastForwardOutput;
-    private IGpuTensor<T>? _gpuLastBackwardOutput;
+    private Tensor<T>? _gpuLastInput;
+    private Tensor<T>? _gpuLastForwardOutput;
+    private Tensor<T>? _gpuLastBackwardOutput;
     #endregion
 
     /// <summary>
@@ -300,7 +301,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// and the results are merged on the GPU.
     /// </para>
     /// </remarks>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -384,9 +385,9 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// <param name="timeSteps">Number of time steps.</param>
     /// <param name="features">Feature dimension size.</param>
     /// <returns>GPU tensor with the sequence reversed along the time dimension.</returns>
-    private static IGpuTensor<T> ReverseSequenceGpu(
+    private static Tensor<T> ReverseSequenceGpu(
         IDirectGpuBackend backend,
-        IGpuTensor<T> input,
+        Tensor<T> input,
         int batchSize,
         int timeSteps,
         int features)
@@ -408,173 +409,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
             backend.Copy2DStrided(srcView.Buffer, outputBuffer, 1, sliceSize, totalSize, dstOffset);
         }
 
-        return new GpuTensor<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <summary>
-    /// GPU-accelerated backward pass for the bidirectional layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This is the GPU-optimized backward pass that propagates gradients
-    /// through both forward and backward inner layers while keeping all data on the GPU.
-    /// </para>
-    /// </remarks>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        var shape = outputGradient.Shape.ToArray();
-        int batchSize, timeSteps, features;
-
-        // Determine input dimensions
-        if (_mergeMode)
-        {
-            // In merge mode, output shape matches inner layer output
-            if (shape.Length == 2)
-            {
-                batchSize = 1;
-                timeSteps = shape[0];
-                features = shape[1];
-            }
-            else if (shape.Length == 3)
-            {
-                batchSize = shape[0];
-                timeSteps = shape[1];
-                features = shape[2];
-            }
-            else
-            {
-                // Higher rank: flatten leading dimensions into batch
-                batchSize = 1;
-                for (int d = 0; d < shape.Length - 2; d++)
-                    batchSize *= shape[d];
-                timeSteps = shape[shape.Length - 2];
-                features = shape[shape.Length - 1];
-            }
-        }
-        else
-        {
-            // Non-merge mode has an extra dimension [2, ...batch, timeSteps, features]
-            if (shape.Length == 3)
-            {
-                batchSize = 1;
-                timeSteps = shape[1];
-                features = shape[2];
-            }
-            else if (shape.Length == 4)
-            {
-                batchSize = shape[1];
-                timeSteps = shape[2];
-                features = shape[3];
-            }
-            else
-            {
-                // Higher rank: flatten leading dims (after dim[0]=2) into batch
-                batchSize = 1;
-                for (int d = 1; d < shape.Length - 2; d++)
-                    batchSize *= shape[d];
-                timeSteps = shape[shape.Length - 2];
-                features = shape[shape.Length - 1];
-            }
-        }
-
-        IGpuTensor<T> forwardGradient, backwardGradient;
-
-        if (_mergeMode)
-        {
-            // In merge mode, both directions receive the same gradient
-            forwardGradient = outputGradient;
-            backwardGradient = outputGradient;
-        }
-        else
-        {
-            // In non-merge mode, split the gradient for each direction
-            int sliceSize = outputGradient.ElementCount / 2;
-            int[] sliceShape = shape.Length == 3 ? [timeSteps, features] : [batchSize, timeSteps, features];
-
-            var forwardBuffer = backend.AllocateBuffer(sliceSize);
-            var backwardBuffer = backend.AllocateBuffer(sliceSize);
-
-            backend.Copy(outputGradient.Buffer, 0, forwardBuffer, 0, sliceSize);
-            backend.Copy(outputGradient.Buffer, sliceSize, backwardBuffer, 0, sliceSize);
-
-            forwardGradient = new GpuTensor<T>(backend, forwardBuffer, sliceShape, GpuTensorRole.Gradient, ownsBuffer: true);
-            backwardGradient = new GpuTensor<T>(backend, backwardBuffer, sliceShape, GpuTensorRole.Gradient, ownsBuffer: true);
-        }
-
-        // Propagate gradient through forward layer
-        IGpuTensor<T> forwardInputGradient;
-        var forwardLayerType = _forwardLayer.GetType();
-        var forwardBackwardGpuMethod = forwardLayerType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
-
-        if (forwardBackwardGpuMethod is not null)
-        {
-            forwardInputGradient = (IGpuTensor<T>)(forwardBackwardGpuMethod.Invoke(_forwardLayer, new object[] { forwardGradient })
-                ?? throw new InvalidOperationException("BackwardGpu returned null."));
-        }
-        else
-        {
-            // CPU fallback: download, compute, upload
-            var gradData = backend.DownloadBuffer(forwardGradient.Buffer);
-            var cpuGrad = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradData), forwardGradient.Shape.ToArray());
-            var cpuResult = _forwardLayer.Backward(cpuGrad);
-            forwardInputGradient = gpuEngine.UploadToGpu(cpuResult, GpuTensorRole.Gradient);
-        }
-
-        // Reverse the backward gradient before propagating
-        var reversedBackwardGradient = ReverseSequenceGpu(backend, backwardGradient, batchSize, timeSteps, features);
-
-        // Propagate gradient through backward layer
-        IGpuTensor<T> backwardInputGradient;
-        var backwardLayerType = _backwardLayer.GetType();
-        var backwardBackwardGpuMethod = backwardLayerType.GetMethod("BackwardGpu", new[] { typeof(IGpuTensor<T>) });
-
-        if (backwardBackwardGpuMethod is not null)
-        {
-            backwardInputGradient = (IGpuTensor<T>)(backwardBackwardGpuMethod.Invoke(_backwardLayer, new object[] { reversedBackwardGradient })
-                ?? throw new InvalidOperationException("BackwardGpu returned null."));
-        }
-        else
-        {
-            // CPU fallback
-            var gradData = backend.DownloadBuffer(reversedBackwardGradient.Buffer);
-            var cpuGrad = new Tensor<T>(DirectGpuEngine.FromFloatArray<T>(gradData), reversedBackwardGradient.Shape.ToArray());
-            var cpuResult = _backwardLayer.Backward(cpuGrad);
-            backwardInputGradient = gpuEngine.UploadToGpu(cpuResult, GpuTensorRole.Gradient);
-        }
-
-        // Reverse the backward input gradient to match original sequence order
-        var reversedBackwardInputGradient = ReverseSequenceGpu(backend, backwardInputGradient, batchSize, timeSteps,
-            backwardInputGradient.Shape[backwardInputGradient.Shape.Length - 1]);
-
-        // Cleanup intermediate tensors
-        reversedBackwardGradient.Dispose();
-        backwardInputGradient.Dispose();
-
-        if (!_mergeMode)
-        {
-            forwardGradient.Dispose();
-            backwardGradient.Dispose();
-        }
-
-        // Sum the gradients from both directions
-        int elementCount = forwardInputGradient.ElementCount;
-        int[] resultShape = (int[])forwardInputGradient.Shape.ToArray().Clone();
-        var resultBuffer = backend.AllocateBuffer(elementCount);
-        backend.Add(forwardInputGradient.Buffer, reversedBackwardInputGradient.Buffer, resultBuffer, elementCount);
-
-        // Cleanup
-        forwardInputGradient.Dispose();
-        reversedBackwardInputGradient.Dispose();
-
-        return new GpuTensor<T>(backend, resultBuffer, resultShape, GpuTensorRole.Gradient, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, input.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -586,10 +421,10 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// <param name="batchSize">Batch size.</param>
     /// <param name="timeSteps">Number of time steps.</param>
     /// <returns>Merged GPU tensor.</returns>
-    private IGpuTensor<T> MergeOutputsGpu(
+    private Tensor<T> MergeOutputsGpu(
         IDirectGpuBackend backend,
-        IGpuTensor<T> forward,
-        IGpuTensor<T> backward,
+        Tensor<T> forward,
+        Tensor<T> backward,
         int batchSize,
         int timeSteps)
     {
@@ -606,7 +441,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
             forward.Dispose();
             backward.Dispose();
 
-            return new GpuTensor<T>(backend, outputBuffer, forward.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
+            return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, forward.Shape.ToArray(), GpuTensorRole.Activation, ownsBuffer: true);
         }
         else
         {
@@ -634,103 +469,8 @@ public class BidirectionalLayer<T> : LayerBase<T>
             forward.Dispose();
             backward.Dispose();
 
-            return new GpuTensor<T>(backend, outputBuffer, stackedShape, GpuTensorRole.Activation, ownsBuffer: true);
+            return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, stackedShape, GpuTensorRole.Activation, ownsBuffer: true);
         }
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the bidirectional layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the bidirectional layer, which is used during training to propagate
-    /// error gradients back through the network. It splits the output gradient according to the merge mode, propagates
-    /// it through both forward and backward inner layers, and combines the resulting input gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
-    /// should change to reduce errors.
-    ///
-    /// During the backward pass:
-    /// - The error gradient from the next layer is received
-    /// - If the outputs were merged, the same gradient is sent to both forward and backward layers
-    /// - If the outputs were separate, the gradient is split for each direction
-    /// - The gradients from both layers are combined to update the previous layer
-    ///
-    /// This process is part of the "backpropagation" algorithm that helps neural networks learn.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        // Note: BidirectionalLayer delegates backward pass to inner forward and backward layers.
-        // Autodiff support is handled by the inner layers (e.g., LSTMLayer, GRULayer).
-        // This wrapper layer simply manages gradient flow for bidirectional processing.
-
-        Tensor<T> forwardGradient, backwardGradient;
-
-        if (_mergeMode)
-        {
-            forwardGradient = outputGradient;
-            backwardGradient = outputGradient;
-        }
-        else
-        {
-            forwardGradient = outputGradient.Slice(0);
-            backwardGradient = outputGradient.Slice(1);
-        }
-
-        var forwardInputGradient = _forwardLayer.Backward(forwardGradient);
-        var backwardInputGradient = _backwardLayer.Backward(backwardGradient);
-
-        // Reverse the backward gradient
-        backwardInputGradient = ReverseSequence(backwardInputGradient);
-
-        // Sum the gradients
-        return forwardInputGradient.Add(backwardInputGradient);
-    }
-
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        // Note: BidirectionalLayer is a wrapper that delegates to inner layers.
-        // The autodiff path simply ensures the inner layers use their autodiff implementations.
-        // This method manages the bidirectional gradient flow using autodiff-friendly operations.
-
-        if (_lastInput is null || _lastForwardOutput is null || _lastBackwardOutput is null)
-            throw new InvalidOperationException("Forward pass must be called before Backward");
-
-        // Split output gradient based on merge mode
-        Tensor<T> forwardGradient, backwardGradient;
-
-        if (_mergeMode)
-        {
-            // In merge mode, the same gradient flows to both directions
-            forwardGradient = outputGradient;
-            backwardGradient = outputGradient;
-        }
-        else
-        {
-            // In non-merge mode, split the gradient for each direction
-            forwardGradient = outputGradient.Slice(0);
-            backwardGradient = outputGradient.Slice(1);
-        }
-
-        // Propagate gradients through inner layers (they will use their autodiff implementations if UseAutodiff is set)
-        var forwardInputGradient = _forwardLayer.Backward(forwardGradient);
-        var backwardInputGradient = _backwardLayer.Backward(backwardGradient);
-
-        // Reverse the backward gradient to match input sequence order
-        backwardInputGradient = ReverseSequence(backwardInputGradient);
-
-        // Sum the gradients from both directions
-        return forwardInputGradient.Add(backwardInputGradient);
     }
 
     /// <summary>
@@ -969,47 +709,6 @@ public class BidirectionalLayer<T> : LayerBase<T>
         _forwardLayer.ResetState();
         _backwardLayer.ResetState();
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (!_forwardLayer.SupportsJitCompilation || !_backwardLayer.SupportsJitCompilation)
-            throw new InvalidOperationException("BidirectionalLayer requires both inner layers to support JIT compilation.");
-
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Forward layer processing
-        var forwardInputNodes = new List<ComputationNode<T>>();
-        var forwardOutput = _forwardLayer.ExportComputationGraph(forwardInputNodes);
-
-        // Backward layer processing (note: sequence reversal is handled at runtime, not in graph)
-        var backwardInputNodes = new List<ComputationNode<T>>();
-        var backwardOutput = _backwardLayer.ExportComputationGraph(backwardInputNodes);
-
-        // Merge outputs based on merge mode
-        if (_mergeMode)
-        {
-            // Add outputs element-wise
-            return TensorOperations<T>.Add(forwardOutput, backwardOutput);
-        }
-        else
-        {
-            // Stack outputs along new dimension
-            // Note: This requires a Stack operation in TensorOperations
-            // For now, return forward output as primary
-            return forwardOutput;
-        }
-    }
-
-    public override bool SupportsJitCompilation =>
-        _forwardLayer.SupportsJitCompilation && _backwardLayer.SupportsJitCompilation;
 
     /// <summary>
     /// Performs the backward pass on GPU tensors.

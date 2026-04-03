@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -451,8 +451,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
             for (int d = 0; d < inputDim; d++)
             {
-                var plusInput = new Tensor<T>(input.Shape.ToArray());
-                var minusInput = new Tensor<T>(input.Shape.ToArray());
+                var plusInput = new Tensor<T>(input._shape);
+                var minusInput = new Tensor<T>(input._shape);
 
                 for (int i = 0; i < inputDim; i++)
                 {
@@ -720,23 +720,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
             }
 
             SetTrainingMode(true);
-
-            try
-            {
-                var prediction = ForwardWithMemory(input);
-                var lossFunction = LossFunction ?? new MeanSquaredErrorLoss<T>();
-                LastLoss = lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-                var outputGradientVector = lossFunction.CalculateDerivative(prediction.ToVector(), expectedOutput.ToVector());
-                var outputGradient = new Tensor<T>(prediction.Shape.ToArray(), outputGradientVector);
-
-                Backpropagate(outputGradient);
-                _optimizer.UpdateParameters(Layers);
-            }
-            finally
-            {
-                SetTrainingMode(false);
-            }
+            try { TrainWithTape(input, expectedOutput); }
+            finally { SetTrainingMode(false); }
         }
 
         /// <inheritdoc/>
@@ -899,8 +884,5 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
         /// <inheritdoc/>
         public override bool SupportsTraining => true;
-
-        /// <inheritdoc/>
-        public override bool SupportsJitCompilation => false;
     }
 }

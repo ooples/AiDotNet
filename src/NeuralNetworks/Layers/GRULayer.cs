@@ -1,9 +1,11 @@
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -38,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = true, HasTrainingMode = true, ChangesShape = true, Cost = ComputeCost.High, TestInputShape = "1, 4", TestConstructorArgs = "4, 8, false, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
-public class GRULayer<T> : LayerBase<T>
+public partial class GRULayer<T> : LayerBase<T>
 {
     /// <summary>
     /// The weight tensors for the update gate (z), reset gate (r), and candidate hidden state (h).
@@ -293,67 +295,67 @@ public class GRULayer<T> : LayerBase<T>
     #region GPU Training Fields
 
     // GPU-resident weight tensors
-    private GpuTensor<T>? _gpuWz;
-    private GpuTensor<T>? _gpuWr;
-    private GpuTensor<T>? _gpuWh;
-    private GpuTensor<T>? _gpuUz;
-    private GpuTensor<T>? _gpuUr;
-    private GpuTensor<T>? _gpuUh;
-    private GpuTensor<T>? _gpuBz;
-    private GpuTensor<T>? _gpuBr;
-    private GpuTensor<T>? _gpuBh;
+    private Tensor<T>? _gpuWz;
+    private Tensor<T>? _gpuWr;
+    private Tensor<T>? _gpuWh;
+    private Tensor<T>? _gpuUz;
+    private Tensor<T>? _gpuUr;
+    private Tensor<T>? _gpuUh;
+    private Tensor<T>? _gpuBz;
+    private Tensor<T>? _gpuBr;
+    private Tensor<T>? _gpuBh;
 
     // GPU-resident gradient tensors
-    private GpuTensor<T>? _gpuWzGradient;
-    private GpuTensor<T>? _gpuWrGradient;
-    private GpuTensor<T>? _gpuWhGradient;
-    private GpuTensor<T>? _gpuUzGradient;
-    private GpuTensor<T>? _gpuUrGradient;
-    private GpuTensor<T>? _gpuUhGradient;
-    private GpuTensor<T>? _gpuBzGradient;
-    private GpuTensor<T>? _gpuBrGradient;
-    private GpuTensor<T>? _gpuBhGradient;
+    private Tensor<T>? _gpuWzGradient;
+    private Tensor<T>? _gpuWrGradient;
+    private Tensor<T>? _gpuWhGradient;
+    private Tensor<T>? _gpuUzGradient;
+    private Tensor<T>? _gpuUrGradient;
+    private Tensor<T>? _gpuUhGradient;
+    private Tensor<T>? _gpuBzGradient;
+    private Tensor<T>? _gpuBrGradient;
+    private Tensor<T>? _gpuBhGradient;
 
     // GPU-resident optimizer state tensors (SGD/NAG/LARS velocity)
-    private GpuTensor<T>? _gpuWzVelocity;
-    private GpuTensor<T>? _gpuWrVelocity;
-    private GpuTensor<T>? _gpuWhVelocity;
-    private GpuTensor<T>? _gpuUzVelocity;
-    private GpuTensor<T>? _gpuUrVelocity;
-    private GpuTensor<T>? _gpuUhVelocity;
-    private GpuTensor<T>? _gpuBzVelocity;
-    private GpuTensor<T>? _gpuBrVelocity;
-    private GpuTensor<T>? _gpuBhVelocity;
+    private Tensor<T>? _gpuWzVelocity;
+    private Tensor<T>? _gpuWrVelocity;
+    private Tensor<T>? _gpuWhVelocity;
+    private Tensor<T>? _gpuUzVelocity;
+    private Tensor<T>? _gpuUrVelocity;
+    private Tensor<T>? _gpuUhVelocity;
+    private Tensor<T>? _gpuBzVelocity;
+    private Tensor<T>? _gpuBrVelocity;
+    private Tensor<T>? _gpuBhVelocity;
 
     // Adam/AdamW M (first moment) tensors
-    private GpuTensor<T>? _gpuWzM;
-    private GpuTensor<T>? _gpuWrM;
-    private GpuTensor<T>? _gpuWhM;
-    private GpuTensor<T>? _gpuUzM;
-    private GpuTensor<T>? _gpuUrM;
-    private GpuTensor<T>? _gpuUhM;
-    private GpuTensor<T>? _gpuBzM;
-    private GpuTensor<T>? _gpuBrM;
-    private GpuTensor<T>? _gpuBhM;
+    private Tensor<T>? _gpuWzM;
+    private Tensor<T>? _gpuWrM;
+    private Tensor<T>? _gpuWhM;
+    private Tensor<T>? _gpuUzM;
+    private Tensor<T>? _gpuUrM;
+    private Tensor<T>? _gpuUhM;
+    private Tensor<T>? _gpuBzM;
+    private Tensor<T>? _gpuBrM;
+    private Tensor<T>? _gpuBhM;
 
     // Adam/AdamW V (second moment) tensors
-    private GpuTensor<T>? _gpuWzV;
-    private GpuTensor<T>? _gpuWrV;
-    private GpuTensor<T>? _gpuWhV;
-    private GpuTensor<T>? _gpuUzV;
-    private GpuTensor<T>? _gpuUrV;
-    private GpuTensor<T>? _gpuUhV;
-    private GpuTensor<T>? _gpuBzV;
-    private GpuTensor<T>? _gpuBrV;
-    private GpuTensor<T>? _gpuBhV;
+    private Tensor<T>? _gpuWzV;
+    private Tensor<T>? _gpuWrV;
+    private Tensor<T>? _gpuWhV;
+    private Tensor<T>? _gpuUzV;
+    private Tensor<T>? _gpuUrV;
+    private Tensor<T>? _gpuUhV;
+    private Tensor<T>? _gpuBzV;
+    private Tensor<T>? _gpuBrV;
+    private Tensor<T>? _gpuBhV;
 
     // Cached forward pass state for backpropagation (BPTT)
-    private IGpuTensor<T>? _gpuLastInput;
-    private IGpuTensor<T>[]? _gpuCachedZGates;
-    private IGpuTensor<T>[]? _gpuCachedRGates;
-    private IGpuTensor<T>[]? _gpuCachedHCandidates;
-    private IGpuTensor<T>[]? _gpuCachedHiddenStates;
-    private IGpuTensor<T>? _gpuInitialHiddenState;
+    private Tensor<T>? _gpuLastInput;
+    private Tensor<T>[]? _gpuCachedZGates;
+    private Tensor<T>[]? _gpuCachedRGates;
+    private Tensor<T>[]? _gpuCachedHCandidates;
+    private Tensor<T>[]? _gpuCachedHiddenStates;
+    private Tensor<T>? _gpuInitialHiddenState;
 
     // Cached stacked weights for fused kernel (PyTorch format: r, z, n)
     private IGpuBuffer? _gpuStackedWeightsIh;
@@ -943,7 +945,7 @@ public class GRULayer<T> : LayerBase<T>
     /// <returns>GPU tensor output after GRU processing.</returns>
     /// <exception cref="ArgumentException">Thrown when no input tensor is provided.</exception>
     /// <exception cref="InvalidOperationException">Thrown when GPU backend is unavailable.</exception>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -1007,7 +1009,7 @@ public class GRULayer<T> : LayerBase<T>
         // Cache input for backward pass if training
         if (IsTrainingMode)
         {
-            _lastInput = input.ToTensor().Reshape([batchSize, sequenceLength, _inputSize]);
+            _lastInput = input.Reshape([batchSize, sequenceLength, _inputSize]);
             _originalInputShape = shape;
         }
 
@@ -1042,7 +1044,7 @@ public class GRULayer<T> : LayerBase<T>
             // Cache initial hidden state
             var initHBufferCopy = backend.AllocateBuffer(hiddenBufferSize);
             backend.Copy(hInitBuffer, initHBufferCopy, hiddenBufferSize);
-            _gpuInitialHiddenState = new GpuTensor<T>(backend, initHBufferCopy, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
+            _gpuInitialHiddenState = GpuTensorHelper.UploadToGpu<T>(backend, initHBufferCopy, [batchSize, _hiddenSize], GpuTensorRole.Activation, ownsBuffer: true);
         }
         else
         {
@@ -1085,7 +1087,7 @@ public class GRULayer<T> : LayerBase<T>
                 cacheGatesBuffer.Dispose();
             }
 
-            return new GpuTensor<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
+            return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, outputShape, GpuTensorRole.Activation, ownsBuffer: true);
         }
         catch
         {
@@ -1159,307 +1161,6 @@ public class GRULayer<T> : LayerBase<T>
         }
 
         throw new InvalidOperationException("No activation function specified");
-    }
-
-    /// <summary>
-    /// Performs the backward pass of the GRU layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when Forward has not been called before Backward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the GRU layer, which is used during training to propagate
-    /// error gradients back through the network. It calculates the gradients for all the weights and biases,
-    /// and returns the gradient with respect to the layer's input for further backpropagation.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's input
-    /// and parameters should change to reduce errors.
-    ///
-    /// During the backward pass:
-    /// 1. The layer receives information about how its output should change to reduce the overall error
-    /// 2. It calculates how each of its weights and biases should change to produce better output
-    /// 3. It calculates how its input should change, which will be used by earlier layers
-    ///
-    /// This complex calculation essentially runs the GRU's logic in reverse, tracking how
-    /// changes to the output would affect each internal part of the layer.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using Backpropagation Through Time (BPTT) for GRU.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass using manual gradient calculations optimized for
-    /// GRU networks. It performs backpropagation through time (BPTT), processing the
-    /// sequence in reverse order and computing gradients for all gate parameters (reset, update)
-    /// and hidden states.
-    /// </para>
-    /// <para>
-    /// Autodiff Note: GRU backward pass involves complex interactions between reset and update gates.
-    /// Implementing this with automatic differentiation would require handling temporal dependencies
-    /// and gate-specific gradient flows. The manual implementation provides efficient and correct
-    /// gradient calculations for all GRU components.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastHiddenState == null || _lastZ == null || _lastR == null || _lastH == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = _lastInput.Shape[0];
-        int sequenceLength = _lastInput.Shape[1];
-
-        // Initialize gradients
-        var dWz = new Tensor<T>([_hiddenSize, _inputSize]);
-        var dWr = new Tensor<T>([_hiddenSize, _inputSize]);
-        var dWh = new Tensor<T>([_hiddenSize, _inputSize]);
-        var dUz = new Tensor<T>([_hiddenSize, _hiddenSize]);
-        var dUr = new Tensor<T>([_hiddenSize, _hiddenSize]);
-        var dUh = new Tensor<T>([_hiddenSize, _hiddenSize]);
-        var dbz = new Tensor<T>([_hiddenSize]);
-        var dbr = new Tensor<T>([_hiddenSize]);
-        var dbh = new Tensor<T>([_hiddenSize]);
-
-        // Initialize input gradients
-        var dInputs = new Tensor<T>([batchSize, sequenceLength, _inputSize]);
-
-        // If we don't have sequence data, just process the final time step
-        if (!_returnSequences || _allHiddenStates == null || _allHiddenStates.Count == 0)
-        {
-            // Handle single timestep case (simple backward pass)
-            var dh = outputGradient;
-
-            // Ensure output gradient matches expected shape [batchSize, hiddenSize]
-            if (dh.Length != _lastZ.Length)
-            {
-                // Reshape or truncate/pad gradient to match _lastZ shape
-                var dhData = new T[_lastZ.Length];
-                int copyLen = Math.Min(dh.Length, dhData.Length);
-                dh.Data.Span.Slice(0, copyLen).CopyTo(dhData.AsSpan());
-                dh = new Tensor<T>(_lastZ.Shape.ToArray(), new Vector<T>(dhData));
-            }
-            else if (!dh.Shape.ToArray().SequenceEqual(_lastZ.Shape.ToArray()))
-            {
-                dh = dh.Reshape(_lastZ.Shape.ToArray());
-            }
-
-            // Vectorized: compute (1 - _lastZ) using pre-allocated ones tensor
-            var ones1 = new Tensor<T>(_lastZ.Shape.ToArray());
-            ones1.Fill(NumOps.One);
-            var oneMinusLastZ = ones1.Subtract(_lastZ);
-            // Note: ones1 reused below for tanh derivative and r gate
-
-            var dh_candidate = dh.ElementwiseMultiply(oneMinusLastZ);
-            // dh/dz = h_prev - h_candidate. For single timestep, h_prev = 0
-            // _lastH is h_candidate, _lastHiddenState is the final h (= z*h_prev + (1-z)*h_candidate)
-            // We need h_prev, not _lastHiddenState
-            var h_prev_for_dz = (_allHiddenStates != null && _allHiddenStates.Count >= 2)
-                ? _allHiddenStates[_allHiddenStates.Count - 2]
-                : new Tensor<T>(_lastH.Shape.ToArray()); // zeros for first timestep
-            var dz = dh.ElementwiseMultiply(h_prev_for_dz.Subtract(_lastH));
-
-            // h_candidate = tanh(Wh @ x + Uh @ (r * h_prev) + bh)
-            // tanh derivative: (1 - h_candidate^2)
-            var tanhDeriv = ones1.Subtract(_lastH.ElementwiseMultiply(_lastH));
-            var dh_candidate_pre = dh_candidate.ElementwiseMultiply(tanhDeriv);
-
-            // z = sigmoid(z_pre), dz_pre = dz * z * (1-z)
-            var dz_pre = dz.ElementwiseMultiply(_lastZ).ElementwiseMultiply(oneMinusLastZ);
-
-            // r gate gradient: d(r * h_prev)/dr = h_prev (NOT h_t)
-            // h̃ = tanh(W·x + U·(r ⊙ h_{t-1})), so gradient flows through h_{t-1}
-            var dr_times_h = dh_candidate_pre.Multiply(_Uh);
-            var dr = dr_times_h.ElementwiseMultiply(h_prev_for_dz);
-            var dr_pre = dr.ElementwiseMultiply(_lastR).ElementwiseMultiply(ones1.Subtract(_lastR));
-
-            // Input gradient: dx = dz_pre @ Wz + dr_pre @ Wr + dh_candidate_pre @ Wh
-            var dx = dz_pre.Multiply(_Wz)
-                    .Add(dr_pre.Multiply(_Wr))
-                    .Add(dh_candidate_pre.Multiply(_Wh));
-
-            var dxReshaped = dx.Reshape([batchSize, 1, _inputSize]);
-            dInputs = Engine.TensorSetSlice(dInputs, dxReshaped, [0, sequenceLength - 1, 0]);
-
-            // Weight gradients: dW = dgate_pre^T @ x
-            var xt = _lastInput.Slice(1, sequenceLength - 1, sequenceLength)
-                            .Reshape([batchSize, _inputSize]);
-            dWz = dz_pre.Transpose([1, 0]).Multiply(xt);
-            dWr = dr_pre.Transpose([1, 0]).Multiply(xt);
-            dWh = dh_candidate_pre.Transpose([1, 0]).Multiply(xt);
-
-            // For U gradients, we need the previous hidden state
-            // If not available, use zeros
-            Tensor<T> prevHidden;
-            if (sequenceLength > 1 && _allHiddenStates != null && _allHiddenStates.Count >= sequenceLength - 1)
-            {
-                prevHidden = _allHiddenStates[sequenceLength - 2];
-            }
-            else
-            {
-                prevHidden = new Tensor<T>([batchSize, _hiddenSize]);
-            }
-
-            dUz = dz_pre.Transpose([1, 0]).Multiply(prevHidden);
-            dUr = dr_pre.Transpose([1, 0]).Multiply(prevHidden);
-            dUh = dh_candidate_pre.Transpose([1, 0]).Multiply(_lastR.ElementwiseMultiply(prevHidden));
-
-            dbz = dz_pre.Sum([0]);
-            dbr = dr_pre.Sum([0]);
-            dbh = dh_candidate_pre.Sum([0]);
-        }
-        else
-        {
-            // For returning sequences, we need to backpropagate through all time steps
-
-            // Split the output gradient into time steps if returningSequences is true
-            Tensor<T>[] dhOutSequence = new Tensor<T>[sequenceLength];
-            if (_returnSequences)
-            {
-                // Split the gradient for each time step
-                for (int t = 0; t < sequenceLength; t++)
-                {
-                    dhOutSequence[t] = outputGradient.Slice(1, t, t + 1).Reshape([batchSize, _hiddenSize]);
-                }
-            }
-            else
-            {
-                // If not returning sequences, only the last time step has gradient from output
-                for (int t = 0; t < sequenceLength - 1; t++)
-                {
-                    dhOutSequence[t] = new Tensor<T>([batchSize, _hiddenSize]);
-                }
-                dhOutSequence[sequenceLength - 1] = outputGradient;
-            }
-
-            // Initialize hidden state gradient for the next timestep
-            var dhNext = new Tensor<T>([batchSize, _hiddenSize]);
-
-            // Pre-allocate reusable tensors to avoid per-timestep allocations
-            var onesGate = new Tensor<T>([batchSize, _hiddenSize]);
-            onesGate.Fill(NumOps.One);
-            var zerosHidden = new Tensor<T>([batchSize, _hiddenSize]);
-
-            // Recompute hidden states and activations for each time step (needed for backward pass)
-            List<Tensor<T>> timeStepHidden = new List<Tensor<T>>(sequenceLength);
-            List<Tensor<T>> timeStepZ = new List<Tensor<T>>(sequenceLength);
-            List<Tensor<T>> timeStepR = new List<Tensor<T>>(sequenceLength);
-            List<Tensor<T>> timeStepHCandidate = new List<Tensor<T>>(sequenceLength);
-            var currentH = new Tensor<T>([batchSize, _hiddenSize]);
-
-            for (int t = 0; t < sequenceLength; t++)
-            {
-                var xt = _lastInput.Slice(1, t, t + 1).Reshape([batchSize, _inputSize]);
-
-                var z = ComputeGate(xt, currentH, _Wz, _Uz, _bz, true);
-                var r = ComputeGate(xt, currentH, _Wr, _Ur, _br, true);
-                var h_candidate = ComputeGate(xt, r.ElementwiseMultiply(currentH), _Wh, _Uh, _bh, false);
-
-                // Vectorized: compute (1 - z) using pre-allocated ones tensor
-                var oneMinusZ2 = onesGate.Subtract(z);
-
-                var newH = z.ElementwiseMultiply(currentH).Add(
-                    oneMinusZ2.ElementwiseMultiply(h_candidate)
-                );
-
-                currentH = newH;
-
-                // Add to lists (not assign by index)
-                timeStepHidden.Add(currentH.Clone());
-                timeStepZ.Add(z.Clone());
-                timeStepR.Add(r.Clone());
-                timeStepHCandidate.Add(h_candidate.Clone());
-            }
-
-            // Backpropagate through time
-            for (int t = sequenceLength - 1; t >= 0; t--)
-            {
-                // Combine gradient from output and from next timestep
-                var dh = dhNext.Add(dhOutSequence[t]);
-
-                // Get activations for this timestep
-                var xt = _lastInput.Slice(1, t, t + 1).Reshape([batchSize, _inputSize]);
-                var h = timeStepHidden[t];
-                var z = timeStepZ[t];
-                var r = timeStepR[t];
-                var h_candidate = timeStepHCandidate[t];
-
-                // Get previous hidden state (or pre-allocated zeros for t=0)
-                var h_prev = t > 0 ? timeStepHidden[t - 1] : zerosHidden;
-
-                // Calculate gradients — reuse pre-allocated ones tensor
-                var oneMinusZ3 = onesGate.Subtract(z);
-
-                // dh flows through two paths: z * h_prev and (1-z) * h_candidate
-                var dz = dh.ElementwiseMultiply(h_prev.Subtract(h_candidate));
-                var dh_candidate = dh.ElementwiseMultiply(oneMinusZ3);
-
-                // h_candidate = tanh(Wh @ x + Uh @ (r * h_prev) + bh)
-                // d(tanh_pre) = dh_candidate * tanh'(h_candidate) = dh_candidate * (1 - h_candidate^2)
-                var tanhDeriv = onesGate.Subtract(h_candidate.ElementwiseMultiply(h_candidate));
-                var dh_candidate_pre = dh_candidate.ElementwiseMultiply(tanhDeriv);
-
-                // dz flows through sigmoid: dz_pre = dz * sigmoid'(z) = dz * z * (1-z)
-                var dz_pre = dz.ElementwiseMultiply(z).ElementwiseMultiply(oneMinusZ3);
-
-                // dr: gradient from candidate's (r * h_prev) term
-                // Forward: gate += (r*h_prev) @ Uh^T, so d(r*h_prev) = dh_candidate_pre @ Uh
-                var dr_times_h = dh_candidate_pre.Multiply(_Uh);
-                var dr = dr_times_h.ElementwiseMultiply(h_prev);
-                // dr flows through sigmoid: dr_pre = dr * sigmoid'(r) = dr * r * (1-r)
-                var dr_pre = dr.ElementwiseMultiply(r).ElementwiseMultiply(onesGate.Subtract(r));
-
-                // Input gradient: dxt = dz_pre @ Wz + dr_pre @ Wr + dh_candidate_pre @ Wh
-                var dxt = dz_pre.Multiply(_Wz)
-                        .Add(dr_pre.Multiply(_Wr))
-                        .Add(dh_candidate_pre.Multiply(_Wh));
-
-                // Store input gradients using Engine.TensorSetSlice
-                var dxtReshaped = dxt.Reshape([batchSize, 1, _inputSize]);
-                dInputs = Engine.TensorSetSlice(dInputs, dxtReshaped, [0, t, 0]);
-
-                // Gradient for next timestep's hidden state
-                // dhNext = dh * z (from h = z*h_prev + (1-z)*candidate)
-                //        + dz_pre @ Uz^T (from z gate)
-                //        + dr_pre @ Ur^T (from r gate)
-                //        + dr_times_h * r (from r * h_prev in candidate, via Uh)
-                dhNext = dh.ElementwiseMultiply(z)
-                        .Add(dz_pre.Multiply(_Uz))
-                        .Add(dr_pre.Multiply(_Ur))
-                        .Add(dr_times_h.ElementwiseMultiply(r));
-
-                // Accumulate weight gradients
-                // Forward: gate = input @ W^T, so dW = dgate^T @ input = [hidden,batch] @ [batch,input] = [hidden,input]
-                dWz = dWz.Add(dz_pre.Transpose([1, 0]).Multiply(xt));
-                dWr = dWr.Add(dr_pre.Transpose([1, 0]).Multiply(xt));
-                dWh = dWh.Add(dh_candidate_pre.Transpose([1, 0]).Multiply(xt));
-
-                // Forward: gate += hidden @ U^T, so dU = dgate^T @ hidden = [hidden,batch] @ [batch,hidden] = [hidden,hidden]
-                dUz = dUz.Add(dz_pre.Transpose([1, 0]).Multiply(h_prev));
-                dUr = dUr.Add(dr_pre.Transpose([1, 0]).Multiply(h_prev));
-                dUh = dUh.Add(dh_candidate_pre.Transpose([1, 0]).Multiply(r.ElementwiseMultiply(h_prev)));
-
-                dbz = dbz.Add(dz_pre.Sum([0]));
-                dbr = dbr.Add(dr_pre.Sum([0]));
-                dbh = dbh.Add(dh_candidate_pre.Sum([0]));
-            }
-        }
-
-        // Store gradients for use in UpdateParameters
-        _dWz = dWz; _dWr = dWr; _dWh = dWh;
-        _dUz = dUz; _dUr = dUr; _dUh = dUh;
-        _dbz = dbz; _dbr = dbr; _dbh = dbh;
-
-        return dInputs;
     }
 
     /// <summary>
@@ -1701,15 +1402,15 @@ public class GRULayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_Wz.Data),
-            Vector<T>.FromMemory(_Wr.Data),
-            Vector<T>.FromMemory(_Wh.Data),
-            Vector<T>.FromMemory(_Uz.Data),
-            Vector<T>.FromMemory(_Ur.Data),
-            Vector<T>.FromMemory(_Uh.Data),
-            Vector<T>.FromMemory(_bz.Data),
-            Vector<T>.FromMemory(_br.Data),
-            Vector<T>.FromMemory(_bh.Data)
+            new Vector<T>(_Wz.ToArray()),
+            new Vector<T>(_Wr.ToArray()),
+            new Vector<T>(_Wh.ToArray()),
+            new Vector<T>(_Uz.ToArray()),
+            new Vector<T>(_Ur.ToArray()),
+            new Vector<T>(_Uh.ToArray()),
+            new Vector<T>(_bz.ToArray()),
+            new Vector<T>(_br.ToArray()),
+            new Vector<T>(_bh.ToArray())
         );
     }
 
@@ -1744,15 +1445,15 @@ public class GRULayer<T> : LayerBase<T>
         }
 
         return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_dWz.Data),
-            Vector<T>.FromMemory(_dWr.Data),
-            Vector<T>.FromMemory(_dWh.Data),
-            Vector<T>.FromMemory(_dUz.Data),
-            Vector<T>.FromMemory(_dUr.Data),
-            Vector<T>.FromMemory(_dUh.Data),
-            Vector<T>.FromMemory(_dbz.Data),
-            Vector<T>.FromMemory(_dbr.Data),
-            Vector<T>.FromMemory(_dbh.Data)
+            new Vector<T>(_dWz.ToArray()),
+            new Vector<T>(_dWr.ToArray()),
+            new Vector<T>(_dWh.ToArray()),
+            new Vector<T>(_dUz.ToArray()),
+            new Vector<T>(_dUr.ToArray()),
+            new Vector<T>(_dUh.ToArray()),
+            new Vector<T>(_dbz.ToArray()),
+            new Vector<T>(_dbr.ToArray()),
+            new Vector<T>(_dbh.ToArray())
         );
     }
 
@@ -1799,105 +1500,6 @@ public class GRULayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Exports the GRU layer's single time-step computation as a JIT-compilable computation graph.
-    /// </summary>
-    /// <param name="inputNodes">List to populate with input computation nodes.</param>
-    /// <returns>The output computation node representing the hidden state at one time step.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method exports a single GRU cell computation for JIT compilation.
-    /// The graph computes: h_t = GRUCell(x_t, h_{t-1})
-    /// using the standard GRU equations with update gate, reset gate, and candidate hidden state.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Create placeholders for single time-step inputs
-        // x_t shape: [batchSize, inputSize]
-        var inputPlaceholder = new Tensor<T>(new int[] { 1, _inputSize });
-        var inputNode = TensorOperations<T>.Variable(inputPlaceholder, "x_t");
-
-        // h_{t-1} shape: [batchSize, hiddenSize]
-        var prevHiddenPlaceholder = new Tensor<T>(new int[] { 1, _hiddenSize });
-        var prevHiddenNode = TensorOperations<T>.Variable(prevHiddenPlaceholder, "h_prev");
-
-        // Create weight and bias nodes (storage is already Tensor<T>)
-        var WzNode = TensorOperations<T>.Variable(_Wz, "W_z");
-        var WrNode = TensorOperations<T>.Variable(_Wr, "W_r");
-        var WhNode = TensorOperations<T>.Variable(_Wh, "W_h");
-        var UzNode = TensorOperations<T>.Variable(_Uz, "U_z");
-        var UrNode = TensorOperations<T>.Variable(_Ur, "U_r");
-        var UhNode = TensorOperations<T>.Variable(_Uh, "U_h");
-        var bzNode = TensorOperations<T>.Variable(_bz, "b_z");
-        var brNode = TensorOperations<T>.Variable(_br, "b_r");
-        var bhNode = TensorOperations<T>.Variable(_bh, "b_h");
-
-        // Add inputs to the list
-        inputNodes.Add(inputNode);
-        inputNodes.Add(prevHiddenNode);
-        inputNodes.Add(WzNode);
-        inputNodes.Add(WrNode);
-        inputNodes.Add(WhNode);
-        inputNodes.Add(UzNode);
-        inputNodes.Add(UrNode);
-        inputNodes.Add(UhNode);
-        inputNodes.Add(bzNode);
-        inputNodes.Add(brNode);
-        inputNodes.Add(bhNode);
-
-        // Build GRU computation graph (single time step)
-        // Update gate: z_t = sigmoid(W_z @ x_t + U_z @ h_{t-1} + b_z)
-        var WzT = TensorOperations<T>.Transpose(WzNode);
-        var UzT = TensorOperations<T>.Transpose(UzNode);
-        var z_input = TensorOperations<T>.MatrixMultiply(inputNode, WzT);
-        var z_hidden = TensorOperations<T>.MatrixMultiply(prevHiddenNode, UzT);
-        var z_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(z_input, z_hidden), bzNode);
-        var z_t = TensorOperations<T>.Sigmoid(z_preact);
-
-        // Reset gate: r_t = sigmoid(W_r @ x_t + U_r @ h_{t-1} + b_r)
-        var WrT = TensorOperations<T>.Transpose(WrNode);
-        var UrT = TensorOperations<T>.Transpose(UrNode);
-        var r_input = TensorOperations<T>.MatrixMultiply(inputNode, WrT);
-        var r_hidden = TensorOperations<T>.MatrixMultiply(prevHiddenNode, UrT);
-        var r_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(r_input, r_hidden), brNode);
-        var r_t = TensorOperations<T>.Sigmoid(r_preact);
-
-        // Candidate hidden state: h_candidate = tanh(W_h @ x_t + U_h @ (r_t ⊙ h_{t-1}) + b_h)
-        var WhT = TensorOperations<T>.Transpose(WhNode);
-        var UhT = TensorOperations<T>.Transpose(UhNode);
-        var h_input = TensorOperations<T>.MatrixMultiply(inputNode, WhT);
-        var r_gated = TensorOperations<T>.ElementwiseMultiply(r_t, prevHiddenNode);
-        var h_hidden = TensorOperations<T>.MatrixMultiply(r_gated, UhT);
-        var h_preact = TensorOperations<T>.Add(TensorOperations<T>.Add(h_input, h_hidden), bhNode);
-        var h_candidate = TensorOperations<T>.Tanh(h_preact);
-
-        // Final hidden state: h_t = z_t ⊙ h_{t-1} + (1 - z_t) ⊙ h_candidate
-        var z_gated = TensorOperations<T>.ElementwiseMultiply(z_t, prevHiddenNode);
-
-        // Compute (1 - z_t)
-        var onesTensor = new Tensor<T>(new int[] { 1, _hiddenSize });
-        onesTensor.Fill(NumOps.One);
-        var onesNode = TensorOperations<T>.Constant(onesTensor);
-        var one_minus_z = TensorOperations<T>.Subtract(onesNode, z_t);
-
-        var candidate_gated = TensorOperations<T>.ElementwiseMultiply(one_minus_z, h_candidate);
-        var h_t = TensorOperations<T>.Add(z_gated, candidate_gated);
-
-        return h_t;
-    }
-
-    /// <summary>
-    /// Gets whether this layer currently supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// True for GRU layers, as single time-step JIT compilation is supported.
-    /// </value>
-    public override bool SupportsJitCompilation => true;
-
-    /// <summary>
     /// Applies the derivative of the appropriate activation function to the input tensor.
     /// </summary>
     /// <param name="input">The input tensor to apply the derivative to.</param>
@@ -1939,225 +1541,6 @@ public class GRULayer<T> : LayerBase<T>
         }
 
         throw new InvalidOperationException("No activation function specified.");
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation with full BPTT.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements full Backpropagation Through Time (BPTT) using automatic differentiation.
-    /// It builds a complete computation graph across all timesteps and backpropagates through the
-    /// entire sequence, correctly computing gradients for all parameters and inputs.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastHiddenState == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = _lastInput.Shape[0];
-        int sequenceLength = _lastInput.Shape[1];
-
-        // Initialize gradient accumulators
-        _dWz = new Tensor<T>([_hiddenSize, _inputSize]);
-        _dWr = new Tensor<T>([_hiddenSize, _inputSize]);
-        _dWh = new Tensor<T>([_hiddenSize, _inputSize]);
-        _dUz = new Tensor<T>([_hiddenSize, _hiddenSize]);
-        _dUr = new Tensor<T>([_hiddenSize, _hiddenSize]);
-        _dUh = new Tensor<T>([_hiddenSize, _hiddenSize]);
-        _dbz = new Tensor<T>([_hiddenSize]);
-        _dbr = new Tensor<T>([_hiddenSize]);
-        _dbh = new Tensor<T>([_hiddenSize]);
-
-        // Initialize input gradients tensor
-        var dInputs = new Tensor<T>([batchSize, sequenceLength, _inputSize]);
-
-        // Create input nodes for each timestep
-        var inputNodes = new List<ComputationNode<T>>(sequenceLength);
-        for (int t = 0; t < sequenceLength; t++)
-        {
-            var xt = _lastInput.Slice(1, t, t + 1).Reshape([batchSize, _inputSize]);
-            inputNodes.Add(Autodiff.TensorOperations<T>.Variable(xt, $"input_t{t}", requiresGradient: true));
-        }
-
-        // Create parameter nodes (shared across all timesteps)
-        var WzNode = Autodiff.TensorOperations<T>.Variable(_Wz, "Wz", requiresGradient: true);
-        var WrNode = Autodiff.TensorOperations<T>.Variable(_Wr, "Wr", requiresGradient: true);
-        var WhNode = Autodiff.TensorOperations<T>.Variable(_Wh, "Wh", requiresGradient: true);
-        var UzNode = Autodiff.TensorOperations<T>.Variable(_Uz, "Uz", requiresGradient: true);
-        var UrNode = Autodiff.TensorOperations<T>.Variable(_Ur, "Ur", requiresGradient: true);
-        var UhNode = Autodiff.TensorOperations<T>.Variable(_Uh, "Uh", requiresGradient: true);
-        var bzNode = Autodiff.TensorOperations<T>.Variable(_bz, "bz", requiresGradient: true);
-        var brNode = Autodiff.TensorOperations<T>.Variable(_br, "br", requiresGradient: true);
-        var bhNode = Autodiff.TensorOperations<T>.Variable(_bh, "bh", requiresGradient: true);
-
-        // Transpose weight matrices once (shared across timesteps)
-        var WzT = Autodiff.TensorOperations<T>.Transpose(WzNode);
-        var WrT = Autodiff.TensorOperations<T>.Transpose(WrNode);
-        var WhT = Autodiff.TensorOperations<T>.Transpose(WhNode);
-        var UzT = Autodiff.TensorOperations<T>.Transpose(UzNode);
-        var UrT = Autodiff.TensorOperations<T>.Transpose(UrNode);
-        var UhT = Autodiff.TensorOperations<T>.Transpose(UhNode);
-
-        // Broadcast biases for batch operations
-        var bzBroadcast = Autodiff.TensorOperations<T>.Variable(
-            BroadcastVector(_bz, batchSize), "bz_broadcast", requiresGradient: false);
-        var brBroadcast = Autodiff.TensorOperations<T>.Variable(
-            BroadcastVector(_br, batchSize), "br_broadcast", requiresGradient: false);
-        var bhBroadcast = Autodiff.TensorOperations<T>.Variable(
-            BroadcastVector(_bh, batchSize), "bh_broadcast", requiresGradient: false);
-
-        // Build computation graph through all timesteps (forward unrolling)
-        var hiddenStates = new List<ComputationNode<T>>(sequenceLength + 1);
-
-        // Initial hidden state (zeros)
-        var h0 = new Tensor<T>([batchSize, _hiddenSize]);
-        hiddenStates.Add(Autodiff.TensorOperations<T>.Variable(h0, "h0", requiresGradient: false));
-
-        // Process each timestep, building the full computation graph
-        for (int t = 0; t < sequenceLength; t++)
-        {
-            var xt = inputNodes[t];
-            var hPrev = hiddenStates[t];
-
-            // Compute update gate: z = sigmoid(xt @ Wz.T + h_prev @ Uz.T + bz)
-            var z_input = Autodiff.TensorOperations<T>.MatrixMultiply(xt, WzT);
-            var z_hidden = Autodiff.TensorOperations<T>.MatrixMultiply(hPrev, UzT);
-            var z_sum = Autodiff.TensorOperations<T>.Add(z_input, z_hidden);
-            var z_preact = Autodiff.TensorOperations<T>.Add(z_sum, bzBroadcast);
-            var z = Autodiff.TensorOperations<T>.Sigmoid(z_preact);
-
-            // Compute reset gate: r = sigmoid(xt @ Wr.T + h_prev @ Ur.T + br)
-            var r_input = Autodiff.TensorOperations<T>.MatrixMultiply(xt, WrT);
-            var r_hidden = Autodiff.TensorOperations<T>.MatrixMultiply(hPrev, UrT);
-            var r_sum = Autodiff.TensorOperations<T>.Add(r_input, r_hidden);
-            var r_preact = Autodiff.TensorOperations<T>.Add(r_sum, brBroadcast);
-            var r = Autodiff.TensorOperations<T>.Sigmoid(r_preact);
-
-            // Compute candidate hidden state: h_candidate = tanh(xt @ Wh.T + (r * h_prev) @ Uh.T + bh)
-            var h_input = Autodiff.TensorOperations<T>.MatrixMultiply(xt, WhT);
-            var r_gated = Autodiff.TensorOperations<T>.ElementwiseMultiply(r, hPrev);
-            var h_hidden = Autodiff.TensorOperations<T>.MatrixMultiply(r_gated, UhT);
-            var h_sum = Autodiff.TensorOperations<T>.Add(h_input, h_hidden);
-            var h_preact = Autodiff.TensorOperations<T>.Add(h_sum, bhBroadcast);
-            var h_candidate = Autodiff.TensorOperations<T>.Tanh(h_preact);
-
-            // Compute final hidden state: h = z * h_prev + (1 - z) * h_candidate
-            var z_gated = Autodiff.TensorOperations<T>.ElementwiseMultiply(z, hPrev);
-            var onesT = CreateOnesLike(z.Value);
-            var onesNode = Autodiff.TensorOperations<T>.Constant(onesT);
-            var one_minus_z = Autodiff.TensorOperations<T>.Subtract(onesNode, z);
-            var candidate_gated = Autodiff.TensorOperations<T>.ElementwiseMultiply(one_minus_z, h_candidate);
-            var h_new = Autodiff.TensorOperations<T>.Add(z_gated, candidate_gated);
-
-            hiddenStates.Add(h_new);
-        }
-
-        // Determine output node(s) and set gradients
-        if (_returnSequences)
-        {
-            // For return sequences, we need to backprop from all hidden states
-            // Split the output gradient for each timestep
-            for (int t = 0; t < sequenceLength; t++)
-            {
-                var gradT = outputGradient.Slice(1, t, t + 1).Reshape([batchSize, _hiddenSize]);
-                var hNode = hiddenStates[t + 1]; // +1 because hiddenStates[0] is h0
-
-                // Accumulate gradients if already set
-                if (hNode.Gradient == null)
-                {
-                    hNode.Gradient = gradT;
-                }
-                else
-                {
-                    hNode.Gradient = Engine.TensorAdd(hNode.Gradient, gradT);
-                }
-            }
-        }
-        else
-        {
-            // For non-sequence output, only the final hidden state receives gradient
-            var finalHidden = hiddenStates[sequenceLength];
-            var outputGradFlat = outputGradient.Shape.Length == 2
-                ? outputGradient
-                : outputGradient.Reshape([batchSize, _hiddenSize]);
-            finalHidden.Gradient = outputGradFlat;
-        }
-
-        // Perform topological sort and backward pass (inlined)
-        // Start from all nodes that have gradients set
-        var visited = new HashSet<ComputationNode<T>>();
-        var topoOrder = new List<ComputationNode<T>>();
-        var topoStack = new Stack<(ComputationNode<T> node, bool processed)>();
-
-        // Add all output nodes to the stack
-        for (int t = sequenceLength; t >= 1; t--)
-        {
-            if (hiddenStates[t].Gradient != null && !visited.Contains(hiddenStates[t]))
-            {
-                topoStack.Push((hiddenStates[t], false));
-            }
-        }
-
-        while (topoStack.Count > 0)
-        {
-            var (currentNode, processed) = topoStack.Pop();
-            if (visited.Contains(currentNode)) continue;
-
-            if (processed)
-            {
-                visited.Add(currentNode);
-                topoOrder.Add(currentNode);
-            }
-            else
-            {
-                topoStack.Push((currentNode, true));
-                foreach (var parent in currentNode.Parents)
-                {
-                    if (!visited.Contains(parent))
-                    {
-                        topoStack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        // Execute backward pass in reverse topological order
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Extract parameter gradients (accumulated across all timesteps via autodiff)
-        if (WzNode.Gradient != null) _dWz = WzNode.Gradient;
-        if (WrNode.Gradient != null) _dWr = WrNode.Gradient;
-        if (WhNode.Gradient != null) _dWh = WhNode.Gradient;
-        if (UzNode.Gradient != null) _dUz = UzNode.Gradient;
-        if (UrNode.Gradient != null) _dUr = UrNode.Gradient;
-        if (UhNode.Gradient != null) _dUh = UhNode.Gradient;
-        if (bzNode.Gradient != null) _dbz = bzNode.Gradient.Sum([0]);
-        if (brNode.Gradient != null) _dbr = brNode.Gradient.Sum([0]);
-        if (bhNode.Gradient != null) _dbh = bhNode.Gradient.Sum([0]);
-
-        // Extract input gradients for each timestep using Engine.TensorSetSlice
-        for (int t = 0; t < sequenceLength; t++)
-        {
-            var inputGrad = inputNodes[t].Gradient;
-            if (inputGrad != null)
-            {
-                var inputGradReshaped = inputGrad.Reshape([batchSize, 1, _inputSize]);
-                dInputs = Engine.TensorSetSlice(dInputs, inputGradReshaped, [0, t, 0]);
-            }
-        }
-
-        return dInputs;
     }
 
     /// <summary>
@@ -2408,145 +1791,6 @@ public class GRULayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// GPU-resident backward pass using fused sequence kernel.
-    /// Computes gradients for all weights and biases in a single kernel launch.
-    /// </summary>
-    /// <param name="outputGradient">Gradient of the loss with respect to the layer output.</param>
-    /// <returns>Gradient of the loss with respect to the layer input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
-
-        // Validate forward pass was called with fused kernel cache
-        if (_gpuLastInput == null || _gpuFusedAllH == null || _gpuFusedCacheGates == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
-
-        if (_gpuStackedWeightsIh == null || _gpuStackedWeightsHh == null)
-            throw new InvalidOperationException("Stacked weights not prepared. ForwardGpu must be called first.");
-
-        // Determine dimensions from input (must match ForwardGpu logic)
-        var shape = _gpuLastInput.Shape.ToArray();
-        int rank = shape.Length;
-        int timeSteps;
-        int batchSize;
-
-        if (rank == 1)
-        {
-            timeSteps = 1;
-            batchSize = 1;
-        }
-        else if (rank == 2)
-        {
-            timeSteps = shape[0];
-            batchSize = 1;
-        }
-        else if (rank == 3)
-        {
-            timeSteps = shape[1];
-            batchSize = shape[0];
-        }
-        else
-        {
-            // Higher rank: collapse leading dims into batch
-            timeSteps = shape[rank - 2];
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 2; d++)
-                flatBatch *= shape[d];
-            batchSize = flatBatch;
-        }
-
-        int hiddenBufferSize = batchSize * _hiddenSize;
-        int inputGradientSize = batchSize * timeSteps * _inputSize;
-        int weightsIhSize = 3 * _hiddenSize * _inputSize;
-        int weightsHhSize = 3 * _hiddenSize * _hiddenSize;
-        int biasSize = 3 * _hiddenSize;
-
-        // Allocate output gradient buffers
-        var gradInputBuffer = backend.AllocateBuffer(inputGradientSize);
-        var gradHInitBuffer = backend.AllocateBuffer(hiddenBufferSize);
-        var dHBuffer = backend.AllocateBuffer(hiddenBufferSize);  // Workspace for accumulated gradients in full BPTT
-        var gradWeightsIhBuffer = backend.AllocateBuffer(weightsIhSize);
-        var gradWeightsHhBuffer = backend.AllocateBuffer(weightsHhSize);
-        var gradBiasIhBuffer = backend.AllocateBuffer(biasSize);
-        var gradBiasHhBuffer = backend.AllocateBuffer(biasSize);
-
-        // Zero all gradient accumulator buffers before GruBackwardSequence
-        // CRITICAL: The CUDA/HIP kernels use atomicAdd which accumulates into these buffers,
-        // so they must start from zero, not uninitialized garbage values
-        backend.Fill(gradInputBuffer, 0f, inputGradientSize);
-        backend.Fill(gradHInitBuffer, 0f, hiddenBufferSize);
-        backend.Fill(dHBuffer, 0f, hiddenBufferSize);
-        backend.Fill(gradWeightsIhBuffer, 0f, weightsIhSize);
-        backend.Fill(gradWeightsHhBuffer, 0f, weightsHhSize);
-        backend.Fill(gradBiasIhBuffer, 0f, biasSize);
-        backend.Fill(gradBiasHhBuffer, 0f, biasSize);
-
-        try
-        {
-            // Call fused GRU backward sequence kernel (processes all timesteps in one kernel launch)
-            backend.GruBackwardSequence(
-                outputGradient.Buffer, _gpuFusedAllH, _gpuFusedCacheGates,
-                _gpuStackedWeightsIh, _gpuStackedWeightsHh, _gpuLastInput.Buffer,
-                gradInputBuffer, gradHInitBuffer, dHBuffer,
-                gradWeightsIhBuffer, gradWeightsHhBuffer, gradBiasIhBuffer, gradBiasHhBuffer,
-                timeSteps, batchSize, _inputSize, _hiddenSize);
-
-            // Unstack gradients from kernel format (r, z, n) to layer format (Wr, Wz, Wh)
-            UnstackGradients(
-                backend, gradWeightsIhBuffer, gradWeightsHhBuffer, gradBiasIhBuffer,
-                out var dWr, out var dWz, out var dWh,
-                out var dUr, out var dUz, out var dUh,
-                out var dBr, out var dBz, out var dBh);
-
-            // Allocate individual gradient buffers and upload unstacked gradients
-            var dWzBuffer = backend.AllocateBuffer(dWz);
-            var dWrBuffer = backend.AllocateBuffer(dWr);
-            var dWhBuffer = backend.AllocateBuffer(dWh);
-            var dUzBuffer = backend.AllocateBuffer(dUz);
-            var dUrBuffer = backend.AllocateBuffer(dUr);
-            var dUhBuffer = backend.AllocateBuffer(dUh);
-            var dBzBuffer = backend.AllocateBuffer(dBz);
-            var dBrBuffer = backend.AllocateBuffer(dBr);
-            var dBhBuffer = backend.AllocateBuffer(dBh);
-
-            // Store gradient tensors for UpdateParametersGpu
-            _gpuWzGradient = new GpuTensor<T>(backend, dWzBuffer, [_hiddenSize, _inputSize], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuWrGradient = new GpuTensor<T>(backend, dWrBuffer, [_hiddenSize, _inputSize], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuWhGradient = new GpuTensor<T>(backend, dWhBuffer, [_hiddenSize, _inputSize], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuUzGradient = new GpuTensor<T>(backend, dUzBuffer, [_hiddenSize, _hiddenSize], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuUrGradient = new GpuTensor<T>(backend, dUrBuffer, [_hiddenSize, _hiddenSize], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuUhGradient = new GpuTensor<T>(backend, dUhBuffer, [_hiddenSize, _hiddenSize], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuBzGradient = new GpuTensor<T>(backend, dBzBuffer, [_hiddenSize], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuBrGradient = new GpuTensor<T>(backend, dBrBuffer, [_hiddenSize], GpuTensorRole.Gradient, ownsBuffer: true);
-            _gpuBhGradient = new GpuTensor<T>(backend, dBhBuffer, [_hiddenSize], GpuTensorRole.Gradient, ownsBuffer: true);
-
-            // Cleanup temporary buffers (stacked gradient buffers and workspace)
-            gradHInitBuffer.Dispose();
-            dHBuffer.Dispose();
-            gradWeightsIhBuffer.Dispose();
-            gradWeightsHhBuffer.Dispose();
-            gradBiasIhBuffer.Dispose();
-            gradBiasHhBuffer.Dispose();
-
-            return new GpuTensor<T>(backend, gradInputBuffer, [batchSize, timeSteps, _inputSize], GpuTensorRole.Gradient, ownsBuffer: true);
-        }
-        catch
-        {
-            gradInputBuffer.Dispose();
-            gradHInitBuffer.Dispose();
-            dHBuffer.Dispose();
-            gradWeightsIhBuffer.Dispose();
-            gradWeightsHhBuffer.Dispose();
-            gradBiasIhBuffer.Dispose();
-            gradBiasHhBuffer.Dispose();
-            throw;
-        }
-    }
-
-    /// <summary>
     /// GPU-resident parameter update with polymorphic optimizer support.
     /// Updates all weight tensors directly on GPU using the specified optimizer configuration.
     /// </summary>
@@ -2564,15 +1808,15 @@ public class GRULayer<T> : LayerBase<T>
             throw new InvalidOperationException("BackwardGpu must be called before UpdateParametersGpu.");
 
         // Ensure GPU weight tensors exist
-        _gpuWz ??= new GpuTensor<T>(backend, _Wz, GpuTensorRole.Weight);
-        _gpuWr ??= new GpuTensor<T>(backend, _Wr, GpuTensorRole.Weight);
-        _gpuWh ??= new GpuTensor<T>(backend, _Wh, GpuTensorRole.Weight);
-        _gpuUz ??= new GpuTensor<T>(backend, _Uz, GpuTensorRole.Weight);
-        _gpuUr ??= new GpuTensor<T>(backend, _Ur, GpuTensorRole.Weight);
-        _gpuUh ??= new GpuTensor<T>(backend, _Uh, GpuTensorRole.Weight);
-        _gpuBz ??= new GpuTensor<T>(backend, _bz, GpuTensorRole.Bias);
-        _gpuBr ??= new GpuTensor<T>(backend, _br, GpuTensorRole.Bias);
-        _gpuBh ??= new GpuTensor<T>(backend, _bh, GpuTensorRole.Bias);
+        _gpuWz ??= GpuTensorHelper.UploadToGpu<T>(backend, _Wz, GpuTensorRole.Weight);
+        _gpuWr ??= GpuTensorHelper.UploadToGpu<T>(backend, _Wr, GpuTensorRole.Weight);
+        _gpuWh ??= GpuTensorHelper.UploadToGpu<T>(backend, _Wh, GpuTensorRole.Weight);
+        _gpuUz ??= GpuTensorHelper.UploadToGpu<T>(backend, _Uz, GpuTensorRole.Weight);
+        _gpuUr ??= GpuTensorHelper.UploadToGpu<T>(backend, _Ur, GpuTensorRole.Weight);
+        _gpuUh ??= GpuTensorHelper.UploadToGpu<T>(backend, _Uh, GpuTensorRole.Weight);
+        _gpuBz ??= GpuTensorHelper.UploadToGpu<T>(backend, _bz, GpuTensorRole.Bias);
+        _gpuBr ??= GpuTensorHelper.UploadToGpu<T>(backend, _br, GpuTensorRole.Bias);
+        _gpuBh ??= GpuTensorHelper.UploadToGpu<T>(backend, _bh, GpuTensorRole.Bias);
 
         // Ensure optimizer state exists
         EnsureGruOptimizerState(config, backend);
@@ -2615,15 +1859,15 @@ public class GRULayer<T> : LayerBase<T>
             var inputWeightSize = _hiddenSize * _inputSize;
             var hiddenWeightSize = _hiddenSize * _hiddenSize;
             var biasSize = _hiddenSize;
-            _gpuWzVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuWrVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuWhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuUzVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuUrVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuUhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBzVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBrVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBhVelocity ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWzVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWrVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWhVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUzVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUrVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUhVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBzVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBrVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBhVelocity ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
         }
         else if (optimizerType == GpuOptimizerType.Adam || optimizerType == GpuOptimizerType.AdamW)
         {
@@ -2632,26 +1876,26 @@ public class GRULayer<T> : LayerBase<T>
             var biasSize = _hiddenSize;
 
             // First moment (M) tensors
-            _gpuWzM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuWrM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuWhM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuUzM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuUrM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuUhM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBzM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBrM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBhM ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWzM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWrM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWhM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUzM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUrM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUhM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBzM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBrM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBhM ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
 
             // Second moment (V) tensors
-            _gpuWzV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuWrV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuWhV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuUzV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuUrV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuUhV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBzV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBrV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
-            _gpuBhV ??= new GpuTensor<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWzV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWrV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuWhV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([inputWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUzV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUrV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuUhV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([hiddenWeightSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBzV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBrV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
+            _gpuBhV ??= GpuTensorHelper.UploadToGpu<T>(backend, Tensor<T>.CreateDefault([biasSize], NumOps.Zero), GpuTensorRole.OptimizerState);
         }
     }
 

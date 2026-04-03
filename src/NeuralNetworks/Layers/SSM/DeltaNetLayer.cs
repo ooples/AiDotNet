@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -112,9 +112,6 @@ public class DeltaNetLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
-
-    /// <inheritdoc />
-    public override bool SupportsJitCompilation => false;
 
     /// <summary>
     /// Gets the model dimension (d_model).
@@ -405,244 +402,6 @@ public class DeltaNetLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null ||
-            _lastQuery == null || _lastKey == null || _lastValue == null ||
-            _lastBeta == null || _lastDeltaRuleOutput == null || _lastStates == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        int batchSize = _lastInput.Shape[0];
-        int seqLen = _lastInput.Shape[1];
-
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, outputGradient.Shape[0], _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLen, _modelDimension);
-
-        var activationGrad = ApplyActivationDerivative(_lastOutput, grad3D);
-
-        // Initialize all gradients
-        _queryWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _queryBiasGradient = new Tensor<T>([_modelDimension]);
-        _keyWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _keyBiasGradient = new Tensor<T>([_modelDimension]);
-        _valueWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _valueBiasGradient = new Tensor<T>([_modelDimension]);
-        _betaWeightsGradient = new Tensor<T>([_modelDimension, _numHeads]);
-        _betaBiasGradient = new Tensor<T>([_numHeads]);
-        _outputProjectionWeightsGradient = new Tensor<T>([_modelDimension, _modelDimension]);
-        _outputProjectionBiasGradient = Engine.ReduceSum(activationGrad, new int[] { 0, 1 });
-
-        // Step 4 backward: output projection
-        var gradFlat = activationGrad.Reshape(batchSize * seqLen, _modelDimension);
-        var deltaRuleOutFlat = _lastDeltaRuleOutput.Reshape(batchSize * seqLen, _modelDimension);
-        _outputProjectionWeightsGradient = Engine.TensorMatMul(
-            deltaRuleOutFlat.Transpose([1, 0]), gradFlat);
-
-        var dDeltaRuleOut = Engine.TensorMatMul(
-            gradFlat, _outputProjectionWeights.Transpose([1, 0]))
-            .Reshape(batchSize, seqLen, _modelDimension);
-
-        // Step 3 backward: delta rule recurrence (reverse time)
-        var dQ = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var dBeta = new Tensor<T>(new[] { batchSize, seqLen, _numHeads });
-
-        T keyScale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDimension));
-        var dState = new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-
-        for (int t = seqLen - 1; t >= 0; t--)
-        {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
-
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    T betaVal = _lastBeta[new[] { bi, t, hi }];
-
-                    // --- Backward through: o = S_t * q ---
-                    // dS_t += dO outer q, dQ += S_t^T * dO
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T dO = dDeltaRuleOut[new[] { bi, t, flatDi }];
-
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            T qVal = _lastQuery[new[] { bi, t, flatKi }];
-                            T sVal = _lastStates[new[] { bi, t + 1, hi, di, ki }];
-
-                            dState[new[] { bi, hi, di, ki }] = NumOps.Add(
-                                dState[new[] { bi, hi, di, ki }],
-                                NumOps.Multiply(dO, qVal));
-
-                            dQ[new[] { bi, t, flatKi }] = NumOps.Add(
-                                dQ[new[] { bi, t, flatKi }],
-                                NumOps.Multiply(dO, sVal));
-                        }
-                    }
-
-                    // --- Backward through: S_t = S_{t-1} + beta * delta * k^T ---
-                    // where delta[di] = v[di] - (S_{t-1} * k)[di]
-                    //
-                    // dS_{t-1} += dS_t  (alpha = 1 implicitly, so dS propagates unchanged)
-                    //           - beta * (k^T * dS_t * k) contribution from delta dependency on S_{t-1}
-                    // dBeta += sum over (di,ki) of dS[di,ki] * delta[di] * k[ki]
-                    // dV[di] += beta * sum_ki(dS[di,ki] * k[ki])
-                    // dK[ki] += beta * sum_di(delta[di] * dS[di,ki])
-                    //         - beta * sum_di(dS[di,ki'] * S_{t-1}[di,ki] * ...) (from S*k in delta)
-
-                    // Recompute delta for this timestep
-                    var deltaDi = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T vVal = _lastValue[new[] { bi, t, flatDi }];
-                        T sK_di = NumOps.Zero;
-                        for (int ki2 = 0; ki2 < _headDimension; ki2++)
-                        {
-                            int flatKi2 = dimStart + ki2;
-                            T kVal2 = NumOps.Multiply(_lastKey[new[] { bi, t, flatKi2 }], keyScale);
-                            T sPrev = _lastStates[new[] { bi, t, hi, di, ki2 }];
-                            sK_di = NumOps.Add(sK_di, NumOps.Multiply(sPrev, kVal2));
-                        }
-                        deltaDi[di] = NumOps.Subtract(vVal, sK_di);
-                    }
-
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            T kVal = NumOps.Multiply(_lastKey[new[] { bi, t, flatKi }], keyScale);
-                            T dS = dState[new[] { bi, hi, di, ki }];
-                            T sPrev = _lastStates[new[] { bi, t, hi, di, ki }];
-
-                            // dBeta: gradient through beta * delta[di] * k[ki]
-                            dBeta[new[] { bi, t, hi }] = NumOps.Add(
-                                dBeta[new[] { bi, t, hi }],
-                                NumOps.Multiply(dS, NumOps.Multiply(deltaDi[di], kVal)));
-
-                            // dV: delta = v - S*k, so d(delta)/dv = I
-                            // dV[di] += beta * dS[di,ki] * k[ki]
-                            dV[new[] { bi, t, flatDi }] = NumOps.Add(
-                                dV[new[] { bi, t, flatDi }],
-                                NumOps.Multiply(NumOps.Multiply(betaVal, dS), kVal));
-
-                            // dK: from beta * delta[di] * k[ki] term, dK += beta * delta[di] * dS[di,ki]
-                            // and from delta = v - S*k, dK -= beta * S_prev^T * (dS * k) contribution
-                            dK[new[] { bi, t, flatKi }] = NumOps.Add(
-                                dK[new[] { bi, t, flatKi }],
-                                NumOps.Multiply(NumOps.Multiply(betaVal, deltaDi[di]), dS));
-
-                            // Propagate dState to previous timestep
-                            // S_t = S_{t-1} + beta * delta * k^T
-                            // dS_{t-1} = dS_t (from direct carry-forward, alpha=1)
-                            //          - beta * (beta * dS * k * k^T contribution from delta's dependency on S_{t-1})
-                            // The S_{t-1} appears inside delta = v - S_{t-1}*k, so
-                            // d/dS_{t-1}[di',ki'] of (beta * (v[di] - sum_j S[di,j]*k[j]) * k[ki])
-                            // = -beta * k[ki'] * k[ki] if di'==di, else 0
-                            // This means: dS_{t-1}[di,ki'] -= beta * k[ki'] * sum_ki(dS[di,ki] * k[ki])
-                            // but that double-sum is expensive. We handle it below after the ki loop.
-
-                            // For now, the direct carry-forward part: dS_{t-1} = dS_t
-                            // (we will apply the correction term after this inner loop)
-                        }
-                    }
-
-                    // Apply corrections for the S_{t-1} dependency through delta = v - S_{t-1}*k
-                    // For each di: let c[di] = sum_ki(dS_t[di,ki] * k_scaled[ki])
-                    //
-                    // dState correction: dS_{t-1}[di,ki'] -= beta * c[di] * k_scaled[ki']
-                    // dK correction: dK[ki'] -= beta * sum_di(c[di] * S_{t-1}[di,ki'])
-                    //   This is the missing "-beta * S_{t-1}^T * ..." term from delta's k dependency.
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        // Compute c[di] = sum_ki(dS[di,ki] * k_scaled[ki])
-                        T cDi = NumOps.Zero;
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            T kVal = NumOps.Multiply(_lastKey[new[] { bi, t, flatKi }], keyScale);
-                            cDi = NumOps.Add(cDi,
-                                NumOps.Multiply(dState[new[] { bi, hi, di, ki }], kVal));
-                        }
-
-                        for (int ki = 0; ki < _headDimension; ki++)
-                        {
-                            int flatKi = dimStart + ki;
-                            T kVal = NumOps.Multiply(_lastKey[new[] { bi, t, flatKi }], keyScale);
-
-                            // dState correction: dS_{t-1}[di,ki'] -= beta * c[di] * k_scaled[ki']
-                            T correction = NumOps.Multiply(betaVal, NumOps.Multiply(cDi, kVal));
-                            dState[new[] { bi, hi, di, ki }] = NumOps.Subtract(
-                                dState[new[] { bi, hi, di, ki }], correction);
-
-                            // dK correction: dK[ki'] -= beta * c[di] * S_{t-1}[di,ki']
-                            // This accounts for k appearing inside delta = v - S_{t-1}*k
-                            T sPrevDiKi = _lastStates[new[] { bi, t, hi, di, ki }];
-                            dK[new[] { bi, t, flatKi }] = NumOps.Subtract(
-                                dK[new[] { bi, t, flatKi }],
-                                NumOps.Multiply(betaVal, NumOps.Multiply(cDi, sPrevDiKi)));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Step 2 backward: beta through sigmoid derivative
-        // sigmoid'(x) = sigmoid(x) * (1 - sigmoid(x))
-        var betaSigDeriv = Engine.TensorMultiply(_lastBeta,
-            Engine.TensorSubtract(CreateOnesLike(_lastBeta), _lastBeta));
-        var dBetaRaw = Engine.TensorMultiply(dBeta, betaSigDeriv);
-
-        // Step 1 backward: projection weight gradients
-        var inputFlat = _lastInput.Reshape(batchSize * seqLen, _modelDimension);
-
-        var dBetaFlat = dBetaRaw.Reshape(batchSize * seqLen, _numHeads);
-        _betaWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dBetaFlat);
-        _betaBiasGradient = Engine.ReduceSum(dBetaRaw, new int[] { 0, 1 });
-
-        var dQFlat = dQ.Reshape(batchSize * seqLen, _modelDimension);
-        var dKFlat = dK.Reshape(batchSize * seqLen, _modelDimension);
-        var dVFlat = dV.Reshape(batchSize * seqLen, _modelDimension);
-
-        _queryWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dQFlat);
-        _queryBiasGradient = Engine.ReduceSum(dQ, new int[] { 0, 1 });
-        _keyWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]),
-            Engine.TensorMultiplyScalar(dKFlat, keyScale));
-        _keyBiasGradient = Engine.ReduceSum(
-            Engine.TensorMultiplyScalar(dK, keyScale), new int[] { 0, 1 });
-        _valueWeightsGradient = Engine.TensorMatMul(inputFlat.Transpose([1, 0]), dVFlat);
-        _valueBiasGradient = Engine.ReduceSum(dV, new int[] { 0, 1 });
-
-        // Input gradient: sum contributions from all projection paths
-        var dInput = Engine.TensorMatMul(dQFlat, _queryWeights.Transpose([1, 0]));
-        dInput = Engine.TensorAdd(dInput,
-            Engine.TensorMatMul(Engine.TensorMultiplyScalar(dKFlat, keyScale),
-                _keyWeights.Transpose([1, 0])));
-        dInput = Engine.TensorAdd(dInput,
-            Engine.TensorMatMul(dVFlat, _valueWeights.Transpose([1, 0])));
-        dInput = Engine.TensorAdd(dInput,
-            Engine.TensorMatMul(dBetaFlat, _betaWeights.Transpose([1, 0])));
-
-        var dInput3D = dInput.Reshape(batchSize, seqLen, _modelDimension);
-
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return dInput3D.Reshape(seqLen, _modelDimension);
-
-        if (_originalInputShape != null)
-            return dInput3D.Reshape(_originalInputShape);
-
-        return dInput3D;
-    }
-
     /// <summary>
     /// Creates a tensor of ones with the same shape as the template tensor.
     /// </summary>
@@ -712,16 +471,16 @@ public class DeltaNetLayer<T> : LayerBase<T>
     {
         if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_queryWeightsGradient is not null ? Vector<T>.FromMemory(_queryWeightsGradient.Data) : new Vector<T>(0)),
-            (_queryBiasGradient is not null ? Vector<T>.FromMemory(_queryBiasGradient.Data) : new Vector<T>(0)),
-            (_keyWeightsGradient is not null ? Vector<T>.FromMemory(_keyWeightsGradient.Data) : new Vector<T>(0)),
-            (_keyBiasGradient is not null ? Vector<T>.FromMemory(_keyBiasGradient.Data) : new Vector<T>(0)),
-            (_valueWeightsGradient is not null ? Vector<T>.FromMemory(_valueWeightsGradient.Data) : new Vector<T>(0)),
-            (_valueBiasGradient is not null ? Vector<T>.FromMemory(_valueBiasGradient.Data) : new Vector<T>(0)),
-            (_betaWeightsGradient is not null ? Vector<T>.FromMemory(_betaWeightsGradient.Data) : new Vector<T>(0)),
-            (_betaBiasGradient is not null ? Vector<T>.FromMemory(_betaBiasGradient.Data) : new Vector<T>(0)),
-            _outputProjectionWeightsGradient is not null ? (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionWeights.Length),
-            _outputProjectionBiasGradient is not null ? (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_outputProjectionBias.Length));
+            new Vector<T>(_queryWeightsGradient!.ToArray()),
+            new Vector<T>(_queryBiasGradient!.ToArray()),
+            new Vector<T>(_keyWeightsGradient!.ToArray()),
+            new Vector<T>(_keyBiasGradient!.ToArray()),
+            new Vector<T>(_valueWeightsGradient!.ToArray()),
+            new Vector<T>(_valueBiasGradient!.ToArray()),
+            new Vector<T>(_betaWeightsGradient!.ToArray()),
+            new Vector<T>(_betaBiasGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
+            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
     }
 
     public override void ClearGradients()
@@ -756,28 +515,6 @@ public class DeltaNetLayer<T> : LayerBase<T>
     }
 
     #endregion
-
-    /// <inheritdoc />
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _modelDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
-        var outWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
-        var outBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
-
-        inputNodes.Add(xNode);
-        inputNodes.Add(outWeightsNode);
-        inputNodes.Add(outBiasNode);
-
-        var outT = TensorOperations<T>.Transpose(outWeightsNode);
-        var finalOutput = TensorOperations<T>.MatrixMultiply(xNode, outT);
-        var outputWithBias = TensorOperations<T>.Add(finalOutput, outBiasNode);
-
-        return outputWithBias;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

@@ -30,7 +30,7 @@ public class SparseTensorTests
             new[] { 1, 2 },
             new[] { 2.0, 3.0 });
 
-        var transposed = sparse.Transpose();
+        var transposed = (SparseTensor<double>)sparse.Transpose();
         var dense = transposed.ToDense();
 
         Assert.Equal(3, transposed.Rows);

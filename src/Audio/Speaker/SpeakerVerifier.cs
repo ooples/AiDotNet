@@ -512,28 +512,15 @@ public class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>
             throw new NotSupportedException("Cannot train in ONNX inference mode. Use the native training constructor.");
         }
 
-        // 1. Set training mode
         SetTrainingMode(true);
-
-        // 2. Forward pass
-        var prediction = Predict(input);
-
-        // 3. Convert tensors to vectors for loss calculation
-        var flatPrediction = prediction.ToVector();
-        var flatExpected = expectedOutput.ToVector();
-
-        // 4. Compute loss
-        LastLoss = _lossFunction.CalculateLoss(flatPrediction, flatExpected);
-
-        // 5. Compute gradients via backpropagation
-        var lossGradient = _lossFunction.CalculateDerivative(flatPrediction, flatExpected);
-        Backpropagate(Tensor<T>.FromVector(lossGradient));
-
-        // 6. Update parameters using optimizer
-        _optimizer?.UpdateParameters(Layers);
-
-        // 7. Exit training mode
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

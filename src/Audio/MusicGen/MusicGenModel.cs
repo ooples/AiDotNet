@@ -1009,20 +1009,15 @@ public class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
             throw new NotSupportedException("Cannot train in ONNX mode.");
         }
 
-        SetTrainingMode(true);
-
-        var prediction = Forward(input);
-        var flatPrediction = prediction.ToVector();
-        var flatExpected = expectedOutput.ToVector();
-
-        LastLoss = _lossFunction.CalculateLoss(flatPrediction, flatExpected);
-        var lossGradient = _lossFunction.CalculateDerivative(flatPrediction, flatExpected);
-
-        Backpropagate(Tensor<T>.FromVector(lossGradient));
-
-        _optimizer?.UpdateParameters(Layers);
-
-        SetTrainingMode(false);
+        try
+        {
+            SetTrainingMode(true);
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

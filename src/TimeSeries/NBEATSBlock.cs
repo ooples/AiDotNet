@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
@@ -260,105 +260,7 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
     private List<Matrix<T>>? _weightGradients;
     private List<Vector<T>>? _biasGradients;
 
-    /// <summary>
-    /// Full analytical backward pass through the FC layers using chain rule.
-    /// Computes dL/dInput and stores dL/dW, dL/db for UpdateParameters.
-    /// </summary>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput is null || _postActivations.Count == 0)
-            return new Tensor<T>(new[] { _lookbackWindow });
-
-        _weightGradients = new List<Matrix<T>>();
-        _biasGradients = new List<Vector<T>>();
-
-        // Output gradient layout: [dL/d_backcast(lookbackWindow) | dL/d_forecast(forecastHorizon)]
-        // Extract forecast output gradient
-        var dForecast = new Vector<T>(_forecastHorizon);
-        for (int i = 0; i < _forecastHorizon && i + _lookbackWindow < outputGradient.Length; i++)
-            dForecast[i] = outputGradient[_lookbackWindow + i];
-
-        // Extract backcast output gradient
-        var dBackcast = new Vector<T>(_lookbackWindow);
-        for (int i = 0; i < _lookbackWindow && i < outputGradient.Length; i++)
-            dBackcast[i] = outputGradient[i];
-
-        // Chain rule: dL/d_theta = BasisMatrix^T @ dL/d_output — vectorized TensorMatMul
-        var fcBasis = ComputeBasisMatrix(_thetaSizeForecast, _forecastHorizon);
-        var fcBasisT = Tensor<T>.FromMatrix(fcBasis).Transpose(new[] { 1, 0 });
-        var dForecastCol = Tensor<T>.FromVector(dForecast).Reshape(_forecastHorizon, 1);
-        var fcThetaGrad = Engine.TensorMatMul(fcBasisT, dForecastCol).Reshape(_thetaSizeForecast).ToVector();
-
-        var bcBasis = ComputeBasisMatrix(_thetaSizeBackcast, _lookbackWindow);
-        var bcBasisT = Tensor<T>.FromMatrix(bcBasis).Transpose(new[] { 1, 0 });
-        var dBackcastCol = Tensor<T>.FromVector(dBackcast).Reshape(_lookbackWindow, 1);
-        var bcThetaGrad = Engine.TensorMatMul(bcBasisT, dBackcastCol).Reshape(_thetaSizeBackcast).ToVector();
-
-        // Backward through forecast theta layer
-        int fcLayerIdx = _numHiddenLayers + 1;
-        var fcW = _fcWeights[fcLayerIdx];
-        var hiddenOut = _lastHiddenOutput ?? new Vector<T>(fcW.Columns);
-
-        // dL/dW_forecast = theta_grad @ hidden^T — vectorized outer product
-        var fcThetaCol = Tensor<T>.FromVector(fcThetaGrad).Reshape(fcW.Rows, 1);
-        var hiddenRow = Tensor<T>.FromVector(hiddenOut).Reshape(1, fcW.Columns);
-        var wGrad = Engine.TensorMatMul(fcThetaCol, hiddenRow).ToMatrix();
-        _weightGradients.Insert(0, wGrad);
-        _biasGradients.Insert(0, fcThetaGrad.Clone());
-
-        // dL/d_hidden = W_forecast^T @ theta_grad — vectorized matmul
-        var fcWTensor = Tensor<T>.FromMatrix(fcW).Transpose(new[] { 1, 0 });
-        var dHidden = Engine.TensorMatMul(fcWTensor, fcThetaCol).Reshape(fcW.Columns).ToVector();
-
-        // Backward through backcast theta layer
-        int bcLayerIdx = _numHiddenLayers;
-        var bcW = _fcWeights[bcLayerIdx];
-
-        // dL/dW_backcast = theta_grad @ hidden^T — vectorized outer product
-        var bcThetaCol = Tensor<T>.FromVector(bcThetaGrad).Reshape(bcW.Rows, 1);
-        var bcWGrad = Engine.TensorMatMul(bcThetaCol, hiddenRow).ToMatrix();
-        _weightGradients.Insert(0, bcWGrad);
-        _biasGradients.Insert(0, bcThetaGrad.Clone());
-
-        // Add backcast contribution: dHidden += W_backcast^T @ bcThetaGrad
-        var bcWTensor = Tensor<T>.FromMatrix(bcW).Transpose(new[] { 1, 0 });
-        var bcDHidden = Engine.TensorMatMul(bcWTensor, bcThetaCol).Reshape(bcW.Columns).ToVector();
-        dHidden = (Vector<T>)Engine.Add(dHidden, bcDHidden);
-
-        // Backward through hidden layers (reverse order)
-        var currentGrad = dHidden;
-        for (int layer = _numHiddenLayers - 1; layer >= 0; layer--)
-        {
-            var preAct = _preActivations[layer];
-            var w = _fcWeights[layer];
-
-            // ReLU derivative
-            var reluGrad = new Vector<T>(currentGrad.Length);
-            for (int i = 0; i < reluGrad.Length; i++)
-                reluGrad[i] = NumOps.GreaterThan(preAct[i], NumOps.Zero) ? currentGrad[i] : NumOps.Zero;
-
-            // dL/dW = reluGrad @ input^T — vectorized outer product
-            var layerInput = layer > 0 ? _postActivations[layer - 1] : _lastInput;
-            var reluCol = Tensor<T>.FromVector(reluGrad).Reshape(w.Rows, 1);
-            var inputRow = Tensor<T>.FromVector(layerInput!).Reshape(1, Math.Min(w.Columns, layerInput!.Length));
-            var layerWGrad = Engine.TensorMatMul(reluCol, inputRow).ToMatrix();
-            _weightGradients.Insert(0, layerWGrad);
-            _biasGradients.Insert(0, reluGrad.Clone());
-
-            // dL/d_input = W^T @ reluGrad — vectorized matmul
-            var wTensor = Tensor<T>.FromMatrix(w).Transpose(new[] { 1, 0 });
-            currentGrad = Engine.TensorMatMul(wTensor, reluCol).Reshape(w.Columns).ToVector();
-        }
-
-        // Convert input gradient to Tensor
-        var inputGrad = new Tensor<T>(new[] { _lookbackWindow });
-        for (int i = 0; i < _lookbackWindow && i < currentGrad.Length; i++)
-            inputGrad[i] = currentGrad[i];
-        return inputGrad;
-    }
-
     public override bool SupportsTraining => true;
-    public override bool SupportsJitCompilation => true;
 
     public override void ResetState() { /* stateless layer — no recurrent state to reset */ }
 
@@ -391,16 +293,6 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
 
         _weightGradients = null;
         _biasGradients = null;
-    }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> nodes)
-    {
-        if (nodes.Count > 0)
-        {
-            var (_, forecast) = ExportComputationGraph(nodes[0]);
-            return forecast;
-        }
-        return TensorOperations<T>.Variable(new Tensor<T>(new[] { _forecastHorizon }), "nbeats_output");
     }
 
     public (Vector<T> backcast, Vector<T> forecast) ForwardInternal(Vector<T> input)

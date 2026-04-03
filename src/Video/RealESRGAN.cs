@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Exceptions;
@@ -587,7 +587,6 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         _lastDiscriminatorLoss = discriminatorLoss;
 
         // Backpropagate discriminator
-        TrainDiscriminatorStep(highResTargets, generatedImages, realOutput, fakeOutput);
 
         // ----- Train Generator -----
 
@@ -605,7 +604,6 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         _lastGeneratorLoss = generatorLoss;
 
         // Backpropagate generator
-        TrainGeneratorStep(lowResImages, highResTargets, newGeneratedImages, newFakeOutput);
 
         // Track losses for monitoring
         _generatorLosses.Add(generatorLoss);
@@ -613,88 +611,6 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
             _generatorLosses.RemoveAt(0);
 
         return (discriminatorLoss, generatorLoss);
-    }
-
-    /// <summary>
-    /// Performs discriminator training step.
-    /// </summary>
-    private void TrainDiscriminatorStep(
-        Tensor<T> realImages,
-        Tensor<T> fakeImages,
-        Tensor<T> realOutput,
-        Tensor<T> fakeOutput)
-    {
-        ThrowIfNativeModeUnavailable();
-
-        // Create target labels
-        var realLabels = CreateLabelTensor(realOutput.Shape[0], NumOps.One);
-        var fakeLabels = CreateLabelTensor(fakeOutput.Shape[0], NumOps.Zero);
-
-        // Calculate gradients for real images
-        var realGradient = DiscriminatorRequired.Backward(
-            CalculateBCEGradient(realOutput, realLabels));
-
-        // Calculate gradients for fake images
-        var fakeGradient = DiscriminatorRequired.Backward(
-            CalculateBCEGradient(fakeOutput, fakeLabels));
-
-        // Update discriminator parameters using optimizer or fallback to default learning rate
-        if (_discriminatorOptimizer != null)
-        {
-            // Use configured optimizer
-            var currentParams = DiscriminatorRequired.GetParameters();
-            var gradients = DiscriminatorRequired.GetParameterGradients();
-            var updatedParams = _discriminatorOptimizer.UpdateParameters(currentParams, gradients);
-            DiscriminatorRequired.SetParameters(updatedParams);
-        }
-        else
-        {
-            // Fallback to simple SGD with default learning rate
-            T learningRate = NumOps.FromDouble(0.0001);
-            DiscriminatorRequired.UpdateParameters(learningRate);
-        }
-    }
-
-    /// <summary>
-    /// Performs generator training step.
-    /// </summary>
-    private void TrainGeneratorStep(
-        Tensor<T> lowResImages,
-        Tensor<T> highResTargets,
-        Tensor<T> generatedImages,
-        Tensor<T> discriminatorOutput)
-    {
-        // Generator wants discriminator to output 1 (real) for generated images
-        var targetLabels = CreateLabelTensor(discriminatorOutput.Shape[0], NumOps.One);
-
-        // Calculate GAN loss gradient
-        var ganGradient = CalculateBCEGradient(discriminatorOutput, targetLabels);
-
-        // Calculate reconstruction loss gradient (L1)
-        var reconstructionGradient = CalculateReconstructionGradient(generatedImages, highResTargets);
-
-        // Combine gradients
-        var combinedGradient = CombineGradients(reconstructionGradient, ganGradient);
-
-        // Backpropagate through generator
-        ThrowIfNativeModeUnavailable();
-        GeneratorRequired.Backward(combinedGradient);
-
-        // Update generator parameters using optimizer or fallback to default learning rate
-        if (_generatorOptimizer != null)
-        {
-            // Use configured optimizer
-            var currentParams = GeneratorRequired.GetParameters();
-            var gradients = GeneratorRequired.GetParameterGradients();
-            var updatedParams = _generatorOptimizer.UpdateParameters(currentParams, gradients);
-            GeneratorRequired.SetParameters(updatedParams);
-        }
-        else
-        {
-            // Fallback to simple SGD with default learning rate
-            T learningRate = NumOps.FromDouble(0.0001);
-            GeneratorRequired.UpdateParameters(learningRate);
-        }
     }
 
     #endregion
@@ -747,7 +663,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         }
 
         // Create ONNX input tensor with shape [batch, channels, height, width]
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
 
         // Get input name from model
         var inputMeta = _onnxSession.InputMetadata;
@@ -816,7 +732,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         var expectedShape = GeneratorRequired.GetInputShape();
 
         // Check if input matches expected shape exactly (no batch dimension)
-        if (input.Rank == expectedShape.Length && ShapesMatch(input.Shape.ToArray(), expectedShape))
+        if (input.Rank == expectedShape.Length && ShapesMatch(input._shape, expectedShape))
         {
             return GeneratorRequired.Forward(input);
         }
@@ -833,7 +749,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
             }
 
             // Validate spatial dimensions match
-            var spatialShape = input.Shape.ToArray().Skip(batchDims).ToArray();
+            var spatialShape = input._shape.Skip(batchDims).ToArray();
             if (!ShapesMatch(spatialShape, expectedShape))
             {
                 throw new TensorShapeMismatchException(
@@ -859,8 +775,8 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
 
             // Combine outputs back into batched tensor
             var outputShape = new int[batchDims + outputs[0].Rank];
-            Array.Copy(input.Shape.ToArray(), 0, outputShape, 0, batchDims);
-            Array.Copy(outputs[0].Shape.ToArray(), 0, outputShape, batchDims, outputs[0].Rank);
+            Array.Copy(input._shape, 0, outputShape, 0, batchDims);
+            Array.Copy(outputs[0]._shape, 0, outputShape, batchDims, outputs[0].Rank);
 
             var combinedData = new T[batchSize * outputs[0].Length];
             for (int b = 0; b < batchSize; b++)
@@ -883,7 +799,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
                 if (input.Shape[i] != expectedShape[dimsToAdd + i])
                 {
                     throw new TensorShapeMismatchException(
-                        $"Shape mismatch in RealESRGAN: Cannot expand [{string.Join(", ", input.Shape.ToArray())}] " +
+                        $"Shape mismatch in RealESRGAN: Cannot expand [{string.Join(", ", input._shape)}] " +
                         $"to match [{string.Join(", ", expectedShape)}].");
                 }
             }
@@ -916,7 +832,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         var expectedShape = DiscriminatorRequired.GetInputShape();
 
         // Check if input matches expected shape exactly (no batch dimension)
-        if (input.Rank == expectedShape.Length && ShapesMatch(input.Shape.ToArray(), expectedShape))
+        if (input.Rank == expectedShape.Length && ShapesMatch(input._shape, expectedShape))
         {
             return DiscriminatorRequired.Forward(input);
         }
@@ -931,7 +847,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
                 batchSize *= input.Shape[i];
             }
 
-            var spatialShape = input.Shape.ToArray().Skip(batchDims).ToArray();
+            var spatialShape = input._shape.Skip(batchDims).ToArray();
             if (!ShapesMatch(spatialShape, expectedShape))
             {
                 throw new TensorShapeMismatchException(
@@ -952,8 +868,8 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
             }
 
             var outputShape = new int[batchDims + outputs[0].Rank];
-            Array.Copy(input.Shape.ToArray(), 0, outputShape, 0, batchDims);
-            Array.Copy(outputs[0].Shape.ToArray(), 0, outputShape, batchDims, outputs[0].Rank);
+            Array.Copy(input._shape, 0, outputShape, 0, batchDims);
+            Array.Copy(outputs[0]._shape, 0, outputShape, batchDims, outputs[0].Rank);
 
             var combinedData = new T[batchSize * outputs[0].Length];
             for (int b = 0; b < batchSize; b++)
@@ -996,7 +912,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// </summary>
     private Tensor<T> CalculateBCEGradient(Tensor<T> output, Tensor<T> target)
     {
-        var gradient = new Tensor<T>(output.Shape.ToArray());
+        var gradient = new Tensor<T>(output._shape);
         double epsilon = 1e-7;
 
         for (int i = 0; i < output.Length; i++)
@@ -1019,7 +935,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// </summary>
     private Tensor<T> CalculateReconstructionGradient(Tensor<T> generated, Tensor<T> target)
     {
-        var gradient = new Tensor<T>(generated.Shape.ToArray());
+        var gradient = new Tensor<T>(generated._shape);
 
         for (int i = 0; i < generated.Length; i++)
         {
@@ -1041,7 +957,7 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
     /// </summary>
     private Tensor<T> CombineGradients(Tensor<T> grad1, Tensor<T> grad2)
     {
-        var combined = new Tensor<T>(grad1.Shape.ToArray());
+        var combined = new Tensor<T>(grad1._shape);
 
         for (int i = 0; i < grad1.Length; i++)
         {

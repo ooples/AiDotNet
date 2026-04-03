@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
@@ -125,7 +125,7 @@ public class DINO<T> : ObjectDetectorBase<T>
         var projected = ProjectFeatures(flattenedFeatures);
 
         // Generate multi-scale positional encoding
-        var posEncoding = GenerateMultiScalePositionalEncoding(projected.Shape.ToArray(), spatialShapes, levelStarts);
+        var posEncoding = GenerateMultiScalePositionalEncoding(projected._shape, spatialShapes, levelStarts);
 
         // Encode with deformable attention
         var memory = _encoder.Forward(projected, posEncoding, spatialShapes, levelStarts);
@@ -282,7 +282,7 @@ public class DINO<T> : ObjectDetectorBase<T>
         int batch = features.Shape[0];
         int seqLen = features.Shape[1];
 
-        var result = new Tensor<T>(features.Shape.ToArray());
+        var result = new Tensor<T>(features._shape);
 
         for (int b = 0; b < batch; b++)
         {
@@ -541,7 +541,7 @@ internal class DINOEncoderLayer<T>
         int seqLen = x.Shape[1];
         int ffnDim = _ffn1.OutputSize;
 
-        var result = new Tensor<T>(x.Shape.ToArray());
+        var result = new Tensor<T>(x._shape);
 
         for (int b = 0; b < batch; b++)
         {

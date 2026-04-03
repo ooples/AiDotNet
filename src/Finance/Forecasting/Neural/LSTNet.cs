@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -560,7 +560,6 @@ public class LSTNet<T> : ForecastingModelBase<T>
         LastLoss = _lossFunction.CalculateLoss(predictions.ToVector(), target.ToVector());
 
         var gradient = _lossFunction.CalculateDerivative(predictions.ToVector(), target.ToVector());
-        Backward(Tensor<T>.FromVector(gradient, predictions.Shape.ToArray()));
 
         _optimizer.UpdateParameters(Layers);
 
@@ -898,77 +897,6 @@ public class LSTNet<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Performs the backward pass through the LSTNet.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> The backward pass is how the network learns. It calculates
-    /// how much each part of the network contributed to the error and adjusts
-    /// accordingly.
-    /// </para>
-    /// </remarks>
-    private void Backward(Tensor<T> gradOutput)
-    {
-        var grad = gradOutput;
-
-        // Backward through output layer
-        if (_outputLayer is not null)
-        {
-            grad = _outputLayer.Backward(grad);
-        }
-
-        // Backward through combination layer
-        if (_combinationLayer is not null)
-        {
-            grad = _combinationLayer.Backward(grad);
-        }
-
-        // Backward through highway
-        if (_highwayLayer is not null && _useHighway)
-        {
-            _ = _highwayLayer.Backward(gradOutput);
-        }
-
-        // Backward through skip GRU
-        if (_skipDropout is not null)
-        {
-            grad = _skipDropout.Backward(grad);
-        }
-
-        if (_skipGruLayer is not null)
-        {
-            grad = _skipGruLayer.Backward(grad);
-        }
-
-        // Backward through main GRU
-        if (_gruDropout is not null)
-        {
-            grad = _gruDropout.Backward(grad);
-        }
-
-        if (_gruLayer is not null)
-        {
-            grad = _gruLayer.Backward(grad);
-        }
-
-        // Backward through convolution
-        if (_convDropout is not null)
-        {
-            grad = _convDropout.Backward(grad);
-        }
-
-        if (_convActivation is not null)
-        {
-            grad = _convActivation.Backward(grad);
-        }
-
-        if (_convLayer is not null)
-        {
-            _ = _convLayer.Backward(grad);
-        }
-    }
-
-    /// <summary>
     /// Performs native mode forecasting.
     /// </summary>
     /// <remarks>
@@ -1003,7 +931,7 @@ public class LSTNet<T> : ForecastingModelBase<T>
             inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
         }
 
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input.Shape.ToArray());
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
         string inputName = inputMeta.Keys.First();
 
@@ -1186,7 +1114,7 @@ public class LSTNet<T> : ForecastingModelBase<T>
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length / batchSize;
         int features = input.Shape.Length > 2 ? input.Shape[2] : 1;
 
-        var shifted = new Tensor<T>(input.Shape.ToArray());
+        var shifted = new Tensor<T>(input._shape);
 
         for (int b = 0; b < batchSize; b++)
         {

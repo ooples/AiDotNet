@@ -324,4 +324,20 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
 
     /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => Clone();
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var gradients = new List<T>();
+        foreach (var layer in _encoderLayers)
+        {
+            var g = layer.GetParameterGradients();
+            for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
+        }
+        foreach (var layer in _decoderLayers)
+        {
+            var g = layer.GetParameterGradients();
+            for (int i = 0; i < g.Length; i++) gradients.Add(g[i]);
+        }
+        return new Vector<T>(gradients.ToArray());
+    }
 }

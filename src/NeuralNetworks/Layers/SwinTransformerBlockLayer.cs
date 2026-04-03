@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 
@@ -137,6 +137,13 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         int mlpHiddenDim = dim * mlpRatio;
         _mlpFc1 = new DenseLayer<T>(dim, mlpHiddenDim, (IActivationFunction<T>)new GELUActivation<T>());
         _mlpFc2 = new DenseLayer<T>(mlpHiddenDim, dim);
+
+        RegisterSubLayer(_norm1);
+        RegisterSubLayer(_norm2);
+        RegisterSubLayer(_qkvProj);
+        RegisterSubLayer(_outProj);
+        RegisterSubLayer(_mlpFc1);
+        RegisterSubLayer(_mlpFc2);
     }
 
     private void InitializeRelativePositionBias()
@@ -588,124 +595,6 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         return Engine.TensorAdd(a, b);
     }
 
-    /// <summary>
-    /// Performs the backward pass.
-    /// </summary>
-    /// <param name="outputGradient">Gradient from the next layer.</param>
-    /// <returns>Gradient for the input.</returns>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Simplified backward pass - compute gradients through the network
-        // Full implementation would require caching intermediate values
-
-        // Backward through second residual
-        var mlpGrad = BackwardMLP(outputGradient);
-        var norm2Grad = _norm2.Backward(mlpGrad);
-        var residual1Grad = AddTensors(outputGradient, norm2Grad);
-
-        // Backward through first residual
-        var attnGrad = BackwardWindowAttention(residual1Grad);
-        var norm1Grad = _norm1.Backward(attnGrad);
-        var inputGrad = AddTensors(residual1Grad, norm1Grad);
-
-        return inputGrad;
-    }
-
-    private Tensor<T> BackwardMLP(Tensor<T> gradient)
-    {
-        int batch = gradient.Shape[0];
-        int seqLen = gradient.Shape[1];
-
-        // Batch all tokens (matching batched ApplyMLP Forward)
-        var flatGrad = gradient.Reshape([batch * seqLen, _dim]);
-        var fc2Grad = _mlpFc2.Backward(flatGrad);
-        var fc1Grad = _mlpFc1.Backward(fc2Grad);
-        return fc1Grad.Reshape([batch, seqLen, _dim]);
-    }
-
-    private Tensor<T> BackwardWindowAttention(Tensor<T> gradient)
-    {
-        int batch = gradient.Shape[0];
-        int seqLen = gradient.Shape[1];
-
-        if (_cachedQkv == null || _cachedAttnProbs == null)
-            throw new InvalidOperationException("Forward must be called before backward.");
-
-        int numWindows = _cachedNumWindows;
-        int windowArea = _cachedWindowArea;
-
-        // Step 1: Backward through outProj (batched)
-        var flatGrad = gradient.Reshape([batch * seqLen, _dim]);
-        var outProjGrad = _outProj.Backward(flatGrad);
-        // outProjGrad shape: [numWindows * windowArea, dim]
-        var dAttnOut = outProjGrad.Reshape([numWindows, windowArea, _dim]);
-
-        // Step 2: Backward through attention per window
-        // attnOut[i, d] = sum_j probs[head, i, j] * V[j, headOffset + d]
-        // dV[j, d] += sum_i probs[head, i, j] * dAttnOut[i, d]
-        // dProbs[head, i, j] += sum_d dAttnOut[i, headOffset+d] * V[j, headOffset+d]
-        var dQkv = new Tensor<T>([numWindows, windowArea, 3 * _dim]);
-
-        for (int win = 0; win < numWindows; win++)
-        {
-            for (int head = 0; head < _numHeads; head++)
-            {
-                int headOffset = head * _headDim;
-                int vOffset = 2 * _dim + headOffset;
-
-                // Compute dProbs and dV
-                var dProbs = new double[windowArea, windowArea];
-                for (int i = 0; i < windowArea; i++)
-                {
-                    for (int j = 0; j < windowArea; j++)
-                    {
-                        double dp = 0;
-                        for (int d = 0; d < _headDim; d++)
-                        {
-                            double dOut = NumOps.ToDouble(dAttnOut[win, i, headOffset + d]);
-                            double vVal = NumOps.ToDouble(_cachedQkv[win, j, vOffset + d]);
-                            dp += dOut * vVal;
-                            // dV[j, vOffset+d] += probs[i,j] * dAttnOut[i, headOffset+d]
-                            dQkv[win, j, vOffset + d] = NumOps.Add(dQkv[win, j, vOffset + d],
-                                NumOps.FromDouble(_cachedAttnProbs[win, head, i, j] * dOut));
-                        }
-                        dProbs[i, j] = dp;
-                    }
-                }
-
-                // Softmax backward: dScores[i,j] = probs[i,j] * (dProbs[i,j] - dot(probs[i,:], dProbs[i,:]))
-                for (int i = 0; i < windowArea; i++)
-                {
-                    double dot = 0;
-                    for (int j = 0; j < windowArea; j++)
-                        dot += _cachedAttnProbs[win, head, i, j] * dProbs[i, j];
-
-                    for (int j = 0; j < windowArea; j++)
-                    {
-                        double dScore = _cachedAttnProbs[win, head, i, j] * (dProbs[i, j] - dot) * _scale;
-
-                        // dQ[i, headOffset+d] += dScore * K[j, headOffset+d]
-                        // dK[j, headOffset+d] += dScore * Q[i, headOffset+d]
-                        for (int d = 0; d < _headDim; d++)
-                        {
-                            double kVal = NumOps.ToDouble(_cachedQkv[win, j, _dim + headOffset + d]);
-                            double qVal = NumOps.ToDouble(_cachedQkv[win, i, headOffset + d]);
-                            dQkv[win, i, headOffset + d] = NumOps.Add(dQkv[win, i, headOffset + d],
-                                NumOps.FromDouble(dScore * kVal));
-                            dQkv[win, j, _dim + headOffset + d] = NumOps.Add(dQkv[win, j, _dim + headOffset + d],
-                                NumOps.FromDouble(dScore * qVal));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Step 3: Backward through qkvProj
-        var flatDQkv = dQkv.Reshape([numWindows * windowArea, 3 * _dim]);
-        var qkvGrad = _qkvProj.Backward(flatDQkv);
-        return qkvGrad.Reshape([batch, seqLen, _dim]);
-    }
-
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
@@ -831,56 +720,4 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
         // In a full implementation, this would use stored gradients
     }
 
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation =>
-        _norm1 != null && _norm1.SupportsJitCompilation &&
-        _norm2 != null && _norm2.SupportsJitCompilation &&
-        _qkvProj != null && _qkvProj.SupportsJitCompilation &&
-        _outProj != null && _outProj.SupportsJitCompilation &&
-        _mlpFc1 != null && _mlpFc1.SupportsJitCompilation &&
-        _mlpFc2 != null && _mlpFc2.SupportsJitCompilation;
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Create symbolic input node: [batch, seqLen, dim]
-        var symbolicInput = new Tensor<T>([1, _windowSize * _windowSize, _dim]);
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "swin_block_input");
-        inputNodes.Add(inputNode);
-
-        // Export norm1 graph
-        var norm1Nodes = new List<ComputationNode<T>> { inputNode };
-        var normed1 = _norm1.ExportComputationGraph(norm1Nodes);
-
-        // Export QKV projection
-        var qkvNodes = new List<ComputationNode<T>> { normed1 };
-        var qkvOut = _qkvProj.ExportComputationGraph(qkvNodes);
-
-        // Window attention is complex - for JIT we represent it as a composite operation
-        // In practice, this would be optimized as a fused attention kernel
-        var outProjNodes = new List<ComputationNode<T>> { qkvOut };
-        var attnOut = _outProj.ExportComputationGraph(outProjNodes);
-
-        // First residual: input + attn
-        var residual1 = TensorOperations<T>.Add(inputNode, attnOut);
-
-        // Export norm2 graph
-        var norm2Nodes = new List<ComputationNode<T>> { residual1 };
-        var normed2 = _norm2.ExportComputationGraph(norm2Nodes);
-
-        // Export MLP: fc1 -> gelu -> fc2
-        var fc1Nodes = new List<ComputationNode<T>> { normed2 };
-        var mlpHidden = _mlpFc1.ExportComputationGraph(fc1Nodes);
-
-        var fc2Nodes = new List<ComputationNode<T>> { mlpHidden };
-        var mlpOut = _mlpFc2.ExportComputationGraph(fc2Nodes);
-
-        // Second residual: residual1 + mlp
-        var output = TensorOperations<T>.Add(residual1, mlpOut);
-
-        return output;
-    }
 }

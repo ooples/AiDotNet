@@ -187,7 +187,7 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
                         output.ToVector(), preprocessedLabels.ToVector()));
                     var grad = LossFunction.CalculateDerivative(output.ToVector(), preprocessedLabels.ToVector());
                     var gt = Tensor<T>.FromVector(grad);
-                    for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
+                    // Backward removed — tape-based training handles gradients
                     _optimizer.UpdateParameters(Layers);
 
                     progress?.Report(new NERTrainingProgress
@@ -292,20 +292,8 @@ public abstract class SpanBasedNERBase<T> : SequenceLabeling.SequenceLabelingNER
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized.");
         SetTrainingMode(true);
-        try
-        {
-            var preprocessed = PreprocessTokens(input);
-            var preprocessedLabels = PreprocessLabels(expected, preprocessed.Shape[0]);
-            var output = Forward(preprocessed);
-            var grad = LossFunction.CalculateDerivative(output.ToVector(), preprocessedLabels.ToVector());
-            var gt = Tensor<T>.FromVector(grad);
-            for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-            _optimizer.UpdateParameters(Layers);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        try { TrainWithTape(input, expected); }
+        finally { SetTrainingMode(false); }
     }
 
     /// <inheritdoc />

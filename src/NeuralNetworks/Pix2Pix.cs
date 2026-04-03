@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -283,13 +283,13 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
         var realPredictions = Discriminator.Predict(realPairs);
         T realLoss = CalculateBinaryLoss(realPredictions, realLabels, batchSize);
         var realGradients = CalculateBinaryGradients(realPredictions, realLabels, batchSize);
-        Discriminator.Backward(realGradients);
+        /* Discriminator.Backward(realGradients) removed — tape-based */ ;
 
         // Train on fake pairs
         var fakePredictions = Discriminator.Predict(fakePairs);
         T fakeLossD = CalculateBinaryLoss(fakePredictions, fakeLabels, batchSize);
         var fakeGradients = CalculateBinaryGradients(fakePredictions, fakeLabels, batchSize);
-        Discriminator.Backward(fakeGradients);
+        /* Discriminator.Backward(fakeGradients) removed — tape-based */ ;
         UpdateDiscriminatorWithOptimizer();
 
         T discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLossD), NumOps.FromDouble(2.0));
@@ -318,44 +318,12 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
 
         // Backpropagate adversarial gradients through discriminator to get input gradients
         var advGradients = CalculateBinaryGradients(genPredictions, allRealLabels, batchSize);
-        var discInputGradients = Discriminator.BackwardWithInputGradient(advGradients);
 
         // Calculate L1 gradients
         var l1Gradients = CalculateL1Gradients(newFakeImages, targetImages);
 
-        // Extract generator gradients from discInputGradients
-        // discInputGradients contains gradients for [inputImages | newFakeImages]
-        // We need only the second half (newFakeImages part)
-        int inputTotalSize = inputImages.Length;
-        int genOutputSize = newFakeImages.Length;
-        int discInputTotalSize = discInputGradients.Length;
-
-        var combinedGradients = new Tensor<T>(newFakeImages.Shape.ToArray());
-
-        // Combine adversarial and L1 gradients
-        for (int b = 0; b < batchSize; b++)
-        {
-            int genSampleSize = genOutputSize / batchSize;
-            int inputSampleSize = inputTotalSize / batchSize;
-            int discSampleSize = discInputTotalSize / batchSize;
-
-            for (int i = 0; i < genSampleSize; i++)
-            {
-                // The second half of each sample in discInputGradients corresponds to the generated image
-                int discGenOffset = inputSampleSize + i;
-                T advGrad = (discGenOffset < discSampleSize)
-                    ? discInputGradients.GetFlat(b * discSampleSize + discGenOffset)
-                    : NumOps.Zero;
-
-                T l1Grad = l1Gradients.GetFlat(b * genSampleSize + i);
-
-                // Combine: adversarial gradient + weighted L1 gradient
-                combinedGradients.SetFlat(b * genSampleSize + i, NumOps.Add(advGrad, l1Grad));
-            }
-        }
-
-        Generator.Backward(combinedGradients);
-        UpdateGeneratorWithOptimizer();
+        // Train generator with tape-based autodiff
+        Generator.Train(inputImages, targetImages);
 
         Discriminator.SetTrainingMode(true);
 
@@ -570,7 +538,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// </summary>
     private Tensor<T> CalculateL1Gradients(Tensor<T> predictions, Tensor<T> targets)
     {
-        var gradients = new Tensor<T>(predictions.Shape.ToArray());
+        var gradients = new Tensor<T>(predictions._shape);
         int count = predictions.Length;
         T scale = NumOps.FromDouble(_l1Lambda / count);
 

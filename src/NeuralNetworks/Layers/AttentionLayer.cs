@@ -1,3 +1,4 @@
+﻿#pragma warning disable CS0649, CS0414, CS0169
 using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -36,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Attention)]
 [LayerTask(LayerTask.AttentionComputation)]
 [LayerProperty(IsTrainable = true, Cost = ComputeCost.High, TestInputShape = "1, 4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IVectorActivationFunction<double>?)null")]
-public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
+public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 {
     /// <summary>
     /// The weight tensor for the query transformation.
@@ -50,6 +51,8 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// Think of it as formulating what information we're looking for in the input sequence.
     /// </para>
     /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _Wq;
 
     /// <summary>
@@ -248,12 +251,12 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private Tensor<T>? _dWo;
 
     // GPU cached tensors for backward pass
-    private IGpuTensor<T>? _gpuInput;
-    private IGpuTensor<T>? _gpuQ;
-    private IGpuTensor<T>? _gpuK;
-    private IGpuTensor<T>? _gpuV;
-    private IGpuTensor<T>? _gpuAttnOutput;
-    private IGpuTensor<T>? _gpuAttnWeights;
+    private Tensor<T>? _gpuInput;
+    private Tensor<T>? _gpuQ;
+    private Tensor<T>? _gpuK;
+    private Tensor<T>? _gpuV;
+    private Tensor<T>? _gpuAttnOutput;
+    private Tensor<T>? _gpuAttnWeights;
     private int[]? _gpuInputShape;
     private int _gpuBatchSize;
     private int _gpuSeqLen;
@@ -592,7 +595,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <returns>The output GPU tensor after applying the attention mechanism.</returns>
     /// <exception cref="ArgumentException">Thrown when no inputs provided.</exception>
     /// <exception cref="InvalidOperationException">Thrown when engine is not a DirectGpuTensorEngine.</exception>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -609,7 +612,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Handle 2D [Batch, InputSize] or 3D [Batch, Seq, InputSize] input
         int batchSize;
         int seqLen;
-        IGpuTensor<T> input3D;
+        Tensor<T> input3D;
 
         if (shape.Length == 2)
         {
@@ -690,12 +693,12 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             _gpuAttnWeights = gpuEngine.ReshapeGpu(attnWeights4D, [batchSize, seqLen, seqLen]);
 
             // Also cache CPU versions for CPU backward compatibility
-            _lastInput = input.ToTensor();
-            _lastQueryInput = input3D.ToTensor();
-            _lastKeyInput = input3D.ToTensor();
-            _lastValueInput = input3D.ToTensor();
-            _lastAttentionOutput = _gpuAttnOutput.ToTensor();
-            _lastAttentionWeights = _gpuAttnWeights.ToTensor();
+            _lastInput = input;
+            _lastQueryInput = input3D;
+            _lastKeyInput = input3D;
+            _lastValueInput = input3D;
+            _lastAttentionOutput = _gpuAttnOutput;
+            _lastAttentionWeights = _gpuAttnWeights;
 
             // Dispose tensors we don't need (but keep ones cached for backward)
             ((IDisposable)inputFlat).Dispose();
@@ -723,7 +726,7 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         // Reshape to final output shape
-        IGpuTensor<T> output;
+        Tensor<T> output;
         if (_inputWas2D)
         {
             output = gpuEngine.ReshapeGpu(outputFlat, [batchSize, _inputSize]);
@@ -1011,387 +1014,6 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
-    /// Performs the backward pass of the attention mechanism.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backpropagation algorithm for the attention mechanism. It computes
-    /// the gradients of the loss with respect to the layer's parameters and input.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is how the layer learns from its mistakes.
-    ///
-    /// The method takes the gradient of the error with respect to the layer's output and works backwards to figure out:
-    /// 1. How much each weight contributed to the error (stored in _dWq, _dWk, _dWv)
-    /// 2. How the input itself contributed to the error (the returned value)
-    ///
-    /// This information is then used to update the weights and improve the layer's performance.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        // Autodiff doesn't support cross-attention or masked attention yet
-        if (UseAutodiff && !_lastWasCrossAttention && !_lastUsedMask)
-            return BackwardViaAutodiff(outputGradient);
-        else
-            return BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Performs the backward pass on GPU for the attention layer.
-    /// </summary>
-    /// <param name="outputGradient">The GPU tensor containing the gradient of the loss with respect to the output.</param>
-    /// <returns>The GPU tensor containing the gradient of the loss with respect to the input.</returns>
-    public override IGpuTensor<T> BackwardGpu(IGpuTensor<T> outputGradient)
-    {
-        if (_gpuInput == null || _gpuQ == null || _gpuK == null || _gpuV == null ||
-            _gpuAttnOutput == null || _gpuAttnWeights == null)
-            throw new InvalidOperationException("ForwardGpu must be called before BackwardGpu.");
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("BackwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        int batchSize = _gpuBatchSize;
-        int seqLen = _gpuSeqLen;
-        int flatBatchSeq = batchSize * seqLen;
-
-        // Step 1: Backprop through output projection (Wo)
-        // Forward: output = attnOutput @ Wo.T
-        // Backward: dWo = dOutput.T @ attnOutput, dAttnOutput = dOutput @ Wo
-
-        // Flatten gradients for matmul
-        var dOutputFlat = gpuEngine.ReshapeGpu(outputGradient, [flatBatchSeq, _inputSize]);
-        var attnOutputFlat = gpuEngine.ReshapeGpu(_gpuAttnOutput, [flatBatchSeq, _attentionSize]);
-
-        // Upload Wo to GPU
-        var gpuWo = gpuEngine.UploadToGpu(_Wo, GpuTensorRole.Weight);
-
-        // Compute dWo: dOutput.T @ attnOutput
-        var dOutputFlatT = gpuEngine.TransposeGpu(dOutputFlat);
-        var gpuDWo = gpuEngine.MatMulGpuTensors(dOutputFlatT, attnOutputFlat);
-        _dWo = gpuDWo.ToTensor();
-
-        // Compute dAttnOutput: dOutput @ Wo
-        var dAttnOutputFlat = gpuEngine.MatMulGpuTensors(dOutputFlat, gpuWo);
-        var dAttnOutput = gpuEngine.ReshapeGpu(dAttnOutputFlat, [batchSize, seqLen, _attentionSize]);
-
-        // Step 2: Backprop through attention
-        // Use ScaledDotProductAttentionBackwardGpu
-        double scale = 1.0 / Math.Sqrt(_attentionSize);
-        var (dQ, dK, dV) = gpuEngine.ScaledDotProductAttentionBackwardGpu(
-            dAttnOutput, _gpuQ, _gpuK, _gpuV, _gpuAttnWeights, scale);
-
-        // Step 3: Backprop through Q, K, V projections
-        // Forward: Q = input @ Wq.T, K = input @ Wk.T, V = input @ Wv.T
-        // Backward: dWq = dQ.T @ input, dWk = dK.T @ input, dWv = dV.T @ input
-        //           dInput = dQ @ Wq + dK @ Wk + dV @ Wv
-
-        // Flatten Q, K, V gradients
-        var dQFlat = gpuEngine.ReshapeGpu(dQ, [flatBatchSeq, _attentionSize]);
-        var dKFlat = gpuEngine.ReshapeGpu(dK, [flatBatchSeq, _attentionSize]);
-        var dVFlat = gpuEngine.ReshapeGpu(dV, [flatBatchSeq, _attentionSize]);
-
-        // Flatten input for weight gradient computation
-        var inputFlat = gpuEngine.ReshapeGpu(_gpuInput, [flatBatchSeq, _inputSize]);
-
-        // Upload weights to GPU
-        var gpuWq = gpuEngine.UploadToGpu(_Wq, GpuTensorRole.Weight);
-        var gpuWk = gpuEngine.UploadToGpu(_Wk, GpuTensorRole.Weight);
-        var gpuWv = gpuEngine.UploadToGpu(_Wv, GpuTensorRole.Weight);
-
-        // Transpose input for weight gradient computation
-        var inputFlatT = gpuEngine.TransposeGpu(inputFlat);
-
-        // Compute weight gradients: dW = dProj.T @ input
-        var dQFlatT = gpuEngine.TransposeGpu(dQFlat);
-        var dKFlatT = gpuEngine.TransposeGpu(dKFlat);
-        var dVFlatT = gpuEngine.TransposeGpu(dVFlat);
-
-        var gpuDWq = gpuEngine.MatMulGpuTensors(dQFlatT, inputFlat);
-        var gpuDWk = gpuEngine.MatMulGpuTensors(dKFlatT, inputFlat);
-        var gpuDWv = gpuEngine.MatMulGpuTensors(dVFlatT, inputFlat);
-
-        _dWq = gpuDWq.ToTensor();
-        _dWk = gpuDWk.ToTensor();
-        _dWv = gpuDWv.ToTensor();
-
-        // Compute input gradients: dInput = dQ @ Wq + dK @ Wk + dV @ Wv
-        var dInputFromQ = gpuEngine.MatMulGpuTensors(dQFlat, gpuWq);
-        var dInputFromK = gpuEngine.MatMulGpuTensors(dKFlat, gpuWk);
-        var dInputFromV = gpuEngine.MatMulGpuTensors(dVFlat, gpuWv);
-
-        // Sum all input gradients
-        int inputSize = flatBatchSeq * _inputSize;
-        var dInputPartial = backend.AllocateBuffer(inputSize);
-        backend.Add(dInputFromQ.Buffer, dInputFromK.Buffer, dInputPartial, inputSize);
-
-        var dInputBuffer = backend.AllocateBuffer(inputSize);
-        backend.Add(dInputPartial, dInputFromV.Buffer, dInputBuffer, inputSize);
-        dInputPartial.Dispose();
-
-        // Reshape to original input shape
-        var dInput = new GpuTensor<T>(backend, dInputBuffer, _gpuInputShape ?? [batchSize, seqLen, _inputSize], GpuTensorRole.Gradient, ownsBuffer: true);
-
-        return dInput;
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastAttentionWeights == null || _lastAttentionOutput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // First, backprop through output projection (Wo)
-        // Forward: output = attentionOutput @ Wo.T
-        // Backward: dWo = dOutput.T @ attentionOutput, dAttentionOutput = dOutput @ Wo
-
-        // Flatten gradients and cached output for matmul
-        int totalElements = 1;
-        for (int i = 0; i < outputGradient.Shape.Length - 1; i++)
-            totalElements *= outputGradient.Shape[i];
-        var dOutputFlat = outputGradient.Reshape(totalElements, _inputSize);
-        var attnOutputFlat = _lastAttentionOutput.Reshape(totalElements, _attentionSize);
-
-        // Compute dWo: [inputSize, N] @ [N, attentionSize] = [inputSize, attentionSize]
-        _dWo = Engine.TensorMatMul(Engine.TensorTranspose(dOutputFlat), attnOutputFlat);
-
-        // Compute dAttentionOutput: [N, inputSize] @ [inputSize, attentionSize] = [N, attentionSize]
-        var dAttnOutputFlat = Engine.TensorMatMul(dOutputFlat, _Wo);
-        var dAttnOutput = dAttnOutputFlat.Reshape(_lastAttentionOutput.Shape.ToArray());
-
-        // Compute V shape info from stored input
-        var input3D = _lastQueryInput ?? _lastInput;
-        int batchSize = input3D.Shape[0];
-        int seqLen = input3D.Shape.Length >= 2 ? input3D.Shape[1] : 1;
-
-        // Now backprop through the attention computation using dAttnOutput
-        // Build permutation to transpose last two dimensions for any-rank tensors
-        int attnRank = _lastAttentionWeights.Rank;
-        int[] attnPerm = Enumerable.Range(0, attnRank).ToArray();
-        if (attnRank >= 2)
-        {
-            (attnPerm[attnRank - 2], attnPerm[attnRank - 1]) = (attnPerm[attnRank - 1], attnPerm[attnRank - 2]);
-        }
-        // dV = A^T @ dAttnOutput (per batch: [S,S]^T @ [S,A] = [S,A])
-        var AT = _lastAttentionWeights.Transpose(attnPerm);
-        var dV = new Tensor<T>(dAttnOutput.Shape.ToArray());
-        for (int b = 0; b < batchSize; b++)
-        {
-            var atB = AT.GetSliceAlongDimension(b, 0);
-            var dAoB = dAttnOutput.GetSliceAlongDimension(b, 0);
-            var dvB = Engine.TensorMatMul(atB, dAoB);
-            for (int j = 0; j < dvB.Length; j++)
-                dV.SetFlat(b * dvB.Length + j, dvB.GetFlat(j));
-        }
-        var inputFlat = input3D.Reshape([batchSize * seqLen, _inputSize]);
-        var wvTransposed = Engine.TensorTranspose(_Wv);
-        var vProjected = Engine.TensorMatMul(inputFlat, wvTransposed);
-        var V = vProjected.Reshape([batchSize, seqLen, _attentionSize]);
-
-        int vRank = V.Rank;
-        int[] vPerm = Enumerable.Range(0, vRank).ToArray();
-        if (vRank >= 2)
-        {
-            (vPerm[vRank - 2], vPerm[vRank - 1]) = (vPerm[vRank - 1], vPerm[vRank - 2]);
-        }
-
-        // dAttentionWeights = dAttnOutput @ V^T -> [B, S, S] (manual per-batch, Engine.BatchMatMul has issues)
-        var VT = V.Transpose(vPerm);
-        var dAttentionWeights = new Tensor<T>([batchSize, seqLen, seqLen]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            var dAttnB = dAttnOutput.GetSliceAlongDimension(b, 0);
-            var vtB = VT.GetSliceAlongDimension(b, 0);
-            var resultB = Engine.TensorMatMul(dAttnB, vtB);
-            for (int i = 0; i < resultB.Length; i++)
-                dAttentionWeights.SetFlat(b * seqLen * seqLen + i, resultB.GetFlat(i));
-        }
-
-        // Backward through activation function applied to attention scores
-        // For softmax: dL/dz = y * (dL/dy - sum(y * dL/dy))
-        // For other activations: dL/dz = f'(z) * dL/dy (using post-activation value)
-        Tensor<T> dAttentionScores;
-        if (VectorActivation is SoftmaxActivation<T>)
-        {
-            int sumAxis = _lastAttentionWeights.Rank - 1;
-            var weightedGrad = _lastAttentionWeights.ElementwiseMultiply(dAttentionWeights);
-            var weightedSum = weightedGrad.SumOverAxis(sumAxis);
-            var broadcastShape = new int[_lastAttentionWeights.Rank];
-            for (int i = 0; i < _lastAttentionWeights.Rank; i++)
-                broadcastShape[i] = i == sumAxis ? 1 : _lastAttentionWeights.Shape[i];
-            var sumBroadcast = weightedSum.Reshape(broadcastShape);
-            var sumExpanded = new Tensor<T>(_lastAttentionWeights.Shape.ToArray());
-            var totalBatches = 1;
-            for (int i = 0; i < sumAxis; i++) totalBatches *= _lastAttentionWeights.Shape[i];
-            var lastDim = _lastAttentionWeights.Shape[sumAxis];
-            for (int batch = 0; batch < totalBatches; batch++)
-            {
-                T sumVal = sumBroadcast.GetFlat(batch);
-                for (int j = 0; j < lastDim; j++)
-                    sumExpanded.SetFlat(batch * lastDim + j, sumVal);
-            }
-            dAttentionScores = _lastAttentionWeights.ElementwiseMultiply(
-                dAttentionWeights.Subtract(sumExpanded));
-        }
-        else
-        {
-            // General activation backward: use ApplyActivationDerivativeFromOutput
-            dAttentionScores = ApplyActivationDerivativeFromOutput(_lastAttentionWeights, dAttentionWeights);
-        }
-
-        var scaleFactor = NumOps.Sqrt(NumOps.FromDouble(_attentionSize));
-        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, scaleFactor);
-        dAttentionScores = dAttentionScores.Scale(scaleValue);
-
-        // Recompute Q, K from stored input for proper backward
-        // Forward: inputFlat @ Wq^T -> reshape to [B, S, A]
-        var wqTransposed = Engine.TensorTranspose(_Wq);
-        var wkTransposed = Engine.TensorTranspose(_Wk);
-        var qProjected = Engine.TensorMatMul(inputFlat, wqTransposed);
-        var kProjected = Engine.TensorMatMul(inputFlat, wkTransposed);
-        var Q = qProjected.Reshape([batchSize, seqLen, _attentionSize]);
-        var K = kProjected.Reshape([batchSize, seqLen, _attentionSize]);
-
-        // Correct attention backward formulas (manual per-batch, Engine.BatchMatMul has issues):
-        // scores = Q @ K^T, so: dQ = dScores @ K, dK = dScores^T @ Q
-        var dQ = new Tensor<T>(Q.Shape.ToArray());
-        var dK = new Tensor<T>(K.Shape.ToArray());
-        for (int b = 0; b < batchSize; b++)
-        {
-            var dScoresB = dAttentionScores.GetSliceAlongDimension(b, 0);
-            var qB = Q.GetSliceAlongDimension(b, 0);
-            var kB = K.GetSliceAlongDimension(b, 0);
-            var dQB = Engine.TensorMatMul(dScoresB, kB);
-            var dKB = Engine.TensorMatMul(Engine.TensorTranspose(dScoresB), qB);
-            for (int i = 0; i < dQB.Length; i++)
-            {
-                dQ.SetFlat(b * dQB.Length + i, dQB.GetFlat(i));
-                dK.SetFlat(b * dKB.Length + i, dKB.GetFlat(i));
-            }
-        }
-
-        // Flatten for weight gradient computation: [B*S, attentionSize]
-        var dQFlat = dQ.Reshape([batchSize * seqLen, _attentionSize]);
-        var dKFlat = dK.Reshape([batchSize * seqLen, _attentionSize]);
-        var dVFlat = dV.Reshape([batchSize * seqLen, _attentionSize]);
-
-        // Weight gradients: for Q = input @ Wq^T, dWq = dQ^T @ input = [A, B*S] @ [B*S, input] = [A, input]
-        _dWq = Engine.TensorMatMul(Engine.TensorTranspose(dQFlat), inputFlat);
-        _dWk = Engine.TensorMatMul(Engine.TensorTranspose(dKFlat), inputFlat);
-        _dWv = Engine.TensorMatMul(Engine.TensorTranspose(dVFlat), inputFlat);
-
-        // Input gradient: dInput = dQ @ Wq^T + dK @ Wk^T + dV @ Wv^T
-        var dinputFromQ = Engine.TensorMatMul(dQFlat, _Wq);
-        var dinputFromK = Engine.TensorMatMul(dKFlat, _Wk);
-        var dinputFromV = Engine.TensorMatMul(dVFlat, _Wv);
-        var dinputFlat = dinputFromQ.Add(dinputFromK).Add(dinputFromV);
-        var dinput = dinputFlat.Reshape(_lastInput.Shape.ToArray());
-
-        return dinput;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation with production-grade optimizations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>Production-Ready Features:</b>
-    /// <list type="bullet">
-    /// <item>Full computation graph construction for Self and Cross Attention</item>
-    /// <item>Supports masking via graph operations</item>
-    /// <item>Uses Permute/Reshape/MatMul for correct gradient flow</item>
-    /// </list>
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastQueryInput == null || _lastKeyInput == null || _lastValueInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        // 1. Create variables
-        var qInput = Autodiff.TensorOperations<T>.Variable(_lastQueryInput, "query", true);
-        var kInput = Autodiff.TensorOperations<T>.Variable(_lastKeyInput, "key", true);
-        var vInput = Autodiff.TensorOperations<T>.Variable(_lastValueInput, "value", true);
-
-        var wq = Autodiff.TensorOperations<T>.Variable(_Wq, "Wq", true);
-        var wk = Autodiff.TensorOperations<T>.Variable(_Wk, "Wk", true);
-        var wv = Autodiff.TensorOperations<T>.Variable(_Wv, "Wv", true);
-
-        int batchSize = _lastQueryInput.Shape[0];
-        int seqLenQ = _lastQueryInput.Shape[1];
-        int seqLenKV = _lastKeyInput.Shape[1];
-
-        // 2. Projections
-        // Reshape inputs to 2D [B*S, E]
-        var q2D = Autodiff.TensorOperations<T>.Reshape(qInput, batchSize * seqLenQ, _inputSize);
-        var k2D = Autodiff.TensorOperations<T>.Reshape(kInput, batchSize * seqLenKV, _inputSize);
-        var v2D = Autodiff.TensorOperations<T>.Reshape(vInput, batchSize * seqLenKV, _inputSize);
-
-        // Transpose weights: [In, Att] -> [Att, In]
-        var wqT = Autodiff.TensorOperations<T>.Transpose(wq);
-        var wkT = Autodiff.TensorOperations<T>.Transpose(wk);
-        var wvT = Autodiff.TensorOperations<T>.Transpose(wv);
-
-        var qFlat = Autodiff.TensorOperations<T>.MatrixMultiply(q2D, wqT);
-        var kFlat = Autodiff.TensorOperations<T>.MatrixMultiply(k2D, wkT);
-        var vFlat = Autodiff.TensorOperations<T>.MatrixMultiply(v2D, wvT);
-
-        // Reshape back: [B, S, Att]
-        var Q = Autodiff.TensorOperations<T>.Reshape(qFlat, batchSize, seqLenQ, _attentionSize);
-        var K = Autodiff.TensorOperations<T>.Reshape(kFlat, batchSize, seqLenKV, _attentionSize);
-        var V = Autodiff.TensorOperations<T>.Reshape(vFlat, batchSize, seqLenKV, _attentionSize);
-
-        // 3. Scores: Q @ K.T
-        // Permute K: [B, S, A] -> [B, A, S]
-        var KT = Autodiff.TensorOperations<T>.Permute(K, 0, 2, 1);
-        // Use BatchMatrixMultiply for 3D tensors [B, S_Q, A] @ [B, A, S_KV] -> [B, S_Q, S_KV]
-        var scores = Autodiff.TensorOperations<T>.BatchMatrixMultiply(Q, KT);
-
-        // Scale
-        T scaleValue = NumericalStabilityHelper.SafeDiv(NumOps.One, NumOps.Sqrt(NumOps.FromDouble(_attentionSize)));
-        var scaleTensor = new Tensor<T>(new int[] { 1 });
-        scaleTensor[0] = scaleValue;
-        var scaleNode = Autodiff.TensorOperations<T>.Constant(scaleTensor, "scale");
-        var scaledScores = Autodiff.TensorOperations<T>.ElementwiseMultiply(scores, scaleNode);
-
-        // Mask
-        if (_lastMask != null)
-        {
-            var maskNode = Autodiff.TensorOperations<T>.Constant(_lastMask, "mask");
-            scaledScores = Autodiff.TensorOperations<T>.Add(scaledScores, maskNode);
-        }
-
-        // Softmax
-        var attentionWeights = Autodiff.TensorOperations<T>.Softmax(scaledScores);
-
-        // Output: Weights @ V
-        // Use BatchMatrixMultiply for 3D tensors [B, S_Q, S_KV] @ [B, S_KV, A] -> [B, S_Q, A]
-        var output = Autodiff.TensorOperations<T>.BatchMatrixMultiply(attentionWeights, V);
-
-        // Gradient
-        output.Gradient = outputGradient;
-        output.Backward();
-
-        // Store
-        _dWq = wq.Gradient;
-        _dWk = wk.Gradient;
-        _dWv = wv.Gradient;
-
-        return qInput.Gradient ?? throw new InvalidOperationException("Gradient computation failed.");
-    }
-
-    /// <summary>
     /// Creates a tensor filled with a scalar value.
     /// </summary>
     private Tensor<T> CreateScalarTensor(T value, int[] shape)
@@ -1496,19 +1118,19 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         // === Vectorized Parameter Extraction (Phase B: US-GPU-015) ===
         // Flatten each tensor to vector and concatenate
-        var wqVec = Vector<T>.FromMemory(_Wq.Data);
-        var wkVec = Vector<T>.FromMemory(_Wk.Data);
-        var wvVec = Vector<T>.FromMemory(_Wv.Data);
+        var wqVec = _Wq.ToVector();
+        var wkVec = _Wk.ToVector();
+        var wvVec = _Wv.ToVector();
 
-        var woVec = Vector<T>.FromMemory(_Wo.Data);
+        var woVec = _Wo.ToVector();
         return Vector<T>.Concatenate(Vector<T>.Concatenate(wqVec, wkVec), Vector<T>.Concatenate(wvVec, woVec));
     }
 
     public override Vector<T> GetParameterGradients()
     {
-        var gQ = _dWq != null ? Vector<T>.FromMemory(_dWq.Data) : new Vector<T>(_Wq.Length);
-        var gK = _dWk != null ? Vector<T>.FromMemory(_dWk.Data) : new Vector<T>(_Wk.Length);
-        var gV = _dWv != null ? Vector<T>.FromMemory(_dWv.Data) : new Vector<T>(_Wv.Length);
+        var gQ = _dWq != null ? _dWq.ToVector() : new Vector<T>(_Wq.Length);
+        var gK = _dWk != null ? _dWk.ToVector() : new Vector<T>(_Wk.Length);
+        var gV = _dWv != null ? _dWv.ToVector() : new Vector<T>(_Wv.Length);
         var gO = new Vector<T>(_Wo.Length); // Wo gradient not tracked separately yet
         return Vector<T>.Concatenate(Vector<T>.Concatenate(gQ, gK), Vector<T>.Concatenate(gV, gO));
     }
@@ -1681,113 +1303,5 @@ public class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _gpuAttnOutput = null;
         _gpuAttnWeights = null;
         _gpuInputShape = null;
-    }
-
-    /// <summary>
-    /// Exports the attention layer as a computation graph for JIT compilation.
-    /// </summary>
-    /// <param name="inputNodes">List to which the input node will be added.</param>
-    /// <returns>The output computation node representing the attention operation.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method creates a symbolic computation graph for JIT compilation:
-    /// 1. Creates a symbolic input node with shape [batch=1, inputSize]
-    /// 2. Creates constant nodes for Query, Key, Value projection weights
-    /// 3. Projects input to Q, K, V using matrix multiplication
-    /// 4. Applies scaled dot-product attention: softmax((Q @ K^T) / sqrt(d_k)) @ V
-    /// 5. Returns the attention output
-    /// </para>
-    /// <para><b>For Beginners:</b> This method builds a symbolic representation of attention for JIT.
-    ///
-    /// JIT compilation converts the attention mechanism into optimized native code.
-    /// Attention allows the model to focus on relevant parts of the input by:
-    /// - Creating Query (what we're looking for), Key (what we have), Value (what we return) projections
-    /// - Computing similarity scores between Query and all Keys
-    /// - Using softmax to convert scores to weights (focusing mechanism)
-    /// - Applying these weights to Values to get focused output
-    ///
-    /// The symbolic graph allows the JIT compiler to:
-    /// - Optimize matrix multiplications using BLAS libraries
-    /// - Fuse softmax computation with scaling
-    /// - Generate efficient memory layouts for cache utilization
-    ///
-    /// Attention is the core mechanism in Transformers and modern NLP models.
-    /// JIT compilation provides 5-10x speedup by optimizing these operations.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="ArgumentNullException">Thrown when inputNodes is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when layer parameters are not initialized.</exception>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured. Initialize the layer first.");
-
-        if (_Wq == null || _Wk == null || _Wv == null)
-            throw new InvalidOperationException("Layer projection weights not initialized. Train or initialize the model first.");
-
-        // Create symbolic input node (shape definition only, batch size adapts at runtime)
-        // AttentionLayer expects input shape: [inputSize]
-        // For attention, we use: [batch, inputSize]
-        var symbolicInput = new Tensor<T>(new int[] { 1 }.Concat(InputShape).ToArray());
-        var inputNode = TensorOperations<T>.Variable(symbolicInput, "input");
-        inputNodes.Add(inputNode);
-
-        // Create constant nodes for projection weights
-        var wqNode = TensorOperations<T>.Constant(_Wq, "Wq");
-        var wkNode = TensorOperations<T>.Constant(_Wk, "Wk");
-        var wvNode = TensorOperations<T>.Constant(_Wv, "Wv");
-
-        // Project input to Query, Key, Value
-        // Q = input @ Wq^T, K = input @ Wk^T, V = input @ Wv^T
-        var wqT = TensorOperations<T>.Transpose(wqNode);
-        var wkT = TensorOperations<T>.Transpose(wkNode);
-        var wvT = TensorOperations<T>.Transpose(wvNode);
-
-        var q = TensorOperations<T>.MatrixMultiply(inputNode, wqT);
-        var k = TensorOperations<T>.MatrixMultiply(inputNode, wkT);
-        var v = TensorOperations<T>.MatrixMultiply(inputNode, wvT);
-
-        // Apply scaled dot-product attention
-        var output = TensorOperations<T>.ScaledDotProductAttention(q, k, v);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets whether this attention layer supports JIT compilation.
-    /// </summary>
-    /// <value>True if the layer parameters are initialized.</value>
-    /// <remarks>
-    /// <para>
-    /// This property indicates whether the layer can be JIT compiled. The layer supports JIT if:
-    /// - Query, Key, Value projection weights are initialized
-    /// </para>
-    /// <para><b>For Beginners:</b> This tells you if this layer can use JIT compilation for faster inference.
-    ///
-    /// The layer can be JIT compiled if:
-    /// - The layer has been initialized with projection weight matrices (Wq, Wk, Wv)
-    ///
-    /// Attention layers require these projection matrices to transform the input into
-    /// query, key, and value representations. Once initialized, JIT compilation can
-    /// provide significant speedup (5-10x) by optimizing:
-    /// - Matrix multiplications for projections
-    /// - Attention score computation (Q @ K^T)
-    /// - Softmax activation
-    /// - Weighted sum of values (attention @ V)
-    ///
-    /// This is especially important for Transformers where attention is computed
-    /// many times in each forward pass (multiple layers, multiple heads).
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation
-    {
-        get
-        {
-            // Attention supports JIT if projection weights are initialized
-            return _Wq != null && _Wk != null && _Wv != null;
-        }
     }
 }

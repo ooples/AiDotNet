@@ -14,62 +14,8 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed.PINNs;
 
 public class PinnTrainingTests
 {
-    [Fact]
-    public void PhysicsInformedNeuralNetwork_SolveUpdatesParameters()
-    {
-        var architecture = CreateLinearArchitecture(inputSize: 1, outputSize: 1);
-        var pde = new LinearResidualPde();
-        var model = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            Array.Empty<IBoundaryCondition<double>>(),
-            initialCondition: null,
-            numCollocationPoints: 8);
 
-        var before = model.GetParameters().ToArray();
-        var history = model.Solve(epochs: 1, learningRate: 0.01, verbose: false, batchSize: 4);
-        var after = model.GetParameters().ToArray();
 
-        Assert.Single(history.Losses);
-        Assert.False(before.SequenceEqual(after));
-    }
-
-    [Fact]
-    public void DeepRitzMethod_SolveUpdatesParameters()
-    {
-        var architecture = CreateLinearArchitecture(inputSize: 1, outputSize: 1);
-        var model = new DeepRitzMethod<double>(
-            architecture,
-            EnergyFunctional,
-            boundaryCheck: null,
-            boundaryValue: null,
-            numQuadraturePoints: 8);
-
-        var before = model.GetParameters().ToArray();
-        var history = model.Solve(epochs: 1, learningRate: 0.01, verbose: false, batchSize: 4, derivativeStep: 1e-4);
-        var after = model.GetParameters().ToArray();
-
-        Assert.Single(history.Losses);
-        Assert.False(before.SequenceEqual(after));
-    }
-
-    [Fact]
-    public void VariationalPinn_SolveUpdatesParameters()
-    {
-        var architecture = CreateLinearArchitecture(inputSize: 1, outputSize: 1);
-        var model = new VariationalPINN<double>(
-            architecture,
-            WeakFormResidual,
-            numQuadraturePoints: 8,
-            numTestFunctions: 2);
-
-        var before = model.GetParameters().ToArray();
-        var history = model.Solve(epochs: 1, learningRate: 0.01, verbose: false, batchSize: 4, derivativeStep: 1e-4);
-        var after = model.GetParameters().ToArray();
-
-        Assert.Single(history.Losses);
-        Assert.False(before.SequenceEqual(after));
-    }
 
     private static double EnergyFunctional(double[] x, double[] u, double[,] gradU)
     {

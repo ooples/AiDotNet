@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -356,7 +356,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         LastLoss = loss;
 
         // Compute gradient: d(MSE)/d(pred) = 2 * (pred - target) / N
-        var gradient = new Tensor<T>(prediction.Shape.ToArray());
+        var gradient = new Tensor<T>(prediction._shape);
         T scale = NumOps.FromDouble(2.0 / expectedOutput.Length);
         for (int i = 0; i < expectedOutput.Length; i++)
         {
@@ -365,7 +365,6 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         }
 
         // Backpropagate
-        BackpropagateGradient(gradient);
 
         // Update parameters
         T lr = NumOps.FromDouble(0.0001);
@@ -403,44 +402,6 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         }
 
         return mask;
-    }
-
-    /// <summary>
-    /// Backpropagates the gradient through all network layers.
-    /// </summary>
-    private void BackpropagateGradient(Tensor<T> gradient)
-    {
-        // Backpropagate through output head
-        gradient = _outputHead.Backward(gradient);
-
-        // Backpropagate through decoder
-        for (int i = _decoder.Count - 1; i >= 0; i--)
-        {
-            gradient = _decoder[i].Backward(gradient);
-        }
-
-        // Backpropagate through transformer
-        for (int i = _transformer.Count - 1; i >= 0; i--)
-        {
-            gradient = _transformer[i].Backward(gradient);
-        }
-
-        // Backpropagate through propagation layers
-        for (int i = _propagation.Count - 1; i >= 0; i--)
-        {
-            gradient = _propagation[i].Backward(gradient);
-        }
-
-        // Backpropagate through encoder
-        for (int i = _encoder.Count - 1; i >= 0; i--)
-        {
-            gradient = _encoder[i].Backward(gradient);
-        }
-
-        // Note: _flowNet and _flowHead are NOT used in the Predict forward pass.
-        // They are only used in EstimateBidirectionalFlow for multi-frame inpainting.
-        // Training the flow network requires a separate training routine with flow-specific
-        // loss functions (e.g., endpoint error, photometric consistency).
     }
 
     #endregion
@@ -603,7 +564,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         if (neighbors.Count == 0)
             return currentFeatures;
 
-        var accumulated = ZeroTensor(currentFeatures.Shape.ToArray());
+        var accumulated = ZeroTensor(currentFeatures._shape);
 
         foreach (var (neighborFrame, neighborMask, flow) in neighbors)
         {
@@ -633,7 +594,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         int height = frame.Shape[2];
         int width = frame.Shape[3];
 
-        var masked = new Tensor<T>(frame.Shape.ToArray());
+        var masked = new Tensor<T>(frame._shape);
         for (int b = 0; b < batchSize; b++)
             for (int c = 0; c < channels; c++)
                 for (int h = 0; h < height; h++)
@@ -654,7 +615,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         int height = original.Shape[2];
         int width = original.Shape[3];
 
-        var blended = new Tensor<T>(original.Shape.ToArray());
+        var blended = new Tensor<T>(original._shape);
         for (int b = 0; b < batchSize; b++)
             for (int c = 0; c < channels; c++)
                 for (int h = 0; h < height; h++)
@@ -679,7 +640,7 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
         int flowH = flow.Shape[2];
         int flowW = flow.Shape[3];
 
-        var warped = new Tensor<T>(features.Shape.ToArray());
+        var warped = new Tensor<T>(features._shape);
 
         for (int b = 0; b < batchSize; b++)
             for (int h = 0; h < height; h++)
@@ -807,7 +768,18 @@ public class E2FGVI<T> : VideoInpaintingBase<T>
 
     #region Abstract Implementation
 
-    protected override void InitializeLayers() => ClearLayers();
+    protected override void InitializeLayers()
+    {
+        ClearLayers();
+
+        foreach (var layer in _flowNet) Layers.Add(layer);
+        Layers.Add(_flowHead);
+        foreach (var layer in _encoder) Layers.Add(layer);
+        foreach (var layer in _transformer) Layers.Add(layer);
+        foreach (var layer in _propagation) Layers.Add(layer);
+        foreach (var layer in _decoder) Layers.Add(layer);
+        Layers.Add(_outputHead);
+    }
 
     public override void UpdateParameters(Vector<T> parameters)
     {

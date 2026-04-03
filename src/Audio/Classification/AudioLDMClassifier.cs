@@ -228,12 +228,14 @@ public class AudioLDMClassifier<T> : AudioClassifierBase<T>, IAudioEventDetector
         if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
         if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized. Cannot train without an optimizer.");
         SetTrainingMode(true);
-        var output = Predict(input);
-        var grad = LossFunction.CalculateDerivative(output.ToVector(), expected.ToVector());
-        var gt = Tensor<T>.FromVector(grad);
-        for (int i = Layers.Count - 1; i >= 0; i--) gt = Layers[i].Backward(gt);
-        _optimizer.UpdateParameters(Layers);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)

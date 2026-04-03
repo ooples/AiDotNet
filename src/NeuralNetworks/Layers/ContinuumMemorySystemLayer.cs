@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Optimizers;
@@ -121,6 +121,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         for (int i = 0; i < numFrequencyLevels; i++)
         {
             _mlpBlocks[i] = new DenseLayer<T>(currentDim, hiddenDim, (IActivationFunction<T>)new ReLUActivation<T>());
+            RegisterSubLayer(_mlpBlocks[i]);
             currentDim = hiddenDim;
         }
 
@@ -202,7 +203,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
     /// </summary>
     /// <param name="inputs">GPU-resident input tensors (uses first input).</param>
     /// <returns>GPU-resident output tensor after chaining through all MLP blocks.</returns>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -218,7 +219,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         // Store CPU tensor for potential backward pass
         if (IsTrainingMode)
         {
-            LastInput = currentGpu.ToTensor();
+            LastInput = currentGpu;
         }
 
         // Sequential chain through all MLP blocks on GPU
@@ -231,7 +232,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
             // Store input for Modified GD optimizer during training
             if (IsTrainingMode)
             {
-                _storedInputs[level] = currentGpu.ToTensor();
+                _storedInputs[level] = currentGpu;
             }
 
             // Each DenseLayer handles its own GPU operations (GEMM + bias + activation)
@@ -241,153 +242,11 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         // Store output for potential backward pass
         if (IsTrainingMode)
         {
-            LastOutput = currentGpu.ToTensor();
+            LastOutput = currentGpu;
         }
 
         _globalStep++;
         return currentGpu;
-    }
-
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (outputGradient == null)
-            throw new ArgumentNullException(nameof(outputGradient));
-
-        var gradient = outputGradient;
-
-        // Backprop through chain in reverse order
-        for (int level = _mlpBlocks.Length - 1; level >= 0; level--)
-        {
-            if (_mlpBlocks[level] == null)
-                throw new InvalidOperationException($"MLP block at level {level} is null");
-
-            gradient = _mlpBlocks[level].Backward(gradient);
-
-            // === Vectorized Gradient Accumulation using IEngine (Phase B: US-GPU-015) ===
-            // Equation 31: θ^(fℓ)_{i+1} = θ^(fℓ)_i - Σ η^(ℓ)_t f(θ^(fℓ)_t; xt) if i ≡ 0 (mod C(ℓ))
-            var mlpGradient = _mlpBlocks[level].GetParameterGradients();
-            if (mlpGradient != null && mlpGradient.Length > 0)
-            {
-                int expectedLength = _accumulatedGradients[level].Length;
-                if (mlpGradient.Length != expectedLength)
-                {
-                    throw new InvalidOperationException(
-                        $"Gradient length mismatch at level {level}: expected {expectedLength}, got {mlpGradient.Length}");
-                }
-
-                // Vectorized accumulation with engine vector ops (no tensor conversion)
-                _accumulatedGradients[level] = Engine.Add(_accumulatedGradients[level], mlpGradient);
-            }
-
-            _stepCounters[level]++;
-
-            // Update parameters when step count reaches chunk size
-            if (_stepCounters[level] >= _chunkSizes[level])
-            {
-                UpdateLevelParameters(level);
-                _stepCounters[level] = 0;
-
-                // Reset gradient accumulation
-                int paramCount = _accumulatedGradients[level].Length;
-                _accumulatedGradients[level] = new Vector<T>(paramCount);
-                _accumulatedGradients[level].Fill(NumOps.Zero);
-            }
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation by delegating to each DenseLayer's own
-    /// autodiff implementation. Since ContinuumMemorySystemLayer is a composite layer that
-    /// chains multiple DenseLayer instances, we enable autodiff on each block and let them
-    /// compute their own gradients.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (outputGradient == null)
-            throw new ArgumentNullException(nameof(outputGradient));
-
-        var gradient = outputGradient;
-
-        // Enable autodiff on all MLP blocks
-        bool[] originalAutodiffSettings = new bool[_mlpBlocks.Length];
-        for (int i = 0; i < _mlpBlocks.Length; i++)
-        {
-            originalAutodiffSettings[i] = _mlpBlocks[i].UseAutodiff;
-            _mlpBlocks[i].UseAutodiff = true;
-        }
-
-        try
-        {
-            // Backprop through chain in reverse order using autodiff
-            for (int level = _mlpBlocks.Length - 1; level >= 0; level--)
-            {
-                if (_mlpBlocks[level] == null)
-                    throw new InvalidOperationException($"MLP block at level {level} is null");
-
-                // Let the DenseLayer use its own autodiff implementation
-                gradient = _mlpBlocks[level].Backward(gradient);
-
-                // === Vectorized Gradient Accumulation using IEngine (Phase B: US-GPU-015) ===
-                var mlpGradient = _mlpBlocks[level].GetParameterGradients();
-                if (mlpGradient != null && mlpGradient.Length > 0)
-                {
-                    int expectedLength = _accumulatedGradients[level].Length;
-                    if (mlpGradient.Length != expectedLength)
-                    {
-                        throw new InvalidOperationException(
-                            $"Gradient length mismatch at level {level}: expected {expectedLength}, got {mlpGradient.Length}");
-                    }
-
-                    // Vectorized accumulation with engine vector ops (no tensor conversion)
-                    _accumulatedGradients[level] = Engine.Add(_accumulatedGradients[level], mlpGradient);
-                }
-
-                _stepCounters[level]++;
-
-                // Update parameters when step count reaches chunk size
-                if (_stepCounters[level] >= _chunkSizes[level])
-                {
-                    UpdateLevelParameters(level);
-                    _stepCounters[level] = 0;
-
-                    // Reset gradient accumulation
-                    int paramCount = _accumulatedGradients[level].Length;
-                    _accumulatedGradients[level] = new Vector<T>(paramCount);
-                    _accumulatedGradients[level].Fill(NumOps.Zero);
-                }
-            }
-
-            return gradient;
-        }
-        finally
-        {
-            // Restore original autodiff settings
-            for (int i = 0; i < _mlpBlocks.Length; i++)
-            {
-                _mlpBlocks[i].UseAutodiff = originalAutodiffSettings[i];
-            }
-        }
     }
 
     private void UpdateLevelParameters(int level)
@@ -693,47 +552,5 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
             _accumulatedGradients[i].Fill(NumOps.Zero);
         }
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (_mlpBlocks == null || _mlpBlocks.Length == 0)
-            throw new InvalidOperationException("MLP blocks are not initialized.");
-
-        // ContinuumMemorySystemLayer is a chain of DenseLayer (MLP) blocks
-        // Since DenseLayer supports JIT compilation, we can chain them together
-        // The update frequencies are only relevant during training, not inference
-
-        var current = inputNodes[0];
-
-        // Chain through all MLP blocks: yt = MLP^(fk)(MLP^(fk-1)(...MLP^(f1)(xt)))
-        for (int level = 0; level < _mlpBlocks.Length; level++)
-        {
-            if (_mlpBlocks[level] == null)
-                throw new InvalidOperationException($"MLP block at level {level} is null.");
-
-            current = _mlpBlocks[level].ExportComputationGraph([current]);
-        }
-
-        return current;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> because ContinuumMemorySystemLayer is a chain of DenseLayer blocks,
-    /// each of which supports JIT compilation. The update frequency logic is only used
-    /// during training and does not affect inference.
-    /// </value>
-    public override bool SupportsJitCompilation => true;
 
 }

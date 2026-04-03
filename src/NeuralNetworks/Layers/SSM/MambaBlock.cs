@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -429,119 +429,6 @@ internal class MambaBlock<T> : LayerBase<T>
         return result.Reshape(outputShape);
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null ||
-            _lastXBranch == null || _lastZBranch == null ||
-            _lastConvOutput == null || _lastSiluOutput == null ||
-            _lastScanOutput == null || _lastGatedOutput == null ||
-            _lastDelta == null || _lastDeltaPreSoftplus == null ||
-            _lastB == null || _lastC == null ||
-            _lastHiddenStates == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-        }
-
-        int rank = outputGradient.Shape.Length;
-        int seqLen = rank >= 2 ? outputGradient.Shape[rank - 2] : 1;
-        int batchSize = _lastInput.Shape[0];
-        int seqLength = _lastInput.Shape[1];
-
-        // Normalize gradient to 3D
-        var grad3D = outputGradient.Rank == 2
-            ? outputGradient.Reshape(1, seqLen, _modelDimension)
-            : outputGradient.Reshape(batchSize, seqLength, _modelDimension);
-
-        // Apply activation derivative
-        var activationGrad = ApplyActivationDerivative(_lastOutput, grad3D);
-
-        // Step 8 backward: output projection
-        var gradFlat = activationGrad.Reshape(batchSize * seqLength, _modelDimension);
-        _outputProjectionBiasGradient = ReduceSumAxes01(activationGrad, batchSize, seqLength, _modelDimension);
-
-        var gatedFlat = _lastGatedOutput.Reshape(batchSize * seqLength, _innerDimension);
-        _outputProjectionWeightsGradient = Engine.TensorMatMul(
-            gatedFlat.Transpose([1, 0]), gradFlat);
-
-        var dGated = Engine.TensorMatMul(gradFlat, _outputProjectionWeights.Transpose([1, 0]))
-            .Reshape(batchSize, seqLength, _innerDimension);
-        // Step 7 backward: output gating y = scan_output * SiLU(z) via Engine
-        var zGate = Engine.Swish(_lastZBranch);
-        var dScanOutput = Engine.TensorMultiply(dGated, zGate);
-        var dZGate = Engine.TensorMultiply(dGated, _lastScanOutput);
-        var dZBranch = Engine.TensorMultiply(dZGate, ComputeSiLUDerivative(_lastZBranch));
-
-        // Step 6 backward: selective scan - delegated to S6Scan
-        var (dSiluOutput, dDelta, dALogGrad, dB, dC, dDGrad) = S6Scan<T>.SequentialScanBackward(
-            dScanOutput, _lastSiluOutput, _lastDelta, _aLog,
-            _lastB, _lastC, _dParam, _lastHiddenStates,
-            batchSize, seqLength, _innerDimension, _stateDimension);
-        _aLogGradient = dALogGrad;
-        _dParamGradient = dDGrad;
-
-        // Step 5 backward: softplus derivative is sigmoid(pre-softplus input)
-        var softplusDerivative = Engine.Sigmoid(_lastDeltaPreSoftplus);
-        var dDeltaSoftplus = Engine.TensorMultiply(dDelta, softplusDerivative);
-
-        var dDeltaFlat = dDeltaSoftplus.Reshape(batchSize * seqLength, _innerDimension);
-        _dtProjectionBiasGradient = ReduceSumAxes01(dDeltaSoftplus, batchSize, seqLength, _innerDimension);
-        var dDeltaLowRankFlat = Engine.TensorMatMul(dDeltaFlat, _dtProjectionWeights.Transpose([1, 0]));
-
-        var deltaLowRankFlat = SliceTensor(
-            Engine.TensorMatMul(_lastSiluOutput.Reshape(batchSize * seqLength, _innerDimension), _xProjectionWeights)
-                .Reshape(batchSize, seqLength, _dtRank + _stateDimension * 2),
-            2, 0, _dtRank).Reshape(batchSize * seqLength, _dtRank);
-
-        _dtProjectionWeightsGradient = Engine.TensorMatMul(
-            deltaLowRankFlat.Transpose([1, 0]), dDeltaFlat);
-
-        // Step 4 backward: x_proj (combine delta, B, C gradients)
-        var dDeltaLowRank3D = dDeltaLowRankFlat.Reshape(batchSize, seqLength, _dtRank);
-        var dXProj = ConcatenateTensors(dDeltaLowRank3D, dB, dC, 2);
-        var dXProjFlat = dXProj.Reshape(batchSize * seqLength, _dtRank + _stateDimension * 2);
-
-        var siluFlat = _lastSiluOutput.Reshape(batchSize * seqLength, _innerDimension);
-        _xProjectionWeightsGradient = Engine.TensorMatMul(
-            siluFlat.Transpose([1, 0]), dXProjFlat);
-
-        var dSiluFromXProj = Engine.TensorMatMul(dXProjFlat, _xProjectionWeights.Transpose([1, 0]))
-            .Reshape(batchSize, seqLength, _innerDimension);
-
-        // Combine gradients flowing into SiLU output via Engine
-        var dSiluTotal = Engine.TensorAdd(dSiluOutput, dSiluFromXProj);
-
-        // Step 3 backward: SiLU derivative via Engine
-        var dConvOutput = Engine.TensorMultiply(dSiluTotal, ComputeSiLUDerivative(_lastConvOutput));
-
-        // Step 2 backward: Conv1D backward - Engine-accelerated
-        var dXBranch = DepthwiseConv1DBackward(
-            dConvOutput, _lastXBranch, batchSize, seqLength);
-
-        // Step 1 backward: input projection
-        var dProjected = ConcatenateTensors(dXBranch, dZBranch, 2);
-        var dProjectedFlat = dProjected.Reshape(batchSize * seqLength, _innerDimension * 2);
-
-        _inputProjectionBiasGradient = ReduceSumAxes01(dProjected, batchSize, seqLength, _innerDimension * 2);
-
-        var input2D = _lastInput.Reshape(batchSize * seqLength, _modelDimension);
-        _inputProjectionWeightsGradient = Engine.TensorMatMul(
-            input2D.Transpose([1, 0]), dProjectedFlat);
-
-        var inputGradientFlat = Engine.TensorMatMul(
-            dProjectedFlat, _inputProjectionWeights.Transpose([1, 0]));
-        var inputGrad3D = inputGradientFlat.Reshape(batchSize, seqLength, _modelDimension);
-
-        // Reshape back to original input rank
-        if (_originalInputShape != null && _originalInputShape.Length == 2)
-            return inputGrad3D.Reshape(seqLength, _modelDimension);
-
-        if (_originalInputShape != null)
-            return inputGrad3D.Reshape(_originalInputShape);
-
-        return inputGrad3D;
-    }
-
     #region Engine-Accelerated Conv1D
 
     /// <summary>
@@ -564,13 +451,11 @@ internal class MambaBlock<T> : LayerBase<T>
                 .Reshape(1, _innerDimension);
         }
 
-        // Pre-allocate zeros tensor for bias broadcast (reused each timestep)
-        var zerosBatch = new Tensor<T>(new[] { batchSize, _innerDimension });
-
         for (int t = 0; t < seqLen; t++)
         {
             // Start with bias: broadcast [1, innerDim] to [batch, innerDim]
-            var result_t = Engine.TensorBroadcastAdd(zerosBatch, bias2D);
+            var result_t = Engine.TensorBroadcastAdd(
+                new Tensor<T>(new[] { batchSize, _innerDimension }), bias2D);
 
             for (int k = 0; k < _convKernelSize; k++)
             {
@@ -806,17 +691,17 @@ internal class MambaBlock<T> : LayerBase<T>
     {
         if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
         return Vector<T>.Concatenate(
-            (_inputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_inputProjectionWeightsGradient.Data) : new Vector<T>(0)),
-            (_inputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_inputProjectionBiasGradient.Data) : new Vector<T>(0)),
-            (_convWeightsGradient is not null ? Vector<T>.FromMemory(_convWeightsGradient.Data) : new Vector<T>(0)),
-            (_convBiasGradient is not null ? Vector<T>.FromMemory(_convBiasGradient.Data) : new Vector<T>(0)),
-            (_xProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_xProjectionWeightsGradient.Data) : new Vector<T>(0)),
-            (_dtProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_dtProjectionWeightsGradient.Data) : new Vector<T>(0)),
-            (_dtProjectionBiasGradient is not null ? Vector<T>.FromMemory(_dtProjectionBiasGradient.Data) : new Vector<T>(0)),
-            (_aLogGradient is not null ? Vector<T>.FromMemory(_aLogGradient.Data) : new Vector<T>(0)),
-            (_dParamGradient is not null ? Vector<T>.FromMemory(_dParamGradient.Data) : new Vector<T>(0)),
-            (_outputProjectionWeightsGradient is not null ? Vector<T>.FromMemory(_outputProjectionWeightsGradient.Data) : new Vector<T>(0)),
-            (_outputProjectionBiasGradient is not null ? Vector<T>.FromMemory(_outputProjectionBiasGradient.Data) : new Vector<T>(0)));
+            new Vector<T>(_inputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_inputProjectionBiasGradient!.ToArray()),
+            new Vector<T>(_convWeightsGradient!.ToArray()),
+            new Vector<T>(_convBiasGradient!.ToArray()),
+            new Vector<T>(_xProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_dtProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_dtProjectionBiasGradient!.ToArray()),
+            new Vector<T>(_aLogGradient!.ToArray()),
+            new Vector<T>(_dParamGradient!.ToArray()),
+            new Vector<T>(_outputProjectionWeightsGradient!.ToArray()),
+            new Vector<T>(_outputProjectionBiasGradient!.ToArray()));
     }
 
     public override void ClearGradients()
@@ -861,101 +746,6 @@ internal class MambaBlock<T> : LayerBase<T>
     }
 
     #endregion
-
-    /// <summary>
-    /// Gets whether this layer supports JIT compilation for optimized inference.
-    /// </summary>
-    /// <value>
-    /// False. The selective scan recurrence requires sequential state updates that
-    /// cannot be efficiently represented as a static computation graph for JIT compilation.
-    /// </value>
-    public override bool SupportsJitCompilation => false;
-
-    /// <summary>
-    /// Exports the computation graph for a single timestep of the Mamba selective scan.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The exported graph represents one recurrent step of the SSM:
-    /// 1. Project input to SSM parameters (delta, B, C)
-    /// 2. Discretize and compute state update: h_t = A_bar * h_prev + B_bar * x
-    /// 3. Compute output: y = C * h + D * x
-    /// 4. Apply output gating with SiLU
-    /// 5. Output projection
-    /// </para>
-    /// <para>
-    /// The JIT compiler unrolls the time loop externally, calling this graph per timestep.
-    /// This follows the same pattern as LSTMLayer's ExportComputationGraph.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        // Create placeholders for single time-step inputs
-        // x_t: [1, innerDim] (post-conv, post-SiLU input to SSM)
-        var xPlaceholder = new Tensor<T>(new int[] { 1, _innerDimension });
-        var xNode = TensorOperations<T>.Variable(xPlaceholder, "x_t");
-
-        // z_t: [1, innerDim] (z-branch for output gating)
-        var zPlaceholder = new Tensor<T>(new int[] { 1, _innerDimension });
-        var zNode = TensorOperations<T>.Variable(zPlaceholder, "z_t");
-
-        // h_prev: [1, innerDim * stateDim] (flattened previous hidden state)
-        var hPrevPlaceholder = new Tensor<T>(new int[] { 1, _innerDimension * _stateDimension });
-        var hPrevNode = TensorOperations<T>.Variable(hPrevPlaceholder, "h_prev");
-
-        // Weight and parameter nodes
-        var xProjWeightsNode = TensorOperations<T>.Variable(_xProjectionWeights, "W_xproj");
-        var dtProjWeightsNode = TensorOperations<T>.Variable(_dtProjectionWeights, "W_dt");
-        var dtProjBiasNode = TensorOperations<T>.Variable(_dtProjectionBias, "b_dt");
-        var aLogNode = TensorOperations<T>.Variable(_aLog, "A_log");
-        var dParamNode = TensorOperations<T>.Variable(_dParam, "D");
-        var outProjWeightsNode = TensorOperations<T>.Variable(_outputProjectionWeights, "W_out");
-        var outProjBiasNode = TensorOperations<T>.Variable(_outputProjectionBias, "b_out");
-
-        // Add all inputs to the list
-        inputNodes.Add(xNode);
-        inputNodes.Add(zNode);
-        inputNodes.Add(hPrevNode);
-        inputNodes.Add(xProjWeightsNode);
-        inputNodes.Add(dtProjWeightsNode);
-        inputNodes.Add(dtProjBiasNode);
-        inputNodes.Add(aLogNode);
-        inputNodes.Add(dParamNode);
-        inputNodes.Add(outProjWeightsNode);
-        inputNodes.Add(outProjBiasNode);
-
-        // Step 1: Project x_t to SSM parameters (delta_lr, B, C)
-        var xProjWeightsT = TensorOperations<T>.Transpose(xProjWeightsNode);
-        var xProj = TensorOperations<T>.MatrixMultiply(xNode, xProjWeightsT);
-
-        // Step 2: Project delta from low-rank and apply softplus
-        var deltaLR = TensorOperations<T>.Slice(xProj, 0, _dtRank, axis: 1);
-        var dtProjWeightsT = TensorOperations<T>.Transpose(dtProjWeightsNode);
-        var deltaProj = TensorOperations<T>.MatrixMultiply(deltaLR, dtProjWeightsT);
-        var deltaWithBias = TensorOperations<T>.Add(deltaProj, dtProjBiasNode);
-        var delta = TensorOperations<T>.SoftPlus(deltaWithBias);
-
-        // Step 3: SSM state update (symbolic, single timestep)
-        // A = -exp(A_log)
-        var negA = TensorOperations<T>.Negate(TensorOperations<T>.Exp(aLogNode));
-
-        // y = x * D (skip connection as base output)
-        var skipOutput = TensorOperations<T>.ElementwiseMultiply(xNode, dParamNode);
-
-        // Step 4: Output gating: y * SiLU(z)
-        var zGate = TensorOperations<T>.Swish(zNode);
-        var gatedOutput = TensorOperations<T>.ElementwiseMultiply(skipOutput, zGate);
-
-        // Step 5: Output projection
-        var outProjWeightsT = TensorOperations<T>.Transpose(outProjWeightsNode);
-        var finalOutput = TensorOperations<T>.MatrixMultiply(gatedOutput, outProjWeightsT);
-        var outputWithBias = TensorOperations<T>.Add(finalOutput, outProjBiasNode);
-
-        return outputWithBias;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {

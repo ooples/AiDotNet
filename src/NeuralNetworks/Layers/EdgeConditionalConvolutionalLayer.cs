@@ -1,8 +1,9 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -39,7 +40,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.GraphProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(ApiShape = LayerApiShape.GraphWithSetup, IsTrainable = true, ChangesShape = true, TestInputShape = "4, 8", TestConstructorArgs = "8, 4, 2", TestSetupCode = "var adj = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 4, 4 }); for (int i = 0; i < 4; i++) { adj[i, i] = 1.0; if (i > 0) adj[i, i-1] = 1.0; if (i < 3) adj[i, i+1] = 1.0; } var m = layer.GetType().GetMethod(\"SetAdjacencyMatrix\"); if (m != null) m.Invoke(layer, new object[] { adj }); var ef = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { 1, 10, 2 }); ef.Fill(1.0); var m2 = layer.GetType().GetMethod(\"SetEdgeFeatures\"); if (m2 != null) m2.Invoke(layer, new object[] { ef });")]
-public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
+public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
 {
     private readonly int _inputFeatures;
     private readonly int _outputFeatures;
@@ -49,8 +50,12 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
     /// <summary>
     /// Edge network: transforms edge features to weight matrices.
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+
     private Tensor<T> _edgeNetworkWeights1;
     private Tensor<T> _edgeNetworkWeights2;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+
     private Tensor<T> _edgeNetworkBias1;
     private Tensor<T> _edgeNetworkBias2;
 
@@ -416,7 +421,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
     }
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
@@ -584,7 +589,7 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         var finalBuffer = backend.AllocateBuffer(totalOutput);
         ApplyGpuActivation(backend, combinedBuffer, finalBuffer, totalOutput, GetFusedActivationType());
 
-        return new GpuTensor<T>(backend, finalBuffer, [batchSize, numNodes, _outputFeatures], GpuTensorRole.Activation, ownsBuffer: true);
+        return GpuTensorHelper.UploadToGpu<T>(backend, finalBuffer, [batchSize, numNodes, _outputFeatures], GpuTensorRole.Activation, ownsBuffer: true);
     }
 
     /// <summary>
@@ -841,194 +846,6 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         return result.Reshape([batch, rows, outputCols]);
     }
 
-    /// <summary>
-    /// Computes the backward pass for this edge-conditional layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient from the next layer.</param>
-    /// <returns>The gradient to propagate to the previous layer.</returns>
-    /// <remarks>
-    /// <para>
-    /// This backward pass computes gradients for all parameters including edge network weights,
-    /// self-weights, biases, and propagates gradients to the input.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null || _lastOutput == null || _normalizedAdjacencyMatrix == null || _normalizedEdgeFeatures == null || _lastEdgeWeights == null || _lastHidden == null)
-        {
-            throw new InvalidOperationException("Forward pass must be called before Backward.");
-        }
-
-        var outputGradient3D = NormalizeOutputGradient(outputGradient);
-        var activationGradient = ApplyActivationDerivativeFromOutput(_lastOutput, outputGradient3D);
-        int batchSize = _lastInput.Shape[0];
-        int numNodes = _lastInput.Shape[1];
-        int numEdges = _normalizedEdgeFeatures.Shape[1];
-
-        // Initialize gradients
-        _edgeNetworkWeights1Gradient = new Tensor<T>([_edgeFeaturesCount, _edgeNetworkHiddenDim]);
-        _edgeNetworkWeights2Gradient = new Tensor<T>([_edgeNetworkHiddenDim, _inputFeatures * _outputFeatures]);
-        _edgeNetworkBias1Gradient = new Tensor<T>([_edgeNetworkHiddenDim]);
-        _edgeNetworkBias2Gradient = new Tensor<T>([_inputFeatures * _outputFeatures]);
-        _selfWeightsGradient = new Tensor<T>([_inputFeatures, _outputFeatures]);
-        _biasGradient = new Tensor<T>([_outputFeatures]);
-
-        _edgeNetworkWeights1Gradient.Fill(NumOps.Zero);
-        _edgeNetworkWeights2Gradient.Fill(NumOps.Zero);
-        _edgeNetworkBias1Gradient.Fill(NumOps.Zero);
-        _edgeNetworkBias2Gradient.Fill(NumOps.Zero);
-        _selfWeightsGradient.Fill(NumOps.Zero);
-        _biasGradient.Fill(NumOps.Zero);
-
-        var inputGradient = new Tensor<T>(_lastInput.Shape.ToArray());
-        inputGradient.Fill(NumOps.Zero);
-
-        // Step 1: Bias gradient (sum over batch and nodes)
-        _biasGradient = Engine.ReduceSum(activationGradient, [0, 1], keepDims: false);
-
-        // Step 2: Self-weights gradient
-        // dL/dSelfWeights = sum_b (input[b]^T @ activationGradient[b])
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int n = 0; n < numNodes; n++)
-            {
-                for (int inF = 0; inF < _inputFeatures; inF++)
-                {
-                    for (int outF = 0; outF < _outputFeatures; outF++)
-                    {
-                        T grad = NumOps.Multiply(_lastInput[b, n, inF], activationGradient[b, n, outF]);
-                        _selfWeightsGradient[inF, outF] = NumOps.Add(_selfWeightsGradient[inF, outF], grad);
-                    }
-                }
-            }
-        }
-
-        // Step 3: Input gradient from self-loop
-        // dL/dInput += activationGradient @ selfWeights^T
-        var selfWeightsT = Engine.TensorTranspose(_selfWeights);
-        var inputGradFromSelf = BatchedMatMul3Dx2D(activationGradient, selfWeightsT, batchSize, numNodes, _outputFeatures, _inputFeatures);
-        inputGradient = Engine.TensorAdd(inputGradient, inputGradFromSelf);
-
-        // Step 4: Gradients through edge-conditioned aggregation
-        var edgeWeightsGradient = new Tensor<T>([batchSize, numNodes, numNodes, _inputFeatures, _outputFeatures]);
-        edgeWeightsGradient.Fill(NumOps.Zero);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < numNodes; i++)
-            {
-                for (int outF = 0; outF < _outputFeatures; outF++)
-                {
-                    T gradOut = activationGradient[b, i, outF];
-
-                    for (int j = 0; j < numNodes; j++)
-                    {
-                        if (NumOps.Equals(_normalizedAdjacencyMatrix[b, i, j], NumOps.Zero))
-                            continue;
-
-                        for (int inF = 0; inF < _inputFeatures; inF++)
-                        {
-                            // Gradient w.r.t. edge weights
-                            T inputVal = _lastInput[b, j, inF];
-                            edgeWeightsGradient[b, i, j, inF, outF] = NumOps.Multiply(gradOut, inputVal);
-
-                            // Gradient w.r.t. input
-                            T edgeWeight = _lastEdgeWeights[b, i, j, inF, outF];
-                            inputGradient[b, j, inF] = NumOps.Add(inputGradient[b, j, inF],
-                                NumOps.Multiply(gradOut, edgeWeight));
-                        }
-                    }
-                }
-            }
-        }
-
-        // Step 5: Backpropagate through edge network
-        // Map edge weights gradient back to flat format
-        var flatWeightsGrad = new Tensor<T>([batchSize, numEdges, _inputFeatures * _outputFeatures]);
-        flatWeightsGrad.Fill(NumOps.Zero);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int edgeIdx = 0;
-            for (int i = 0; i < numNodes; i++)
-            {
-                for (int j = 0; j < numNodes; j++)
-                {
-                    if (!NumOps.Equals(_normalizedAdjacencyMatrix[b, i, j], NumOps.Zero))
-                    {
-                        for (int inF = 0; inF < _inputFeatures; inF++)
-                        {
-                            for (int outF = 0; outF < _outputFeatures; outF++)
-                            {
-                                int flatIdx = inF * _outputFeatures + outF;
-                                flatWeightsGrad[b, edgeIdx, flatIdx] = edgeWeightsGradient[b, i, j, inF, outF];
-                            }
-                        }
-                        edgeIdx++;
-                    }
-                }
-            }
-        }
-
-        // Gradient w.r.t. edge network bias 2
-        _edgeNetworkBias2Gradient = Engine.ReduceSum(flatWeightsGrad, [0, 1], keepDims: false);
-
-        // Gradient w.r.t. edge network weights 2
-        // dL/dW2 = hidden^T @ flatWeightsGrad
-        var hiddenT = _lastHidden.Transpose([0, 2, 1]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            var hiddenBatchT = Engine.TensorSlice(hiddenT, [b, 0, 0], [1, _edgeNetworkHiddenDim, numEdges]).Reshape([_edgeNetworkHiddenDim, numEdges]);
-            var flatGradBatch = Engine.TensorSlice(flatWeightsGrad, [b, 0, 0], [1, numEdges, _inputFeatures * _outputFeatures]).Reshape([numEdges, _inputFeatures * _outputFeatures]);
-            var w2Grad = Engine.TensorMatMul(hiddenBatchT, flatGradBatch);
-            _edgeNetworkWeights2Gradient = Engine.TensorAdd(_edgeNetworkWeights2Gradient, w2Grad);
-        }
-
-        // Gradient w.r.t. hidden layer
-        var weights2T = Engine.TensorTranspose(_edgeNetworkWeights2);
-        var hiddenGrad = BatchedMatMul3Dx2D(flatWeightsGrad, weights2T, batchSize, numEdges, _inputFeatures * _outputFeatures, _edgeNetworkHiddenDim);
-
-        // Apply ReLU derivative
-        var reluGrad = new Tensor<T>(hiddenGrad.Shape.ToArray());
-        for (int i = 0; i < hiddenGrad.Length; i++)
-        {
-            T hiddenVal = _lastHidden.GetFlat(i);
-            T gradVal = hiddenGrad.GetFlat(i);
-            reluGrad[i] = NumOps.GreaterThan(hiddenVal, NumOps.Zero) ? gradVal : NumOps.Zero;
-        }
-
-        // Gradient w.r.t. edge network bias 1
-        _edgeNetworkBias1Gradient = Engine.ReduceSum(reluGrad, [0, 1], keepDims: false);
-
-        // Gradient w.r.t. edge network weights 1
-        // dL/dW1 = edgeFeatures^T @ reluGrad
-        var edgeFeaturesT = _normalizedEdgeFeatures.Transpose([0, 2, 1]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            var edgesBatchT = Engine.TensorSlice(edgeFeaturesT, [b, 0, 0], [1, _edgeFeaturesCount, numEdges]).Reshape([_edgeFeaturesCount, numEdges]);
-            var reluGradBatch = Engine.TensorSlice(reluGrad, [b, 0, 0], [1, numEdges, _edgeNetworkHiddenDim]).Reshape([numEdges, _edgeNetworkHiddenDim]);
-            var w1Grad = Engine.TensorMatMul(edgesBatchT, reluGradBatch);
-            _edgeNetworkWeights1Gradient = Engine.TensorAdd(_edgeNetworkWeights1Gradient, w1Grad);
-        }
-
-        if (_originalInputShape != null && _originalInputShape.Length != inputGradient.Shape.Length)
-        {
-            if (_originalInputShape.Length == 2)
-            {
-                return inputGradient.Reshape([numNodes, _inputFeatures]);
-            }
-
-            if (_originalInputShape.Length == 1)
-            {
-                return inputGradient.Reshape([_inputFeatures]);
-            }
-
-            return inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
     private Tensor<T> NormalizeOutputGradient(Tensor<T> outputGradient)
     {
         int rank = outputGradient.Shape.Length;
@@ -1099,24 +916,24 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
     {
         // Use Vector.Concatenate to efficiently combine all parameters
         return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_edgeNetworkWeights1.Data),
-            Vector<T>.FromMemory(_edgeNetworkWeights2.Data),
-            Vector<T>.FromMemory(_edgeNetworkBias1.Data),
-            Vector<T>.FromMemory(_edgeNetworkBias2.Data),
-            Vector<T>.FromMemory(_selfWeights.Data),
-            Vector<T>.FromMemory(_bias.Data)
+            new Vector<T>(_edgeNetworkWeights1.ToArray()),
+            new Vector<T>(_edgeNetworkWeights2.ToArray()),
+            new Vector<T>(_edgeNetworkBias1.ToArray()),
+            new Vector<T>(_edgeNetworkBias2.ToArray()),
+            new Vector<T>(_selfWeights.ToArray()),
+            new Vector<T>(_bias.ToArray())
         );
     }
 
     public override Vector<T> GetParameterGradients()
     {
         return Vector<T>.Concatenate(
-            _edgeNetworkWeights1Gradient != null ? (_edgeNetworkWeights1Gradient is not null ? Vector<T>.FromMemory(_edgeNetworkWeights1Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_edgeNetworkWeights1.Length),
-            _edgeNetworkWeights2Gradient != null ? (_edgeNetworkWeights2Gradient is not null ? Vector<T>.FromMemory(_edgeNetworkWeights2Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_edgeNetworkWeights2.Length),
-            _edgeNetworkBias1Gradient != null ? (_edgeNetworkBias1Gradient is not null ? Vector<T>.FromMemory(_edgeNetworkBias1Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_edgeNetworkBias1.Length),
-            _edgeNetworkBias2Gradient != null ? (_edgeNetworkBias2Gradient is not null ? Vector<T>.FromMemory(_edgeNetworkBias2Gradient.Data) : new Vector<T>(0)) : new Vector<T>(_edgeNetworkBias2.Length),
-            _selfWeightsGradient != null ? (_selfWeightsGradient is not null ? Vector<T>.FromMemory(_selfWeightsGradient.Data) : new Vector<T>(0)) : new Vector<T>(_selfWeights.Length),
-            _biasGradient != null ? (_biasGradient is not null ? Vector<T>.FromMemory(_biasGradient.Data) : new Vector<T>(0)) : new Vector<T>(_bias.Length)
+            _edgeNetworkWeights1Gradient != null ? new Vector<T>(_edgeNetworkWeights1Gradient.ToArray()) : new Vector<T>(_edgeNetworkWeights1.Length),
+            _edgeNetworkWeights2Gradient != null ? new Vector<T>(_edgeNetworkWeights2Gradient.ToArray()) : new Vector<T>(_edgeNetworkWeights2.Length),
+            _edgeNetworkBias1Gradient != null ? new Vector<T>(_edgeNetworkBias1Gradient.ToArray()) : new Vector<T>(_edgeNetworkBias1.Length),
+            _edgeNetworkBias2Gradient != null ? new Vector<T>(_edgeNetworkBias2Gradient.ToArray()) : new Vector<T>(_edgeNetworkBias2.Length),
+            _selfWeightsGradient != null ? new Vector<T>(_selfWeightsGradient.ToArray()) : new Vector<T>(_selfWeights.Length),
+            _biasGradient != null ? new Vector<T>(_biasGradient.ToArray()) : new Vector<T>(_bias.Length)
         );
     }
 
@@ -1199,15 +1016,5 @@ public class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraphConvolut
         _edgeNetworkBias2Gradient = null;
         _selfWeightsGradient = null;
         _biasGradient = null;
-    }
-
-    /// <inheritdoc/>
-    public override bool SupportsJitCompilation => false;
-
-    /// <inheritdoc/>
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        throw new NotSupportedException(
-            "EdgeConditionalConvolutionalLayer does not support computation graph export due to dynamic edge-based weight generation.");
     }
 }

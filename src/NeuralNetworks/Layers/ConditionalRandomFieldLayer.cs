@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -94,7 +94,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
-    public override IGpuTensor<T> ForwardGpu(params IGpuTensor<T>[] inputs)
+    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0) throw new ArgumentException("CRF requires an input tensor.");
         var input = inputs[0];
@@ -105,7 +105,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         // Input normalization [Batch, Seq, Class]
         int rank = input.Shape.Length;
         int batchSize, seqLen, numClasses;
-        IGpuTensor<T> input3D;
+        Tensor<T> input3D;
 
         if (rank == 3)
         {
@@ -156,7 +156,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         // But acceptable for sequence length ~100.
 
         // Viterbi variables
-        IGpuTensor<T> viterbi;
+        Tensor<T> viterbi;
 
         // Step 0
         {
@@ -280,7 +280,7 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
             // If we run Forward on GPU, we should cache tensors if we want GPU backward.
             // But Backward logic is complex (Forward-Backward algo).
             // For now, cache CPU tensor to support existing Backward.
-            _lastInput = input.ToTensor();
+            _lastInput = input;
             _lastOutput = new Tensor<T>(new Vector<T>(outputData.Select(x => NumOps.FromFloat(x)).ToArray()), [batchSize, seqLen, numClasses]);
         }
 
@@ -438,6 +438,11 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         endHalf.Fill(half);
         var endCentered = Engine.TensorSubtract(endRandom, endHalf);
         _endScores = Engine.TensorMultiplyScalar(endCentered, scale);
+
+        // Register after all reassignments so references are to final tensors
+        RegisterTrainableParameter(_transitionMatrix, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_startScores, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_endScores, PersistentTensorRole.Weights);
     }
 
     /// <summary>
@@ -668,255 +673,6 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         return output;
     }
 
-    /// <summary>
-    /// Performs the backward pass of the CRF layer.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when backward is called before forward.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the backward pass of the CRF layer, which is used during training to propagate
-    /// error gradients back through the network. It computes the gradients of the loss with respect to the
-    /// layer's parameters (transition matrix, start scores, and end scores) and the layer's input.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method is used during training to calculate how the layer's inputs
-    /// and parameters should change to reduce errors.
-    ///
-    /// During the backward pass:
-    /// 1. The layer receives error gradients from the next layer
-    /// 2. It calculates how much each parameter contributed to the error:
-    ///    - How transition scores between labels should change
-    ///    - How start and end scores should change
-    /// 3. It calculates how the input features contributed to the error
-    /// 4. If an activation function was used, its derivative is applied
-    ///
-    /// This lets the network learn:
-    /// - Which label is likely to follow another
-    /// - Which labels commonly appear at the start or end of sequences
-    /// - How input features relate to labels
-    ///
-    /// This is part of the "backpropagation" algorithm that helps neural networks learn
-    /// from their mistakes and improve over time.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        return UseAutodiff
-            ? BackwardViaAutodiff(outputGradient)
-            : BackwardManual(outputGradient);
-    }
-
-    /// <summary>
-    /// Manual backward pass implementation using optimized gradient calculations.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    private Tensor<T> BackwardManual(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var outputGradient3D = NormalizeOutputGradient(outputGradient);
-        int batchSize = _lastInput.Shape[0];
-
-        // === VECTORIZED Gradient Computation ===
-
-        // Input gradient starts as a copy of output gradient
-        var inputGradient = outputGradient3D.Clone();
-
-        // Start scores gradient: sum of gradients at t=0 over all batches
-        // outputGradient[:, 0, :] summed over batch
-        var firstTimestep = Engine.TensorSliceAxis(outputGradient3D, 1, 0); // [batchSize, numClasses]
-        _startScoresGradient = Engine.ReduceSum(firstTimestep, new[] { 0 }, keepDims: false);
-
-        // End scores gradient: sum of gradients at t=seqLen-1 over all batches
-        var lastTimestep = Engine.TensorSliceAxis(outputGradient3D, 1, _sequenceLength - 1); // [batchSize, numClasses]
-        _endScoresGradient = Engine.ReduceSum(lastTimestep, new[] { 0 }, keepDims: false);
-
-        // Transition matrix gradient via proper chain rule through log-sum-exp.
-        // Forward: output[t,c] = logsumexp_prevC(viterbi[t-1,prevC] + trans[prevC,c]) + emission[t,c]
-        // d(logsumexp)/d(trans[i,j]) = softmax(viterbi[t-1,:] + trans[:,j])[i]
-        // So: dTrans[i,j] = sum_b sum_t>0 dL/dOutput[b,t,j] * softmax_i(viterbi[t-1,:] + trans[:,j])
-        _transitionMatrixGradient = new Tensor<T>([_numClasses, _numClasses]);
-
-        // Recompute viterbi scores for softmax weights (same as Forward training path)
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Forward pass: recompute viterbi scores and cache softmax weights
-            var viterbi = new double[_sequenceLength, _numClasses];
-            var softmaxCache = new double[_sequenceLength, _numClasses, _numClasses]; // [t, prevC, c]
-
-            for (int c = 0; c < _numClasses; c++)
-                viterbi[0, c] = NumOps.ToDouble(_lastInput[b, 0, c]) + NumOps.ToDouble(_startScores[c]);
-
-            for (int t = 1; t < _sequenceLength; t++)
-            {
-                for (int c = 0; c < _numClasses; c++)
-                {
-                    double maxVal = double.MinValue;
-                    for (int prevC = 0; prevC < _numClasses; prevC++)
-                    {
-                        double score = viterbi[t - 1, prevC] + NumOps.ToDouble(_transitionMatrix[prevC, c]);
-                        if (score > maxVal) maxVal = score;
-                    }
-                    double sumExp = 0;
-                    for (int prevC = 0; prevC < _numClasses; prevC++)
-                    {
-                        double score = viterbi[t - 1, prevC] + NumOps.ToDouble(_transitionMatrix[prevC, c]);
-                        softmaxCache[t, prevC, c] = Math.Exp(score - maxVal);
-                        sumExp += softmaxCache[t, prevC, c];
-                    }
-                    for (int prevC = 0; prevC < _numClasses; prevC++)
-                        softmaxCache[t, prevC, c] /= (sumExp + 1e-10);
-
-                    viterbi[t, c] = maxVal + Math.Log(sumExp + 1e-10) + NumOps.ToDouble(_lastInput[b, t, c]);
-                }
-            }
-
-            // Backward pass: propagate gradient through time (BPTT for CRF)
-            // dViterbi[t, c] = dOutput[b, t, c] + sum_nextC dViterbi[t+1, nextC] * softmax[t+1, c, nextC]
-            var dViterbi = new double[_sequenceLength, _numClasses];
-
-            // Initialize from last timestep
-            for (int c = 0; c < _numClasses; c++)
-                dViterbi[_sequenceLength - 1, c] = NumOps.ToDouble(outputGradient3D[b, _sequenceLength - 1, c]);
-
-            // Backward through time
-            for (int t = _sequenceLength - 2; t >= 0; t--)
-            {
-                for (int c = 0; c < _numClasses; c++)
-                {
-                    dViterbi[t, c] = NumOps.ToDouble(outputGradient3D[b, t, c]);
-                    // Add contribution from future timesteps through the logsumexp
-                    for (int nextC = 0; nextC < _numClasses; nextC++)
-                        dViterbi[t, c] += dViterbi[t + 1, nextC] * softmaxCache[t + 1, c, nextC];
-                }
-            }
-
-            // Accumulate transition gradient using BPTT'd state gradient
-            for (int t = 1; t < _sequenceLength; t++)
-            {
-                for (int c = 0; c < _numClasses; c++)
-                {
-                    for (int prevC = 0; prevC < _numClasses; prevC++)
-                    {
-                        _transitionMatrixGradient[prevC, c] = NumOps.Add(
-                            _transitionMatrixGradient[prevC, c],
-                            NumOps.FromDouble(dViterbi[t, c] * softmaxCache[t, prevC, c]));
-                    }
-                }
-            }
-        }
-
-        // Apply activation function gradient if applicable
-        if (UsingVectorActivation || (ScalarActivation != null && !(ScalarActivation is IdentityActivation<T>)))
-        {
-            inputGradient = ApplyActivationDerivative(_lastInput, inputGradient);
-        }
-
-        // Restore original input rank if needed
-        if (_originalInputShape != null && _originalInputShape.Length != inputGradient.Shape.Length)
-        {
-            inputGradient = inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
-    /// <summary>
-    /// Backward pass implementation using automatic differentiation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses automatic differentiation to compute gradients via the CRFForward operation.
-    /// It builds a computation graph for the CRF forward pass, then propagates gradients backward
-    /// through the graph. The activation function derivative is applied separately after the autodiff
-    /// backward pass to match the behavior of BackwardManual.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> BackwardViaAutodiff(Tensor<T> outputGradient)
-    {
-        if (_lastInput == null)
-            throw new InvalidOperationException("Forward pass must be called before backward pass.");
-
-        var outputGradient3D = NormalizeOutputGradient(outputGradient);
-
-        // Build computation graph using differentiable CRF forward op
-        var emissionsNode = Autodiff.TensorOperations<T>.Variable(_lastInput, "crf_emissions", requiresGradient: true);
-        var transitionsNode = Autodiff.TensorOperations<T>.Variable(_transitionMatrix, "crf_transitions", requiresGradient: true);
-        var startNode = Autodiff.TensorOperations<T>.Variable(_startScores, "crf_start", requiresGradient: true);
-        var endNode = Autodiff.TensorOperations<T>.Variable(_endScores, "crf_end", requiresGradient: true);
-
-        var outputNode = Autodiff.TensorOperations<T>.CRFForward(emissionsNode, transitionsNode, startNode, endNode);
-        outputNode.Gradient = outputGradient3D;
-
-        // Inline topological sort
-        var visited = new HashSet<Autodiff.ComputationNode<T>>();
-        var topoOrder = new List<Autodiff.ComputationNode<T>>();
-        var stack = new Stack<(Autodiff.ComputationNode<T> node, bool processed)>();
-        stack.Push((outputNode, false));
-
-        while (stack.Count > 0)
-        {
-            var (node, processed) = stack.Pop();
-            if (visited.Contains(node)) continue;
-
-            if (processed)
-            {
-                visited.Add(node);
-                topoOrder.Add(node);
-            }
-            else
-            {
-                stack.Push((node, true));
-                if (node.Parents != null)
-                {
-                    foreach (var parent in node.Parents)
-                    {
-                        if (!visited.Contains(parent))
-                            stack.Push((parent, false));
-                    }
-                }
-            }
-        }
-
-        for (int i = topoOrder.Count - 1; i >= 0; i--)
-        {
-            var node = topoOrder[i];
-            if (node.RequiresGradient && node.BackwardFunction != null && node.Gradient != null)
-            {
-                node.BackwardFunction(node.Gradient);
-            }
-        }
-
-        // Capture gradients
-        _transitionMatrixGradient = transitionsNode.Gradient ?? new Tensor<T>([_numClasses, _numClasses]);
-        _startScoresGradient = startNode.Gradient ?? new Tensor<T>([_numClasses]);
-        _endScoresGradient = endNode.Gradient ?? new Tensor<T>([_numClasses]);
-
-        if (emissionsNode.Gradient == null)
-            throw new InvalidOperationException("Gradient computation failed in CRF autodiff.");
-
-        var inputGradient = emissionsNode.Gradient;
-
-        // Apply activation function gradient if applicable (matching BackwardManual behavior)
-        if (UsingVectorActivation || (ScalarActivation != null && !(ScalarActivation is IdentityActivation<T>)))
-        {
-            inputGradient = ApplyActivationDerivative(_lastInput, inputGradient);
-        }
-
-        // Restore original input rank if needed
-        if (_originalInputShape != null && _originalInputShape.Length != inputGradient.Shape.Length)
-        {
-            inputGradient = inputGradient.Reshape(_originalInputShape);
-        }
-
-        return inputGradient;
-    }
-
     private Tensor<T> NormalizeOutputGradient(Tensor<T> outputGradient)
     {
         if (_originalInputShape == null || _originalInputShape.Length == 3)
@@ -1018,9 +774,9 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     public override Vector<T> GetParameters()
     {
         // Use Vector<T>.Concatenate for efficient parameter collection
-        var flatTrans = Vector<T>.FromMemory(_transitionMatrix.Data);
-        var flatStart = Vector<T>.FromMemory(_startScores.Data);
-        var flatEnd = Vector<T>.FromMemory(_endScores.Data);
+        var flatTrans = new Vector<T>(_transitionMatrix.ToArray());
+        var flatStart = new Vector<T>(_startScores.ToArray());
+        var flatEnd = new Vector<T>(_endScores.ToArray());
 
         return Vector<T>.Concatenate(Vector<T>.Concatenate(flatTrans, flatStart), flatEnd);
     }
@@ -1055,13 +811,13 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         var flatTrans = _transitionMatrixGradient != null
-            ? (_transitionMatrixGradient is not null ? Vector<T>.FromMemory(_transitionMatrixGradient.Data) : new Vector<T>(0))
+            ? new Vector<T>(_transitionMatrixGradient.ToArray())
             : new Vector<T>(_numClasses * _numClasses);
         var flatStart = _startScoresGradient != null
-            ? (_startScoresGradient is not null ? Vector<T>.FromMemory(_startScoresGradient.Data) : new Vector<T>(0))
+            ? new Vector<T>(_startScoresGradient.ToArray())
             : new Vector<T>(_numClasses);
         var flatEnd = _endScoresGradient != null
-            ? (_endScoresGradient is not null ? Vector<T>.FromMemory(_endScoresGradient.Data) : new Vector<T>(0))
+            ? new Vector<T>(_endScoresGradient.ToArray())
             : new Vector<T>(_numClasses);
 
         return Vector<T>.Concatenate(Vector<T>.Concatenate(flatTrans, flatStart), flatEnd);
@@ -1124,56 +880,5 @@ public class ConditionalRandomFieldLayer<T> : LayerBase<T>
         _startScoresGradient = null;
         _endScoresGradient = null;
     }
-
-    public override ComputationNode<T> ExportComputationGraph(List<ComputationNode<T>> inputNodes)
-    {
-        if (inputNodes == null)
-            throw new ArgumentNullException(nameof(inputNodes));
-
-        if (InputShape == null || InputShape.Length == 0)
-            throw new InvalidOperationException("Layer input shape not configured.");
-
-        if (inputNodes.Count == 0)
-            throw new ArgumentException("At least one input node is required.", nameof(inputNodes));
-
-        // ConditionalRandomFieldLayer JIT uses the forward algorithm for differentiable inference:
-        // This computes the log partition function which can be used for CRF training.
-        // For inference at runtime, Viterbi decoding is still used, but training can use autodiff.
-
-        var input = inputNodes[0];
-
-        // Input is emissions [seqLen, numClasses]
-        // Convert transition matrix to computation node
-        var transitionsTensor = new Tensor<T>([_numClasses, _numClasses]);
-        for (int i = 0; i < _numClasses; i++)
-            for (int j = 0; j < _numClasses; j++)
-                transitionsTensor[i, j] = _transitionMatrix[i, j];
-
-        var transitionsNode = TensorOperations<T>.Variable(transitionsTensor, "crf_transitions", requiresGradient: true);
-
-        // Use CRF forward algorithm for log partition computation
-        var logPartition = TensorOperations<T>.CRFForward(input, transitionsNode);
-
-        // Apply activation
-        var output = ApplyActivationToGraph(logPartition);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports JIT compilation.
-    /// </summary>
-    /// <value>
-    /// Always <c>true</c>. CRF uses the forward algorithm for differentiable training.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// JIT compilation for CRF uses the forward algorithm to compute the log partition
-    /// function, which is differentiable with respect to emissions and transitions.
-    /// This enables gradient-based optimization of CRF parameters. For inference,
-    /// Viterbi decoding is used at runtime, but the JIT-compiled graph supports training.
-    /// </para>
-    /// </remarks>
-    public override bool SupportsJitCompilation => true;
 
 }

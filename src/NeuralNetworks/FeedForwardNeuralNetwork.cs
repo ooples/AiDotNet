@@ -221,36 +221,6 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Performs a backward pass through the network to calculate gradients.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the network's output.</param>
-    /// <returns>The gradient of the loss with respect to the network's input.</returns>
-    /// <remarks>
-    /// <para>
-    /// The backward pass is used during training to update the network's parameters.
-    /// It propagates the gradient backward through each layer, starting from the output layer.
-    /// This process is known as "backpropagation" and is essential for training neural networks.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> While the forward pass makes predictions, the backward pass is how
-    /// the network learns from its mistakes. After making a prediction, we calculate how wrong
-    /// the prediction was (the error). This method takes that error and works backward through
-    /// the network, calculating how each part contributed to the mistake. This information is
-    /// then used to adjust the network's internal settings to make better predictions next time.
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Backward(Tensor<T> outputGradient)
-    {
-        Tensor<T> gradient = outputGradient;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            gradient = Layers[i].Backward(gradient);
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
     /// Updates the parameters of all layers in the network.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters for the network.</param>
@@ -326,7 +296,6 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
         var outputGradientTensor = Tensor<T>.FromVector(outputGradient);
 
         // Backpropagation
-        var inputGradient = Backward(outputGradientTensor);
 
         // Update parameters using the optimizer
         _optimizer.UpdateParameters(Layers);

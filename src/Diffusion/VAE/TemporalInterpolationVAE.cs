@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
@@ -149,7 +149,7 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
         x = _encoderOut.Forward(x);
 
         int halfLen = x.Shape[^1] / 2;
-        var meanShape = GetReducedShape(x.Shape.ToArray(), halfLen);
+        var meanShape = GetReducedShape(x._shape, halfLen);
         var mean = new Tensor<T>(meanShape);
         var logVar = new Tensor<T>(meanShape);
         int elements = mean.Length;
@@ -298,5 +298,26 @@ public class TemporalInterpolationVAE<T> : VAEModelBase<T>
             latentScaleFactor: _latentScaleFactor);
         clone.SetParameters(GetParameters());
         return clone;
+    }
+
+    protected override Vector<T> GetParameterGradients()
+    {
+        var parts = new[]
+        {
+            _encoderIn.GetParameterGradients(), _encoderOut.GetParameterGradients(),
+            _decoderIn.GetParameterGradients(), _decoderOut.GetParameterGradients(),
+            _interpIn.GetParameterGradients(), _interpOut.GetParameterGradients(),
+            _encoderNorm.GetParameterGradients(), _decoderNorm.GetParameterGradients()
+        };
+        int total = 0;
+        foreach (var p in parts) total += p.Length;
+        var combined = new Vector<T>(total);
+        int offset = 0;
+        foreach (var p in parts)
+        {
+            for (int i = 0; i < p.Length; i++) combined[offset + i] = p[i];
+            offset += p.Length;
+        }
+        return combined;
     }
 }
