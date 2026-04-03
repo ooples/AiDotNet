@@ -106,6 +106,9 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
 
         // Layer normalization over embedding dimension
         _norm = new LayerNormalizationLayer<T>(embedDim);
+
+        RegisterSubLayer(_projection);
+        RegisterSubLayer(_norm);
     }
 
     /// <summary>
@@ -214,5 +217,4 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override IReadOnlyList<ILayer<T>> GetSubLayers() => new ILayer<T>[] { _projection, _norm };
 }

@@ -73,6 +73,9 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
 
         // Linear reduction: 4 * inputDim -> 2 * inputDim
         _reduction = new DenseLayer<T>(inputDim * 4, _outputDim);
+
+        RegisterSubLayer(_reduction);
+        RegisterSubLayer(_norm);
     }
 
     /// <summary>
@@ -242,5 +245,4 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override IReadOnlyList<ILayer<T>> GetSubLayers() => new ILayer<T>[] { _reduction, _norm };
 }
