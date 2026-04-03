@@ -88,9 +88,6 @@ public class PGDAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TO
         var epsilon = NumOps.FromDouble(Options.Epsilon);
         var stepSize = NumOps.FromDouble(Options.StepSize);
 
-        // Extract class index from label vector
-        var trueLabelIndex = GetClassIndex(vectorLabel);
-
         // Initialize adversarial example
         var adversarial = Options.UseRandomStart
             ? RandomStartingPoint(vectorInput, epsilon)
@@ -106,7 +103,6 @@ public class PGDAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TO
                 var inputTensor = Tensor<T>.FromVector(adversarial);
                 var targetTensor = Tensor<T>.FromVector(vectorLabel);
                 using var tape = new GradientTape<T>();
-                var modelIn = ConversionsHelper.ConvertVectorToInput<T, TInput>(adversarial, input);
                 // Use ForwardForTraining so ops are tape-recorded for gradient computation
                 Tensor<T> outputTensor;
                 if (targetModel is NeuralNetworks.NeuralNetworkBase<T> nnModel)
@@ -115,6 +111,7 @@ public class PGDAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TO
                 }
                 else
                 {
+                    var modelIn = ConversionsHelper.ConvertVectorToInput<T, TInput>(adversarial, input);
                     var output = targetModel.Predict(modelIn);
                     outputTensor = Tensor<T>.FromVector(ConversionsHelper.ConvertToVector<T, TOutput>(output));
                 }
@@ -209,83 +206,6 @@ public class PGDAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TO
 
         // Return projected point: original + projected_perturbation
         return Engine.Add<T>(original, perturbation);
-    }
-
-
-    /// <summary>
-    /// Computes the gradient using finite-difference approximation as a fallback.
-    /// </summary>
-    private Vector<T> ComputeFiniteDifferenceGradient(
-        Vector<T> vectorInput,
-        int targetClass,
-        TInput referenceInput,
-        IFullModel<T, TInput, TOutput> targetModel)
-    {
-        var gradient = new Vector<T>(vectorInput.Length);
-        var delta = NumOps.FromDouble(0.001);
-
-        var modelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(vectorInput, referenceInput);
-        var originalOutput = targetModel.Predict(modelInput);
-        var originalOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(originalOutput);
-        var originalLoss = ComputeLoss(originalOutputVector, targetClass);
-
-        for (int i = 0; i < vectorInput.Length; i++)
-        {
-            // Create perturbation vector with delta in dimension i
-            var perturbationDelta = Engine.FillZero<T>(vectorInput.Length);
-            perturbationDelta[i] = delta;
-
-            // perturbedVector = vectorInput + perturbationDelta
-            var perturbedVector = Engine.Add<T>(vectorInput, perturbationDelta);
-
-            var perturbedModelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(perturbedVector, referenceInput);
-            var perturbedOutput = targetModel.Predict(perturbedModelInput);
-            var perturbedOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(perturbedOutput);
-            var perturbedLoss = ComputeLoss(perturbedOutputVector, targetClass);
-
-            gradient[i] = NumOps.Divide(NumOps.Subtract(perturbedLoss, originalLoss), delta);
-        }
-
-        return gradient;
-    }
-
-    /// <summary>
-    /// Computes the cross-entropy loss.
-    /// </summary>
-    private T ComputeLoss(Vector<T> output, int targetClass)
-    {
-        var probabilities = Engine.Softmax<T>(output);
-
-        if (targetClass >= 0 && targetClass < probabilities.Length)
-        {
-            var prob = Math.Max(NumOps.ToDouble(probabilities[targetClass]), 1e-10);
-            return NumOps.FromDouble(-Math.Log(prob));
-        }
-
-        return NumOps.Zero;
-    }
-
-    /// <summary>
-    /// Gets the class index from a label vector (argmax for one-hot or probability vectors).
-    /// </summary>
-    private int GetClassIndex(Vector<T> label)
-    {
-        if (label == null || label.Length == 0)
-        {
-            return 0;
-        }
-
-        int maxIndex = 0;
-        T maxValue = label[0];
-        for (int i = 1; i < label.Length; i++)
-        {
-            if (NumOps.GreaterThan(label[i], maxValue))
-            {
-                maxValue = label[i];
-                maxIndex = i;
-            }
-        }
-        return maxIndex;
     }
 
     /// <inheritdoc/>

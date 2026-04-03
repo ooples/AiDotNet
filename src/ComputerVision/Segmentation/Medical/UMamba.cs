@@ -190,7 +190,7 @@ public class UMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        if (input.Shape.Length == 3) { input = input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] }); expectedOutput = expectedOutput.Reshape(new[] { 1, expectedOutput.Shape[0], expectedOutput.Shape[1], expectedOutput.Shape[2] }); } else if (input.Shape.Length != 4) throw new ArgumentException($"Training requires rank 3 [C,H,W] or 4 [B,C,H,W], got rank {input.Shape.Length}.", nameof(input));
+        if (input.Shape.Length == 3 || input.Shape.Length == 4) { input = AddBatchDimension(input); expectedOutput = AddBatchDimension(expectedOutput); } else if (input.Shape.Length != 5) throw new ArgumentException($"UMamba supports 2D [C,H,W]/[B,C,H,W] and 3D [C,D,H,W]/[B,C,D,H,W]. Got rank {input.Shape.Length}.", nameof(input));
         SetTrainingMode(true);
         try
         {
@@ -206,7 +206,7 @@ public class UMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     #region Private Methods
     private Tensor<T> Forward(Tensor<T> input)
     {
-        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
+        bool hasBatch = input.Rank == 4 || input.Rank == 5; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
         for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
         for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
@@ -216,7 +216,7 @@ public class UMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     private Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
-        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
+        bool hasBatch = input.Rank == 4 || input.Rank == 5; if (!hasBatch) input = AddBatchDimension(input);
         var inputData = new float[input.Length];
         for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
