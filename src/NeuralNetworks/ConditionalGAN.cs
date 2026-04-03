@@ -415,8 +415,8 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         {
             // Concatenate generator output with conditions for discriminator
             var conditions = Engine.TensorSlice(generatorInput,
-                new[] { 0, Generator.Architecture.InputSize - _conditionSize },
-                new[] { generatorInput.Shape[0], _conditionSize });
+                new[] { 0, Generator.Architecture.InputSize - _numConditionClasses },
+                new[] { generatorInput.Shape[0], _numConditionClasses });
             var withConditions = ConcatenateImageAndCondition(genOutput, conditions);
             var discScore = Discriminator.Predict(withConditions);
             // BCE(disc(fake_with_cond), real_labels) via engine ops

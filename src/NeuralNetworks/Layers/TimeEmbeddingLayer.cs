@@ -141,7 +141,7 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
     [TrainableParameter(Role = PersistentTensorRole.Constant)]
 
 
-    private Tensor<T>? _frequencies;
+    private Tensor<T> _frequencies = new Tensor<T>([1, 1]);
 
     /// <inheritdoc/>
     public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)

@@ -571,13 +571,19 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             gateBiasBuffer = backend.AllocateBuffer(DirectGpuEngine.ToFloatArray<T>(_gateBias.Data.ToArray()));
         }
 
-        // Convert adjacency matrix to CSR format for sparse operations
+        // Convert adjacency matrix to CSR format — upload to GPU buffers for sparse ops
         var (adjValues, adjColIndices, adjRowPointers) = ConvertToCSR(_adjacencyMatrix);
-        using var adjCsr = new SparseTensor<T>(backend, adjValues, adjColIndices, adjRowPointers, numNodes, numNodes);
+        using var adjValsBuf = backend.AllocateBuffer(adjValues);
+        using var adjColsBuf = backend.AllocateBuffer(adjColIndices.Select(x => (float)x).ToArray());
+        using var adjRowPtrBuf = backend.AllocateBuffer(adjRowPointers.Select(x => (float)x).ToArray());
+        int adjNnz = adjValues.Length;
 
         // Create transposed adjacency for outgoing aggregation
         var (adjTValues, adjTColIndices, adjTRowPointers) = ConvertToCSRTranspose(_adjacencyMatrix);
-        using var adjTCsr = new SparseTensor<T>(backend, adjTValues, adjTColIndices, adjTRowPointers, numNodes, numNodes);
+        using var adjTValsBuf = backend.AllocateBuffer(adjTValues);
+        using var adjTColsBuf = backend.AllocateBuffer(adjTColIndices.Select(x => (float)x).ToArray());
+        using var adjTRowPtrBuf = backend.AllocateBuffer(adjTRowPointers.Select(x => (float)x).ToArray());
+        int adjTNnz = adjTValues.Length;
 
         // Allocate output buffer [batch, nodes, outputFeatures]
         int outputSize = batchSize * numNodes * _outputFeatures;
@@ -610,9 +616,9 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             // A @ (X @ W_in): SpMM with sparse adjacency
             using var incomingBuffer = backend.AllocateBuffer(transformedSize);
             backend.CsrSpMM(
-                adjCsr.Values, adjCsr.ColumnIndices, adjCsr.RowPointers,
+                adjValsBuf, adjColsBuf, adjRowPtrBuf,
                 xwInBuffer, incomingBuffer,
-                numNodes, inputFeatures, _outputFeatures, adjCsr.NonZeroCount);
+                numNodes, inputFeatures, _outputFeatures, adjNnz);
 
             // Add bias: incoming + b_in
             backend.BiasAdd(incomingBuffer, inBiasBuffer, incomingBuffer, numNodes, _outputFeatures);
@@ -629,9 +635,9 @@ public class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             // A^T @ (X @ W_out): SpMM with transposed sparse adjacency
             using var outgoingBuffer = backend.AllocateBuffer(transformedSize);
             backend.CsrSpMM(
-                adjTCsr.Values, adjTCsr.ColumnIndices, adjTCsr.RowPointers,
+                adjTValsBuf, adjTColsBuf, adjTRowPtrBuf,
                 xwOutBuffer, outgoingBuffer,
-                numNodes, inputFeatures, _outputFeatures, adjTCsr.NonZeroCount);
+                numNodes, inputFeatures, _outputFeatures, adjTNnz);
 
             // Add bias: outgoing + b_out
             backend.BiasAdd(outgoingBuffer, outBiasBuffer, outgoingBuffer, numNodes, _outputFeatures);

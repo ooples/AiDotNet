@@ -409,7 +409,11 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
 
         // Convert adjacency matrix to CSR for sparse operations
         var (adjValues, adjColIndices, adjRowPointers) = ConvertToCSR(_adjacencyMatrix, numNodes);
-        using var adjCsr = new SparseTensor<T>(backend, adjValues, adjColIndices, adjRowPointers, numNodes, numNodes);
+        // Upload CSR arrays to GPU for sparse operations
+        using var adjValuesBuffer = backend.AllocateBuffer(adjValues);
+        using var adjColIndicesBuffer = backend.AllocateBuffer(adjColIndices.Select(x => (float)x).ToArray());
+        using var adjRowPointersBuffer = backend.AllocateBuffer(adjRowPointers.Select(x => (float)x).ToArray());
+        int adjNnz = adjValues.Length;
 
         // Compute node degrees from adjacency matrix row sums
         float[] degrees = ComputeDegrees(_adjacencyMatrix, numNodes);
@@ -465,9 +469,9 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
                     case PNAAggregator.Mean:
                         // A @ transformed for sum; divide by degree for mean
                         backend.CsrSpMM(
-                            adjCsr.Values, adjCsr.ColumnIndices, adjCsr.RowPointers,
+                            adjValuesBuffer, adjColIndicesBuffer, adjRowPointersBuffer,
                             transformedBuffer, aggregatedBuffer,
-                            numNodes, preTransformFeatures, numNodes, adjCsr.NonZeroCount);
+                            numNodes, preTransformFeatures, numNodes, adjNnz);
 
                         if (aggregator == PNAAggregator.Mean)
                         {
@@ -479,7 +483,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
                     case PNAAggregator.Max:
                         // Use GPU segmented max aggregation
                         backend.CsrSegmentedMax(
-                            adjCsr.ColumnIndices, adjCsr.RowPointers,
+                            adjColIndicesBuffer, adjRowPointersBuffer,
                             transformedBuffer, aggregatedBuffer,
                             numNodes, numNodes, preTransformFeatures);
                         break;
@@ -487,7 +491,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
                     case PNAAggregator.Min:
                         // Use GPU segmented min aggregation
                         backend.CsrSegmentedMin(
-                            adjCsr.ColumnIndices, adjCsr.RowPointers,
+                            adjColIndicesBuffer, adjRowPointersBuffer,
                             transformedBuffer, aggregatedBuffer,
                             numNodes, numNodes, preTransformFeatures);
                         break;
@@ -495,7 +499,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
                     case PNAAggregator.StdDev:
                         // Use GPU segmented stddev aggregation
                         backend.CsrSegmentedStdDev(
-                            adjCsr.ColumnIndices, adjCsr.RowPointers,
+                            adjColIndicesBuffer, adjRowPointersBuffer,
                             transformedBuffer, aggregatedBuffer,
                             numNodes, numNodes, preTransformFeatures);
                         break;
@@ -503,9 +507,9 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
                     default:
                         // Default to sum
                         backend.CsrSpMM(
-                            adjCsr.Values, adjCsr.ColumnIndices, adjCsr.RowPointers,
+                            adjValuesBuffer, adjColIndicesBuffer, adjRowPointersBuffer,
                             transformedBuffer, aggregatedBuffer,
-                            numNodes, preTransformFeatures, numNodes, adjCsr.NonZeroCount);
+                            numNodes, preTransformFeatures, numNodes, adjNnz);
                         break;
                 }
 
