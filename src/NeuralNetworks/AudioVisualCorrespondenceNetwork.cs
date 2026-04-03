@@ -1007,26 +1007,9 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-
         try
         {
-            // Forward pass: compute audio embedding from input
-            var prediction = Predict(input);
-
-            // Calculate loss
-            var predictionVec = prediction.ToVector();
-            var expectedVec = expectedOutput.ToVector();
-            var loss = _lossFunction.CalculateLoss(predictionVec, expectedVec);
-            LastLoss = loss;
-
-            // Backward pass: compute gradients
-            var outputGradient = _lossFunction.CalculateDerivative(predictionVec, expectedVec);
-
-            // Convert gradient to tensor and backpropagate through audio encoder
-            var gradientTensor = new Tensor<T>(prediction._shape, outputGradient);
-
-            // Update parameters using the optimizer
-            _optimizer.UpdateParameters(Layers);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
