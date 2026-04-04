@@ -40,6 +40,7 @@ namespace AiDotNet.AutoML.NAS
     [ModelTask(ModelTask.FeatureExtraction)]
     [ModelComplexity(ModelComplexity.VeryHigh)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("BigNAS: Scaling Up Neural Architecture Search with Big Single-Stage Models", "https://arxiv.org/abs/2003.11142")]
     public class BigNAS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;

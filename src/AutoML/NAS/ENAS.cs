@@ -43,6 +43,7 @@ namespace AiDotNet.AutoML.NAS
     [ModelTask(ModelTask.FeatureExtraction)]
     [ModelComplexity(ModelComplexity.High)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Efficient Neural Architecture Search via Parameter Sharing", "https://arxiv.org/abs/1802.03268")]
     public class ENAS<T> : NasAutoMLModelBase<T>
     {
         private readonly INumericOperations<T> _ops;
