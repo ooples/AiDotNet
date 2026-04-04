@@ -503,8 +503,9 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         }
         finally
         {
+            // Restore eval mode after prediction (Train sets training mode when needed)
             foreach (var layer in Layers)
-                layer.SetTrainingMode(true);
+                layer.SetTrainingMode(false);
         }
     }
 

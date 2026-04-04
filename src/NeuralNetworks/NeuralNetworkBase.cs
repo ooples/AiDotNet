@@ -2634,6 +2634,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var seenForViews = new HashSet<ILayer<T>>();
         ReplaceParametersWithViews(Layers, views, ref viewIdx, seenForViews);
 
+        // Assert all views were consumed — mismatch means CollectRecursive and
+        // ReplaceParametersWithViews walked a different set of layers.
+        if (viewIdx != views.Length)
+        {
+            throw new InvalidOperationException(
+                $"Parameter buffer view mismatch: created {views.Length} views but only " +
+                $"bound {viewIdx}. This indicates a layer structure inconsistency.");
+        }
+
         _parameterBuffer = buffer;
         return buffer;
     }
