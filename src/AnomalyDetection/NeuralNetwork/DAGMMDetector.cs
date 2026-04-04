@@ -400,12 +400,10 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
                     var dDecH = new double[_hiddenDim];
                     for (int i = 0; i < _hiddenDim; i++)
                     {
-                        double decHVal = NumOps.ToDouble(decH[i]);
                         for (int j = 0; j < _inputDim; j++)
                         {
-                            double dXReconVal = NumOps.ToDouble(dXRecon[j]);
-                            dDecW2[i, j] += decHVal * dXReconVal;
-                            dDecH[i] += NumOps.ToDouble(decW2[i, j]) * dXReconVal;
+                            dDecW2[i, j] += NumOps.ToDouble(NumOps.Multiply(decH[i], dXRecon[j]));
+                            dDecH[i] += NumOps.ToDouble(NumOps.Multiply(decW2[i, j], dXRecon[j]));
                         }
                     }
                     for (int j = 0; j < _inputDim; j++)
@@ -416,18 +414,17 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
                     // Tanh derivative for decoder hidden layer
                     for (int i = 0; i < _hiddenDim; i++)
                     {
-                        double h = NumOps.ToDouble(decH[i]);
-                        dDecH[i] *= (1 - h * h);
+                        T tanhDeriv = NumOps.Subtract(NumOps.One, NumOps.Multiply(decH[i], decH[i]));
+                        dDecH[i] *= NumOps.ToDouble(tanhDeriv);
                     }
 
                     // Backprop through decoder hidden layer
                     var dZ = new double[_latentDim];
                     for (int i = 0; i < _latentDim; i++)
                     {
-                        double zVal = NumOps.ToDouble(z[i]);
                         for (int j = 0; j < _hiddenDim; j++)
                         {
-                            dDecW1[i, j] += zVal * dDecH[j];
+                            dDecW1[i, j] += NumOps.ToDouble(z[i]) * dDecH[j];
                             dZ[i] += NumOps.ToDouble(decW1[i, j]) * dDecH[j];
                         }
                     }
@@ -439,18 +436,17 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
                     // Tanh derivative for z
                     for (int i = 0; i < _latentDim; i++)
                     {
-                        double zVal = NumOps.ToDouble(z[i]);
-                        dZ[i] *= (1 - zVal * zVal);
+                        T zTanhDeriv = NumOps.Subtract(NumOps.One, NumOps.Multiply(z[i], z[i]));
+                        dZ[i] *= NumOps.ToDouble(zTanhDeriv);
                     }
 
                     // Backprop through encoder output layer
                     var dEncH = new double[_hiddenDim];
                     for (int i = 0; i < _hiddenDim; i++)
                     {
-                        double encHVal = NumOps.ToDouble(encH[i]);
                         for (int j = 0; j < _latentDim; j++)
                         {
-                            dEncW2[i, j] += encHVal * dZ[j];
+                            dEncW2[i, j] += NumOps.ToDouble(encH[i]) * dZ[j];
                             dEncH[i] += NumOps.ToDouble(encW2[i, j]) * dZ[j];
                         }
                     }
@@ -462,17 +458,16 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
                     // Tanh derivative for encoder hidden layer
                     for (int i = 0; i < _hiddenDim; i++)
                     {
-                        double h = NumOps.ToDouble(encH[i]);
-                        dEncH[i] *= (1 - h * h);
+                        T tanhDeriv = NumOps.Subtract(NumOps.One, NumOps.Multiply(encH[i], encH[i]));
+                        dEncH[i] *= NumOps.ToDouble(tanhDeriv);
                     }
 
                     // Backprop through encoder hidden layer
                     for (int i = 0; i < _inputDim; i++)
                     {
-                        double xVal = NumOps.ToDouble(x[i]);
                         for (int j = 0; j < _hiddenDim; j++)
                         {
-                            dEncW1[i, j] += xVal * dEncH[j];
+                            dEncW1[i, j] += NumOps.ToDouble(x[i]) * dEncH[j];
                         }
                     }
                     for (int j = 0; j < _hiddenDim; j++)
@@ -602,10 +597,9 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
                     var dEstH = new double[_hiddenDim];
                     for (int i = 0; i < _hiddenDim; i++)
                     {
-                        double estHVal = NumOps.ToDouble(estH[i]);
                         for (int j = 0; j < _numMixtures; j++)
                         {
-                            dEstW2[i, j] += estHVal * dGamma[j];
+                            dEstW2[i, j] += NumOps.ToDouble(estH[i]) * dGamma[j];
                             dEstH[i] += NumOps.ToDouble(estW2[i, j]) * dGamma[j];
                         }
                     }
@@ -617,8 +611,8 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
                     // Tanh derivative for estimation hidden
                     for (int i = 0; i < _hiddenDim; i++)
                     {
-                        double h = NumOps.ToDouble(estH[i]);
-                        dEstH[i] *= (1 - h * h);
+                        T tanhDeriv = NumOps.Subtract(NumOps.One, NumOps.Multiply(estH[i], estH[i]));
+                        dEstH[i] *= NumOps.ToDouble(tanhDeriv);
                     }
 
                     for (int i = 0; i < _zDim; i++)
