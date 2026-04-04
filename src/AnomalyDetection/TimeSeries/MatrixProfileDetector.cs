@@ -121,18 +121,19 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Extract values
-        _trainingValues = new double[n];
+        var trainingValuesD = new double[n];
         double checksum = 0;
         for (int i = 0; i < n; i++)
         {
-            _trainingValues[i] = NumOps.ToDouble(X[i, 0]);
-            // Compute a weighted checksum for same-data detection
-            checksum += _trainingValues[i] * (i + 1);
+            trainingValuesD[i] = NumOps.ToDouble(X[i, 0]);
+            checksum += trainingValuesD[i] * (i + 1);
         }
-        _trainingChecksum = checksum;
+        _trainingChecksum = NumOps.FromDouble(checksum);
+        _trainingValues = new Vector<T>(trainingValuesD.Select(v => NumOps.FromDouble(v)));
 
         // Compute Matrix Profile using STOMP algorithm (simplified)
-        _matrixProfile = ComputeMatrixProfile(_trainingValues);
+        var matrixProfileD = ComputeMatrixProfile(trainingValuesD);
+        _matrixProfile = new Vector<T>(matrixProfileD.Select(v => NumOps.FromDouble(v)));
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);

@@ -149,8 +149,8 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         }
         yStd = Math.Sqrt(yStd / n);
         if (yStd < 1e-10) yStd = 1.0;
-        _yMean = yMean;
-        _yStd = yStd;
+        _yMean = NumOps.FromDouble(yMean);
+        _yStd = NumOps.FromDouble(yStd);
 
         var yStandardized = new Vector<T>(n);
         for (int i = 0; i < n; i++)
@@ -839,8 +839,8 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _options.UseNaturalGradient = reader.ReadBoolean();
 
         // Y standardization
-        _yMean = reader.ReadDouble();
-        _yStd = reader.ReadDouble();
+        _yMean = NumOps.FromDouble(reader.ReadDouble());
+        _yStd = NumOps.FromDouble(reader.ReadDouble());
 
         // Initial parameters
         _numParams = reader.ReadInt32();

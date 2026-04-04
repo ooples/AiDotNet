@@ -117,7 +117,7 @@ public class PoissonRegression<T> : RegressionBase<T>
 
         // Poisson requires positive targets. Shift if needed and store the shift
         // so we can adjust predictions back.
-        _yShift = 0.0;
+        _yShift = NumOps.Zero;
         double minY = double.MaxValue;
         for (int i = 0; i < y.Length; i++)
         {
@@ -126,7 +126,7 @@ public class PoissonRegression<T> : RegressionBase<T>
         }
         if (minY <= 0)
         {
-            _yShift = Math.Abs(minY) + 1.0;
+            _yShift = NumOps.FromDouble(Math.Abs(minY) + 1.0);
             var yShifted = new Vector<T>(y.Length);
             for (int i = 0; i < y.Length; i++)
                 yShifted[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + _yShift);

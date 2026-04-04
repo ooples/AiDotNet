@@ -160,7 +160,7 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
 
         // Shift y to be positive (NB requires positive targets)
         // Use a local copy to avoid modifying the caller's vector
-        _yShift = 0.0;
+        _yShift = NumOps.Zero;
         double minY = double.MaxValue;
         for (int i = 0; i < y.Length; i++)
         {
@@ -169,7 +169,7 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
         }
         if (minY <= 0)
         {
-            _yShift = Math.Abs(minY) + 1.0;
+            _yShift = NumOps.FromDouble(Math.Abs(minY) + 1.0);
             var yShifted = new Vector<T>(y.Length);
             for (int i = 0; i < y.Length; i++)
                 yShifted[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + _yShift);

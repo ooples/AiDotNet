@@ -172,31 +172,35 @@ public class STLDetector<T> : AnomalyDetectorBase<T>
 
             // Normalize seasonal (mean = 0)
             double seasonalMean = seasonalTemp.Average();
+            var seasonalD = new double[n];
             for (int i = 0; i < n; i++)
             {
-                _seasonal[i] = seasonalTemp[i] - seasonalMean;
+                seasonalD[i] = seasonalTemp[i] - seasonalMean;
             }
 
             // Step 3: Deseasonalize
             var deseasoned = new double[n];
             for (int i = 0; i < n; i++)
             {
-                deseasoned[i] = values[i] - _seasonal[i];
+                deseasoned[i] = values[i] - seasonalD[i];
             }
 
             // Step 4: Smooth to get trend (moving average)
-            _trend = SmoothMovingAverage(deseasoned, _trendSmoothness);
+            var trendD = SmoothMovingAverage(deseasoned, _trendSmoothness);
+            _trend = new Vector<T>(trendD.Select(v => NumOps.FromDouble(v)));
+            _seasonal = new Vector<T>(seasonalD.Select(v => NumOps.FromDouble(v)));
         }
 
         // Compute residual standard deviation
         var residuals = new double[n];
         for (int i = 0; i < n; i++)
         {
-            residuals[i] = values[i] - _trend[i] - _seasonal[i];
+            residuals[i] = values[i] - NumOps.ToDouble(_trend[i]) - NumOps.ToDouble(_seasonal[i]);
         }
 
-        _residualStd = Math.Sqrt(residuals.Select(r => r * r).Average());
-        if (_residualStd < 1e-10) _residualStd = 1e-10;
+        double residualStdD = Math.Sqrt(residuals.Select(r => r * r).Average());
+        if (residualStdD < 1e-10) residualStdD = 1e-10;
+        _residualStd = NumOps.FromDouble(residualStdD);
     }
 
     private double[] SmoothMovingAverage(double[] values, int windowSize)

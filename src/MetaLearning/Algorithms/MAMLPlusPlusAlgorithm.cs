@@ -163,10 +163,10 @@ public class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         _mamlOptions = options;
 
         // Initialize per-step learning rates
-        _perStepLearningRates = new double[options.AdaptationSteps];
+        _perStepLearningRates = new Vector<T>(options.AdaptationSteps);
         for (int i = 0; i < options.AdaptationSteps; i++)
         {
-            _perStepLearningRates[i] = options.InnerLearningRate;
+            _perStepLearningRates[i] = NumOps.FromDouble(options.InnerLearningRate);
         }
     }
 

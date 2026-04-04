@@ -79,9 +79,9 @@ public class MOCAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             throw new ArgumentOutOfRangeException(nameof(options), "AugmentationStrength must be non-negative.");
         if (options.NumAugmentedTasks < 0)
             throw new ArgumentOutOfRangeException(nameof(options), "NumAugmentedTasks must be non-negative.");
-        _gradMean = new double[_paramDim];
-        _gradVar = new double[_paramDim];
-        for (int d = 0; d < _paramDim; d++) _gradVar[d] = 1.0;
+        _gradMean = new Vector<T>(_paramDim);
+        _gradVar = new Vector<T>(_paramDim);
+        for (int d = 0; d < _paramDim; d++) _gradVar[d] = NumOps.One;
     }
 
     /// <inheritdoc/>

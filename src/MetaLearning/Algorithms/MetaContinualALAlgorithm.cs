@@ -78,9 +78,9 @@ public class MetaContinualALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         _paramDim = options.MetaModel.GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
-        _uncertaintyMean = new double[_paramDim];
-        _uncertaintyVar = new double[_paramDim];
-        for (int d = 0; d < _paramDim; d++) _uncertaintyVar[d] = 1.0;
+        _uncertaintyMean = new Vector<T>(_paramDim);
+        _uncertaintyVar = new Vector<T>(_paramDim);
+        for (int d = 0; d < _paramDim; d++) _uncertaintyVar[d] = NumOps.One;
     }
 
     /// <inheritdoc/>

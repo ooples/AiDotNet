@@ -299,8 +299,8 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
             throw new ArgumentOutOfRangeException(nameof(identityLambda), identityLambda, "Identity lambda must be non-negative.");
         }
 
-        _cycleConsistencyLambda = cycleConsistencyLambda;
-        _identityLambda = identityLambda;
+        _cycleConsistencyLambda = NumOps.FromDouble(cycleConsistencyLambda);
+        _identityLambda = NumOps.FromDouble(identityLambda);
 
         GeneratorAtoB = CreateNetworkForInputType(generatorAtoB, inputType);
         GeneratorBtoA = CreateNetworkForInputType(generatorBtoA, inputType);

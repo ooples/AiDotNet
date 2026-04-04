@@ -161,8 +161,8 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
             if (yi < yMin) yMin = yi;
             if (yi > yMax) yMax = yi;
         }
-        _yMin = yMin;
-        _yMax = yMax;
+        _yMin = NumOps.FromDouble(yMin);
+        _yMax = NumOps.FromDouble(yMax);
         double yRange = yMax - yMin;
         if (yRange < 1e-10) yRange = 1.0;
 
@@ -267,12 +267,12 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         // Inverse transform from (0.01, 0.99) back to original y scale
         if (_needsTransform)
         {
-            double yRange = _yMax - _yMin;
+            double yRange = NumOps.ToDouble(_yMax) - NumOps.ToDouble(_yMin);
             if (yRange < 1e-10) yRange = 1.0;
             for (int i = 0; i < mus.Length; i++)
             {
                 double mu = NumOps.ToDouble(mus[i]);
-                double original = ((mu - 0.01) / 0.98) * yRange + _yMin;
+                double original = ((mu - 0.01) / 0.98) * yRange + NumOps.ToDouble(_yMin);
                 mus[i] = NumOps.FromDouble(original);
             }
         }
@@ -788,8 +788,8 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         writer.Write((int)_options.LinkFunction);
         writer.Write(_options.ModelVariablePrecision);
-        writer.Write(_yMin);
-        writer.Write(_yMax);
+        writer.Write(NumOps.ToDouble(_yMin));
+        writer.Write(NumOps.ToDouble(_yMax));
         writer.Write(_useOLS);
         writer.Write(_needsTransform);
         if (_useOLS && _meanCoefficients is not null)
@@ -834,8 +834,8 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
         _options.LinkFunction = (BetaLinkFunction)reader.ReadInt32();
         _options.ModelVariablePrecision = reader.ReadBoolean();
-        _yMin = reader.ReadDouble();
-        _yMax = reader.ReadDouble();
+        _yMin = NumOps.FromDouble(reader.ReadDouble());
+        _yMax = NumOps.FromDouble(reader.ReadDouble());
         _useOLS = reader.ReadBoolean();
         _needsTransform = reader.ReadBoolean();
         int olsCoeffCount = reader.ReadInt32();

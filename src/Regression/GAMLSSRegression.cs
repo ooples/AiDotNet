@@ -153,8 +153,8 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         for (int i = 0; i < n; i++) { double d = NumOps.ToDouble(y[i]) - yMean; yVar += d * d; }
         double yStd = Math.Sqrt(yVar / n);
         if (yStd < 1e-10) yStd = 1.0;
-        _yMean = yMean;
-        _yStd = yStd;
+        _yMean = NumOps.FromDouble(yMean);
+        _yStd = NumOps.FromDouble(yStd);
         var yStandardized = new Vector<T>(n);
         for (int i = 0; i < n; i++)
             yStandardized[i] = NumOps.FromDouble((NumOps.ToDouble(y[i]) - yMean) / yStd);
@@ -789,8 +789,8 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _options.ShapeModelType = (GAMLSSModelType)reader.ReadInt32();
 
         // Y standardization
-        _yMean = reader.ReadDouble();
-        _yStd = reader.ReadDouble();
+        _yMean = NumOps.FromDouble(reader.ReadDouble());
+        _yStd = NumOps.FromDouble(reader.ReadDouble());
 
         // State
         _numFeatures = reader.ReadInt32();

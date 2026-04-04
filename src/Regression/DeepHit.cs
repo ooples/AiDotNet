@@ -242,8 +242,8 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         for (int i = 0; i < n; i++) { double d = NumOps.ToDouble(y[i]) - yMean; yVar += d * d; }
         double yStd = Math.Sqrt(yVar / n);
         if (yStd < 1e-10) yStd = 1.0;
-        _yMean = yMean;
-        _yStd = yStd;
+        _yMean = NumOps.FromDouble(yMean);
+        _yStd = NumOps.FromDouble(yStd);
 
         // OLS: solve (X'X + ridge)^-1 X'y
         var xWithInt = x.AddColumn(Vector<T>.CreateDefault(n, NumOps.One));
@@ -1436,8 +1436,8 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
 
         // OLS state
         _useOLS = reader.ReadBoolean();
-        _yMean = reader.ReadDouble();
-        _yStd = reader.ReadDouble();
+        _yMean = NumOps.FromDouble(reader.ReadDouble());
+        _yStd = NumOps.FromDouble(reader.ReadDouble());
         int olsCount = reader.ReadInt32();
         if (olsCount > 0)
         {

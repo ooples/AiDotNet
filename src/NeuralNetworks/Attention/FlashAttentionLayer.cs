@@ -292,7 +292,7 @@ public class FlashAttentionLayer<T> : LayerBase<T>
         double? scale = _config.ScaleFactor.HasValue
             ? (double)_config.ScaleFactor.Value
             : null; // null means 1/sqrt(headDim) will be computed by IEngine
-        _lastScale = scale ?? 1.0 / Math.Sqrt(_headDimension);
+        _lastScale = NumOps.FromDouble(scale ?? 1.0 / Math.Sqrt(_headDimension));
 
         Tensor<T> attentionOutput;
         Tensor<T>? softmaxStats;
