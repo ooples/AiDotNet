@@ -52,7 +52,7 @@ public class IsolationForest<T> : AnomalyDetectorBase<T>
     private readonly int _numTrees;
     private readonly int _maxSamples;
     private List<IsolationTree>? _trees;
-    private T _averagePathLength;
+    private T _averagePathLength = default;
     private int _inputDim;
 
     /// <summary>

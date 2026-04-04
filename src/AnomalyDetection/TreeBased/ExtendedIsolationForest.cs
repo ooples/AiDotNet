@@ -227,7 +227,7 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
         private readonly Random _random;
         private readonly INumericOperations<T> _numOps;
         private Vector<T>? _normal;
-        private T _intercept;
+        private T _intercept = default;
         private ExtendedIsolationTree? _left;
         private ExtendedIsolationTree? _right;
         private int _size;

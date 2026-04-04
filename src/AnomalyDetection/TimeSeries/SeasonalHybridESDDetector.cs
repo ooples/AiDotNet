@@ -53,9 +53,9 @@ public class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
     private readonly double _alpha;
     private readonly int? _maxAnomalies;
     private Vector<T>? _seasonalPattern;
-    private T _trend;
-    private T _residualStd;
-    private T _esdCriticalValue;
+    private T _trend = default;
+    private T _residualStd = default;
+    private T _esdCriticalValue = default;
     private int _nSamples;
 
     /// <summary>

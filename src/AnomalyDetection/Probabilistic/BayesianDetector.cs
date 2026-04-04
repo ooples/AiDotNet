@@ -52,7 +52,7 @@ public class BayesianDetector<T> : AnomalyDetectorBase<T>
     private Matrix<T>? _posteriorCovariance;
     private Matrix<T>? _posteriorPrecision;
     private int _nFeatures;
-    private T _logNormalization;
+    private T _logNormalization = default;
 
     /// <summary>
     /// Gets the prior strength parameter.

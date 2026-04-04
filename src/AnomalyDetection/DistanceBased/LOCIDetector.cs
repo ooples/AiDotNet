@@ -63,7 +63,7 @@ public class LOCIDetector<T> : AnomalyDetectorBase<T>
     private readonly double _alpha;
     private readonly int _kMax;
     private Matrix<T>? _trainingData;
-    private T _maxRadius;
+    private T _maxRadius = default;
 
     /// <summary>
     /// Gets the alpha parameter (sampling neighborhood ratio).

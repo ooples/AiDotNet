@@ -105,7 +105,7 @@ public class LinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Log-likelihood of the fitted model.
     /// </summary>
-    private T _logLikelihood;
+    private T _logLikelihood = default;
 
     /// <summary>
     /// Number of observations.

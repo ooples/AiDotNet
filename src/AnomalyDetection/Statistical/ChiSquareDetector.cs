@@ -43,7 +43,7 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
     private readonly double _alpha;
     private Vector<T>? _mean;
     private Matrix<T>? _covarianceInverse;
-    private T _chiSquareCritical;
+    private T _chiSquareCritical = default;
     private int _nFeatures;
 
     /// <summary>

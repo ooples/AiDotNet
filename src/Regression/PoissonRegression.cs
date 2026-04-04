@@ -61,7 +61,7 @@ public class PoissonRegression<T> : RegressionBase<T>
     /// <summary>
     /// Shift applied to y to make it positive (0 if y was already positive).
     /// </summary>
-    private T _yShift;
+    private T _yShift = default;
 
     /// <summary>
     /// Initializes a new instance of the PoissonRegression class with the specified options and regularization.

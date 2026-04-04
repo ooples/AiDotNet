@@ -63,7 +63,7 @@ namespace AiDotNet.Clustering.Density;
 public class DBSCAN<T> : ClusteringBase<T>
 {
     private readonly DBSCANOptions<T> _options;
-    private T _fittedEpsilon;
+    private T _fittedEpsilon = default;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;

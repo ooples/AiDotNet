@@ -65,7 +65,7 @@ public class FlashAttentionLayer<T> : LayerBase<T>
     private Tensor<T>? _lastAttentionOutput;
     private Tensor<T>? _lastSoftmaxStats;
     private Tensor<T>? _lastAlibiBias;
-    private T _lastScale;
+    private T _lastScale = default;
     private int[]? _originalInputShape;
 
     // Gradients

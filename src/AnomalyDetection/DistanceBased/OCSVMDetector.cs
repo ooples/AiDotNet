@@ -53,7 +53,7 @@ public class OCSVMDetector<T> : AnomalyDetectorBase<T>
     private readonly int _maxIterations;
     private Matrix<T>? _supportVectors;
     private Vector<T>? _alphas;
-    private T _rho;
+    private T _rho = default;
 
     /// <summary>
     /// Gets the nu parameter.

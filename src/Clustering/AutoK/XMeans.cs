@@ -61,7 +61,7 @@ public class XMeans<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-    private T _bic;
+    private T _bic = default;
 
     /// <summary>
     /// Initializes a new XMeans instance.

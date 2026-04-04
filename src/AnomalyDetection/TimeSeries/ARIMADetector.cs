@@ -58,8 +58,8 @@ public class ARIMADetector<T> : AnomalyDetectorBase<T>
     private readonly int _q;
     private Vector<T>? _arCoeffs;
     private Vector<T>? _maCoeffs;
-    private T _mean;
-    private T _residualStd;
+    private T _mean = default;
+    private T _residualStd = default;
     private Vector<T>? _lastValues;
 
     /// <summary>

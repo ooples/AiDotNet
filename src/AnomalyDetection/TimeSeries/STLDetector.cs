@@ -53,7 +53,7 @@ public class STLDetector<T> : AnomalyDetectorBase<T>
     private readonly int _trendSmoothness;
     private Vector<T>? _trend;
     private Vector<T>? _seasonal;
-    private T _residualStd;
+    private T _residualStd = default;
 
     /// <summary>
     /// Gets the season length.

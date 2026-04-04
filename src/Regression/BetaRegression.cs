@@ -79,7 +79,7 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Intercept for the mean model.
     /// </summary>
-    private T _meanIntercept;
+    private T _meanIntercept = default;
 
     /// <summary>
     /// Coefficients for the precision (φ) model (if variable precision).
@@ -89,7 +89,7 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Intercept for the precision model.
     /// </summary>
-    private T _precisionIntercept;
+    private T _precisionIntercept = default;
 
     /// <summary>
     /// Number of features.
@@ -102,8 +102,8 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private readonly BetaRegressionOptions _options;
 
     /// <summary>Y min-max scaling for mapping to (0,1).</summary>
-    private T _yMin;
-    private T _yMax;
+    private T _yMin = default;
+    private T _yMax = default;
     private bool _needsTransform;
     private bool _useOLS;
 

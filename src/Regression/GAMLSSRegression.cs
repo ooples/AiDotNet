@@ -85,17 +85,17 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Intercept for the location parameter.
     /// </summary>
-    private T _locationIntercept;
+    private T _locationIntercept = default;
 
     /// <summary>
     /// Intercept for the scale parameter.
     /// </summary>
-    private T _scaleIntercept;
+    private T _scaleIntercept = default;
 
     /// <summary>
     /// Intercept for the shape parameter.
     /// </summary>
-    private T _shapeIntercept;
+    private T _shapeIntercept = default;
 
     /// <summary>
     /// Number of features.
@@ -137,8 +137,8 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
     /// <inheritdoc/>
     /// <summary>Y standardization for scale-invariant training.</summary>
-    private T _yMean;
-    private T _yStd;
+    private T _yMean = default;
+    private T _yStd = default;
 
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {

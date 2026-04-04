@@ -52,7 +52,7 @@ public class ESDDetector<T> : AnomalyDetectorBase<T>
     private Vector<T>? _stds;
     private int _nFeatures;
     private int _nSamples;
-    private T _criticalValue;
+    private T _criticalValue = default;
 
     /// <summary>
     /// Gets the significance level (alpha) for the test.
