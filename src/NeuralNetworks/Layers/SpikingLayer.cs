@@ -637,8 +637,9 @@ public class SpikingLayer<T> : LayerBase<T>
         : base([inputSize], [outputSize])
     {
         _neuronType = neuronType;
-        _tau = tau;
-        _refractoryPeriod = refractoryPeriod;
+        _tau = NumOps.FromDouble(tau);
+        _refractoryPeriod = NumOps.FromDouble(refractoryPeriod);
+        _threshold = NumOps.FromDouble(0.5);
 
         // Initialize weights with small random values as Tensor<T>
         // CreateRandom gives [0,1], scale to [-0.1, 0.1]
@@ -666,20 +667,20 @@ public class SpikingLayer<T> : LayerBase<T>
         // Initialize model-specific variables based on neuron type
         if (neuronType == SpikingNeuronType.Izhikevich)
         {
-            _a = 0.02;  // Time scale of recovery variable
-            _b = 0.2;   // Sensitivity of recovery variable
-            _c = -65.0; // After-spike reset value of membrane potential
-            _d = 8.0;   // After-spike reset of recovery variable
+            _a = NumOps.FromDouble(0.02);  // Time scale of recovery variable
+            _b = NumOps.FromDouble(0.2);   // Sensitivity of recovery variable
+            _c = NumOps.FromDouble(-65.0); // After-spike reset value of membrane potential
+            _d = NumOps.FromDouble(8.0);   // After-spike reset of recovery variable
             _recoveryVariable = new Tensor<T>([outputSize]);
             _recoveryVariable.Fill(NumOps.Zero);
         }
         else if (neuronType == SpikingNeuronType.AdaptiveExponential)
         {
-            _deltaT = 2.0;  // Sharpness of exponential
-            _vT = -50.0;    // Threshold potential
-            _tauw = 30.0;   // Adaptation time constant
-            _a_adex = 4.0;  // Subthreshold adaptation
-            _b_adex = 0.5;  // Spike-triggered adaptation
+            _deltaT = NumOps.FromDouble(2.0);  // Sharpness of exponential
+            _vT = NumOps.FromDouble(-50.0);    // Threshold potential
+            _tauw = NumOps.FromDouble(30.0);   // Adaptation time constant
+            _a_adex = NumOps.FromDouble(4.0);  // Subthreshold adaptation
+            _b_adex = NumOps.FromDouble(0.5);  // Spike-triggered adaptation
             _adaptationVariable = new Tensor<T>([outputSize]);
             _adaptationVariable.Fill(NumOps.Zero);
         }
@@ -944,7 +945,7 @@ public class SpikingLayer<T> : LayerBase<T>
     private Tensor<T> UpdateLeakyIntegrateAndFire(Tensor<T> current)
     {
         // Decay membrane potential using Engine operations
-        T decayFactor = NumOps.FromDouble(1.0 - 1.0 / _tau);
+        T decayFactor = NumOps.Subtract(NumOps.One, NumOps.Divide(NumOps.One, _tau));
         _membranePotential = Engine.TensorMultiplyScalar(_membranePotential, decayFactor);
 
         // Cache ones/zeros tensors to avoid per-call allocation (hot loop)
@@ -968,14 +969,14 @@ public class SpikingLayer<T> : LayerBase<T>
 
         // Generate spikes: where membrane potential >= threshold
         // Threshold calibrated for typical input magnitudes from Dense layers
-        _spikes = Engine.TensorGreaterThan(_membranePotential, NumOps.FromDouble(_threshold - 0.0001));
+        _spikes = Engine.TensorGreaterThan(_membranePotential, NumOps.Subtract(_threshold, NumOps.FromDouble(0.0001)));
 
         // Reset membrane potential where spikes occurred
         var resetMask = Engine.TensorSubtract(_cachedOnes, _spikes);
         _membranePotential = Engine.TensorMultiply(_membranePotential, resetMask);
 
         // Set refractory countdown where spikes occurred
-        var refractorySet = Engine.TensorMultiplyScalar(_spikes, NumOps.FromDouble(_refractoryPeriod));
+        var refractorySet = Engine.TensorMultiplyScalar(_spikes, _refractoryPeriod);
         _refractoryCountdown = Engine.TensorAdd(
             Engine.TensorMultiply(_refractoryCountdown, resetMask),
             refractorySet);
@@ -1030,14 +1031,14 @@ public class SpikingLayer<T> : LayerBase<T>
         _refractoryCountdown = Engine.TensorSubtract(_refractoryCountdown, refractoryDecrement);
 
         // Generate spikes where membrane potential >= 1.0
-        _spikes = Engine.TensorGreaterThan(_membranePotential, NumOps.FromDouble(_threshold - 0.0001));
+        _spikes = Engine.TensorGreaterThan(_membranePotential, NumOps.Subtract(_threshold, NumOps.FromDouble(0.0001)));
 
         // Reset membrane potential where spikes occurred
         var resetMask = Engine.TensorSubtract(_cachedOnes, _spikes);
         _membranePotential = Engine.TensorMultiply(_membranePotential, resetMask);
 
         // Set refractory countdown where spikes occurred
-        var refractorySet = Engine.TensorMultiplyScalar(_spikes, NumOps.FromDouble(_refractoryPeriod));
+        var refractorySet = Engine.TensorMultiplyScalar(_spikes, _refractoryPeriod);
         _refractoryCountdown = Engine.TensorAdd(
             Engine.TensorMultiply(_refractoryCountdown, resetMask),
             refractorySet);
@@ -1080,6 +1081,10 @@ public class SpikingLayer<T> : LayerBase<T>
 
         // Izhikevich model - complex biophysical dynamics require element-wise computation
         // These equations are inherently non-vectorizable due to their coupled nonlinear nature
+        double aD = NumOps.ToDouble(_a);
+        double bD = NumOps.ToDouble(_b);
+        double cD = NumOps.ToDouble(_c);
+        double dD = NumOps.ToDouble(_d);
         for (int i = 0; i < _membranePotential.Length; i++)
         {
             double v = Convert.ToDouble(_membranePotential[i]);
@@ -1088,7 +1093,7 @@ public class SpikingLayer<T> : LayerBase<T>
 
             // Update membrane potential and recovery variable
             double dv = 0.04 * v * v + 5 * v + 140 - u + I;
-            double du = _a * (_b * v - u);
+            double du = aD * (bD * v - u);
 
             v += dv;
             u += du;
@@ -1097,8 +1102,8 @@ public class SpikingLayer<T> : LayerBase<T>
             if (v >= 30)
             {
                 _spikes[i] = NumOps.One;
-                v = _c;
-                u += _d;
+                v = cD;
+                u += dD;
             }
             else
             {
@@ -1147,12 +1152,12 @@ public class SpikingLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Adaptation variable not initialized for AdEx model");
 
         // Vectorized Adaptive Exponential Integrate-and-Fire model using IEngine
-        T vT = NumOps.FromDouble(_vT);
-        T deltaT = NumOps.FromDouble(_deltaT);
-        T tau = NumOps.FromDouble(_tau);
-        T tauw = NumOps.FromDouble(_tauw);
-        T aAdex = NumOps.FromDouble(_a_adex);
-        T bAdex = NumOps.FromDouble(_b_adex);
+        T vT = _vT;
+        T deltaT = _deltaT;
+        T tau = _tau;
+        T tauw = _tauw;
+        T aAdex = _a_adex;
+        T bAdex = _b_adex;
         T one = NumOps.One;
         T zero = NumOps.Zero;
         T resetV = NumOps.FromDouble(-70.0);
@@ -1904,7 +1909,7 @@ public class SpikingLayer<T> : LayerBase<T>
         // 3. Apply surrogate spike function (tanh-based surrogate for differentiability)
         // The forward pass uses hard threshold, but autodiff uses soft surrogate
         double threshold = _threshold;
-        double surrogateBeta = 1.0 / _tau;
+        double surrogateBeta = 1.0 / NumOps.ToDouble(_tau);
         var output = TensorOperations<T>.SurrogateSpike(withBias, threshold, surrogateBeta);
 
         // Set output gradient on the computation graph
@@ -2066,7 +2071,7 @@ public class SpikingLayer<T> : LayerBase<T>
         // Apply surrogate spike function with threshold
         // Default threshold is typically 1.0 for normalized inputs
         double threshold = _threshold;
-        double surrogateBeta = 1.0 / _tau; // Use tau to scale surrogate sharpness
+        double surrogateBeta = 1.0 / NumOps.ToDouble(_tau); // Use tau to scale surrogate sharpness
         var spikes = TensorOperations<T>.SurrogateSpike(membranePotential, threshold, surrogateBeta);
 
         // Apply activation if present
