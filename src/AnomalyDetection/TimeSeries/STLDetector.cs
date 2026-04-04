@@ -136,8 +136,8 @@ public class STLDetector<T> : AnomalyDetectorBase<T>
         int n = values.Length;
 
         // Initialize
-        _trend = new double[n];
-        _seasonal = new double[n];
+        var trendLocal = new double[n];
+        var seasonalLocal = new double[n];
 
         // Iterative STL (simplified)
         for (int iter = 0; iter < 3; iter++)
@@ -146,7 +146,7 @@ public class STLDetector<T> : AnomalyDetectorBase<T>
             var detrended = new double[n];
             for (int i = 0; i < n; i++)
             {
-                detrended[i] = values[i] - _trend[i];
+                detrended[i] = values[i] - trendLocal[i];
             }
 
             // Step 2: Extract seasonal using subseries
@@ -260,8 +260,8 @@ public class STLDetector<T> : AnomalyDetectorBase<T>
             int trendIdx = Math.Min(i, trend.Length - 1);
             int seasonIdx = i % _seasonLength;
 
-            double residual = value - trend[trendIdx] - seasonal[seasonIdx];
-            double score = Math.Abs(residual) / _residualStd;
+            double residual = value - NumOps.ToDouble(trend[trendIdx]) - NumOps.ToDouble(seasonal[seasonIdx]);
+            double score = Math.Abs(residual) / NumOps.ToDouble(_residualStd);
 
             scores[i] = NumOps.FromDouble(score);
         }
