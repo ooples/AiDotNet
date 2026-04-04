@@ -478,7 +478,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
         lock (_parameterSamplingLock)
         {
-            var originalParameters = ((IParameterizable<T, TInput, TOutput>)EnsureModel).GetParameters().Clone();
+            var originalParameters = InterfaceGuard.Parameterizable(EnsureModel).GetParameters().Clone();
             try
             {
                 for (int s = 0; s < effectiveSamples; s++)
@@ -492,14 +492,14 @@ public partial class AiModelResult<T, TInput, TOutput>
                         sampledParams[i] = numOps.Add(posteriorMean[i], noise);
                     }
 
-                    ((IParameterizable<T, TInput, TOutput>)EnsureModel).SetParameters(sampledParams);
+                    InterfaceGuard.Parameterizable(EnsureModel).SetParameters(sampledParams);
                     var normalizedPrediction = EnsureModel.Predict(normalizedNewData);
                     samples.Add(ConvertToTensorSafe(normalizedPrediction, "normalized prediction"));
                 }
             }
             finally
             {
-                ((IParameterizable<T, TInput, TOutput>)EnsureModel).SetParameters(originalParameters);
+                InterfaceGuard.Parameterizable(EnsureModel).SetParameters(originalParameters);
             }
         }
 

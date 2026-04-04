@@ -85,7 +85,7 @@ public class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
 
         // Initialize per-parameter learning rates
         _perParamLR = new Vector<T>(_paramDim);
@@ -106,7 +106,7 @@ public class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -118,7 +118,7 @@ public class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             // Inner loop with per-parameter LR (MAML++ style)
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Element-wise learning rate application
@@ -138,14 +138,14 @@ public class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
                 // Multi-step loss: evaluate at each intermediate step
                 if (step < _algoOptions.AdaptationSteps - 1)
                 {
-                    ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+                    InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
                     var intermediateLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
                     multiStepLosses.Add(intermediateLoss);
                 }
             }
 
             // Final step query loss
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
             var finalLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Multi-step loss: final + weighted intermediate
@@ -183,13 +183,13 @@ public class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
             if (_algoOptions.LearnPerParamLR)
@@ -215,7 +215,7 @@ public class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         for (int d = 0; d < _paramDim; d++)
             modulationFactors[d] = d < midpoint ? 1.0 : noveltyGate;
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams, modulationFactors: modulationFactors);
     }
 
@@ -254,7 +254,7 @@ public class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private double ComputeOpenMAMLLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -263,7 +263,7 @@ public class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 if (_algoOptions.LearnPerParamLR)
                 {
@@ -279,14 +279,14 @@ public class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
                 }
             }
 
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
             double loss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
             var pred = ConvertToVector(MetaModel.Predict(task.QueryInput)) ?? new Vector<T>(1);
             loss += _algoOptions.EntropyRegWeight * ComputePredictionEntropy(pred);
             totalLoss += loss;
         }
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

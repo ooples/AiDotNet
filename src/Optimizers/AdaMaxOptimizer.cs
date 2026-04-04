@@ -190,7 +190,7 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
         ValidationHelper<T>.ValidateInputData(inputData);
 
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
-        var parameters = ((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
@@ -257,7 +257,7 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
     /// </remarks>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
-        var parameters = ((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         // Initialize state vectors if needed
         if (_m == null || _u == null || _m.Length != parameters.Length)
@@ -295,7 +295,7 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
         var update = (Vector<T>)Engine.Divide(alphaMScaled, uSafe);
         var newCoefficients = (Vector<T>)Engine.Subtract(parameters, update);
 
-        return ((IParameterizable<T, TInput, TOutput>)currentSolution).WithParameters(newCoefficients);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>

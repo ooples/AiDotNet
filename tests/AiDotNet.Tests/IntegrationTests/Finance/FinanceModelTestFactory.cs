@@ -520,12 +520,12 @@ internal static class FinanceModelTestFactory
         var featureImportance = model.GetFeatureImportance();
         Assert.NotNull(featureImportance);
 
-        var activeFeatures = ((IFeatureAware)model).GetActiveFeatureIndices()?.ToList() ?? new List<int>();
-        ((IFeatureAware)model).SetActiveFeatureIndices(activeFeatures.Take(1));
+        var activeFeatures = InterfaceGuard.FeatureAware(model).GetActiveFeatureIndices()?.ToList() ?? new List<int>();
+        InterfaceGuard.FeatureAware(model).SetActiveFeatureIndices(activeFeatures.Take(1));
 
         if (activeFeatures.Count > 0)
         {
-            Assert.True(((IFeatureAware)model).IsFeatureUsed(activeFeatures[0]));
+            Assert.True(InterfaceGuard.FeatureAware(model).IsFeatureUsed(activeFeatures[0]));
         }
 
         var parameters = ((IParameterizable<T, Tensor<T>, Tensor<T>>)model).GetParameters();

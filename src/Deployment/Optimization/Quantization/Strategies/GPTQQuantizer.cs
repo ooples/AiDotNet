@@ -88,9 +88,9 @@ public class GPTQQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
                 "GPTQ requires calibration data to compute Hessian. Call Calibrate() first.");
         }
 
-        var parameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         var quantizedParams = QuantizeWithGPTQ(parameters, config);
-        return ((IParameterizable<T, TInput, TOutput>)model).WithParameters(quantizedParams);
+        return InterfaceGuard.Parameterizable(model).WithParameters(quantizedParams);
     }
 
     /// <inheritdoc/>
@@ -118,7 +118,7 @@ public class GPTQQuantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
         else
         {
             // Fallback: compute from parameters directly
-            ComputeHessianFromParameters(((IParameterizable<T, TInput, TOutput>)model).GetParameters());
+            ComputeHessianFromParameters(InterfaceGuard.Parameterizable(model).GetParameters());
         }
 
         _isCalibrated = true;

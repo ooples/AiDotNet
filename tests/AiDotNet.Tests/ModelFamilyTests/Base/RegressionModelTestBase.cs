@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -572,7 +573,7 @@ public abstract class RegressionModelTestBase
         var (trainX, trainY) = ModelTestHelpers.GenerateLinearData(TrainSamples, Features, rng);
 
         model.Train(trainX, trainY);
-        var activeFeatures = ((IFeatureAware)model).GetActiveFeatureIndices().ToList();
+        var activeFeatures = InterfaceGuard.FeatureAware(model).GetActiveFeatureIndices().ToList();
 
         Assert.True(activeFeatures.Count > 0, "Trained model should have at least one active feature.");
         foreach (var idx in activeFeatures)

@@ -236,7 +236,7 @@ public class MASTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                     var target = taskData.GetOutput(idx);
 
                     // Compute gradients for this sample
-                    var sampleGradients = ((IGradientComputable<T, TInput, TOutput>)Model).ComputeGradients(input, target, LossFunction);
+                    var sampleGradients = InterfaceGuard.GradientComputable(Model).ComputeGradients(input, target, LossFunction);
 
                     // Accumulate gradients
                     if (batchGradients == null)
@@ -281,7 +281,7 @@ public class MASTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                 var adjustedGradients = Strategy.AdjustGradients(batchGradients);
 
                 // Apply gradients to update model
-                ((IGradientComputable<T, TInput, TOutput>)Model).ApplyGradients(adjustedGradients, learningRate);
+                InterfaceGuard.GradientComputable(Model).ApplyGradients(adjustedGradients, learningRate);
                 totalGradientUpdates++;
 
                 // Track losses
@@ -306,7 +306,7 @@ public class MASTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                             learningRate,
                             NumOps.FromDouble(replayLrFactor));
                         var adjustedReplayGradients = Strategy.AdjustGradients(replayGradients);
-                        ((IGradientComputable<T, TInput, TOutput>)Model).ApplyGradients(adjustedReplayGradients, replayLr);
+                        InterfaceGuard.GradientComputable(Model).ApplyGradients(adjustedReplayGradients, replayLr);
                         totalGradientUpdates++;
                     }
                 }
@@ -472,7 +472,7 @@ public class MASTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
 
         foreach (var dataPoint in replayBatch)
         {
-            var sampleGradients = ((IGradientComputable<T, TInput, TOutput>)Model).ComputeGradients(
+            var sampleGradients = InterfaceGuard.GradientComputable(Model).ComputeGradients(
                 dataPoint.Input, dataPoint.Output, LossFunction);
 
             if (replayGradients == null)

@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 
@@ -227,8 +228,8 @@ public class ConstitutionalAIFineTuning<T, TInput, TOutput> : FineTuningBase<T, 
                 var loss = -LogSigmoid(margin);
 
                 // Compute and apply gradients to update model parameters
-                var gradients = ((IGradientComputable<T, TInput, TOutput>)policyModel).ComputeGradients(input, revised);
-                ((IGradientComputable<T, TInput, TOutput>)policyModel).ApplyGradients(gradients, NumOps.FromDouble(learningRate));
+                var gradients = InterfaceGuard.GradientComputable(policyModel).ComputeGradients(input, revised);
+                InterfaceGuard.GradientComputable(policyModel).ApplyGradients(gradients, NumOps.FromDouble(learningRate));
 
                 totalLoss += loss;
             }
@@ -254,8 +255,8 @@ public class ConstitutionalAIFineTuning<T, TInput, TOutput> : FineTuningBase<T, 
             var loss = -logProb;
 
             // Compute and apply gradients to update model parameters
-            var gradients = ((IGradientComputable<T, TInput, TOutput>)policyModel).ComputeGradients(input, targetOutput);
-            ((IGradientComputable<T, TInput, TOutput>)policyModel).ApplyGradients(gradients, NumOps.FromDouble(learningRate));
+            var gradients = InterfaceGuard.GradientComputable(policyModel).ComputeGradients(input, targetOutput);
+            InterfaceGuard.GradientComputable(policyModel).ApplyGradients(gradients, NumOps.FromDouble(learningRate));
 
             totalLoss += loss;
         }

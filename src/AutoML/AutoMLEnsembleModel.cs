@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -311,7 +312,7 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
         var indices = new HashSet<int>();
         foreach (var member in Members)
         {
-            foreach (var idx in ((IFeatureAware)member).GetActiveFeatureIndices())
+            foreach (var idx in InterfaceGuard.FeatureAware(member).GetActiveFeatureIndices())
             {
                 indices.Add(idx);
             }
@@ -324,13 +325,13 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
     {
         foreach (var member in Members)
         {
-            ((IFeatureAware)member).SetActiveFeatureIndices(featureIndices);
+            InterfaceGuard.FeatureAware(member).SetActiveFeatureIndices(featureIndices);
         }
     }
 
     public override bool IsFeatureUsed(int featureIndex)
     {
-        return Members.Any(m => ((IFeatureAware)m).IsFeatureUsed(featureIndex));
+        return Members.Any(m => InterfaceGuard.FeatureAware(m).IsFeatureUsed(featureIndex));
     }
 
     public override Dictionary<string, T> GetFeatureImportance()

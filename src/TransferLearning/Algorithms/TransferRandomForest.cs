@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -138,7 +139,7 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
         }
 
         // Get source model's feature dimension
-        int sourceFeatures = ((IFeatureAware)sourceModel).GetActiveFeatureIndices().Count();
+        int sourceFeatures = InterfaceGuard.FeatureAware(sourceModel).GetActiveFeatureIndices().Count();
 
         // Map target features to source feature space
         Matrix<T> mappedTargetData = FeatureMapper.MapToSource(targetData, sourceFeatures);
@@ -199,7 +200,7 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
         }
 
         // Step 2: Get source model's feature dimension
-        int sourceFeatures = ((IFeatureAware)sourceModel).GetActiveFeatureIndices().Count();
+        int sourceFeatures = InterfaceGuard.FeatureAware(sourceModel).GetActiveFeatureIndices().Count();
 
         // Step 3: Map target features to source feature space
         Matrix<T> mappedTargetData = FeatureMapper.MapToSource(targetData, sourceFeatures);

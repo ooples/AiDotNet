@@ -179,23 +179,23 @@ public class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     {
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
             // Generate task-specific initialization from support features
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
             var supportPred = MetaModel.Predict(task.SupportInput);
             var supportFeatures = ConvertToVector(supportPred);
             var taskInit = GenerateTaskInit(initParams, supportFeatures);
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(taskInit);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(taskInit);
 
             // Inner loop adaptation from task-specific init
             for (int step = 0; step < _hyperMAMLOptions.AdaptationSteps; step++)
             {
                 var innerGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                var adapted = ApplyGradients(((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters(), innerGrad, _hyperMAMLOptions.InnerLearningRate);
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adapted);
+                var adapted = ApplyGradients(InterfaceGuard.Parameterizable(MetaModel).GetParameters(), innerGrad, _hyperMAMLOptions.InnerLearningRate);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adapted);
             }
 
             // Query evaluation
@@ -219,50 +219,50 @@ public class HyperMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     /// </summary>
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
             var supportPred = MetaModel.Predict(task.SupportInput);
             var supportFeatures = ConvertToVector(supportPred);
             var taskInit = GenerateTaskInit(initParams, supportFeatures);
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(taskInit);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(taskInit);
 
             for (int step = 0; step < _hyperMAMLOptions.AdaptationSteps; step++)
             {
                 var innerGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                var adapted = ApplyGradients(((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters(), innerGrad, _hyperMAMLOptions.InnerLearningRate);
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adapted);
+                var adapted = ApplyGradients(InterfaceGuard.Parameterizable(MetaModel).GetParameters(), innerGrad, _hyperMAMLOptions.InnerLearningRate);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adapted);
             }
 
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var sharedInit = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var sharedInit = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         // Generate task-specific initialization from support features
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(sharedInit);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(sharedInit);
         var supportPred = MetaModel.Predict(task.SupportInput);
         var supportFeatures = ConvertToVector(supportPred);
         var taskInit = GenerateTaskInit(sharedInit, supportFeatures);
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(taskInit);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(taskInit);
 
         // Inner loop adaptation from task-specific init
         var adaptedParams = taskInit;
         for (int step = 0; step < _hyperMAMLOptions.AdaptationSteps; step++)
         {
             var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-            adaptedParams = ApplyGradients(((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters(), grad, _hyperMAMLOptions.InnerLearningRate);
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+            adaptedParams = ApplyGradients(InterfaceGuard.Parameterizable(MetaModel).GetParameters(), grad, _hyperMAMLOptions.InnerLearningRate);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
         }
 
         return new HyperMAMLModel<T, TInput, TOutput>(MetaModel, adaptedParams);
@@ -279,7 +279,7 @@ internal class HyperMAMLModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mode
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
     public HyperMAMLModel(IFullModel<T, TInput, TOutput> model, Vector<T> p) { _model = model; _params = p; }
     /// <inheritdoc/>
-    public TOutput Predict(TInput input) { ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(_params); return _model.Predict(input); }
+    public TOutput Predict(TInput input) { InterfaceGuard.Parameterizable(_model).SetParameters(_params); return _model.Predict(input); }
     /// <summary>Training not supported on adapted models.</summary>
     public void Train(TInput inputs, TOutput targets) =>
         throw new NotSupportedException("Adapted meta-learning models do not support direct training. Use the meta-learning algorithm's MetaTrain method instead.");

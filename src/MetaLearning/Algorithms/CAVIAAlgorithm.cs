@@ -239,9 +239,9 @@ public class CAVIAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
             }
 
             // Update body (model) parameters
-            var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+            var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
             var updatedParams = ApplyGradients(currentParams, accumulatedBodyGradients, _caviaOptions.OuterLearningRate);
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(updatedParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedParams);
         }
 
         // Return average meta-loss

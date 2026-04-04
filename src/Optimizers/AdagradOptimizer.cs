@@ -151,7 +151,7 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        _accumulatedSquaredGradients = new Vector<T>(((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters().Length);
+        _accumulatedSquaredGradients = new Vector<T>(InterfaceGuard.Parameterizable(currentSolution).GetParameters().Length);
         InitializeAdaptiveParameters();
 
         for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
@@ -238,7 +238,7 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     /// </remarks>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
-        var parameters = ((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         // === Vectorized Adagrad Update using IEngine (Phase B: US-GPU-015) ===
         T epsilon = NumOps.FromDouble(_options.Epsilon);
@@ -256,7 +256,7 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         // Update parameters: params - updates
         var newCoefficients = (Vector<T>)Engine.Subtract(parameters, updates);
 
-        return ((IParameterizable<T, TInput, TOutput>)currentSolution).WithParameters(newCoefficients);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>

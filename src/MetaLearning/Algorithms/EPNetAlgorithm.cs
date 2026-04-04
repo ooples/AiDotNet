@@ -225,11 +225,11 @@ public class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     {
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
 
             // Extract support and query features, propagate on joint graph
             var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
@@ -265,11 +265,11 @@ public class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 if (count > 0)
                 {
                     double avgRatio = sumRatio / count;
-                    var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+                    var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
                     var modulatedParams = new Vector<T>(currentParams.Length);
                     for (int i = 0; i < currentParams.Length; i++)
                         modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(modulatedParams);
+                    InterfaceGuard.Parameterizable(MetaModel).SetParameters(modulatedParams);
                 }
             }
 
@@ -286,7 +286,7 @@ public class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         // Extract support and query features
         var supportPred = MetaModel.Predict(task.SupportInput);
@@ -409,11 +409,11 @@ internal class EPNetModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
                 double mod = _modulationFactors[i % _modulationFactors.Length];
                 modulatedParams[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(mod));
             }
-            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(modulatedParams);
+            InterfaceGuard.Parameterizable(_model).SetParameters(modulatedParams);
         }
         else
         {
-            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(_backboneParams);
+            InterfaceGuard.Parameterizable(_model).SetParameters(_backboneParams);
         }
         return _model.Predict(input);
     }

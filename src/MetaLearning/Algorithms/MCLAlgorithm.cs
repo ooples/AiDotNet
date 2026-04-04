@@ -257,11 +257,11 @@ public class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     {
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
 
             // Meta-learning loss
             var queryPred = MetaModel.Predict(task.QueryInput);
@@ -299,12 +299,12 @@ public class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// </summary>
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
 
             // Meta-learning loss component
             var queryPred = MetaModel.Predict(task.QueryInput);
@@ -321,14 +321,14 @@ public class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
             totalLoss += metaLossVal + _mclOptions.ContrastiveWeight * contrastLoss;
         }
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         // Extract and project support features through contrastive head
         var supportPred = MetaModel.Predict(task.SupportInput);
@@ -408,11 +408,11 @@ internal class MCLModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
                 double mod = _modulationFactors[i % _modulationFactors.Length];
                 modulatedParams[i] = NumOps.Multiply(_backboneParams[i], NumOps.FromDouble(mod));
             }
-            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(modulatedParams);
+            InterfaceGuard.Parameterizable(_model).SetParameters(modulatedParams);
         }
         else
         {
-            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(_backboneParams);
+            InterfaceGuard.Parameterizable(_model).SetParameters(_backboneParams);
         }
         return _model.Predict(input);
     }

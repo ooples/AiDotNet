@@ -132,7 +132,7 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         _encoderWeights = InitializeWeights(encoderSize);
 
         // Adaptation network: maps representation to fast weights
-        int modelParamCount = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters().Length;
+        int modelParamCount = InterfaceGuard.Parameterizable(MetaModel).GetParameters().Length;
         int adaptationSize = _cnapOptions.RepresentationDimension * _cnapOptions.HiddenDimension +
                             _cnapOptions.HiddenDimension * modelParamCount;
         _adaptationNetworkWeights = InitializeWeights(adaptationSize);
@@ -269,9 +269,9 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         var baseModelGradients = ComputeBaseModelGradients(taskBatch);
         if (baseModelGradients != null)
         {
-            var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+            var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
             var updatedParams = ApplyGradients(currentParams, baseModelGradients, _cnapOptions.OuterLearningRate);
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(updatedParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedParams);
         }
 
         return NumOps.Divide(totalLoss, batchSizeT);
@@ -402,7 +402,7 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// <returns>Fast weights to be applied to the base model.</returns>
     private Vector<T> GenerateFastWeights(Vector<T> taskRepresentation)
     {
-        int numModelParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters().Length;
+        int numModelParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters().Length;
         var fastWeights = new Vector<T>(numModelParams);
 
         // Apply adaptation network to generate fast weights
@@ -456,7 +456,7 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// <param name="fastWeights">The fast weights to apply.</param>
     private void ApplyFastWeights(IFullModel<T, TInput, TOutput> model, Vector<T> fastWeights)
     {
-        var currentParams = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(model).GetParameters();
 
         if (currentParams.Length != fastWeights.Length)
         {
@@ -495,7 +495,7 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                 break;
         }
 
-        ((IParameterizable<T, TInput, TOutput>)model).SetParameters(modifiedParams);
+        InterfaceGuard.Parameterizable(model).SetParameters(modifiedParams);
     }
 
     /// <summary>
@@ -656,7 +656,7 @@ public class CNAPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     private int EstimateInputOutputDimension()
     {
         // Use model parameter count as a proxy
-        return Math.Max(128, ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters().Length / 10);
+        return Math.Max(128, InterfaceGuard.Parameterizable(MetaModel).GetParameters().Length / 10);
     }
 
     /// <summary>

@@ -84,7 +84,7 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             throw new ArgumentOutOfRangeException(nameof(options), "AttentionTemperature must be positive.");
 
         _algoOptions = options;
-        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters. ContextMetaRL requires a model with at least one parameter.");
         _contextDim = options.ContextDim;
@@ -108,7 +108,7 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -118,7 +118,7 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Encode and store gradient
@@ -141,7 +141,7 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                 }
             }
 
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -160,14 +160,14 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var gradHistory = new List<Vector<T>>();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             gradHistory.Add(EncodeGradient(grad));
             var contextVec = AttentionAggregate(gradHistory);
@@ -183,7 +183,7 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             }
         }
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
@@ -253,7 +253,7 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     private double ComputeContextMetaRLLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         foreach (var task in taskBatch.Tasks)
         {
             var gh = new List<Vector<T>>();
@@ -261,7 +261,7 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ap);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(ap);
                 var g = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 gh.Add(EncodeGradient(g));
                 var cv = AttentionAggregate(gh);
@@ -274,10 +274,10 @@ public class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                         NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(g[d])));
                 }
             }
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ap);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(ap);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

@@ -1,3 +1,4 @@
+using AiDotNet.Caching;
 using AiDotNet.Enums;
 
 namespace AiDotNet.Models.Options;

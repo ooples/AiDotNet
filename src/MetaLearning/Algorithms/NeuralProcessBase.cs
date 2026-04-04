@@ -254,7 +254,7 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
     /// </summary>
     protected void ModulateParameters(Vector<T> initParams, double scale)
     {
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ScaleVector(initParams, scale));
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(ScaleVector(initParams, scale));
     }
 
     /// <summary>
@@ -266,11 +266,11 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
             var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
             var supportLabels = ConvertToVector(task.SupportOutput);
             var contextReps = BuildContextRepresentations(supportFeatures, supportLabels);
@@ -294,7 +294,7 @@ public abstract class NeuralProcessBase<T, TInput, TOutput> : MetaLearnerBase<T,
     /// </summary>
     protected IModel<TInput, TOutput, ModelMetadata<T>> StandardNPAdapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
         var supportLabels = ConvertToVector(task.SupportOutput);
         var contextReps = BuildContextRepresentations(supportFeatures, supportLabels);
@@ -348,7 +348,7 @@ public class NeuralProcessModel<T, TInput, TOutput> : MetaLearningModelBase<T, T
 
     public override TOutput Predict(TInput input)
     {
-        ((IParameterizable<T, TInput, TOutput>)BaseModel).SetParameters(_params);
+        InterfaceGuard.Parameterizable(BaseModel).SetParameters(_params);
         return BaseModel.Predict(input);
     }
 

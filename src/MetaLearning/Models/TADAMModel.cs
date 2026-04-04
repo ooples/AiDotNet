@@ -271,7 +271,7 @@ public class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
     /// <inheritdoc/>
     public Vector<T> GetParameters()
     {
-        return ((IParameterizable<T, TInput, TOutput>)_featureEncoder).GetParameters();
+        return InterfaceGuard.Parameterizable(_featureEncoder).GetParameters();
     }
 
     /// <inheritdoc/>

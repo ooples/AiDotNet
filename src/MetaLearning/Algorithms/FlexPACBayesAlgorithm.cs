@@ -75,7 +75,7 @@ public class FlexPACBayesAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
 
         _priorLogVar = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++)
@@ -87,7 +87,7 @@ public class FlexPACBayesAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var metaParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var metaParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         // Split adaptation steps into prior and bound phases
         int totalSteps = _algoOptions.AdaptationSteps;
@@ -102,7 +102,7 @@ public class FlexPACBayesAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
             for (int step = 0; step < priorSteps; step++)
             {
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(thetaPrior);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(thetaPrior);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 thetaPrior = ApplyGradients(thetaPrior, grad, _algoOptions.InnerLearningRate);
             }
@@ -113,7 +113,7 @@ public class FlexPACBayesAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
             for (int step = 0; step < boundSteps; step++)
             {
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(thetaPost);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(thetaPost);
                 var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 for (int d = 0; d < _paramDim; d++)
@@ -129,10 +129,10 @@ public class FlexPACBayesAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             // Compute flex loss on query set
             double f = _algoOptions.PriorDataFraction;
 
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(thetaPost);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(thetaPost);
             double postLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
 
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(thetaPrior);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(thetaPrior);
             double priorLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
 
             // Weighted flex combination
@@ -144,17 +144,17 @@ public class FlexPACBayesAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
             losses.Add(NumOps.FromDouble(flexLoss));
 
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(thetaPost);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(thetaPost);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
         // Outer loop: update meta-parameters
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(metaParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(metaParams);
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
             var newParams = ApplyGradients(metaParams, avgGrad, _algoOptions.OuterLearningRate);
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(newParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(newParams);
         }
 
         // Update prior log-variance via SPSA
@@ -166,7 +166,7 @@ public class FlexPACBayesAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var metaParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var metaParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         int totalSteps = _algoOptions.AdaptationSteps;
         int priorSteps = Math.Max(1, (int)(totalSteps * _algoOptions.PriorDataFraction));
@@ -178,7 +178,7 @@ public class FlexPACBayesAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         for (int step = 0; step < priorSteps; step++)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(thetaPrior);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(thetaPrior);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             thetaPrior = ApplyGradients(thetaPrior, grad, _algoOptions.InnerLearningRate);
         }
@@ -189,7 +189,7 @@ public class FlexPACBayesAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         for (int step = 0; step < boundSteps; step++)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(thetaPost);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(thetaPost);
             var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
             for (int d = 0; d < _paramDim; d++)
@@ -202,7 +202,7 @@ public class FlexPACBayesAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             }
         }
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(metaParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(metaParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, thetaPost);
     }
 
@@ -225,7 +225,7 @@ public class FlexPACBayesAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private double ComputeFlexPACBayesLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var metaParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var metaParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         int totalSteps = _algoOptions.AdaptationSteps;
         int priorSteps = Math.Max(1, (int)(totalSteps * _algoOptions.PriorDataFraction));
@@ -238,7 +238,7 @@ public class FlexPACBayesAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
             for (int step = 0; step < priorSteps; step++)
             {
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(thetaPrior);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(thetaPrior);
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 thetaPrior = ApplyGradients(thetaPrior, grad, _algoOptions.InnerLearningRate);
             }
@@ -248,7 +248,7 @@ public class FlexPACBayesAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
             for (int step = 0; step < boundSteps; step++)
             {
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(thetaPost);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(thetaPost);
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 for (int d = 0; d < _paramDim; d++)
                 {
@@ -260,16 +260,16 @@ public class FlexPACBayesAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             }
 
             double f = _algoOptions.PriorDataFraction;
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(thetaPost);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(thetaPost);
             double postLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(thetaPrior);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(thetaPrior);
             double priorLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
 
             double kl = ComputePointKL(thetaPost, thetaPrior);
             totalLoss += (1.0 - f) * postLoss + f * priorLoss + _algoOptions.KLCoefficient * kl / 2.0;
         }
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(metaParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(metaParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

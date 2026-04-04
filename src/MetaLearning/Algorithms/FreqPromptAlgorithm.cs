@@ -88,7 +88,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
             throw new ArgumentOutOfRangeException(nameof(options), "PromptInitScale must be positive.");
 
         _algoOptions = options;
-        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         _numComponents = options.NumFreqComponents;
 
         // Initialize basis vectors using DCT-like cosine basis
@@ -116,7 +116,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var baseParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var baseParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -129,7 +129,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
                 var effectiveParams = ComputeEffectiveParams(baseParams, coeffs);
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(effectiveParams);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(effectiveParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Project gradient onto basis vectors to get coefficient gradients
@@ -147,19 +147,19 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
 
             // Evaluate with adapted prompt
             var finalParams = ComputeEffectiveParams(baseParams, coeffs);
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(finalParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(finalParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
         // Outer loop: update backbone
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(baseParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(baseParams);
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
             var newBaseParams = ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate);
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(newBaseParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(newBaseParams);
         }
 
         // Update prompt basis and initial coefficients via SPSA
@@ -172,7 +172,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var baseParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var baseParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         var coeffs = new double[_numComponents];
         for (int k = 0; k < _numComponents; k++)
@@ -181,7 +181,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
             var effectiveParams = ComputeEffectiveParams(baseParams, coeffs);
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(effectiveParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(effectiveParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
             for (int k = 0; k < _numComponents; k++)
@@ -195,7 +195,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         }
 
         var adaptedParams = ComputeEffectiveParams(baseParams, coeffs);
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(baseParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(baseParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
@@ -222,7 +222,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
     private double ComputeFreqPromptLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var baseParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var baseParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -233,7 +233,7 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
                 var effectiveParams = ComputeEffectiveParams(baseParams, coeffs);
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(effectiveParams);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(effectiveParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 for (int k = 0; k < _numComponents; k++)
@@ -249,11 +249,11 @@ public class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
             }
 
             var finalParams = ComputeEffectiveParams(baseParams, coeffs);
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(finalParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(finalParams);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(baseParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(baseParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

@@ -85,7 +85,7 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             throw new ArgumentOutOfRangeException(nameof(options), "LatentDim must be positive.");
 
         _algoOptions = options;
-        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
         _latentDim = options.LatentDim;
@@ -116,18 +116,18 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var baseParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var baseParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
             // Inner loop: compute task-specific adapted params
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(baseParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(baseParams);
             var adaptedParams = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++) adaptedParams[d] = baseParams[d];
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
@@ -150,7 +150,7 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
             // Apply fused delta to base params
             var fusedParams = ApplyCompressedDelta(baseParams, fusedDelta);
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(fusedParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(fusedParams);
 
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
@@ -163,11 +163,11 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         }
 
         // Outer loop: update base params
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(baseParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(baseParams);
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(ApplyGradients(baseParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
         // Update VAE params via SPSA
@@ -180,7 +180,7 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var baseParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var baseParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         // Inner loop adaptation
         var adaptedParams = new Vector<T>(_paramDim);
@@ -188,7 +188,7 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
         }
@@ -200,7 +200,7 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
         var fusedDelta = DecodeLatent(zFused);
         var finalParams = ApplyCompressedDelta(baseParams, fusedDelta);
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(baseParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(baseParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, finalParams);
     }
 
@@ -334,18 +334,18 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
     private double ComputeVAELoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var baseParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var baseParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(baseParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(baseParams);
             var adaptedParams = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++) adaptedParams[d] = baseParams[d];
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
@@ -356,13 +356,13 @@ public class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             var decoded = DecodeLatent(FuseLatents(z));
             var fusedParams = ApplyCompressedDelta(baseParams, decoded);
 
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(fusedParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(fusedParams);
             double taskLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
             double klLoss = ComputeKLDivergence(mu, logVar);
             totalLoss += taskLoss + _algoOptions.KLWeight * klLoss;
         }
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(baseParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(baseParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 

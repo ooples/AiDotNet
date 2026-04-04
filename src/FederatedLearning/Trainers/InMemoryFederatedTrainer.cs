@@ -105,7 +105,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         var metadata = new FederatedLearningMetadata();
         var uniqueParticipants = new HashSet<int>();
 
-        var previousGlobalParams = ((IParameterizable<T, TInput, TOutput>)GetGlobalModel()).GetParameters();
+        var previousGlobalParams = InterfaceGuard.Parameterizable(GetGlobalModel()).GetParameters();
 
         var aggregator = GetAggregationStrategyOrThrow();
         var aggregationName = aggregator.GetStrategyName();
@@ -178,7 +178,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         HomomorphicEncryptionMode heMode = effectiveHeOptions?.Mode ?? HomomorphicEncryptionMode.HeOnly;
         var heProvider = useHomomorphicEncryption ? (_homomorphicEncryptionProviderOverride ?? new SealHomomorphicEncryptionProvider<T>()) : null;
         var encryptedIndices = useHomomorphicEncryption && effectiveHeOptions != null
-            ? ResolveEncryptedIndices(effectiveHeOptions, ((IParameterizable<T, TInput, TOutput>)GetGlobalModel()).ParameterCount, heMode)
+            ? ResolveEncryptedIndices(effectiveHeOptions, InterfaceGuard.Parameterizable(GetGlobalModel()).ParameterCount, heMode)
             : Array.Empty<int>();
 
         metadata.HomomorphicEncryptionEnabled = useHomomorphicEncryption;
@@ -270,7 +270,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         bool isHeadSplitPersonalization = usePersonalization && IsHeadSplitPersonalization(personalizationStrategy);
         bool isClusteredPersonalization = usePersonalization && IsClusteredPersonalization(personalizationStrategy);
         var personalizedIndices = (isHeadSplitPersonalization || isClusteredPersonalization)
-            ? ResolvePersonalizedIndices(metadata.PersonalizedParameterFraction, ((IParameterizable<T, TInput, TOutput>)GetGlobalModel()).ParameterCount)
+            ? ResolvePersonalizedIndices(metadata.PersonalizedParameterFraction, InterfaceGuard.Parameterizable(GetGlobalModel()).ParameterCount)
             : Array.Empty<int>();
 
         Dictionary<int, Vector<T>>? perClientPersonalState = usePersonalization ? new Dictionary<int, Vector<T>>() : null;
@@ -280,7 +280,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         {
             var roundStart = DateTime.UtcNow;
             var globalBefore = GetGlobalModel();
-            var globalBeforeParams = ((IParameterizable<T, TInput, TOutput>)globalBefore).GetParameters();
+            var globalBeforeParams = InterfaceGuard.Parameterizable(globalBefore).GetParameters();
             var selectedClientIds = SelectClients(clientData, round, clientSelectionFraction);
 
             foreach (var id in selectedClientIds)
@@ -301,7 +301,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             {
                 if (secureAggregationMode == SecureAggregationMode.ThresholdDropoutResilient)
                 {
-                    thresholdSecureAggregation = new ThresholdSecureAggregationVector<T>(((IParameterizable<T, TInput, TOutput>)globalBefore).ParameterCount, _randomSeed);
+                    thresholdSecureAggregation = new ThresholdSecureAggregationVector<T>(InterfaceGuard.Parameterizable(globalBefore).ParameterCount, _randomSeed);
                     thresholdSecureAggregation.InitializeRound(
                         selectedClientIds,
                         minimumUploaderCount: secureAggregationOptions?.MinimumUploaderCount ?? 0,
@@ -313,7 +313,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 }
                 else
                 {
-                    secureAggregation = new SecureAggregationVector<T>(((IParameterizable<T, TInput, TOutput>)globalBefore).ParameterCount, _randomSeed);
+                    secureAggregation = new SecureAggregationVector<T>(InterfaceGuard.Parameterizable(globalBefore).ParameterCount, _randomSeed);
                     secureAggregation.GeneratePairwiseSecrets(selectedClientIds);
 
                     // Full participation mode: "threshold" is effectively the entire selected set.
@@ -356,7 +356,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 double weight = Math.Max(1.0, dataset.SampleCount);
                 clientWeights[clientId] = weight;
 
-                var trainedParameters = ((IParameterizable<T, TInput, TOutput>)trainedModel).GetParameters();
+                var trainedParameters = InterfaceGuard.Parameterizable(trainedModel).GetParameters();
                 var parameters = usePersonalization && effectivePersonalizationOptions is not null && perClientPersonalState != null
                     ? ApplyPersonalizationAfterLocalTraining(
                         personalizationStrategy,
@@ -436,7 +436,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 }
                 else
                 {
-                    clientModels[clientId] = ((IParameterizable<T, TInput, TOutput>)trainedModel).WithParameters(parametersForAggregation);
+                    clientModels[clientId] = InterfaceGuard.Parameterizable(trainedModel).WithParameters(parametersForAggregation);
                 }
             }
 
@@ -464,11 +464,11 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 var heAggregated = heProvider.AggregateEncryptedWeightedAverage(
                     heClientParameters,
                     clientWeights,
-                    ((IParameterizable<T, TInput, TOutput>)globalBefore).GetParameters(),
+                    InterfaceGuard.Parameterizable(globalBefore).GetParameters(),
                     encryptedIndices,
                     effectiveHeOptions);
 
-                newGlobalModel = ((IParameterizable<T, TInput, TOutput>)globalBefore).WithParameters(heAggregated);
+                newGlobalModel = InterfaceGuard.Parameterizable(globalBefore).WithParameters(heAggregated);
             }
             else if (useSecureAggregation)
             {
@@ -489,7 +489,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                         "Secure aggregation is enabled but neither threshold nor standard secure aggregation was initialized.");
                 }
 
-                newGlobalModel = ((IParameterizable<T, TInput, TOutput>)globalBefore).WithParameters(averagedParameters);
+                newGlobalModel = InterfaceGuard.Parameterizable(globalBefore).WithParameters(averagedParameters);
             }
             else
             {
@@ -510,37 +510,37 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     encryptedIndices,
                     effectiveHeOptions);
 
-                var merged = ((IParameterizable<T, TInput, TOutput>)newGlobalModel).GetParameters();
+                var merged = InterfaceGuard.Parameterizable(newGlobalModel).GetParameters();
                 foreach (var idx in encryptedIndices)
                 {
                     merged[idx] = heAggregated[idx];
                 }
 
-                newGlobalModel = ((IParameterizable<T, TInput, TOutput>)newGlobalModel).WithParameters(merged);
+                newGlobalModel = InterfaceGuard.Parameterizable(newGlobalModel).WithParameters(merged);
             }
 
             if (useMetaLearning && effectiveMetaLearningOptions != null)
             {
                 var metaRate = effectiveMetaLearningOptions.MetaLearningRate;
-                var averaged = ((IParameterizable<T, TInput, TOutput>)newGlobalModel).GetParameters();
+                var averaged = InterfaceGuard.Parameterizable(newGlobalModel).GetParameters();
                 var metaUpdated = ApplyMetaLearningUpdate(globalBeforeParams, averaged, metaRate);
-                newGlobalModel = ((IParameterizable<T, TInput, TOutput>)globalBefore).WithParameters(metaUpdated);
+                newGlobalModel = InterfaceGuard.Parameterizable(globalBefore).WithParameters(metaUpdated);
             }
 
             if (serverOptimizer != null)
             {
-                var updatedParams = serverOptimizer.Step(globalBeforeParams, ((IParameterizable<T, TInput, TOutput>)newGlobalModel).GetParameters());
-                newGlobalModel = ((IParameterizable<T, TInput, TOutput>)newGlobalModel).WithParameters(updatedParams);
+                var updatedParams = serverOptimizer.Step(globalBeforeParams, InterfaceGuard.Parameterizable(newGlobalModel).GetParameters());
+                newGlobalModel = InterfaceGuard.Parameterizable(newGlobalModel).WithParameters(updatedParams);
             }
 
             if (useDifferentialPrivacy && dpMechanism is not null && privacyAccountant is not null &&
                 (dpMode == DifferentialPrivacyMode.Central || dpMode == DifferentialPrivacyMode.LocalAndCentral))
             {
-                var globalParams = ((IParameterizable<T, TInput, TOutput>)newGlobalModel).GetParameters();
+                var globalParams = InterfaceGuard.Parameterizable(newGlobalModel).GetParameters();
                 var privateGlobalParams = dpMechanism.ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
                 privacyAccountant.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
                 privacyEventsThisRound++;
-                newGlobalModel = ((IParameterizable<T, TInput, TOutput>)newGlobalModel).WithParameters(privateGlobalParams);
+                newGlobalModel = InterfaceGuard.Parameterizable(newGlobalModel).WithParameters(privateGlobalParams);
             }
 
             SetGlobalModel(newGlobalModel);
@@ -552,7 +552,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     effectivePersonalizationOptions,
                     clientData,
                     selectedClientIds,
-                    ((IParameterizable<T, TInput, TOutput>)newGlobalModel).GetParameters(),
+                    InterfaceGuard.Parameterizable(newGlobalModel).GetParameters(),
                     personalizedIndices,
                     perClientPersonalState,
                     perClusterPersonalState);
@@ -568,13 +568,13 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 metadata.ReportedEpsilonAtDelta = privacyAccountant.GetEpsilonAtDelta(dpDelta);
             }
 
-            var newParams = ((IParameterizable<T, TInput, TOutput>)newGlobalModel).GetParameters();
+            var newParams = InterfaceGuard.Parameterizable(newGlobalModel).GetParameters();
             var deltaNorm = ComputeL2Distance(previousGlobalParams, newParams);
 
             UpdateClientPerformanceScores(selectedClientIds, clientWeights);
 
             double averageUploadRatio = uploadRatioCount > 0 ? uploadRatioSum / uploadRatioCount : 1.0;
-            double roundCommunicationMB = EstimateRoundCommunicationMB(selectedClientIds.Count, ((IParameterizable<T, TInput, TOutput>)globalBefore).ParameterCount, averageUploadRatio);
+            double roundCommunicationMB = EstimateRoundCommunicationMB(selectedClientIds.Count, InterfaceGuard.Parameterizable(globalBefore).ParameterCount, averageUploadRatio);
             metadata.TotalCommunicationMB += roundCommunicationMB;
             metadata.RoundMetrics.Add(new RoundMetadata
             {
@@ -688,15 +688,15 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 double weight = Math.Max(1.0, dataset.SampleCount);
                 startedClientWeights[clientId] = weight;
 
-                var parameters = ((IParameterizable<T, TInput, TOutput>)trainedModel).GetParameters();
-                UpdateClientEmbedding(clientId, ((IParameterizable<T, TInput, TOutput>)globalAtStepStart).GetParameters(), parameters);
+                var parameters = InterfaceGuard.Parameterizable(trainedModel).GetParameters();
+                UpdateClientEmbedding(clientId, InterfaceGuard.Parameterizable(globalAtStepStart).GetParameters(), parameters);
 
                 if (heterogeneityCorrection != null)
                 {
                     parameters = heterogeneityCorrection.Correct(
                         clientId,
                         step,
-                        ((IParameterizable<T, TInput, TOutput>)globalAtStepStart).GetParameters(),
+                        InterfaceGuard.Parameterizable(globalAtStepStart).GetParameters(),
                         parameters,
                         localEpochs);
                 }
@@ -706,7 +706,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     var clientRandom = FederatedRandom.CreateClientRandom(_randomSeed, step, clientId, salt: 4242);
                     parameters = ApplyCompressionToParameters(
                         clientId,
-                        ((IParameterizable<T, TInput, TOutput>)globalAtStepStart).GetParameters(),
+                        InterfaceGuard.Parameterizable(globalAtStepStart).GetParameters(),
                         parameters,
                         compressionOptions,
                         compressionResiduals,
@@ -776,11 +776,11 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                         var heAggregated = heProvider.AggregateEncryptedWeightedAverage(
                             singleParams,
                             singleWeights,
-                            ((IParameterizable<T, TInput, TOutput>)currentModel).GetParameters(),
+                            InterfaceGuard.Parameterizable(currentModel).GetParameters(),
                             encryptedIndices,
                             heOptions);
 
-                        var maskedPlain = MaskEncryptedIndices(update.Parameters, ((IParameterizable<T, TInput, TOutput>)currentModel).GetParameters(), encryptedIndices);
+                        var maskedPlain = MaskEncryptedIndices(update.Parameters, InterfaceGuard.Parameterizable(currentModel).GetParameters(), encryptedIndices);
                         foreach (var idx in encryptedIndices)
                         {
                             maskedPlain[idx] = heAggregated[idx];
@@ -789,23 +789,23 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                         targetParameters = maskedPlain;
                     }
 
-                    var mixed = MixParameters(((IParameterizable<T, TInput, TOutput>)currentModel).GetParameters(), targetParameters, alpha);
-                    var targetModel = ((IParameterizable<T, TInput, TOutput>)currentModel).WithParameters(mixed);
+                    var mixed = MixParameters(InterfaceGuard.Parameterizable(currentModel).GetParameters(), targetParameters, alpha);
+                    var targetModel = InterfaceGuard.Parameterizable(currentModel).WithParameters(mixed);
 
                     if (serverOptimizer != null)
                     {
-                        var updatedParams = serverOptimizer.Step(((IParameterizable<T, TInput, TOutput>)currentModel).GetParameters(), ((IParameterizable<T, TInput, TOutput>)targetModel).GetParameters());
-                        targetModel = ((IParameterizable<T, TInput, TOutput>)targetModel).WithParameters(updatedParams);
+                        var updatedParams = serverOptimizer.Step(InterfaceGuard.Parameterizable(currentModel).GetParameters(), InterfaceGuard.Parameterizable(targetModel).GetParameters());
+                        targetModel = InterfaceGuard.Parameterizable(targetModel).WithParameters(updatedParams);
                     }
 
                     if (useDifferentialPrivacy && dpMechanism is not null && privacyAccountant is not null &&
                         (dpMode == DifferentialPrivacyMode.Central || dpMode == DifferentialPrivacyMode.LocalAndCentral))
                     {
-                        var globalParams = ((IParameterizable<T, TInput, TOutput>)targetModel).GetParameters();
+                        var globalParams = InterfaceGuard.Parameterizable(targetModel).GetParameters();
                         var privateGlobalParams = dpMechanism.ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
                         privacyAccountant.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
                         privacyEventsThisStep++;
-                        targetModel = ((IParameterizable<T, TInput, TOutput>)targetModel).WithParameters(privateGlobalParams);
+                        targetModel = InterfaceGuard.Parameterizable(targetModel).WithParameters(privateGlobalParams);
                     }
 
                     SetGlobalModel(targetModel);
@@ -816,10 +816,10 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 foreach (var update in due)
                 {
                     var parametersForPlain = useHomomorphicEncryption
-                        ? MaskEncryptedIndices(update.Parameters, ((IParameterizable<T, TInput, TOutput>)globalAtStepStart).GetParameters(), encryptedIndices)
+                        ? MaskEncryptedIndices(update.Parameters, InterfaceGuard.Parameterizable(globalAtStepStart).GetParameters(), encryptedIndices)
                         : update.Parameters;
 
-                    bufferModels[bufferedUpdateKey] = ((IParameterizable<T, TInput, TOutput>)globalAtStepStart).WithParameters(parametersForPlain);
+                    bufferModels[bufferedUpdateKey] = InterfaceGuard.Parameterizable(globalAtStepStart).WithParameters(parametersForPlain);
                     bufferWeights[bufferedUpdateKey] = update.Weight;
                     if (useHomomorphicEncryption)
                     {
@@ -849,33 +849,33 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                         var heAggregated = heProvider.AggregateEncryptedWeightedAverage(
                             bufferHeParameters,
                             bufferWeights,
-                            ((IParameterizable<T, TInput, TOutput>)globalAtStepStart).GetParameters(),
+                            InterfaceGuard.Parameterizable(globalAtStepStart).GetParameters(),
                             encryptedIndices,
                             heOptions);
 
-                        var merged = ((IParameterizable<T, TInput, TOutput>)newGlobalModel).GetParameters();
+                        var merged = InterfaceGuard.Parameterizable(newGlobalModel).GetParameters();
                         foreach (var idx in encryptedIndices)
                         {
                             merged[idx] = heAggregated[idx];
                         }
 
-                        newGlobalModel = ((IParameterizable<T, TInput, TOutput>)newGlobalModel).WithParameters(merged);
+                        newGlobalModel = InterfaceGuard.Parameterizable(newGlobalModel).WithParameters(merged);
                     }
 
                     if (serverOptimizer != null)
                     {
-                        var updatedParams = serverOptimizer.Step(((IParameterizable<T, TInput, TOutput>)currentModel).GetParameters(), ((IParameterizable<T, TInput, TOutput>)newGlobalModel).GetParameters());
-                        newGlobalModel = ((IParameterizable<T, TInput, TOutput>)newGlobalModel).WithParameters(updatedParams);
+                        var updatedParams = serverOptimizer.Step(InterfaceGuard.Parameterizable(currentModel).GetParameters(), InterfaceGuard.Parameterizable(newGlobalModel).GetParameters());
+                        newGlobalModel = InterfaceGuard.Parameterizable(newGlobalModel).WithParameters(updatedParams);
                     }
 
                     if (useDifferentialPrivacy && dpMechanism is not null && privacyAccountant is not null &&
                         (dpMode == DifferentialPrivacyMode.Central || dpMode == DifferentialPrivacyMode.LocalAndCentral))
                     {
-                        var globalParams = ((IParameterizable<T, TInput, TOutput>)newGlobalModel).GetParameters();
+                        var globalParams = InterfaceGuard.Parameterizable(newGlobalModel).GetParameters();
                         var privateGlobalParams = dpMechanism.ApplyPrivacy(globalParams, dpEpsilon, dpDelta);
                         privacyAccountant.AddRound(dpEpsilon, dpDelta, samplingRate: (double)selectedClientIds.Count / GetNumberOfClientsOrThrow());
                         privacyEventsThisStep++;
-                        newGlobalModel = ((IParameterizable<T, TInput, TOutput>)newGlobalModel).WithParameters(privateGlobalParams);
+                        newGlobalModel = InterfaceGuard.Parameterizable(newGlobalModel).WithParameters(privateGlobalParams);
                     }
 
                     SetGlobalModel(newGlobalModel);
@@ -899,13 +899,13 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 metadata.ReportedEpsilonAtDelta = privacyAccountant.GetEpsilonAtDelta(dpDelta);
             }
 
-            var newParams = ((IParameterizable<T, TInput, TOutput>)GetGlobalModel()).GetParameters();
+            var newParams = InterfaceGuard.Parameterizable(GetGlobalModel()).GetParameters();
             var deltaNorm = ComputeL2Distance(previousGlobalParams, newParams);
 
             UpdateClientPerformanceScores(selectedClientIds, startedClientWeights);
 
             double averageUploadRatio = uploadRatioCount > 0 ? uploadRatioSum / uploadRatioCount : 1.0;
-            double stepCommunicationMB = EstimateRoundCommunicationMB(selectedClientIds.Count, ((IParameterizable<T, TInput, TOutput>)globalAtStepStart).ParameterCount, averageUploadRatio);
+            double stepCommunicationMB = EstimateRoundCommunicationMB(selectedClientIds.Count, InterfaceGuard.Parameterizable(globalAtStepStart).ParameterCount, averageUploadRatio);
             metadata.TotalCommunicationMB += stepCommunicationMB;
             metadata.RoundMetrics.Add(new RoundMetadata
             {
@@ -1356,7 +1356,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 }
             }
 
-            return ((IParameterizable<T, TInput, TOutput>)globalModel).WithParameters(start);
+            return InterfaceGuard.Parameterizable(globalModel).WithParameters(start);
         }
 
         if (IsPFedMePersonalization(personalizationStrategy))
@@ -1367,7 +1367,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 perClientState[clientId] = theta;
             }
 
-            return ((IParameterizable<T, TInput, TOutput>)globalModel).WithParameters(theta);
+            return InterfaceGuard.Parameterizable(globalModel).WithParameters(theta);
         }
 
         if (IsHeadSplitPersonalization(personalizationStrategy))
@@ -1384,7 +1384,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 start[idx] = clientVector[idx];
             }
 
-            return ((IParameterizable<T, TInput, TOutput>)globalModel).WithParameters(start);
+            return InterfaceGuard.Parameterizable(globalModel).WithParameters(start);
         }
 
         // Ditto (and unknown strategies) start from the current global model for the global update path.
@@ -1585,12 +1585,12 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     start[idx] = clientParams[idx];
                 }
 
-                var localModel = CloneModelByParameters(((IParameterizable<T, TInput, TOutput>)globalModel).WithParameters(start));
+                var localModel = CloneModelByParameters(InterfaceGuard.Parameterizable(globalModel).WithParameters(start));
                 var localOptimizer = CreateOptimizerForModel(localModel);
                 ConfigureLocalOptimizer(localOptimizer, adaptationEpochs);
                 var input = CreateLocalOptimizationInputData(dataset, localModel);
                 var result = localOptimizer.Optimize(input);
-                var adapted = ((IParameterizable<T, TInput, TOutput>)(result.BestSolution ?? localModel)).GetParameters();
+                var adapted = InterfaceGuard.Parameterizable((result.BestSolution ?? localModel)).GetParameters();
 
                 perClientState[clientId] = adapted;
             }
@@ -1623,12 +1623,12 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     start[idx] = clusterHead[idx];
                 }
 
-                var localModel = CloneModelByParameters(((IParameterizable<T, TInput, TOutput>)globalModel).WithParameters(start));
+                var localModel = CloneModelByParameters(InterfaceGuard.Parameterizable(globalModel).WithParameters(start));
                 var localOptimizer = CreateOptimizerForModel(localModel);
                 ConfigureLocalOptimizer(localOptimizer, adaptationEpochs);
                 var input = CreateLocalOptimizationInputData(dataset, localModel);
                 var result = localOptimizer.Optimize(input);
-                var adapted = ((IParameterizable<T, TInput, TOutput>)(result.BestSolution ?? localModel)).GetParameters();
+                var adapted = InterfaceGuard.Parameterizable((result.BestSolution ?? localModel)).GetParameters();
 
                 double w = Math.Max(1.0, dataset.SampleCount);
                 if (!clusterSums.TryGetValue(clusterId, out var sum))
@@ -2071,7 +2071,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
     private static IFullModel<T, TInput, TOutput> CloneModelByParameters(IFullModel<T, TInput, TOutput> model)
     {
         // Prefer parameter-based cloning to avoid relying on model-specific serialization in DeepCopy().
-        var parameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
-        return ((IParameterizable<T, TInput, TOutput>)model).WithParameters(parameters);
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
+        return InterfaceGuard.Parameterizable(model).WithParameters(parameters);
     }
 }

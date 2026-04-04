@@ -144,11 +144,11 @@ public class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
 
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
 
             // Standard forward pass and loss computation
             var queryLoss = ComputeLossFromOutput(
@@ -195,7 +195,7 @@ public class SimpleShotAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
     /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         // Extract support features
         var supportPred = MetaModel.Predict(task.SupportInput);
@@ -379,11 +379,11 @@ internal class SimpleShotModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
             for (int i = 0; i < _backboneParams.Length; i++)
                 modulated[i] = NumOps.Multiply(_backboneParams[i],
                     NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(modulated);
+            InterfaceGuard.Parameterizable(_model).SetParameters(modulated);
         }
         else
         {
-            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(_backboneParams);
+            InterfaceGuard.Parameterizable(_model).SetParameters(_backboneParams);
         }
         return _model.Predict(input);
     }

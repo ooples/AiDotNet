@@ -153,11 +153,11 @@ public class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     {
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
 
             // Extract support features and compute GP kernel-based modulation
             // This connects the deep kernel to the training loss
@@ -185,11 +185,11 @@ public class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
                 if (count > 0)
                 {
                     double avgRatio = sumRatio / count;
-                    var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+                    var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
                     var modulatedParams = new Vector<T>(currentParams.Length);
                     for (int i = 0; i < currentParams.Length; i++)
                         modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(modulatedParams);
+                    InterfaceGuard.Parameterizable(MetaModel).SetParameters(modulatedParams);
                 }
             }
 
@@ -214,12 +214,12 @@ public class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// </summary>
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
 
             var supportPred = MetaModel.Predict(task.SupportInput);
             var supportFeatures = ConvertToVector(supportPred);
@@ -244,18 +244,18 @@ public class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
                 if (count > 0)
                 {
                     double avgRatio = sumRatio / count;
-                    var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+                    var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
                     var modulatedParams = new Vector<T>(currentParams.Length);
                     for (int i = 0; i < currentParams.Length; i++)
                         modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(avgRatio));
-                    ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(modulatedParams);
+                    InterfaceGuard.Parameterizable(MetaModel).SetParameters(modulatedParams);
                 }
             }
 
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
@@ -409,7 +409,7 @@ public class DKTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         // Extract support and query features
         var supportPred = MetaModel.Predict(task.SupportInput);
@@ -490,11 +490,11 @@ internal class DKTModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetad
             for (int i = 0; i < _backboneParams.Length; i++)
                 modulated[i] = NumOps.Multiply(_backboneParams[i],
                     NumOps.FromDouble(_modulationFactors[i % _modulationFactors.Length]));
-            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(modulated);
+            InterfaceGuard.Parameterizable(_model).SetParameters(modulated);
         }
         else
         {
-            ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(_backboneParams);
+            InterfaceGuard.Parameterizable(_model).SetParameters(_backboneParams);
         }
         return _model.Predict(input);
     }

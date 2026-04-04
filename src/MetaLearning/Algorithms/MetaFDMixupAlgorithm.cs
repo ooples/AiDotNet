@@ -62,7 +62,7 @@ public class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
     }
@@ -72,14 +72,14 @@ public class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var tasks = taskBatch.Tasks;
 
         // Step 1: Compute initial task gradients for mixup pool
         var taskGradPool = new List<Vector<T>>();
         foreach (var task in tasks)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
             taskGradPool.Add(ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput)));
         }
 
@@ -92,7 +92,7 @@ public class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
                 var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Apply gradient mixup with probability p
@@ -118,7 +118,7 @@ public class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                 adaptedParams = ApplyGradients(adaptedParams, taskGrad, _algoOptions.InnerLearningRate);
             }
 
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
             losses.Add(queryLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -128,7 +128,7 @@ public class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         double alignmentPenalty = ComputeGradientAlignmentPenalty(taskGradPool);
 
         // Outer loop
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
@@ -139,7 +139,7 @@ public class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
                 double alignGrad = _algoOptions.AlignmentWeight * ComputeAlignmentGradient(taskGradPool, d);
                 avgGrad[d] = NumOps.Add(avgGrad[d], NumOps.FromDouble(alignGrad));
             }
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate));
         }
 
         var totalLoss = NumOps.Add(ComputeMean(losses), NumOps.FromDouble(alignmentPenalty));
@@ -149,18 +149,18 @@ public class MetaFDMixupAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = currentParams[d];
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
         }
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(currentParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(currentParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 

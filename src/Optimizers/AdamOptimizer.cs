@@ -129,7 +129,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // Initialize with random solution
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
-        var parameters = ((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         _m = new Vector<T>(parameters.Length);
         _v = new Vector<T>(parameters.Length);
         _t = 0;
@@ -227,7 +227,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
-        var parameters = ((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         // === Vectorized Adam Update using IEngine ===
         // Phase B: US-GPU-015 - GPU-accelerated gradient updates
@@ -266,7 +266,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // Apply update: parameters = parameters - update
         var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
 
-        return ((IParameterizable<T, TInput, TOutput>)currentSolution).WithParameters(updatedParams);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(updatedParams);
     }
 
     /// <summary>

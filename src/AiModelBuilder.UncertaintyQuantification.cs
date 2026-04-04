@@ -890,7 +890,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         Vector<T> gradients;
         try
         {
-            gradients = ((IGradientComputable<T, TInput, TOutput>)model).ComputeGradients(input, target, lossFunction: null);
+            gradients = InterfaceGuard.GradientComputable(model).ComputeGradients(input, target, lossFunction: null);
         }
         catch (Exception ex)
         {
@@ -917,7 +917,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         artifacts.HasLaplacePosterior = true;
-        artifacts.LaplacePosteriorMean = ((IParameterizable<T, TInput, TOutput>)model).GetParameters().Clone();
+        artifacts.LaplacePosteriorMean = InterfaceGuard.Parameterizable(model).GetParameters().Clone();
         artifacts.LaplacePosteriorVarianceDiag = variance;
     }
 
@@ -945,7 +945,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         Vector<T> gradients;
         try
         {
-            gradients = ((IGradientComputable<T, TInput, TOutput>)model).ComputeGradients(input, target, lossFunction: null);
+            gradients = InterfaceGuard.GradientComputable(model).ComputeGradients(input, target, lossFunction: null);
         }
         catch (Exception ex)
         {
@@ -972,7 +972,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         artifacts.HasLaplacePosterior = true;
-        artifacts.LaplacePosteriorMean = ((IParameterizable<T, TInput, TOutput>)model).GetParameters().Clone();
+        artifacts.LaplacePosteriorMean = InterfaceGuard.Parameterizable(model).GetParameters().Clone();
         artifacts.LaplacePosteriorVarianceDiag = variance;
     }
 
@@ -1021,7 +1021,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             Vector<T> gradients;
             try
             {
-                gradients = ((IGradientComputable<T, TInput, TOutput>)swagModel).ComputeGradients(input, target, lossFunction: null);
+                gradients = InterfaceGuard.GradientComputable(swagModel).ComputeGradients(input, target, lossFunction: null);
             }
             catch (Exception ex)
             {
@@ -1029,7 +1029,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 return;
             }
 
-            ((IGradientComputable<T, TInput, TOutput>)swagModel).ApplyGradients(gradients, lr);
+            InterfaceGuard.GradientComputable(swagModel).ApplyGradients(gradients, lr);
 
             if (step < burnIn)
             {
@@ -1041,7 +1041,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 continue;
             }
 
-            var parameters = ((IParameterizable<T, TInput, TOutput>)swagModel).GetParameters();
+            var parameters = InterfaceGuard.Parameterizable(swagModel).GetParameters();
             snapshotCount++;
 
             if (mean == null)
@@ -1131,7 +1131,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             Vector<T> gradients;
             try
             {
-                gradients = ((IGradientComputable<T, TInput, TOutput>)swagModel).ComputeGradients(input, target, lossFunction: null);
+                gradients = InterfaceGuard.GradientComputable(swagModel).ComputeGradients(input, target, lossFunction: null);
             }
             catch (Exception ex)
             {
@@ -1139,7 +1139,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 return;
             }
 
-            ((IGradientComputable<T, TInput, TOutput>)swagModel).ApplyGradients(gradients, lr);
+            InterfaceGuard.GradientComputable(swagModel).ApplyGradients(gradients, lr);
 
             if (step < burnIn)
             {
@@ -1151,7 +1151,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 continue;
             }
 
-            var parameters = ((IParameterizable<T, TInput, TOutput>)swagModel).GetParameters();
+            var parameters = InterfaceGuard.Parameterizable(swagModel).GetParameters();
             snapshotCount++;
 
             if (mean == null)

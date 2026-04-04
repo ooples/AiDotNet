@@ -106,10 +106,10 @@ public class MXFP4Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
         // Use config's group size if specified and different from constructor value
         int effectiveBlockSize = config.GroupSize > 0 ? config.GroupSize : _blockSize;
 
-        var parameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         var quantizedParams = QuantizeWithMXFP4(parameters, effectiveBlockSize);
 
-        return ((IParameterizable<T, TInput, TOutput>)model).WithParameters(quantizedParams);
+        return InterfaceGuard.Parameterizable(model).WithParameters(quantizedParams);
     }
 
     /// <inheritdoc/>
@@ -125,7 +125,7 @@ public class MXFP4Quantizer<T, TInput, TOutput> : IQuantizer<T, TInput, TOutput>
         }
 
         // Pre-compute block scales
-        var parameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
         ComputeBlockScales(parameters);
 
         IsCalibrated = true;

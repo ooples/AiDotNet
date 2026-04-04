@@ -285,9 +285,9 @@ public class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         _decoderWeights = ApplyGradients(_decoderWeights, accumulatedDecoderGrad, _leoOptions.OuterLearningRate);
 
         // Update feature encoder
-        var featureParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var featureParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var updatedFeatureParams = ApplyGradients(featureParams, accumulatedFeatureGrad, _leoOptions.OuterLearningRate);
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(updatedFeatureParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedFeatureParams);
 
         return NumOps.Divide(totalLoss, batchSizeT);
     }

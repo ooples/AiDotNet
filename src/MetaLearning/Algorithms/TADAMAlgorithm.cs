@@ -255,9 +255,9 @@ public class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         }
 
         // Update MetaModel parameters
-        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var updatedParams = ApplyGradients(currentParams, modelGradients, _options.OuterLearningRate);
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(updatedParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedParams);
 
         // Update metric scale parameters using finite differences
         UpdateMetricScale(task, loss);
@@ -905,7 +905,7 @@ public class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         // Regularize MetaModel parameters (feature encoder)
         if (MetaModel != null)
         {
-            var modelParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+            var modelParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
             for (int i = 0; i < modelParams.Length; i++)
             {
                 T val = modelParams[i];

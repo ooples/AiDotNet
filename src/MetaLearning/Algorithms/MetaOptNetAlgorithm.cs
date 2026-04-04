@@ -259,9 +259,9 @@ public class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput
         }
 
         // Update encoder parameters
-        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var updatedParams = ApplyGradients(currentParams, accumulatedGradients, _metaOptNetOptions.OuterLearningRate);
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(updatedParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedParams);
 
         // Update temperature
         if (_metaOptNetOptions.UseLearnedTemperature)

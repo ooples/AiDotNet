@@ -131,7 +131,7 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
 
-        _velocity = new Vector<T>(((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters().Length);
+        _velocity = new Vector<T>(InterfaceGuard.Parameterizable(currentSolution).GetParameters().Length);
         InitializeAdaptiveParameters();
 
         for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
@@ -226,14 +226,14 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <returns>An updated symbolic model with improved coefficients.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> velocity)
     {
-        var parameters = ((IParameterizable<T, TInput, TOutput>)currentSolution).GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         // === Vectorized Update using IEngine ===
         // Phase B: US-GPU-015 - GPU-accelerated parameter updates
         // params = params - velocity
         var newCoefficients = (Vector<T>)Engine.Subtract(parameters, velocity);
 
-        return ((IParameterizable<T, TInput, TOutput>)currentSolution).WithParameters(newCoefficients);
+        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
     }
 
     /// <summary>

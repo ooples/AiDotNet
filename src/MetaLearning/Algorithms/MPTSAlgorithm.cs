@@ -70,7 +70,7 @@ public class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
         if (options.PriorityDecayRate <= 0)
@@ -89,7 +89,7 @@ public class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -99,7 +99,7 @@ public class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             int K = _algoOptions.AdaptationSteps;
             for (int step = 0; step < K; step++)
             {
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 double progress = (double)step / Math.Max(K - 1, 1);
@@ -117,7 +117,7 @@ public class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                 }
             }
 
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Group coherence regularization
@@ -158,14 +158,14 @@ public class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
         int K = _algoOptions.AdaptationSteps;
         for (int step = 0; step < K; step++)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             double progress = (double)step / Math.Max(K - 1, 1);
 
@@ -179,14 +179,14 @@ public class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             }
         }
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
     private double ComputeMPTSLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         int K = _algoOptions.AdaptationSteps;
         foreach (var task in taskBatch.Tasks)
         {
@@ -194,7 +194,7 @@ public class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
             for (int step = 0; step < K; step++)
             {
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ap);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(ap);
                 var g = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 double progress = (double)step / Math.Max(K - 1, 1);
                 for (int d = 0; d < _paramDim; d++)
@@ -206,10 +206,10 @@ public class MPTSAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
                         NumOps.FromDouble(_algoOptions.InnerLearningRate * act * NumOps.ToDouble(g[d])));
                 }
             }
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ap);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(ap);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

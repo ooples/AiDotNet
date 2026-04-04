@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Validation;
@@ -143,13 +144,13 @@ public abstract class ShardedOptimizerBase<T, TInput, TOutput> : IShardedOptimiz
         }
 
         // Get current parameters
-        var parameters = ((IParameterizable<T, TInput, TOutput>)model).GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
 
         // Average parameters across all processes
         Config.CommunicationBackend.AllReduce(parameters, ReductionOperation.Average);
 
         // Update model with averaged parameters
-        ((IParameterizable<T, TInput, TOutput>)model).SetParameters(parameters);
+        InterfaceGuard.Parameterizable(model).SetParameters(parameters);
     }
 
     /// <inheritdoc/>

@@ -68,7 +68,7 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         _logVar = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++)
             _logVar[d] = NumOps.FromDouble(options.InitialLogVar);
@@ -79,7 +79,7 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     {
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -89,7 +89,7 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedMean);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedMean);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 adaptedMean = ApplyGradients(adaptedMean, grad, _algoOptions.InnerLearningRate);
             }
@@ -98,7 +98,7 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             for (int tStep = 0; tStep < _algoOptions.TransductiveSteps; tStep++)
             {
                 // Use query gradients to refine posterior mean
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedMean);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedMean);
                 var queryGrad = ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput));
                 for (int d = 0; d < _paramDim; d++)
                     adaptedMean[d] = NumOps.Subtract(adaptedMean[d],
@@ -110,7 +110,7 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             for (int s = 0; s < _algoOptions.NumPosteriorSamples; s++)
             {
                 var sampled = SamplePosterior(adaptedMean);
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(sampled);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(sampled);
                 finalLosses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
             }
             var ensembleLoss = ComputeMean(finalLosses);
@@ -128,7 +128,7 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             var totalLoss = NumOps.Add(ensembleLoss, NumOps.FromDouble(_algoOptions.KLWeight * kl / _paramDim));
             losses.Add(totalLoss);
 
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedMean);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedMean);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
@@ -142,18 +142,18 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var adaptedMean = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedMean[d] = initParams[d];
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedMean);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedMean);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             adaptedMean = ApplyGradients(adaptedMean, grad, _algoOptions.InnerLearningRate);
         }
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedMean);
     }
 
@@ -171,21 +171,21 @@ public class BayTransProtoAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     private double ComputeBayTransLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         foreach (var task in taskBatch.Tasks)
         {
             var ap = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ap);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(ap);
                 var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 ap = ApplyGradients(ap, g, _algoOptions.InnerLearningRate);
             }
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(ap);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(ap);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

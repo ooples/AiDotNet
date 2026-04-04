@@ -184,11 +184,11 @@ public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
         var metaGradients = new List<Vector<T>>();
         var losses = new List<T>();
 
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
 
             // Forward pass: extract features and amortize classifier
             var supportPred = MetaModel.Predict(task.SupportInput);
@@ -206,11 +206,11 @@ public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 double meanAbs = sumAbs / classifierWeights.Length;
                 double modFactor = 0.5 + 0.5 / (1.0 + Math.Exp(-meanAbs + 1.0));
 
-                var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+                var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
                 var modulatedParams = new Vector<T>(currentParams.Length);
                 for (int i = 0; i < currentParams.Length; i++)
                     modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(modFactor));
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(modulatedParams);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(modulatedParams);
             }
 
             // Compute query loss on modulated backbone (amortization affects loss)
@@ -238,12 +238,12 @@ public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// </summary>
     private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         double totalLoss = 0;
 
         foreach (var task in taskBatch.Tasks)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
 
             var supportPred = MetaModel.Predict(task.SupportInput);
             var classifierWeights = AmortizeClassifier(supportPred);
@@ -256,18 +256,18 @@ public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
                 double meanAbs = sumAbs / classifierWeights.Length;
                 double modFactor = 0.5 + 0.5 / (1.0 + Math.Exp(-meanAbs + 1.0));
 
-                var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+                var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
                 var modulatedParams = new Vector<T>(currentParams.Length);
                 for (int i = 0; i < currentParams.Length; i++)
                     modulatedParams[i] = NumOps.Multiply(currentParams[i], NumOps.FromDouble(modFactor));
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(modulatedParams);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(modulatedParams);
             }
 
             var queryPred = MetaModel.Predict(task.QueryInput);
             totalLoss += NumOps.ToDouble(ComputeLossFromOutput(queryPred, task.QueryOutput));
         }
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 
@@ -296,7 +296,7 @@ public class VERSAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOu
     /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         // Extract support features and amortize classifier
         var supportPred = MetaModel.Predict(task.SupportInput);
@@ -440,7 +440,7 @@ internal class VERSAModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMet
             for (int i = 0; i < _backboneParams.Length; i++)
                 modulated[i] = _backboneParams[i];
         }
-        ((IParameterizable<T, TInput, TOutput>)_model).SetParameters(modulated);
+        InterfaceGuard.Parameterizable(_model).SetParameters(modulated);
         return _model.Predict(input);
     }
 

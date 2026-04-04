@@ -206,7 +206,7 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             // Add L2 regularization if configured
             if (_matchingOptions.L2Regularization > 0.0)
             {
-                var paramsVec = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+                var paramsVec = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
                 for (int i = 0; i < accumulatedGradients.Length && i < paramsVec.Length; i++)
                 {
                     T regGrad = NumOps.Multiply(paramsVec[i], NumOps.FromDouble(2 * _matchingOptions.L2Regularization));
@@ -215,9 +215,9 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             }
 
             // Update encoder parameters
-            var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+            var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
             var updatedParams = ApplyGradients(currentParams, accumulatedGradients, _matchingOptions.OuterLearningRate);
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(updatedParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedParams);
         }
 
         // Return average loss
@@ -286,7 +286,7 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     /// </summary>
     private Vector<T> ComputeAttentionGradients(IMetaLearningTask<T, TInput, TOutput> task, T currentLoss)
     {
-        var parameters = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var parameters = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var gradients = new Vector<T>(parameters.Length);
         double epsilon = 1e-5;
         double currentLossVal = NumOps.ToDouble(currentLoss);
@@ -302,7 +302,7 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
             // Perturb parameter
             T original = parameters[i];
             parameters[i] = NumOps.Add(original, NumOps.FromDouble(epsilon));
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(parameters);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(parameters);
 
             // Recompute loss through the attention mechanism
             var supportEmbeddings = EncodeExamples(task.SupportInput);
@@ -319,7 +319,7 @@ public class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         }
 
         // Restore original parameters
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(parameters);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(parameters);
 
         return gradients;
     }
@@ -712,7 +712,7 @@ public class MatchingNetworksModel<T, TInput, TOutput> : IModel<TInput, TOutput,
     /// <summary>
     /// Gets encoder parameters.
     /// </summary>
-    public Vector<T> GetParameters() => ((IParameterizable<T, TInput, TOutput>)_encoder).GetParameters();
+    public Vector<T> GetParameters() => InterfaceGuard.Parameterizable(_encoder).GetParameters();
 
     /// <summary>
     /// Gets model metadata.

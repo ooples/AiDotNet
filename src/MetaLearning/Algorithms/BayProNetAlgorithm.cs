@@ -74,7 +74,7 @@ public class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _algoOptions = options;
-        _paramDim = ((IParameterizable<T, TInput, TOutput>)options.MetaModel).GetParameters().Length;
+        _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
 
@@ -92,7 +92,7 @@ public class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -102,7 +102,7 @@ public class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
                 adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
@@ -115,7 +115,7 @@ public class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             for (int s = 0; s < numSamples; s++)
             {
                 var sampledParams = SamplePosterior(adaptedParams);
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(sampledParams);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(sampledParams);
                 var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
                 sampleLosses.Add(queryLoss);
                 sampleGrads.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -153,18 +153,18 @@ public class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var adaptedParams = new Vector<T>(_paramDim);
         for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+            InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
             adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
         }
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
 
         // Encode uncertainty as modulation: high-variance dims get dampened
         var modulationFactors = new double[_paramDim];
@@ -211,7 +211,7 @@ public class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
     private double ComputeBayProNetLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         double totalLoss = 0;
-        var initParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var initParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -220,7 +220,7 @@ public class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(adaptedParams);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(adaptedParams);
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
                 adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
             }
@@ -230,7 +230,7 @@ public class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             for (int s = 0; s < numSamples; s++)
             {
                 var sampledParams = SamplePosterior(adaptedParams);
-                ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(sampledParams);
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(sampledParams);
                 sampleLossSum += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
             }
             double ensembleLoss = sampleLossSum / numSamples;
@@ -238,7 +238,7 @@ public class BayProNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput,
             totalLoss += ensembleLoss + _algoOptions.KLWeight * klPenalty;
         }
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(initParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(initParams);
         return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
     }
 }

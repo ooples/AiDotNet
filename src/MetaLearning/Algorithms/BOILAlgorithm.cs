@@ -375,7 +375,7 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// </summary>
     private void InitializeParameters()
     {
-        var totalParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var totalParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
 
         // Estimate head size
         _headParameterCount = _boilOptions.FeatureDimension * _boilOptions.NumClasses;
@@ -429,7 +429,7 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// </summary>
     private Vector<T> InitializeBodyParameters()
     {
-        var totalParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var totalParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var bodyParams = new Vector<T>(_bodyParameterCount);
 
         double scale = Math.Sqrt(2.0 / _boilOptions.FeatureDimension);
@@ -453,7 +453,7 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// </summary>
     private Vector<T> CloneBodyParameters()
     {
-        var totalParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var totalParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var bodyParams = new Vector<T>(_bodyParameterCount);
 
         int copyLen = Math.Min(_bodyParameterCount, totalParams.Length);
@@ -488,7 +488,7 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     private TOutput ForwardWithBody(TInput input, Vector<T> bodyParams)
     {
         // Apply body parameters to model
-        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var tempParams = new Vector<T>(currentParams.Length);
 
         // Copy body parameters
@@ -503,7 +503,7 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             tempParams[i] = currentParams[i];
         }
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(tempParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(tempParams);
 
         // Extract features
         var features = MetaModel.Predict(input);
@@ -518,7 +518,7 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         var logits = ComputeLogits(featureVec, _headWeights, _headBias);
 
         // Restore original parameters
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(currentParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(currentParams);
 
         return ConvertFromVector(logits);
     }
@@ -749,7 +749,7 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     /// </summary>
     private void UpdateBodyInitialization(Vector<T> gradients)
     {
-        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var updatedParams = new Vector<T>(currentParams.Length);
 
         // Update body parameters
@@ -768,7 +768,7 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
             updatedParams[i] = currentParams[i];
         }
 
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(updatedParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedParams);
     }
 
     #endregion

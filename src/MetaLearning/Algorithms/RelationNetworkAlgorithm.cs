@@ -463,7 +463,7 @@ public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         // L2 regularization for feature encoder
         if (_relationOptions.FeatureEncoderL2Reg > 0.0)
         {
-            var encoderParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+            var encoderParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
             T encoderReg = ComputeL2Regularization(encoderParams);
             T regWeight = NumOps.FromDouble(_relationOptions.FeatureEncoderL2Reg);
             totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(regWeight, encoderReg));
@@ -517,9 +517,9 @@ public class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         // Update feature encoder using base class gradient computation
         var featureGradients = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
         featureGradients = ClipGradients(featureGradients);
-        var currentParams = ((IParameterizable<T, TInput, TOutput>)MetaModel).GetParameters();
+        var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
         var updatedParams = ApplyGradients(currentParams, featureGradients, _relationOptions.OuterLearningRate);
-        ((IParameterizable<T, TInput, TOutput>)MetaModel).SetParameters(updatedParams);
+        InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedParams);
 
         // Update relation module parameters using sampled finite differences
         var relationParams = _relationModule.GetParameters();
