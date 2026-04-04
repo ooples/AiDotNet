@@ -51,6 +51,7 @@ namespace AiDotNet.Diffusion.Video.WorldModels;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Oasis: A Universe in a Transformer", "https://oasis-model.github.io")]
 public class OasisModel<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

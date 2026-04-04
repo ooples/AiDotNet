@@ -89,6 +89,7 @@ namespace AiDotNet.Diffusion.TextToImage;
 [ModelTask(ModelTask.TextToImage)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Recraft V3", "https://www.recraft.ai/blog/recraft-v3")]
 public class RecraftV3Model<T> : LatentDiffusionModelBase<T>
 {
     #region Constants

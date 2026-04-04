@@ -54,6 +54,7 @@ namespace AiDotNet.Diffusion.Video.AudioVisual;
 [ModelTask(ModelTask.ImageToVideo)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Emu Video 2", "https://ai.meta.com/research/publications/emu-video/")]
 public class EmuVideo2Model<T> : VideoDiffusionModelBase<T>
 {
     private const int LATENT_CHANNELS = 16;

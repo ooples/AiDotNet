@@ -45,6 +45,7 @@ namespace AiDotNet.Diffusion.NoisePredictors;
 [ModelTask(ModelTask.VideoGeneration)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+    [ModelPaper("Mochi 1: A New SOTA in Open-Source Video Generation", "https://github.com/genmoai/mochi")]
 public class AsymmDiTPredictor<T> : NoisePredictorBase<T>
 {
     private readonly int _inputChannels;
