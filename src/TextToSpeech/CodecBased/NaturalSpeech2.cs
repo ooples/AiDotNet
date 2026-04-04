@@ -142,8 +142,9 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// <inheritdoc />
     protected override Tensor<T> PreprocessText(string text)
     {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
+        int hiddenDim = _options.HiddenDim;
+        int len = Math.Min(text.Length, hiddenDim);
+        var t = new Tensor<T>([1, hiddenDim]);
         for (int i = 0; i < len; i++)
             t[i] = NumOps.FromDouble(text[i] / 128.0);
         return t;
@@ -172,6 +173,18 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
         var c = input;
+        int hiddenDim = _options.HiddenDim;
+        int lastDim = c.Shape[^1];
+        if (lastDim != hiddenDim)
+        {
+            int batch = Math.Max(1, c.Length / lastDim);
+            var projected = new Tensor<T>([batch, hiddenDim]);
+            int copyLen = Math.Min(lastDim, hiddenDim);
+            for (int b = 0; b < batch; b++)
+                for (int j = 0; j < copyLen; j++)
+                    projected[b * hiddenDim + j] = c[b * lastDim + j];
+            c = projected;
+        }
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
@@ -186,8 +199,16 @@ public class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
         SetTrainingMode(true);
         try
         {
-            var o = Predict(input);
-            var g = LossFunction.CalculateDerivative(o.ToVector(), expected.ToVector());
+            var output = Predict(input);
+            var ov = output.ToVector();
+            var ev = expected.ToVector();
+            if (ov.Length != ev.Length)
+            {
+                int minLen = Math.Min(ov.Length, ev.Length);
+                ov = ov.Slice(0, minLen);
+                ev = ev.Slice(0, minLen);
+            }
+            var g = LossFunction.CalculateDerivative(ov, ev);
             var gt = Tensor<T>.FromVector(g);
             for (int i = Layers.Count - 1; i >= 0; i--)
                 gt = Layers[i].Backward(gt);
