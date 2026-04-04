@@ -892,8 +892,7 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
         var output = new Vector<T>(x.Length);
         for (int i = 0; i < x.Length; i++)
         {
-            double val = NumOps.ToDouble(x[i]);
-            output[i] = NumOps.FromDouble(Math.Max(0, val));
+            output[i] = NumOps.GreaterThan(x[i], NumOps.Zero) ? x[i] : NumOps.Zero;
         }
         return output;
     }
