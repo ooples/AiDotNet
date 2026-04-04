@@ -176,7 +176,7 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
             _yShift = NumOps.FromDouble(Math.Abs(minY) + 1.0);
             var yShifted = new Vector<T>(y.Length);
             for (int i = 0; i < y.Length; i++)
-                yShifted[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + _yShift);
+                yShifted[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + NumOps.ToDouble(_yShift));
             y = yShifted;
         }
 
@@ -316,7 +316,7 @@ public class NegativeBinomialRegression<T> : RegressionBase<T>
         if (NumOps.GreaterThan(_yShift, NumOps.Zero))
         {
             for (int i = 0; i < predictions.Length; i++)
-                predictions[i] = NumOps.Subtract(predictions[i], NumOps.FromDouble(_yShift));
+                predictions[i] = NumOps.Subtract(predictions[i], _yShift);
         }
         return predictions;
     }
