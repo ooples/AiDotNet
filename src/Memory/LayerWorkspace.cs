@@ -1,150 +1,136 @@
+using System.Runtime.CompilerServices;
+
 namespace AiDotNet.Memory;
 
 /// <summary>
 /// Per-layer workspace that manages pre-allocated tensor buffers for zero-allocation forward passes.
-/// Wraps ForwardArena with named buffer declarations for type-safe, self-documenting allocation.
+/// Uses index-based access for maximum performance — array lookup instead of dictionary.
 ///
-/// Usage in layer constructor:
+/// Usage:
 /// <code>
-/// Workspace = new LayerWorkspace&lt;T&gt;();
-/// Workspace.DeclareTimestepBuffer("rInput", modelDim);
-/// Workspace.DeclareTimestepBuffer("kInput", modelDim);
-/// Workspace.DeclareSequenceBuffer("allR", modelDim);
-/// </code>
+/// // In layer class:
+/// private const int BufRInput = 0, BufKInput = 1, BufVInput = 2;
+/// private const int SeqAllR = 0, SeqAllK = 1, SeqAllV = 2;
 ///
-/// Usage in Forward:
-/// <code>
+/// // In constructor:
+/// Workspace = new LayerWorkspace&lt;T&gt;(timestepCount: 7, sequenceCount: 8);
+/// Workspace.DeclareTimestep(BufRInput, modelDim);
+/// Workspace.DeclareTimestep(BufKInput, modelDim);
+/// Workspace.DeclareSequence(SeqAllR, modelDim);
+///
+/// // In Forward:
 /// Workspace.BeginForward(batchSize, seqLen);
-/// try {
-///     for (int t = 0; t &lt; seqLen; t++) {
-///         var rInput = Workspace.RentTimestep("rInput");  // O(1), zero alloc
-///         // ... use rInput ...
-///     }
-/// } finally {
-///     Workspace.EndForward();
-/// }
+/// var rInput = Workspace.Timestep(BufRInput);  // O(1) array index
 /// </code>
 /// </summary>
 public sealed class LayerWorkspace<T>
 {
-    private readonly ForwardArena<T> _arena = new();
-    private readonly Dictionary<string, BufferDeclaration> _declarations = new();
+    private readonly int[][] _timestepSuffixes;
+    private readonly int[][] _sequenceSuffixes;
+    private readonly Tensor<T>?[] _timestepBuffers;
+    private readonly Tensor<T>?[] _sequenceBuffers;
     private int _lastBatchSize;
     private int _lastSeqLen;
-    private bool _isActive;
 
     /// <summary>
-    /// Declare a per-timestep buffer (reused each iteration of the inner loop).
-    /// Shape will be [batchSize, ...shapeSuffix] when resolved.
+    /// Create a workspace with the specified number of timestep and sequence buffer slots.
     /// </summary>
-    public void DeclareTimestepBuffer(string name, params int[] shapeSuffix)
+    public LayerWorkspace(int timestepCount, int sequenceCount)
     {
-        _declarations[name] = new BufferDeclaration(name, shapeSuffix, true);
+        _timestepSuffixes = new int[timestepCount][];
+        _sequenceSuffixes = new int[sequenceCount][];
+        _timestepBuffers = new Tensor<T>?[timestepCount];
+        _sequenceBuffers = new Tensor<T>?[sequenceCount];
     }
 
     /// <summary>
-    /// Declare a per-sequence buffer (one per forward pass, stores all timesteps).
-    /// Shape will be [batchSize, seqLen, ...shapeSuffix] when resolved.
+    /// Declare a per-timestep buffer at the given index.
+    /// Shape will be [batchSize, ...shapeSuffix].
     /// </summary>
-    public void DeclareSequenceBuffer(string name, params int[] shapeSuffix)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void DeclareTimestep(int index, params int[] shapeSuffix)
     {
-        _declarations[name] = new BufferDeclaration(name, shapeSuffix, false);
+        _timestepSuffixes[index] = shapeSuffix;
     }
 
     /// <summary>
-    /// Begin a forward pass. Pre-sizes arena if shapes changed.
-    /// Must be paired with EndForward() in a try/finally.
+    /// Declare a per-sequence buffer at the given index.
+    /// Shape will be [batchSize, seqLen, ...shapeSuffix].
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void DeclareSequence(int index, params int[] shapeSuffix)
+    {
+        _sequenceSuffixes[index] = shapeSuffix;
+    }
+
+    /// <summary>
+    /// Prepare for a forward pass. Only re-allocates when shapes change.
     /// </summary>
     public void BeginForward(int batchSize, int seqLen = 1)
     {
-        bool shapesChanged = batchSize != _lastBatchSize || seqLen != _lastSeqLen;
+        if (batchSize == _lastBatchSize && seqLen == _lastSeqLen)
+            return; // Same shapes — reuse existing buffers
 
-        if (shapesChanged)
+        _lastBatchSize = batchSize;
+        _lastSeqLen = seqLen;
+
+        // Re-allocate timestep buffers
+        for (int i = 0; i < _timestepSuffixes.Length; i++)
         {
-            _lastBatchSize = batchSize;
-            _lastSeqLen = seqLen;
-
-            // Pre-allocate arena capacity for all declared buffers
-            foreach (var decl in _declarations.Values)
-            {
-                var shape = decl.ResolveShape(batchSize, seqLen);
-                int count = decl.IsTimestep ? 1 : 1; // 1 tensor per name (reused across timesteps for timestep buffers)
-                _arena.EnsureCapacity(shape, count);
-            }
+            var suffix = _timestepSuffixes[i];
+            if (suffix is null) continue;
+            var shape = new int[1 + suffix.Length];
+            shape[0] = batchSize;
+            Array.Copy(suffix, 0, shape, 1, suffix.Length);
+            _timestepBuffers[i] = new Tensor<T>(shape);
         }
 
-        _arena.Reset();
-        _isActive = true;
+        // Re-allocate sequence buffers
+        for (int i = 0; i < _sequenceSuffixes.Length; i++)
+        {
+            var suffix = _sequenceSuffixes[i];
+            if (suffix is null) continue;
+            var shape = new int[2 + suffix.Length];
+            shape[0] = batchSize;
+            shape[1] = seqLen;
+            Array.Copy(suffix, 0, shape, 2, suffix.Length);
+            _sequenceBuffers[i] = new Tensor<T>(shape);
+        }
     }
 
     /// <summary>
-    /// Rent a per-timestep buffer by name. O(1) bump pointer allocation.
-    /// The same tensor is reused each timestep (cursor resets implicitly since
-    /// only 1 is pre-allocated per timestep buffer).
+    /// Get a pre-allocated timestep buffer by index. O(1) array access.
     /// </summary>
-    public Tensor<T> RentTimestep(string name)
-    {
-        if (!_isActive)
-            throw new InvalidOperationException("Call BeginForward() before renting buffers.");
-
-        var decl = _declarations[name];
-        var shape = decl.ResolveShape(_lastBatchSize, _lastSeqLen);
-        return _arena.Rent(shape);
-    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Tensor<T> Timestep(int index) => _timestepBuffers[index]
+        ?? throw new InvalidOperationException($"Timestep buffer {index} not allocated. Call BeginForward first.");
 
     /// <summary>
-    /// Rent a per-sequence buffer by name. O(1) bump pointer allocation.
+    /// Get a pre-allocated sequence buffer by index. O(1) array access.
     /// </summary>
-    public Tensor<T> RentSequence(string name)
-    {
-        if (!_isActive)
-            throw new InvalidOperationException("Call BeginForward() before renting buffers.");
-
-        var decl = _declarations[name];
-        var shape = decl.ResolveShape(_lastBatchSize, _lastSeqLen);
-        return _arena.Rent(shape);
-    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Tensor<T> Sequence(int index) => _sequenceBuffers[index]
+        ?? throw new InvalidOperationException($"Sequence buffer {index} not allocated. Call BeginForward first.");
 
     /// <summary>
-    /// End the forward pass. Resets all arena cursors for next call.
+    /// End the forward pass. No-op — buffers persist for reuse.
     /// </summary>
-    public void EndForward()
-    {
-        _arena.Reset();
-        _isActive = false;
-    }
-
-    /// <summary>
-    /// Gets the underlying arena for direct access (advanced usage).
-    /// </summary>
-    public ForwardArena<T> Arena => _arena;
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void EndForward() { }
 
     /// <summary>
     /// Gets the total number of pre-allocated tensors.
     /// </summary>
-    public int TotalPreAllocated => _arena.TotalPreAllocated;
-
-    private readonly record struct BufferDeclaration(string Name, int[] ShapeSuffix, bool IsTimestep)
+    public int TotalPreAllocated
     {
-        public int[] ResolveShape(int batchSize, int seqLen)
+        get
         {
-            if (IsTimestep)
-            {
-                // [batchSize, ...suffix]
-                var shape = new int[1 + ShapeSuffix.Length];
-                shape[0] = batchSize;
-                Array.Copy(ShapeSuffix, 0, shape, 1, ShapeSuffix.Length);
-                return shape;
-            }
-            else
-            {
-                // [batchSize, seqLen, ...suffix]
-                var shape = new int[2 + ShapeSuffix.Length];
-                shape[0] = batchSize;
-                shape[1] = seqLen;
-                Array.Copy(ShapeSuffix, 0, shape, 2, ShapeSuffix.Length);
-                return shape;
-            }
+            int count = 0;
+            for (int i = 0; i < _timestepBuffers.Length; i++)
+                if (_timestepBuffers[i] is not null) count++;
+            for (int i = 0; i < _sequenceBuffers.Length; i++)
+                if (_sequenceBuffers[i] is not null) count++;
+            return count;
         }
     }
 }
