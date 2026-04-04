@@ -392,7 +392,7 @@ public class GANomalyDetector<T> : AnomalyDetectorBase<T>
         return zRecon;
     }
 
-    // LeakyReLU is now inline: NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Multiply(alpha, x)
+    private static double LeakyReLU(double x, double alpha = 0.2) => x >= 0 ? x : alpha * x;
 
     private GradientAccumulators InitializeGradients()
     {

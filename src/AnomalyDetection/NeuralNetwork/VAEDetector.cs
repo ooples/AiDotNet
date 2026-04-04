@@ -615,7 +615,7 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
         }
     }
 
-    // ReLU is now inline: NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Zero
+    private static double ReLU(double x) => Math.Max(0, x);
 
     private double GaussianRandom()
     {

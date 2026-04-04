@@ -373,8 +373,8 @@ public class S5Layer<T> : LayerBase<T>
             delta[n] = Math.Exp(NumOps.ToDouble(_logDelta[n]));
 
         // Build kernel K[h_out, h_in, l]
-        _cachedKernel = new double[_modelDimension, _modelDimension, seqLen];
-        _cachedDelta = delta;
+        var kernelD = new double[_modelDimension, _modelDimension, seqLen];
+        _cachedDelta = new Vector<T>(delta.Select(d => NumOps.FromDouble(d)));
 
         for (int n = 0; n < _stateDimension; n++)
         {
@@ -405,7 +405,7 @@ public class S5Layer<T> : LayerBase<T>
                     double pow_r = 1.0, pow_i = 0.0;
                     for (int l = 0; l < seqLen; l++)
                     {
-                        _cachedKernel[ho, hi, l] += ceff_r * pow_r - ceff_i * pow_i;
+                        kernelD[ho, hi, l] += ceff_r * pow_r - ceff_i * pow_i;
                         double new_r = pow_r * abar_r - pow_i * abar_i;
                         double new_i = pow_r * abar_i + pow_i * abar_r;
                         pow_r = new_r; pow_i = new_i;
@@ -413,6 +413,13 @@ public class S5Layer<T> : LayerBase<T>
                 }
             }
         }
+
+        // Convert kernel to T[,,]
+        _cachedKernel = new T[_modelDimension, _modelDimension, seqLen];
+        for (int ho = 0; ho < _modelDimension; ho++)
+            for (int hi = 0; hi < _modelDimension; hi++)
+                for (int l = 0; l < seqLen; l++)
+                    _cachedKernel[ho, hi, l] = NumOps.FromDouble(kernelD[ho, hi, l]);
 
         // Causal matrix convolution: y[b,t,ho] = sum_l sum_hi K[ho,hi,l] * u[b,t-l,hi] + D[ho] * u[b,t,ho]
         var output = new Tensor<T>([batchSize, seqLen, _modelDimension]);
@@ -425,7 +432,7 @@ public class S5Layer<T> : LayerBase<T>
                     double sum = NumOps.ToDouble(_dParam[ho]) * NumOps.ToDouble(u[b, t, ho]);
                     for (int l = 0; l <= t; l++)
                         for (int hi = 0; hi < _modelDimension; hi++)
-                            sum += _cachedKernel[ho, hi, l] * NumOps.ToDouble(u[b, t - l, hi]);
+                            sum += NumOps.ToDouble(_cachedKernel[ho, hi, l]) * NumOps.ToDouble(u[b, t - l, hi]);
                     output[b, t, ho] = NumOps.FromDouble(sum);
                 }
             }
@@ -699,14 +706,14 @@ public class S5Layer<T> : LayerBase<T>
                     double dxVal = NumOps.ToDouble(_dParam[hi]) * NumOps.ToDouble(dOutput[b, t, hi]);
                     for (int l = 0; l < seqLen - t; l++)
                         for (int ho = 0; ho < _modelDimension; ho++)
-                            dxVal += NumOps.ToDouble(dOutput[b, t + l, ho]) * _cachedKernel[ho, hi, l];
+                            dxVal += NumOps.ToDouble(dOutput[b, t + l, ho]) * NumOps.ToDouble(_cachedKernel[ho, hi, l]);
                     dX[b, t, hi] = NumOps.FromDouble(dxVal);
                 }
 
         // Step 2: Chain dK to SSM params per state n
         for (int n = 0; n < _stateDimension; n++)
         {
-            double dt = _cachedDelta[n];
+            double dt = NumOps.ToDouble(_cachedDelta[n]);
             double ar = NumOps.ToDouble(_aReal[n]);
             double ai = NumOps.ToDouble(_aImag[n]);
             double expR = Math.Exp(dt * ar);
