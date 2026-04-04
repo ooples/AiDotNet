@@ -480,8 +480,8 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         _options = options ?? new EchoStateNetworkOptions();
         Options = _options;
         _reservoirSize = reservoirSize;
-        _spectralRadius = spectralRadius;
-        _sparsity = sparsity;
+        _spectralRadius = NumOps.FromDouble(spectralRadius);
+        _sparsity = NumOps.FromDouble(sparsity);
         _inputSize = architecture.InputSize;
         _outputSize = architecture.OutputSize;
         _leakingRate = NumOps.FromDouble(leakingRate);
@@ -564,8 +564,8 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         _options = options ?? new EchoStateNetworkOptions();
         Options = _options;
         _reservoirSize = reservoirSize;
-        _spectralRadius = spectralRadius;
-        _sparsity = sparsity;
+        _spectralRadius = NumOps.FromDouble(spectralRadius);
+        _sparsity = NumOps.FromDouble(sparsity);
         _inputSize = architecture.InputSize;
         _outputSize = architecture.OutputSize;
         _leakingRate = NumOps.FromDouble(leakingRate);
@@ -630,7 +630,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         {
             for (int j = 0; j < _reservoirSize; j++)
             {
-                if (_random.NextDouble() < _sparsity)
+                if (_random.NextDouble() < NumOps.ToDouble(_sparsity))
                 {
                     _reservoirWeights[i, j] = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * 0.1);
                 }
@@ -644,7 +644,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         }
 
         // Scale reservoir weights to achieve desired spectral radius
-        _reservoirWeights = ScaleToSpectralRadius(_reservoirWeights, _spectralRadius);
+        _reservoirWeights = ScaleToSpectralRadius(_reservoirWeights, NumOps.ToDouble(_spectralRadius));
 
         // Initialize output weights with small random values (Xavier-like initialization).
         // Zero initialization causes Predict to always return zero before training,
@@ -922,8 +922,8 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
                 inputSize: inputSize,
                 outputSize: outputSize,
                 reservoirSize: _reservoirSize,
-                spectralRadius: _spectralRadius,
-                sparsity: _sparsity
+                spectralRadius: NumOps.ToDouble(_spectralRadius),
+                sparsity: NumOps.ToDouble(_sparsity)
             ));
         }
     }
@@ -1499,8 +1499,8 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "ReservoirSize", _reservoirSize },
-                { "SpectralRadius", _spectralRadius },
-                { "Sparsity", _sparsity },
+                { "SpectralRadius", NumOps.ToDouble(_spectralRadius) },
+                { "Sparsity", NumOps.ToDouble(_sparsity) },
                 { "InputSize", _inputSize },
                 { "OutputSize", _outputSize },
                 { "LeakingRate", Convert.ToDouble(_leakingRate) },
@@ -1536,8 +1536,8 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     {
         // Write basic configuration
         writer.Write(_reservoirSize);
-        writer.Write(_spectralRadius);
-        writer.Write(_sparsity);
+        writer.Write(NumOps.ToDouble(_spectralRadius));
+        writer.Write(NumOps.ToDouble(_sparsity));
         writer.Write(_inputSize);
         writer.Write(_outputSize);
         writer.Write(Convert.ToDouble(_leakingRate));
@@ -1668,8 +1668,8 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     {
         // Read basic configuration
         _reservoirSize = reader.ReadInt32();
-        _spectralRadius = reader.ReadDouble();
-        _sparsity = reader.ReadDouble();
+        _spectralRadius = NumOps.FromDouble(reader.ReadDouble());
+        _sparsity = NumOps.FromDouble(reader.ReadDouble());
         _inputSize = reader.ReadInt32();
         _outputSize = reader.ReadInt32();
         _leakingRate = NumOps.FromDouble(reader.ReadDouble());
@@ -1818,8 +1818,8 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             return new EchoStateNetwork<T>(
                 Architecture,
                 _reservoirSize,
-                _spectralRadius,
-                _sparsity,
+                NumOps.ToDouble(_spectralRadius),
+                NumOps.ToDouble(_sparsity),
                 Convert.ToDouble(_leakingRate),
                 Convert.ToDouble(_regularization),
                 _warmupPeriod,
@@ -1835,8 +1835,8 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
             return new EchoStateNetwork<T>(
                 Architecture,
                 _reservoirSize,
-                _spectralRadius,
-                _sparsity,
+                NumOps.ToDouble(_spectralRadius),
+                NumOps.ToDouble(_sparsity),
                 Convert.ToDouble(_leakingRate),
                 Convert.ToDouble(_regularization),
                 _warmupPeriod,

@@ -255,11 +255,11 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     {
         _options = options ?? new LiquidStateMachineOptions();
         Options = _options;
-        _leakingRate = leakingRate;
-        _inputScaling = inputScaling;
-        _spectralRadius = spectralRadius;
+        _leakingRate = NumOps.FromDouble(leakingRate);
+        _inputScaling = NumOps.FromDouble(inputScaling);
+        _spectralRadius = NumOps.FromDouble(spectralRadius);
         _reservoirSize = reservoirSize;
-        _connectionProbability = connectionProbability;
+        _connectionProbability = NumOps.FromDouble(connectionProbability);
 
         InitializeLayers();
     }
@@ -301,7 +301,7 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
         else
         {
             // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultLSMLayers(Architecture, _reservoirSize, _connectionProbability, _spectralRadius, _inputScaling, _leakingRate));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultLSMLayers(Architecture, _reservoirSize, NumOps.ToDouble(_connectionProbability), NumOps.ToDouble(_spectralRadius), NumOps.ToDouble(_inputScaling), NumOps.ToDouble(_leakingRate)));
         }
     }
 
