@@ -137,25 +137,27 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </summary>
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
-
     private Tensor<T> _queryWeights;
 
     /// <summary>
     /// Tensor of weights for transforming input into key representations.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _keyWeights;
 
     /// <summary>
     /// Tensor of weights for transforming input into value representations.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _valueWeights;
 
     /// <summary>
     /// Tensor of weights for the final output projection.
     /// Shape: [embeddingDimension, embeddingDimension]
     /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _outputWeights;
 
     /// <summary>
@@ -163,7 +165,6 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// Shape: [embeddingDimension]
     /// </summary>
     [TrainableParameter(Role = PersistentTensorRole.Biases)]
-
     private Tensor<T> _outputBias;
 
     /// <summary>
