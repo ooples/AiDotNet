@@ -302,31 +302,21 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Weights not initialized.");
         }
 
-        // Encoder: x -> hidden
-        var hidden = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = encoderB1[j];
-            { var _w0 = new Vector<T>(_inputDim); for (int _i = 0; _i < _inputDim; _i++) _w0[_i] = encoderW1[_i, j]; sum = NumOps.Add(sum, Engine.DotProduct(x, _w0)); }
-            T reluVal = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
-            hidden[j] = reluVal;
-        }
+        // Encoder: hidden = ReLU(x @ W1 + b1)  (SIMD)
+        var xT = Tensor<T>.FromVector(x).Reshape(1, _inputDim);
+        var hiddenPre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(xT, Tensor<T>.FromMatrix(encoderW1)),
+            Tensor<T>.FromVector(encoderB1).Reshape(1, _hiddenDim));
+        var hidden = Engine.ReLU(hiddenPre.Reshape(_hiddenDim).ToVector());
 
-        // Encoder: hidden -> mean, logVar
-        var mean = new Vector<T>(_latentDim);
-        var logVar = new Vector<T>(_latentDim);
-        for (int j = 0; j < _latentDim; j++)
-        {
-            T sumMean = encoderBMean[j];
-            T sumLogVar = encoderBLogVar[j];
-            for (int i = 0; i < _hiddenDim; i++)
-            {
-                sumMean = NumOps.Add(sumMean, NumOps.Multiply(hidden[i], encoderWMean[i, j]));
-                sumLogVar = NumOps.Add(sumLogVar, NumOps.Multiply(hidden[i], encoderWLogVar[i, j]));
-            }
-            mean[j] = sumMean;
-            logVar[j] = sumLogVar;
-        }
+        // Encoder: mean = hidden @ WMean + bMean, logVar = hidden @ WLogVar + bLogVar  (SIMD)
+        var hT = Tensor<T>.FromVector(hidden).Reshape(1, _hiddenDim);
+        var mean = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(hT, Tensor<T>.FromMatrix(encoderWMean)),
+            Tensor<T>.FromVector(encoderBMean).Reshape(1, _latentDim)).Reshape(_latentDim).ToVector();
+        var logVar = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(hT, Tensor<T>.FromMatrix(encoderWLogVar)),
+            Tensor<T>.FromVector(encoderBLogVar).Reshape(1, _latentDim)).Reshape(_latentDim).ToVector();
 
         // Reparameterization: z = mean + exp(0.5 * logVar) * epsilon
         var z = new Vector<T>(_latentDim);
@@ -338,24 +328,18 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
             z[j] = NumOps.Add(mean[j], NumOps.Multiply(std, epsilon));
         }
 
-        // Decoder: z -> hidden2
-        var hidden2 = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = decoderB1[j];
-            { var _w1 = new Vector<T>(_latentDim); for (int _i = 0; _i < _latentDim; _i++) _w1[_i] = decoderW1[_i, j]; sum = NumOps.Add(sum, Engine.DotProduct(z, _w1)); }
-            T reluVal = NumOps.GreaterThan(sum, NumOps.Zero) ? sum : NumOps.Zero;
-            hidden2[j] = reluVal;
-        }
+        // Decoder: hidden2 = ReLU(z @ W1 + b1)  (SIMD)
+        var zT = Tensor<T>.FromVector(z).Reshape(1, _latentDim);
+        var h2Pre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(zT, Tensor<T>.FromMatrix(decoderW1)),
+            Tensor<T>.FromVector(decoderB1).Reshape(1, _hiddenDim));
+        var hidden2 = Engine.ReLU(h2Pre.Reshape(_hiddenDim).ToVector());
 
-        // Decoder: hidden2 -> reconstruction
-        var reconstruction = new Vector<T>(_inputDim);
-        for (int j = 0; j < _inputDim; j++)
-        {
-            T sum = decoderB2[j];
-            { var _w2 = new Vector<T>(_hiddenDim); for (int _i = 0; _i < _hiddenDim; _i++) _w2[_i] = decoderW2[_i, j]; sum = NumOps.Add(sum, Engine.DotProduct(hidden2, _w2)); }
-            reconstruction[j] = sum;
-        }
+        // Decoder: reconstruction = hidden2 @ W2 + b2  (SIMD, linear)
+        var h2T = Tensor<T>.FromVector(hidden2).Reshape(1, _hiddenDim);
+        var reconstruction = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(h2T, Tensor<T>.FromMatrix(decoderW2)),
+            Tensor<T>.FromVector(decoderB2).Reshape(1, _inputDim)).Reshape(_inputDim).ToVector();
 
         return (hidden, mean, logVar, z, reconstruction);
     }
