@@ -279,14 +279,15 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
         int offset = 0;
         foreach (var member in Members)
         {
-            int count = ((IParameterizable<T, Matrix<T>, Vector<T>>)member).ParameterCount;
+            var paramMember = (IParameterizable<T, Matrix<T>, Vector<T>>)member;
+            int count = paramMember.ParameterCount;
             var segment = new Vector<T>(count);
             for (int i = 0; i < count; i++)
             {
                 segment[i] = parameters[offset + i];
             }
 
-            ((IParameterizable<T, Matrix<T>, Vector<T>>)member).SetParameters(segment);
+            paramMember.SetParameters(segment);
             offset += count;
         }
     }
@@ -422,7 +423,8 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
         int offset = 0;
         foreach (var member in Members)
         {
-            int count = ((IParameterizable<T, Matrix<T>, Vector<T>>)member).ParameterCount;
+            var paramMember = (IParameterizable<T, Matrix<T>, Vector<T>>)member;
+            int count = paramMember.ParameterCount;
             var segment = new Vector<T>(count);
             for (int i = 0; i < count; i++)
             {
