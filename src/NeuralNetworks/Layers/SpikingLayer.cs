@@ -632,10 +632,12 @@ public class SpikingLayer<T> : LayerBase<T>
     /// for the specified neuron type, with appropriate default values.
     /// </para>
     /// </remarks>
+#pragma warning disable CS8618 // T fields initialized via NumOps.FromDouble in constructor body
     public SpikingLayer(int inputSize, int outputSize, SpikingNeuronType neuronType = SpikingNeuronType.LeakyIntegrateAndFire,
         double tau = 10.0, double refractoryPeriod = 2.0)
         : base([inputSize], [outputSize])
     {
+#pragma warning restore CS8618
         _neuronType = neuronType;
         _tau = NumOps.FromDouble(tau);
         _refractoryPeriod = NumOps.FromDouble(refractoryPeriod);
