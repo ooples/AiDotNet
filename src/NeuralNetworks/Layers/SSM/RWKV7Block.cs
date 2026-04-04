@@ -2,6 +2,7 @@
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Memory;
 
 namespace AiDotNet.NeuralNetworks.Layers.SSM;
 
@@ -309,7 +310,33 @@ public class RWKV7Block<T> : LayerBase<T>
         _normBeta1.Fill(NumOps.Zero);
         _normGamma2.Fill(NumOps.One);
         _normBeta2.Fill(NumOps.Zero);
+
+        // Arena workspace: pre-allocate forward pass buffers for zero-allocation hot path
+        Workspace = new LayerWorkspace<T>(timestepCount: 7, sequenceCount: 8);
+        // Timestep buffers (reused each iteration of seqLen loop)
+        Workspace.DeclareTimestep(TsRInput, _modelDimension);
+        Workspace.DeclareTimestep(TsKInput, _modelDimension);
+        Workspace.DeclareTimestep(TsVInput, _modelDimension);
+        Workspace.DeclareTimestep(TsAInput, _modelDimension);
+        Workspace.DeclareTimestep(TsBInput, _modelDimension);
+        Workspace.DeclareTimestep(TsWkvOut, _modelDimension);
+        Workspace.DeclareTimestep(TsYt, _modelDimension);
+        // Sequence buffers (one per forward pass, stores all timesteps)
+        Workspace.DeclareSequence(SqAllR, _modelDimension);
+        Workspace.DeclareSequence(SqAllK, _modelDimension);
+        Workspace.DeclareSequence(SqAllV, _modelDimension);
+        Workspace.DeclareSequence(SqAllA, _modelDimension);
+        Workspace.DeclareSequence(SqAllB, _modelDimension);
+        Workspace.DeclareSequence(SqAllWkv, _modelDimension);
+        Workspace.DeclareSequence(SqAllWkvPre, _modelDimension);
+        Workspace.DeclareSequence(SqAllWkvGated, _modelDimension);
     }
+
+    // Workspace buffer indices
+    private const int TsRInput = 0, TsKInput = 1, TsVInput = 2;
+    private const int TsAInput = 3, TsBInput = 4, TsWkvOut = 5, TsYt = 6;
+    private const int SqAllR = 0, SqAllK = 1, SqAllV = 2, SqAllA = 3;
+    private const int SqAllB = 4, SqAllWkv = 5, SqAllWkvPre = 6, SqAllWkvGated = 7;
 
     private void InitializeProjection(Tensor<T> tensor)
     {
@@ -370,32 +397,33 @@ public class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> TimeMixingForward(Tensor<T> x, int batchSize, int seqLen)
     {
+        Workspace!.BeginForward(batchSize, seqLen);
         var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         // State: [batch, numHeads, headDim, headDim] - matrix-valued per head
         var state = _recurrentState ?? new Tensor<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
         var xPrev = _prevToken ?? new Tensor<T>(new[] { batchSize, _modelDimension });
 
-        // Cache intermediate values for backward
-        var allR = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allK = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allV = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allA = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allB = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allWkv = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allWkvPreGate = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
-        var allWkvGated = new Tensor<T>(new[] { batchSize, seqLen, _modelDimension });
+        // Cache intermediate values for backward — zero allocation via workspace
+        var allR = Workspace.Sequence(SqAllR);
+        var allK = Workspace.Sequence(SqAllK);
+        var allV = Workspace.Sequence(SqAllV);
+        var allA = Workspace.Sequence(SqAllA);
+        var allB = Workspace.Sequence(SqAllB);
+        var allWkv = Workspace.Sequence(SqAllWkv);
+        var allWkvPreGate = Workspace.Sequence(SqAllWkvPre);
+        var allWkvGated = Workspace.Sequence(SqAllWkvGated);
 
         for (int t = 0; t < seqLen; t++)
         {
             var x_t = x.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
 
-            // Token shift: lerp between current and previous token
-            var rInput = new Tensor<T>(new[] { batchSize, _modelDimension });
-            var kInput = new Tensor<T>(new[] { batchSize, _modelDimension });
-            var vInput = new Tensor<T>(new[] { batchSize, _modelDimension });
-            var aInput = new Tensor<T>(new[] { batchSize, _modelDimension });
-            var bInput = new Tensor<T>(new[] { batchSize, _modelDimension });
+            // Token shift: lerp between current and previous token — zero allocation via workspace
+            var rInput = Workspace.Timestep(TsRInput);
+            var kInput = Workspace.Timestep(TsKInput);
+            var vInput = Workspace.Timestep(TsVInput);
+            var aInput = Workspace.Timestep(TsAInput);
+            var bInput = Workspace.Timestep(TsBInput);
 
             for (int bi = 0; bi < batchSize; bi++)
             {
