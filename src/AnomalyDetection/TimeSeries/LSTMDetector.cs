@@ -635,17 +635,12 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
             oGates[t] = o;
 
             // New cell and hidden state
-            var cNew = new Vector<T>(_hiddenDim);
-            var hNew = new Vector<T>(_hiddenDim);
-            for (int j = 0; j < _hiddenDim; j++)
-            {
-                // c = f * cPrev + i * cCand
-                cNew[j] = NumOps.Add(
-                    NumOps.Multiply(f[j], cPrev[j]),
-                    NumOps.Multiply(ig[j], cCand[j]));
-                // h = o * tanh(c)
-                hNew[j] = NumOps.Multiply(o[j], NumOps.Tanh(cNew[j]));
-            }
+            // c = f * cPrev + i * cCand  (SIMD)
+            var cNew = (Vector<T>)Engine.Add(
+                Engine.Multiply(f, cPrev),
+                Engine.Multiply(ig, cCand));
+            // h = o * tanh(c)  (SIMD)
+            var hNew = (Vector<T>)Engine.Multiply(o, Engine.Tanh(cNew));
 
             hStates[t + 1] = hNew;
             cStates[t + 1] = cNew;
@@ -726,62 +721,38 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
             concat[_inputDim + i] = hPrev[i];
         }
 
-        // Forget gate
-        var f = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = bf[j];
-            { var wc6 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc6[ii] = Wf[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc6)); }
-            // Sigmoid: 1/(1+exp(-x))
-            f[j] = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(sum))));
-        }
+        // SIMD-accelerated LSTM gates via Engine vectorized operations
+        var concatTensor = Tensor<T>.FromVector(concat).Reshape(1, inputSize);
 
-        // Input gate
-        var ig = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = bi[j];
-            { var wc7 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc7[ii] = Wi[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc7)); }
-            ig[j] = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(sum))));
-        }
+        // Gate pre-activations: matmul(concat, W) + b  (SIMD via Engine.TensorMatMul)
+        var fPre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(concatTensor, Tensor<T>.FromMatrix(Wf)),
+            Tensor<T>.FromVector(bf).Reshape(1, _hiddenDim)).Reshape(_hiddenDim).ToVector();
+        var iPre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(concatTensor, Tensor<T>.FromMatrix(Wi)),
+            Tensor<T>.FromVector(bi).Reshape(1, _hiddenDim)).Reshape(_hiddenDim).ToVector();
+        var cPre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(concatTensor, Tensor<T>.FromMatrix(Wc)),
+            Tensor<T>.FromVector(bc).Reshape(1, _hiddenDim)).Reshape(_hiddenDim).ToVector();
+        var oPre = Engine.TensorBroadcastAdd(
+            Engine.TensorMatMul(concatTensor, Tensor<T>.FromMatrix(Wo)),
+            Tensor<T>.FromVector(bo).Reshape(1, _hiddenDim)).Reshape(_hiddenDim).ToVector();
 
-        // Cell candidate
-        var cCandidate = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = bc[j];
-            { var wc8 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc8[ii] = Wc[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc8)); }
-            cCandidate[j] = NumOps.Tanh(sum);
-        }
+        // Vectorized activations (SIMD via Engine.Sigmoid/Tanh)
+        var f = (Vector<T>)Engine.Sigmoid(fPre);
+        var ig = (Vector<T>)Engine.Sigmoid(iPre);
+        var cCandidate = (Vector<T>)Engine.Tanh(cPre);
+        var o = (Vector<T>)Engine.Sigmoid(oPre);
 
-        // Output gate
-        var o = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            T sum = bo[j];
-            { var wc9 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc9[ii] = Wo[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc9)); }
-            o[j] = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(sum))));
-        }
+        // New cell state: c = f * cPrev + i * cCand  (SIMD via Engine.Add/Multiply)
+        var cNew = (Vector<T>)Engine.Add(
+            Engine.Multiply(f, cPrev),
+            Engine.Multiply(ig, cCandidate));
 
-        // New cell state and hidden state
-        var cNew = new Vector<T>(_hiddenDim);
-        var hNew = new Vector<T>(_hiddenDim);
-        for (int j = 0; j < _hiddenDim; j++)
-        {
-            // c = f * cPrev + i * cCand
-            cNew[j] = NumOps.Add(
-                NumOps.Multiply(f[j], cPrev[j]),
-                NumOps.Multiply(ig[j], cCandidate[j]));
-            // h = o * tanh(c)
-            hNew[j] = NumOps.Multiply(o[j], NumOps.Tanh(cNew[j]));
-        }
+        // Hidden state: h = o * tanh(c)  (SIMD)
+        var hNew = (Vector<T>)Engine.Multiply(o, Engine.Tanh(cNew));
 
         return (hNew, cNew);
-    }
-
-    private static double Sigmoid(double x)
-    {
-        return 1.0 / (1.0 + Math.Exp(-Math.Max(-500, Math.Min(500, x))));
     }
 
     /// <inheritdoc/>
