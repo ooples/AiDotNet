@@ -424,13 +424,27 @@ public class S5Layer<T> : LayerBase<T>
         {
             for (int t = 0; t < seqLen; t++)
             {
+                // Extract input slice u[b, t, :] as vector for SIMD dot products
+                var uSlice = new Vector<T>(_modelDimension);
+                for (int hi = 0; hi < _modelDimension; hi++)
+                    uSlice[hi] = u[b, t, hi];
+
                 for (int ho = 0; ho < _modelDimension; ho++)
                 {
-                    double sum = NumOps.ToDouble(_dParam[ho]) * NumOps.ToDouble(u[b, t, ho]);
+                    T sum = NumOps.Multiply(_dParam[ho], u[b, t, ho]);
                     for (int l = 0; l <= t; l++)
+                    {
+                        // Extract kernel row and input slice for SIMD dot product
+                        var kRow = new Vector<T>(_modelDimension);
+                        var uLag = new Vector<T>(_modelDimension);
                         for (int hi = 0; hi < _modelDimension; hi++)
-                            sum += NumOps.ToDouble(_cachedKernel[ho, hi, l]) * NumOps.ToDouble(u[b, t - l, hi]);
-                    output[b, t, ho] = NumOps.FromDouble(sum);
+                        {
+                            kRow[hi] = _cachedKernel[ho, hi, l];
+                            uLag[hi] = u[b, t - l, hi];
+                        }
+                        sum = NumOps.Add(sum, Engine.DotProduct(kRow, uLag));
+                    }
+                    output[b, t, ho] = sum;
                 }
             }
         }

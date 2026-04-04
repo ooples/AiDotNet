@@ -887,15 +887,7 @@ public class NBEATSDetector<T> : AnomalyDetectorBase<T>
         return output;
     }
 
-    private Vector<T> ApplyReLU(Vector<T> x)
-    {
-        var output = new Vector<T>(x.Length);
-        for (int i = 0; i < x.Length; i++)
-        {
-            output[i] = NumOps.GreaterThan(x[i], NumOps.Zero) ? x[i] : NumOps.Zero;
-        }
-        return output;
-    }
+    private Vector<T> ApplyReLU(Vector<T> x) => (Vector<T>)Engine.ReLU(x);
 
     /// <inheritdoc/>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)
