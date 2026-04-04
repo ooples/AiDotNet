@@ -532,11 +532,11 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
 
             // Cache attention probs for backward
             if (_cachedAttnProbs == null)
-                _cachedAttnProbs = new double[numWindows, _numHeads, windowArea, windowArea];
+                _cachedAttnProbs = new T[numWindows, _numHeads, windowArea, windowArea];
             for (int head = 0; head < _numHeads; head++)
                 for (int i = 0; i < windowArea; i++)
                     for (int j = 0; j < windowArea; j++)
-                        _cachedAttnProbs[win, head, i, j] = attnProbs[head, i, j];
+                        _cachedAttnProbs[win, head, i, j] = NumOps.FromDouble(attnProbs[head, i, j]);
 
             // Apply attention to values and concatenate heads
             var attnOut = new double[windowArea, c];
@@ -667,7 +667,7 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
                             dp += dOut * vVal;
                             // dV[j, vOffset+d] += probs[i,j] * dAttnOut[i, headOffset+d]
                             dQkv[win, j, vOffset + d] = NumOps.Add(dQkv[win, j, vOffset + d],
-                                NumOps.FromDouble(_cachedAttnProbs[win, head, i, j] * dOut));
+                                NumOps.FromDouble(NumOps.ToDouble(_cachedAttnProbs[win, head, i, j]) * dOut));
                         }
                         dProbs[i, j] = dp;
                     }
@@ -678,11 +678,11 @@ public class SwinTransformerBlockLayer<T> : LayerBase<T>
                 {
                     double dot = 0;
                     for (int j = 0; j < windowArea; j++)
-                        dot += _cachedAttnProbs[win, head, i, j] * dProbs[i, j];
+                        dot += NumOps.ToDouble(_cachedAttnProbs[win, head, i, j]) * dProbs[i, j];
 
                     for (int j = 0; j < windowArea; j++)
                     {
-                        double dScore = _cachedAttnProbs[win, head, i, j] * (dProbs[i, j] - dot) * _scale;
+                        double dScore = NumOps.ToDouble(_cachedAttnProbs[win, head, i, j]) * (dProbs[i, j] - dot) * _scale;
 
                         // dQ[i, headOffset+d] += dScore * K[j, headOffset+d]
                         // dK[j, headOffset+d] += dScore * Q[i, headOffset+d]

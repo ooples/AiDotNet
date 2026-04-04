@@ -697,8 +697,10 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
                 L1Ratio = modelDataObj["RegularizationL1Ratio"]?.ToObject<double>() ?? 0.5
             };
 
+#pragma warning disable CS8601 // Pre-existing: switch expression null assignment
             Regularization = (RegularizationType)regType.Value switch
             {
+#pragma warning restore CS8601
                 RegularizationType.L1 => new L1Regularization<T, Matrix<T>, Vector<T>>(regOptions),
                 RegularizationType.L2 => new L2Regularization<T, Matrix<T>, Vector<T>>(regOptions),
                 RegularizationType.ElasticNet => new ElasticNetRegularization<T, Matrix<T>, Vector<T>>(regOptions),
