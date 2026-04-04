@@ -58,6 +58,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Regression Shrinkage and Selection via the Lasso", "https://doi.org/10.1111/j.2517-6161.1996.tb02080.x")]
 public class LassoRegression<T> : RegressionBase<T>
 {
     /// <summary>

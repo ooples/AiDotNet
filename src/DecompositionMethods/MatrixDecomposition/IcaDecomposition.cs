@@ -33,6 +33,7 @@ namespace AiDotNet.DecompositionMethods.MatrixDecomposition;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Matrix<>), typeof(Matrix<>))]
+    [ModelPaper("Independent Component Analysis: Algorithms and Applications", "https://doi.org/10.1016/S0893-6080(00)00026-5")]
 public class IcaDecomposition<T> : MatrixDecompositionBase<T>
 {
     /// <summary>

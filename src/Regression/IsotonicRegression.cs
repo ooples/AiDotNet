@@ -54,6 +54,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Isotonic Regression Under Lipschitz Constraint", "https://doi.org/10.1080/01621459.1972.10482387")]
 public class IsotonicRegression<T> : NonLinearRegressionBase<T>
 {
     /// <summary>

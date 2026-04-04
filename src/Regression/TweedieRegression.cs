@@ -66,6 +66,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Generalized Linear Models", "https://doi.org/10.1007/978-1-4899-3242-6")]
 public class TweedieRegression<T> : RegressionBase<T>
 {
     /// <summary>

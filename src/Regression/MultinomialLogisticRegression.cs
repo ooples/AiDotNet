@@ -51,6 +51,7 @@ namespace AiDotNet.Regression;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+    [ModelPaper("Applied Logistic Regression", "https://doi.org/10.1002/0471722146")]
 public class MultinomialLogisticRegression<T> : RegressionBase<T>
 {
     /// <summary>
