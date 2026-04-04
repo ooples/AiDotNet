@@ -114,7 +114,7 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentException("Sparsity must be in [0, 1).", nameof(sparsity));
         }
 
-        _sparsity = sparsity;
+        _sparsity = NumOps.FromDouble(sparsity);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
@@ -303,7 +303,7 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "SparseNeuralNetwork" },
-                { "Sparsity", _sparsity },
+                { "Sparsity", NumOps.ToDouble(_sparsity) },
                 { "InputShape", Architecture.GetInputShape() },
                 { "OutputShape", Architecture.GetOutputShape() },
                 { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() },
@@ -321,7 +321,7 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(_sparsity);
+        writer.Write(NumOps.ToDouble(_sparsity));
         writer.Write(_optimizer.GetType().FullName ?? "AdamOptimizer");
         writer.Write(_lossFunction.GetType().FullName ?? "MeanSquaredErrorLoss");
     }
@@ -331,7 +331,7 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _sparsity = reader.ReadDouble();
+        _sparsity = NumOps.FromDouble(reader.ReadDouble());
 
         // Read type names for forward compatibility and validation
         string optimizerType = reader.ReadString();

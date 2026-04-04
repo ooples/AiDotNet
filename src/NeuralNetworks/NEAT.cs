@@ -221,8 +221,8 @@ public class NEAT<T> : NeuralNetworkBase<T>
         _options = options ?? new NEATOptions();
         Options = _options;
         _populationSize = populationSize;
-        _mutationRate = mutationRate;
-        _crossoverRate = crossoverRate;
+        _mutationRate = NumOps.FromDouble(mutationRate);
+        _crossoverRate = NumOps.FromDouble(crossoverRate);
         _innovationNumber = 0;
         _population = InitializePopulation();
     }
@@ -417,7 +417,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
 
             while (newPopulation.Count < _populationSize)
             {
-                if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), NumOps.FromDouble(_crossoverRate)))
+                if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), _crossoverRate))
                 {
                     var parent1 = SelectParent();
                     var parent2 = SelectParent();
@@ -558,7 +558,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// </remarks>
     private void Mutate(Genome<T> genome)
     {
-        if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), NumOps.FromDouble(_mutationRate)))
+        if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), _mutationRate))
         {
             // Add new node
             var connection = genome.Connections[Random.Next(genome.Connections.Count)];
@@ -568,7 +568,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
             genome.AddConnection(newNodeId, connection.ToNode, connection.Weight, true, _innovationNumber++);
         }
 
-        if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), NumOps.FromDouble(_mutationRate)))
+        if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), _mutationRate))
         {
             // Add new connection
             int fromNode = Random.Next(Architecture.InputSize + Architecture.OutputSize);
@@ -582,7 +582,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
         // Mutate weights
         foreach (var conn in genome.Connections)
         {
-            if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), NumOps.FromDouble(_mutationRate)))
+            if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), _mutationRate))
             {
                 conn.Weight = NumOps.Add(conn.Weight, RandomWeight());
             }
@@ -1193,8 +1193,8 @@ public class NEAT<T> : NeuralNetworkBase<T>
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "PopulationSize", _populationSize },
-                { "MutationRate", _mutationRate },
-                { "CrossoverRate", _crossoverRate },
+                { "MutationRate", NumOps.ToDouble(_mutationRate) },
+                { "CrossoverRate", NumOps.ToDouble(_crossoverRate) },
                 { "InnovationNumber", _innovationNumber },
                 { "AverageConnections", avgConnections },
                 { "MaxConnections", maxConnections },

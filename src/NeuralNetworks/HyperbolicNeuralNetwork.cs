@@ -109,7 +109,7 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
             throw new ArgumentException("Curvature must be negative for hyperbolic space.", nameof(curvature));
         }
 
-        _curvature = curvature;
+        _curvature = NumOps.FromDouble(curvature);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Note: LossFunction is inherited from NeuralNetworkBase and set in base constructor call
@@ -302,7 +302,7 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "HyperbolicNeuralNetwork" },
-                { "Curvature", _curvature },
+                { "Curvature", NumOps.ToDouble(_curvature) },
                 { "InputShape", Architecture.GetInputShape() },
                 { "OutputShape", Architecture.GetOutputShape() },
                 { "HiddenLayerSizes", Architecture.GetHiddenLayerSizes() },
@@ -320,7 +320,7 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(_curvature);
+        writer.Write(NumOps.ToDouble(_curvature));
         writer.Write(_optimizer.GetType().FullName ?? "AdamOptimizer");
         writer.Write(LossFunction.GetType().FullName ?? "MeanSquaredErrorLoss");
     }
@@ -341,7 +341,7 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
                 "Curvature must be negative for hyperbolic space. The serialized data may be corrupted.");
         }
 
-        _curvature = deserializedCurvature;
+        _curvature = NumOps.FromDouble(deserializedCurvature);
 
         // Read type names for forward compatibility and validation
         string optimizerType = reader.ReadString();

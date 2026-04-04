@@ -214,7 +214,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         _historyCapacity = historyCapacity;
         _smoothingFactor = smoothingFactor;
         _anomalyHistory = new Queue<double>(_historyCapacity);
-        _smoothedAnomalyScore = 0.0;
+        _smoothedAnomalyScore = NumOps.Zero;
     }
 
     /// <summary>
@@ -274,7 +274,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
             meanScore /= anomalyScores.Length;
         }
 
-        _smoothedAnomalyScore = (_smoothingFactor * meanScore) + ((1 - _smoothingFactor) * _smoothedAnomalyScore);
+        _smoothedAnomalyScore = NumOps.FromDouble((_smoothingFactor * meanScore) + ((1 - _smoothingFactor) * NumOps.ToDouble(_smoothedAnomalyScore)));
         UpdateAnomalyHistory(meanScore);
 
         var output = new Tensor<T>([1]);
@@ -354,7 +354,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         double meanScore = count > 0 ? totalScore / count : 0.0;
 
         // Update stateful elements (CPU-side)
-        _smoothedAnomalyScore = (_smoothingFactor * meanScore) + ((1 - _smoothingFactor) * _smoothedAnomalyScore);
+        _smoothedAnomalyScore = NumOps.FromDouble((_smoothingFactor * meanScore) + ((1 - _smoothingFactor) * NumOps.ToDouble(_smoothedAnomalyScore)));
         UpdateAnomalyHistory(meanScore);
 
         // Create output tensor with single anomaly score
@@ -529,7 +529,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
                 { "stdDev", 0.0 },
                 { "min", 0.0 },
                 { "max", 0.0 },
-                { "current", _smoothedAnomalyScore },
+                { "current", NumOps.ToDouble(_smoothedAnomalyScore) },
                 { "isAnomaly", IsAnomaly() ? 1.0 : 0.0 }
             };
         }
@@ -565,7 +565,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
             { "stdDev", stdDev },
             { "min", min },
             { "max", max },
-            { "current", _smoothedAnomalyScore },
+            { "current", NumOps.ToDouble(_smoothedAnomalyScore) },
             { "isAnomaly", IsAnomaly() ? 1.0 : 0.0 }
         };
     }
@@ -713,7 +713,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
         _anomalyHistory.Clear();
 
         // Reset smoothed anomaly score
-        _smoothedAnomalyScore = 0.0;
+        _smoothedAnomalyScore = NumOps.Zero;
         _lastInputShape = null;
     }
 

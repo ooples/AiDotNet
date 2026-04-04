@@ -210,7 +210,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
             throw new ArgumentOutOfRangeException(nameof(l1Lambda), l1Lambda, "L1 lambda must be non-negative.");
         }
 
-        _l1Lambda = l1Lambda;
+        _l1Lambda = NumOps.FromDouble(l1Lambda);
 
         Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
         Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
@@ -730,7 +730,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
             {
                 { "GeneratorParameters", Generator.GetParameterCount() },
                 { "DiscriminatorParameters", Discriminator.GetParameterCount() },
-                { "L1Lambda", _l1Lambda }
+                { "L1Lambda", NumOps.ToDouble(_l1Lambda) }
             },
             ModelData = this.Serialize()
         };
@@ -739,7 +739,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(_l1Lambda);
+        writer.Write(NumOps.ToDouble(_l1Lambda));
 
         // Serialize loss histories
         writer.Write(_generatorLosses.Count);
@@ -762,7 +762,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _l1Lambda = reader.ReadDouble();
+        _l1Lambda = NumOps.FromDouble(reader.ReadDouble());
 
         // Deserialize loss histories
         _generatorLosses.Clear();

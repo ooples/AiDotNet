@@ -289,7 +289,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         _latentSize = latentSize;
         _intermediateLatentSize = intermediateLatentSize;
         _enableStyleMixing = enableStyleMixing;
-        _styleMixingProbability = styleMixingProbability;
+        _styleMixingProbability = NumOps.FromDouble(styleMixingProbability);
         _initialLearningRate = initialLearningRate;
 
         // Initialize MappingNetwork optimizer state
@@ -874,7 +874,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         writer.Write(_latentSize);
         writer.Write(_intermediateLatentSize);
         writer.Write(_enableStyleMixing);
-        writer.Write(_styleMixingProbability);
+        writer.Write(NumOps.ToDouble(_styleMixingProbability));
 
         var mappingBytes = MappingNetwork.Serialize();
         writer.Write(mappingBytes.Length);
@@ -908,7 +908,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         _latentSize = reader.ReadInt32();
         _intermediateLatentSize = reader.ReadInt32();
         _enableStyleMixing = reader.ReadBoolean();
-        _styleMixingProbability = reader.ReadDouble();
+        _styleMixingProbability = NumOps.FromDouble(reader.ReadDouble());
 
         int mappingLength = reader.ReadInt32();
         MappingNetwork.Deserialize(reader.ReadBytes(mappingLength));
