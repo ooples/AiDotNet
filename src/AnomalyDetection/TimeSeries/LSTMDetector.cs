@@ -352,11 +352,11 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
                     var hFinal = hStates[seq.Length];
                     for (int j = 0; j < _inputDim; j++)
                     {
-                        double dOutJ = NumOps.ToDouble(dOutput[j]);
-                        dby[j] += dOutJ;
+                        T dOutJ = dOutput[j];
+                        dby[j] += NumOps.ToDouble(dOutJ);
                         for (int i = 0; i < _hiddenDim; i++)
                         {
-                            dWy[i, j] += NumOps.ToDouble(hFinal[i]) * dOutJ;
+                            dWy[i, j] += NumOps.ToDouble(NumOps.Multiply(hFinal[i], dOutJ));
                         }
                     }
 
@@ -400,9 +400,8 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
                         for (int i = 0; i < _hiddenDim; i++)
                         {
                             do_gate[i] = NumOps.Multiply(dh[i], tanhC[i]);
-                            double tanhCVal = NumOps.ToDouble(tanhC[i]);
-                            double tanhDerivative = 1.0 - tanhCVal * tanhCVal;
-                            T dcFromH = NumOps.Multiply(dh[i], NumOps.Multiply(o[i], NumOps.FromDouble(tanhDerivative)));
+                            T tanhDeriv = NumOps.Subtract(NumOps.One, NumOps.Multiply(tanhC[i], tanhC[i]));
+                            T dcFromH = NumOps.Multiply(dh[i], NumOps.Multiply(o[i], tanhDeriv));
                             dc[i] = NumOps.Add(dc[i], dcFromH);
                         }
 
@@ -426,28 +425,27 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
                         for (int i = 0; i < _hiddenDim; i++)
                         {
                             // Sigmoid derivative: s * (1 - s)
-                            double fVal = NumOps.ToDouble(f[i]);
-                            double igVal = NumOps.ToDouble(ig[i]);
-                            double oVal = NumOps.ToDouble(o[i]);
-                            double cCandVal = NumOps.ToDouble(cCand[i]);
+                            T fSigDeriv = NumOps.Multiply(f[i], NumOps.Subtract(NumOps.One, f[i]));
+                            T igSigDeriv = NumOps.Multiply(ig[i], NumOps.Subtract(NumOps.One, ig[i]));
+                            T oSigDeriv = NumOps.Multiply(o[i], NumOps.Subtract(NumOps.One, o[i]));
 
-                            dfPre[i] = NumOps.Multiply(df[i], NumOps.FromDouble(fVal * (1.0 - fVal)));
-                            diPre[i] = NumOps.Multiply(di[i], NumOps.FromDouble(igVal * (1.0 - igVal)));
-                            doPre[i] = NumOps.Multiply(do_gate[i], NumOps.FromDouble(oVal * (1.0 - oVal)));
+                            dfPre[i] = NumOps.Multiply(df[i], fSigDeriv);
+                            diPre[i] = NumOps.Multiply(di[i], igSigDeriv);
+                            doPre[i] = NumOps.Multiply(do_gate[i], oSigDeriv);
                             // Tanh derivative: 1 - tanh^2
-                            dcCandPre[i] = NumOps.Multiply(dcCand[i], NumOps.FromDouble(1.0 - cCandVal * cCandVal));
+                            dcCandPre[i] = NumOps.Multiply(dcCand[i], NumOps.Subtract(NumOps.One, NumOps.Multiply(cCand[i], cCand[i])));
                         }
 
                         // Accumulate gradients for gate weights
                         for (int i = 0; i < inputSize; i++)
                         {
-                            double concatI = NumOps.ToDouble(concat[i]);
+                            T concatI = concat[i];
                             for (int j = 0; j < _hiddenDim; j++)
                             {
-                                dWf[i, j] += concatI * NumOps.ToDouble(dfPre[j]);
-                                dWi[i, j] += concatI * NumOps.ToDouble(diPre[j]);
-                                dWc[i, j] += concatI * NumOps.ToDouble(dcCandPre[j]);
-                                dWo[i, j] += concatI * NumOps.ToDouble(doPre[j]);
+                                dWf[i, j] += NumOps.ToDouble(NumOps.Multiply(concatI, dfPre[j]));
+                                dWi[i, j] += NumOps.ToDouble(NumOps.Multiply(concatI, diPre[j]));
+                                dWc[i, j] += NumOps.ToDouble(NumOps.Multiply(concatI, dcCandPre[j]));
+                                dWo[i, j] += NumOps.ToDouble(NumOps.Multiply(concatI, doPre[j]));
                             }
                         }
 
@@ -646,8 +644,7 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
                     NumOps.Multiply(f[j], cPrev[j]),
                     NumOps.Multiply(ig[j], cCand[j]));
                 // h = o * tanh(c)
-                double tanhC = NumOps.ToDouble(NumOps.Tanh(cNew[j]));
-                hNew[j] = NumOps.Multiply(o[j], NumOps.FromDouble(tanhC));
+                hNew[j] = NumOps.Multiply(o[j], NumOps.Tanh(cNew[j]));
             }
 
             hStates[t + 1] = hNew;
@@ -735,8 +732,8 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = bf[j];
             { var wc6 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc6[ii] = Wf[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc6)); }
-            double sigInput = NumOps.ToDouble(sum);
-            f[j] = NumOps.FromDouble(Sigmoid(sigInput));
+            // Sigmoid: 1/(1+exp(-x))
+            f[j] = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(sum))));
         }
 
         // Input gate
@@ -745,8 +742,7 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = bi[j];
             { var wc7 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc7[ii] = Wi[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc7)); }
-            double sigInput = NumOps.ToDouble(sum);
-            ig[j] = NumOps.FromDouble(Sigmoid(sigInput));
+            ig[j] = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(sum))));
         }
 
         // Cell candidate
@@ -764,8 +760,7 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
         {
             T sum = bo[j];
             { var wc9 = new Vector<T>(inputSize); for (int ii = 0; ii < inputSize; ii++) wc9[ii] = Wo[ii, j]; sum = NumOps.Add(sum, Engine.DotProduct(concat, wc9)); }
-            double sigInput = NumOps.ToDouble(sum);
-            o[j] = NumOps.FromDouble(Sigmoid(sigInput));
+            o[j] = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(sum))));
         }
 
         // New cell state and hidden state
@@ -778,8 +773,7 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
                 NumOps.Multiply(f[j], cPrev[j]),
                 NumOps.Multiply(ig[j], cCandidate[j]));
             // h = o * tanh(c)
-            double tanhC = NumOps.ToDouble(NumOps.Tanh(cNew[j]));
-            hNew[j] = NumOps.Multiply(o[j], NumOps.FromDouble(tanhC));
+            hNew[j] = NumOps.Multiply(o[j], NumOps.Tanh(cNew[j]));
         }
 
         return (hNew, cNew);
