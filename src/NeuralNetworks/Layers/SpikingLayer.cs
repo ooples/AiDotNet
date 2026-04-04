@@ -1602,8 +1602,8 @@ public class SpikingLayer<T> : LayerBase<T>
     {
         // Write neuron type and parameters
         writer.Write((int)_neuronType);
-        writer.Write(_tau);
-        writer.Write(_refractoryPeriod);
+        writer.Write(NumOps.ToDouble(_tau));
+        writer.Write(NumOps.ToDouble(_refractoryPeriod));
 
         // Write weights and biases from tensors
         int inputSize = _weights.Shape[0];
@@ -1624,18 +1624,18 @@ public class SpikingLayer<T> : LayerBase<T>
         // Write model-specific parameters
         if (_neuronType == SpikingNeuronType.Izhikevich)
         {
-            writer.Write(_a);
-            writer.Write(_b);
-            writer.Write(_c);
-            writer.Write(_d);
+            writer.Write(NumOps.ToDouble(_a));
+            writer.Write(NumOps.ToDouble(_b));
+            writer.Write(NumOps.ToDouble(_c));
+            writer.Write(NumOps.ToDouble(_d));
         }
         else if (_neuronType == SpikingNeuronType.AdaptiveExponential)
         {
-            writer.Write(_deltaT);
-            writer.Write(_vT);
-            writer.Write(_tauw);
-            writer.Write(_a_adex);
-            writer.Write(_b_adex);
+            writer.Write(NumOps.ToDouble(_deltaT));
+            writer.Write(NumOps.ToDouble(_vT));
+            writer.Write(NumOps.ToDouble(_tauw));
+            writer.Write(NumOps.ToDouble(_a_adex));
+            writer.Write(NumOps.ToDouble(_b_adex));
         }
     }
 
@@ -1664,8 +1664,8 @@ public class SpikingLayer<T> : LayerBase<T>
     {
         // Read neuron type and parameters
         _neuronType = (SpikingNeuronType)reader.ReadInt32();
-        _tau = reader.ReadDouble();
-        _refractoryPeriod = reader.ReadDouble();
+        _tau = NumOps.FromDouble(reader.ReadDouble());
+        _refractoryPeriod = NumOps.FromDouble(reader.ReadDouble());
 
         // Read weights and biases into tensors
         int inputSize = _weights.Shape[0];
@@ -1686,10 +1686,10 @@ public class SpikingLayer<T> : LayerBase<T>
         // Read model-specific parameters
         if (_neuronType == SpikingNeuronType.Izhikevich)
         {
-            _a = reader.ReadDouble();
-            _b = reader.ReadDouble();
-            _c = reader.ReadDouble();
-            _d = reader.ReadDouble();
+            _a = NumOps.FromDouble(reader.ReadDouble());
+            _b = NumOps.FromDouble(reader.ReadDouble());
+            _c = NumOps.FromDouble(reader.ReadDouble());
+            _d = NumOps.FromDouble(reader.ReadDouble());
 
             // Initialize recovery variable if needed
             if (_recoveryVariable == null)
@@ -1700,11 +1700,11 @@ public class SpikingLayer<T> : LayerBase<T>
         }
         else if (_neuronType == SpikingNeuronType.AdaptiveExponential)
         {
-            _deltaT = reader.ReadDouble();
-            _vT = reader.ReadDouble();
-            _tauw = reader.ReadDouble();
-            _a_adex = reader.ReadDouble();
-            _b_adex = reader.ReadDouble();
+            _deltaT = NumOps.FromDouble(reader.ReadDouble());
+            _vT = NumOps.FromDouble(reader.ReadDouble());
+            _tauw = NumOps.FromDouble(reader.ReadDouble());
+            _a_adex = NumOps.FromDouble(reader.ReadDouble());
+            _b_adex = NumOps.FromDouble(reader.ReadDouble());
 
             // Initialize adaptation variable if needed
             if (_adaptationVariable == null)
@@ -1908,7 +1908,7 @@ public class SpikingLayer<T> : LayerBase<T>
 
         // 3. Apply surrogate spike function (tanh-based surrogate for differentiability)
         // The forward pass uses hard threshold, but autodiff uses soft surrogate
-        double threshold = _threshold;
+        double threshold = NumOps.ToDouble(_threshold);
         double surrogateBeta = 1.0 / NumOps.ToDouble(_tau);
         var output = TensorOperations<T>.SurrogateSpike(withBias, threshold, surrogateBeta);
 
@@ -2070,7 +2070,7 @@ public class SpikingLayer<T> : LayerBase<T>
 
         // Apply surrogate spike function with threshold
         // Default threshold is typically 1.0 for normalized inputs
-        double threshold = _threshold;
+        double threshold = NumOps.ToDouble(_threshold);
         double surrogateBeta = 1.0 / NumOps.ToDouble(_tau); // Use tau to scale surrogate sharpness
         var spikes = TensorOperations<T>.SurrogateSpike(membranePotential, threshold, surrogateBeta);
 
