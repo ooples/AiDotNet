@@ -738,11 +738,11 @@ public class LSTMDetector<T> : AnomalyDetectorBase<T>
             Engine.TensorMatMul(concatTensor, Tensor<T>.FromMatrix(Wo)),
             Tensor<T>.FromVector(bo).Reshape(1, _hiddenDim)).Reshape(_hiddenDim).ToVector();
 
-        // Vectorized activations (SIMD via Engine.Sigmoid/Tanh)
-        var f = (Vector<T>)Engine.Sigmoid(fPre);
-        var ig = (Vector<T>)Engine.Sigmoid(iPre);
-        var cCandidate = (Vector<T>)Engine.Tanh(cPre);
-        var o = (Vector<T>)Engine.Sigmoid(oPre);
+        // Vectorized activations (SIMD via Engine.Sigmoid/Tanh on Vector<T>)
+        var f = Engine.Sigmoid(fPre);
+        var ig = Engine.Sigmoid(iPre);
+        var cCandidate = Engine.Tanh(cPre);
+        var o = Engine.Sigmoid(oPre);
 
         // New cell state: c = f * cPrev + i * cCand  (SIMD via Engine.Add/Multiply)
         var cNew = (Vector<T>)Engine.Add(
