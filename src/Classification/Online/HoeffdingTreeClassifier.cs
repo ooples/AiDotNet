@@ -70,7 +70,8 @@ namespace AiDotNet.Classification.Online;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Mining High-Speed Data Streams", "https://doi.org/10.1145/347090.347107", Year = 2000, Authors = "Pedro Domingos, Geoff Hulten")]
-public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>
+public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     private readonly HoeffdingTreeOptions<T> _options;
 
@@ -716,20 +717,20 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         // Tree structure is complex - return empty for now
         return new Vector<T>(0);
     }
 
     /// <inheritdoc />
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         // Tree is structural, cannot set from flat parameters
     }
 
     /// <inheritdoc />
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         // Return a cold instance to avoid inconsistent state and shared mutable references.
         // Tree structure cannot be set from flat parameters - deep cloning would be needed
@@ -744,14 +745,14 @@ public class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClassifier<T
     }
 
     /// <inheritdoc />
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Tree-based model - no gradients
         return new Vector<T>(0);
     }
 
     /// <inheritdoc />
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Tree-based model - no gradient application
     }

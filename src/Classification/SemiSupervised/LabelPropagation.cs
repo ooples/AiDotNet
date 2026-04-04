@@ -65,7 +65,8 @@ namespace AiDotNet.Classification.SemiSupervised;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Learning from Labeled and Unlabeled Data with Label Propagation", "https://citeseerx.ist.psu.edu/document?repid=rep1&type=pdf&doi=8a6a114d699824b678325766be195b0e7b564f87", Year = 2002, Authors = "Xiaojin Zhu, Zoubin Ghahramani")]
-public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
+public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     #region Fields
 
@@ -1051,7 +1052,7 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// prediction time, so there are no "learned" parameters in the traditional sense.
     /// </para>
     /// </remarks>
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         // Label Propagation is non-parametric - it stores training data, not learned weights
         return new Vector<T>(0);
@@ -1068,7 +1069,7 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// this just creates a new instance with the same configuration.
     /// </para>
     /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         return new LabelPropagation<T>(_kernel, _maxIterations, _tolerance, _random.Next());
     }
@@ -1083,7 +1084,7 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// this method does nothing.
     /// </para>
     /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         // Non-parametric model - no parameters to set
     }
@@ -1102,7 +1103,7 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// no gradients to compute.
     /// </para>
     /// </remarks>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Label Propagation is not gradient-based
         return new Vector<T>(0);
@@ -1119,7 +1120,7 @@ public class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// this method does nothing.
     /// </para>
     /// </remarks>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Non-parametric model - no gradients to apply
     }

@@ -63,7 +63,8 @@ namespace AiDotNet.Classification.Ordinal;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
 [ModelPaper("Regression Models for Ordinal Data", "https://doi.org/10.1111/j.2517-6161.1980.tb01109.x", Year = 1980, Authors = "Peter McCullagh")]
-public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
+public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// The learned coefficient vector (β).
@@ -502,7 +503,7 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
     /// for serialization or optimization purposes. The coefficients come first, followed
     /// by the thresholds.</para>
     /// </remarks>
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         if (_coefficients is null || _thresholds is null)
         {
@@ -533,7 +534,7 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
     /// <para><b>For Beginners:</b> This unpacks parameters from a single vector and sets
     /// the internal coefficients and thresholds. Used when loading a saved model.</para>
     /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         if (parameters.Length == 0)
         {
@@ -594,7 +595,7 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
     /// <para><b>For Beginners:</b> Creates a fresh copy of the model with specific parameter
     /// values. Useful for optimization algorithms that explore different parameter settings.</para>
     /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var model = new OrdinalLogisticRegression<T>(_learningRate, _maxIterations, _tolerance, _regularizationStrength);
         model.NumFeatures = NumFeatures;
@@ -670,7 +671,7 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
     /// This computes the derivative of the negative log-likelihood with respect to
     /// each parameter.</para>
     /// </remarks>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         if (_coefficients is null || _thresholds is null)
         {
@@ -779,7 +780,7 @@ public class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>
     /// opposite direction of the gradients (to reduce error). The learning rate controls
     /// how big the step is.</para>
     /// </remarks>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         if (_coefficients is null || _thresholds is null)
         {

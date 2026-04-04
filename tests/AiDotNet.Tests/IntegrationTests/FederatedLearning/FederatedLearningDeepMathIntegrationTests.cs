@@ -746,10 +746,10 @@ public class FederatedLearningDeepMathIntegrationTests
         var weights = new Dictionary<int, double>
             { [0] = 1.0, [1] = 1.0, [2] = 1.0, [3] = 1.0, [4] = 1.0, [5] = 1.0, [6] = 1.0 };
 
-        var median = new ((IParameterizable<double, double[], double[]>)MedianFullModelAggregationStrategy<double, double[], double[]>().Aggregate(models, weights)).GetParameters();
-        var trimmed = new ((IParameterizable<double, double[], double[]>)TrimmedMeanFullModelAggregationStrategy<double, double[], double[]>().Aggregate(models, weights)).GetParameters();
-        var winsorized = new ((IParameterizable<double, double[], double[]>)WinsorizedMeanFullModelAggregationStrategy<double, double[], double[]>().Aggregate(models, weights)).GetParameters();
-        var rfa = new ((IParameterizable<double, double[], double[]>)RfaFullModelAggregationStrategy<double, double[], double[]>(maxIterations: 100).Aggregate(models, weights)).GetParameters();
+        var median = ((IParameterizable<double, double[], double[]>)new MedianFullModelAggregationStrategy<double, double[], double[]>().Aggregate(models, weights)).GetParameters();
+        var trimmed = ((IParameterizable<double, double[], double[]>)new TrimmedMeanFullModelAggregationStrategy<double, double[], double[]>().Aggregate(models, weights)).GetParameters();
+        var winsorized = ((IParameterizable<double, double[], double[]>)new WinsorizedMeanFullModelAggregationStrategy<double, double[], double[]>().Aggregate(models, weights)).GetParameters();
+        var rfa = ((IParameterizable<double, double[], double[]>)new RfaFullModelAggregationStrategy<double, double[], double[]>(maxIterations: 100).Aggregate(models, weights)).GetParameters();
 
         // Median of [1,2,3,4,5,6,1000] = 4
         Assert.Equal(4.0, median[0], Tol);
@@ -764,7 +764,7 @@ public class FederatedLearningDeepMathIntegrationTests
             $"RFA result {rfa[0]} should be in [1, 7]");
 
         // FedAvg would be skewed by outlier: (1+2+3+4+5+6+1000)/7 ≈ 145.9
-        var fedAvg = new ((IParameterizable<double, double[], double[]>)FedAvgFullModelAggregationStrategy<double, double[], double[]>().Aggregate(models, weights)).GetParameters();
+        var fedAvg = ((IParameterizable<double, double[], double[]>)new FedAvgFullModelAggregationStrategy<double, double[], double[]>().Aggregate(models, weights)).GetParameters();
         Assert.True(fedAvg[0] > 100.0, "FedAvg should be heavily influenced by outlier");
     }
 

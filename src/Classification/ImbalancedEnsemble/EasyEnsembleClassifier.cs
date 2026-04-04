@@ -611,7 +611,7 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
     /// <para><b>For Beginners:</b> Complex ensemble models don't fit into a simple parameter vector.
     /// Use serialization for full model persistence.</para>
     /// </remarks>
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         return new Vector<T>(1) { [0] = NumOps.FromDouble(_subClassifiers.Count) };
     }
@@ -623,7 +623,7 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> Use serialization to save/load ensemble models.</para>
     /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         // Limited support for ensemble models
     }
@@ -636,7 +636,7 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> Creates a new untrained model with same hyperparameters.</para>
     /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         return new EasyEnsembleClassifier<T>(_nSubsets, _nEstimatorsPerSubset, _maxDepth,
             _learningRate, _samplingStrategy, _softVoting);
@@ -665,7 +665,7 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> Ensemble models don't use gradient descent.</para>
     /// </remarks>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         return new Vector<T>(1) { [0] = NumOps.Zero };
     }
@@ -678,7 +678,7 @@ public class EasyEnsembleClassifier<T> : ClassifierBase<T>
     /// <remarks>
     /// <para><b>For Beginners:</b> Ensemble models don't support gradient updates.</para>
     /// </remarks>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // Ensemble models don't support gradient-based updates
     }

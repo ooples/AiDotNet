@@ -85,7 +85,8 @@ namespace AiDotNet.Classification.Ordinal;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
-public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>
+public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
+    IParameterizable<T, Matrix<T>, Vector<T>>, IGradientComputable<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// The learned coefficient vector (β).
@@ -452,7 +453,7 @@ public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>
     /// <para><b>For Beginners:</b> This packs all learned parameters into a single vector:
     /// first the coefficients, then the bias, then the thresholds.</para>
     /// </remarks>
-    public override Vector<T> GetParameters()
+    public Vector<T> GetParameters()
     {
         if (_coefficients is null || _thresholds is null)
         {
@@ -485,7 +486,7 @@ public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>
     /// <para><b>For Beginners:</b> This unpacks parameters from a single vector and sets
     /// the internal state. The vector format is: [coefficients..., bias, thresholds...].</para>
     /// </remarks>
-    public override void SetParameters(Vector<T> parameters)
+    public void SetParameters(Vector<T> parameters)
     {
         if (parameters.Length == 0)
         {
@@ -550,7 +551,7 @@ public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>
     /// <para><b>For Beginners:</b> Creates a copy of this model with different parameter values.
     /// Useful for optimization or ensemble methods.</para>
     /// </remarks>
-    public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
+    public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var model = new OrdinalRidgeRegression<T>(_alpha, _fitIntercept);
         model.NumFeatures = NumFeatures;
@@ -591,7 +592,7 @@ public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>
     /// prediction error. For ridge regression, the gradient of the mean squared error with
     /// regularization is: ∂L/∂β = (2/n) * X^T(Xβ - y) + 2λβ</para>
     /// </remarks>
-    public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
+    public Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         if (_coefficients is null || _thresholds is null)
         {
@@ -662,7 +663,7 @@ public class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>
     /// the gradients. Note that thresholds are not updated via gradient descent in this
     /// implementation - they're derived from the data.</para>
     /// </remarks>
-    public override void ApplyGradients(Vector<T> gradients, T learningRate)
+    public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         if (_coefficients is null || _thresholds is null)
         {
