@@ -794,7 +794,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
             null, // Use default optimizer
             null, // Use default optimizer
             _lossFunction,
-            _l1Lambda);
+            NumOps.ToDouble(_l1Lambda));
     }
 
     /// <summary>

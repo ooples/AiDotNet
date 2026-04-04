@@ -350,7 +350,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
         var styles = MappingNetwork.Predict(latentCodes);
 
         // Apply style mixing if enabled
-        if (_enableStyleMixing && RandomHelper.ThreadSafeRandom.NextDouble() < _styleMixingProbability)
+        if (_enableStyleMixing && RandomHelper.ThreadSafeRandom.NextDouble() < NumOps.ToDouble(_styleMixingProbability))
         {
             var latentCodes2 = GenerateRandomLatentCodes(batchSize);
             var styles2 = MappingNetwork.Predict(latentCodes2);
@@ -942,7 +942,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
             _lossFunction,
             _initialLearningRate,
             _enableStyleMixing,
-            _styleMixingProbability);
+            NumOps.ToDouble(_styleMixingProbability));
     }
 
     /// <summary>

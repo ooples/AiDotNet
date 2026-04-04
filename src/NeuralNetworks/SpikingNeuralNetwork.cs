@@ -1231,7 +1231,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
             // Use the vector activation constructor
             return new SpikingNeuralNetwork<T>(
                 Architecture,
-                _timeStep,
+                NumOps.ToDouble(_timeStep),
                 _simulationSteps,
                 _vectorActivation,
                 LossFunction);
@@ -1241,7 +1241,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
             // Use the scalar activation constructor
             return new SpikingNeuralNetwork<T>(
                 Architecture,
-                _timeStep,
+                NumOps.ToDouble(_timeStep),
                 _simulationSteps,
                 _scalarActivation,
                 LossFunction);

@@ -439,7 +439,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         T mutualInfoLoss = CalculateMutualInfoLoss(predictedCodes, latentCodes, batchSize);
 
         // Total generator loss
-        T miCoeff = NumOps.FromDouble(_mutualInfoCoefficient);
+        T miCoeff = NumOps.FromDouble(NumOps.ToDouble(_mutualInfoCoefficient));
         T generatorLoss = NumOps.Add(ganLoss, NumOps.Multiply(miCoeff, mutualInfoLoss));
 
         // Backpropagate through discriminator (for GAN loss) to get input gradients
@@ -915,7 +915,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
             discriminatorOptimizer: null,
             qNetworkOptimizer: null,
             _lossFunction,
-            _mutualInfoCoefficient);
+            NumOps.ToDouble(_mutualInfoCoefficient));
     }
 
     /// <summary>

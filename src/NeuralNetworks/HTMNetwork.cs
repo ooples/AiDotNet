@@ -260,7 +260,7 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
         else
         {
             // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultHTMLayers(Architecture, _columnCount, _cellsPerColumn, _sparsityThreshold));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultHTMLayers(Architecture, _columnCount, _cellsPerColumn, NumOps.ToDouble(_sparsityThreshold)));
         }
     }
 
@@ -821,6 +821,6 @@ public class HTMNetwork<T> : NeuralNetworkBase<T>
             this.Architecture,
             _columnCount,
             _cellsPerColumn,
-            _sparsityThreshold);
+            NumOps.ToDouble(_sparsityThreshold));
     }
 }
