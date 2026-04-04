@@ -200,7 +200,15 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
         }
 
         // Step 2: Get source model's feature dimension
-        int sourceFeatures = InterfaceGuard.FeatureAware(sourceModel).GetActiveFeatureIndices().Count();
+        int sourceFeatures;
+        if (sourceModel is IFeatureAware fa)
+        {
+            sourceFeatures = fa.GetActiveFeatureIndices().Count();
+        }
+        else
+        {
+            sourceFeatures = sourceData.Columns;
+        }
 
         // Step 3: Map target features to source feature space
         Matrix<T> mappedTargetData = FeatureMapper.MapToSource(targetData, sourceFeatures);

@@ -71,16 +71,20 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
     // --- IParameterizable ---
 
     /// <inheritdoc/>
-    public virtual Vector<T> GetParameters() => ((IParameterizable<T, TInput, TOutput>)BaseModel).GetParameters();
+    public virtual Vector<T> GetParameters()
+        => InterfaceGuard.TryParameterizable(BaseModel)?.GetParameters() ?? new Vector<T>(0);
 
     /// <inheritdoc/>
-    public virtual void SetParameters(Vector<T> parameters) => ((IParameterizable<T, TInput, TOutput>)BaseModel).SetParameters(parameters);
+    public virtual void SetParameters(Vector<T> parameters)
+        => InterfaceGuard.TryParameterizable(BaseModel)?.SetParameters(parameters);
 
     /// <inheritdoc/>
-    public virtual int ParameterCount => ((IParameterizable<T, TInput, TOutput>)BaseModel).ParameterCount;
+    public virtual int ParameterCount =>
+        InterfaceGuard.TryParameterizable(BaseModel)?.ParameterCount ?? 0;
 
     /// <inheritdoc/>
-    public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+    public virtual bool SupportsParameterInitialization =>
+        InterfaceGuard.TryParameterizable(BaseModel) is { SupportsParameterInitialization: true };
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 
@@ -100,11 +104,11 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
 
     /// <inheritdoc/>
     public virtual Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
-        => ((IGradientComputable<T, TInput, TOutput>)BaseModel).ComputeGradients(input, target, lossFunction ?? DefaultLossFunction);
+        => InterfaceGuard.GradientComputable(BaseModel).ComputeGradients(input, target, lossFunction ?? DefaultLossFunction);
 
     /// <inheritdoc/>
     public virtual void ApplyGradients(Vector<T> gradients, T learningRate)
-        => ((IGradientComputable<T, TInput, TOutput>)BaseModel).ApplyGradients(gradients, learningRate);
+        => InterfaceGuard.GradientComputable(BaseModel).ApplyGradients(gradients, learningRate);
 
     // --- IModelSerializer ---
 
@@ -135,14 +139,16 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
     // --- IFeatureAware ---
 
     /// <inheritdoc/>
-    public virtual IEnumerable<int> GetActiveFeatureIndices() => ((IFeatureAware)BaseModel).GetActiveFeatureIndices();
+    public virtual IEnumerable<int> GetActiveFeatureIndices()
+        => InterfaceGuard.TryFeatureAware(BaseModel)?.GetActiveFeatureIndices() ?? Enumerable.Empty<int>();
 
     /// <inheritdoc/>
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
-        => ((IFeatureAware)BaseModel).SetActiveFeatureIndices(featureIndices);
+        => InterfaceGuard.TryFeatureAware(BaseModel)?.SetActiveFeatureIndices(featureIndices);
 
     /// <inheritdoc/>
-    public virtual bool IsFeatureUsed(int featureIndex) => ((IFeatureAware)BaseModel).IsFeatureUsed(featureIndex);
+    public virtual bool IsFeatureUsed(int featureIndex)
+        => InterfaceGuard.TryFeatureAware(BaseModel)?.IsFeatureUsed(featureIndex) ?? false;
 
     // --- IFeatureImportance ---
 
