@@ -53,7 +53,6 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
     private readonly int _hiddenDim;
     private readonly int _epochs;
     private readonly double _learningRate;
-    private readonly double _marginScale;
 
     // Network weights
     private Matrix<T>? _w1;
@@ -118,7 +117,6 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
         _hiddenDim = hiddenDim;
         _epochs = epochs;
         _learningRate = learningRate;
-        _marginScale = marginScale;
 
         // Initialize reference statistics to default values (will be set in Fit)
         _refMean = NumOps.Zero;
@@ -506,6 +504,11 @@ public class DevNetDetector<T> : AnomalyDetectorBase<T>
         if (dataMeans == null || dataStds == null)
         {
             throw new InvalidOperationException("Model not properly fitted. Normalization parameters missing.");
+        }
+
+        if (X.Columns != _inputDim)
+        {
+            throw new ArgumentException($"Expected {_inputDim} features but got {X.Columns}.", nameof(X));
         }
 
         var scores = new Vector<T>(X.Rows);

@@ -53,9 +53,9 @@ public class STLDetector<T> : AnomalyDetectorBase<T>
     private readonly int _trendSmoothness;
     private Vector<T>? _trend;
     private Vector<T>? _seasonal;
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _residualStd = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _residualStd;
+
 
     /// <summary>
     /// Gets the season length.
@@ -92,6 +92,7 @@ public class STLDetector<T> : AnomalyDetectorBase<T>
 
         _seasonLength = seasonLength;
         _trendSmoothness = trendSmoothness;
+        _residualStd = NumOps.Zero;
     }
 
     /// <inheritdoc/>
@@ -189,6 +190,11 @@ public class STLDetector<T> : AnomalyDetectorBase<T>
 
             // Step 4: Smooth to get trend (moving average)
             var trendD = SmoothMovingAverage(deseasoned, _trendSmoothness);
+
+            // Feed updated decomposition into next iteration
+            trendLocal = trendD;
+            seasonalLocal = seasonalD;
+
             _trend = new Vector<T>(trendD.Select(v => NumOps.FromDouble(v)));
             _seasonal = new Vector<T>(seasonalD.Select(v => NumOps.FromDouble(v)));
         }

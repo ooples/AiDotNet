@@ -121,6 +121,7 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     public SupportVectorRegression(SupportVectorRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
+        _olsIntercept = NumOps.Zero;
         _options = options ?? new SupportVectorRegressionOptions();
     }
 
@@ -169,11 +170,11 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
 
     private bool _useOLS;
     private Vector<T>? _olsCoefficients;
-#pragma warning disable CS8601
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _olsIntercept = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
-#pragma warning restore CS8601
+
+
+    private T _olsIntercept;
+
+
 
     protected override void OptimizeModel(Matrix<T> x, Vector<T> y)
     {

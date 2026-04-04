@@ -52,9 +52,9 @@ public class IsolationForest<T> : AnomalyDetectorBase<T>
     private readonly int _numTrees;
     private readonly int _maxSamples;
     private List<IsolationTree>? _trees;
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _averagePathLength = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _averagePathLength;
+
     private int _inputDim;
 
     /// <summary>
@@ -107,6 +107,7 @@ public class IsolationForest<T> : AnomalyDetectorBase<T>
         int randomSeed = 42)
         : base(contamination, randomSeed)
     {
+        _averagePathLength = NumOps.Zero;
         if (numTrees < 1)
         {
             throw new ArgumentOutOfRangeException(nameof(numTrees),
@@ -333,9 +334,7 @@ public class IsolationForest<T> : AnomalyDetectorBase<T>
         public bool IsExternal { get; set; }
         public int Size { get; set; }
         public int SplitFeature { get; set; }
-#pragma warning disable CS8601, CS8618 // T defaults to default(T) - used with value types
-        public T SplitValue { get; set; } = default;
-#pragma warning restore CS8601, CS8618
+        public T SplitValue { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
         public IsolationTree? Left { get; set; }
         public IsolationTree? Right { get; set; }
     }

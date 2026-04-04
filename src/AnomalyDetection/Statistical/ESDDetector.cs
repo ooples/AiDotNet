@@ -52,9 +52,9 @@ public class ESDDetector<T> : AnomalyDetectorBase<T>
     private Vector<T>? _stds;
     private int _nFeatures;
     private int _nSamples;
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _criticalValue = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _criticalValue;
+
 
     /// <summary>
     /// Gets the significance level (alpha) for the test.
@@ -95,6 +95,7 @@ public class ESDDetector<T> : AnomalyDetectorBase<T>
     public ESDDetector(double alpha = 0.05, int? maxOutliers = null, double contamination = 0.1, int randomSeed = 42)
         : base(contamination, randomSeed)
     {
+        _criticalValue = NumOps.Zero;
         if (alpha <= 0 || alpha >= 1)
         {
             throw new ArgumentOutOfRangeException(nameof(alpha),

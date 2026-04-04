@@ -4,7 +4,7 @@ using AiDotNet.Models.Options;
 
 namespace AiDotNet.Regression.MixedEffects;
 
-#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 
 /// <summary>
 /// Generalized Linear Mixed-Effects Model (GLMM) for non-Gaussian hierarchical data.
@@ -97,9 +97,9 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Dispersion parameter (for overdispersed models).
     /// </summary>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _dispersion = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _dispersion;
+
 
     /// <summary>
     /// Log-likelihood of the fitted model.
@@ -172,6 +172,7 @@ public class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options ?? new GLMMOptions<T>(), regularization)
     {
+        _logLikelihood = NumOps.Zero;
         _options = options ?? new GLMMOptions<T>();
         _randomEffects = [];
         _dispersion = NumOps.One;

@@ -730,7 +730,10 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _l1Lambda = NumOps.FromDouble(reader.ReadDouble());
+        double l1Val = reader.ReadDouble();
+        if (l1Val < 0 || double.IsNaN(l1Val) || double.IsInfinity(l1Val))
+            throw new InvalidOperationException($"Deserialized invalid l1Lambda: {l1Val}");
+        _l1Lambda = NumOps.FromDouble(l1Val);
 
         // Deserialize loss histories
         _generatorLosses.Clear();

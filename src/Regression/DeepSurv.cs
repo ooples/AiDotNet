@@ -107,11 +107,11 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     private readonly Random _random;
     private bool _useOLS;
     private Vector<T>? _olsCoefficients;
-#pragma warning disable CS8601
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _olsIntercept = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
-#pragma warning restore CS8601
+
+
+    private T _olsIntercept;
+
+
 
     /// <inheritdoc/>
     public override int NumberOfTrees => 1;
@@ -124,6 +124,7 @@ public class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     public DeepSurv(DeepSurvOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(null, regularization)
     {
+        _olsIntercept = NumOps.Zero;
         _options = options ?? new DeepSurvOptions();
         _weights = [];
         _biases = [];

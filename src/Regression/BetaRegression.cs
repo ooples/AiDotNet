@@ -79,9 +79,9 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Intercept for the mean model.
     /// </summary>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _meanIntercept = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _meanIntercept;
+
 
     /// <summary>
     /// Coefficients for the precision (φ) model (if variable precision).
@@ -91,9 +91,9 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Intercept for the precision model.
     /// </summary>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _precisionIntercept = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _precisionIntercept;
+
 
     /// <summary>
     /// Number of features.
@@ -106,12 +106,12 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private readonly BetaRegressionOptions _options;
 
     /// <summary>Y min-max scaling for mapping to (0,1).</summary>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _yMin = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _yMax = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _yMin;
+
+
+    private T _yMax;
+
     private bool _needsTransform;
     private bool _useOLS;
 
@@ -148,6 +148,8 @@ public class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public BetaRegression(BetaRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(null, regularization)
     {
+        _yMax = NumOps.Zero;
+        _yMin = NumOps.Zero;
         _options = options ?? new BetaRegressionOptions();
         _meanIntercept = NumOps.Zero;
         _precisionIntercept = NumOps.FromDouble(Math.Log(10));  // Initial precision = 10

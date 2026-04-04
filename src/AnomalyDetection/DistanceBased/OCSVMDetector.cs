@@ -53,9 +53,9 @@ public class OCSVMDetector<T> : AnomalyDetectorBase<T>
     private readonly int _maxIterations;
     private Matrix<T>? _supportVectors;
     private Vector<T>? _alphas;
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _rho = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _rho;
+
 
     /// <summary>
     /// Gets the nu parameter.
@@ -79,6 +79,7 @@ public class OCSVMDetector<T> : AnomalyDetectorBase<T>
         double contamination = 0.1, int randomSeed = 42)
         : base(contamination, randomSeed)
     {
+        _rho = NumOps.Zero;
         if (nu <= 0 || nu > 1)
         {
             throw new ArgumentOutOfRangeException(nameof(nu),

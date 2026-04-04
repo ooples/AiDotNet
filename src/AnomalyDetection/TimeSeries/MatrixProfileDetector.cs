@@ -57,9 +57,7 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
     private readonly int _exclusionZone;
     private Vector<T>? _matrixProfile;
     private Vector<T>? _trainingValues;
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _trainingChecksum = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+    private double _trainingChecksum;
 
     /// <summary>
     /// Gets the subsequence length.
@@ -130,7 +128,7 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
             trainingValuesD[i] = NumOps.ToDouble(X[i, 0]);
             checksum += trainingValuesD[i] * (i + 1);
         }
-        _trainingChecksum = NumOps.FromDouble(checksum);
+        _trainingChecksum = checksum;
         _trainingValues = new Vector<T>(trainingValuesD.Select(v => NumOps.FromDouble(v)));
 
         // Compute Matrix Profile using STOMP algorithm (simplified)
@@ -261,7 +259,7 @@ public class MatrixProfileDetector<T> : AnomalyDetectorBase<T>
                 checksum += values[i] * (i + 1);
             }
             // Allow small floating point tolerance in checksum comparison
-            isSameData = Math.Abs(checksum - NumOps.ToDouble(_trainingChecksum)) < 1e-6;
+            isSameData = Math.Abs(checksum - _trainingChecksum) < 1e-6;
         }
 
         if (isSameData)

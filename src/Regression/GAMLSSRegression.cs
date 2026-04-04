@@ -85,23 +85,23 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Intercept for the location parameter.
     /// </summary>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _locationIntercept = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _locationIntercept;
+
 
     /// <summary>
     /// Intercept for the scale parameter.
     /// </summary>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _scaleIntercept = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _scaleIntercept;
+
 
     /// <summary>
     /// Intercept for the shape parameter.
     /// </summary>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _shapeIntercept = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _shapeIntercept;
+
 
     /// <summary>
     /// Number of features.
@@ -134,6 +134,8 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public GAMLSSRegression(GAMLSSOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(null, regularization)
     {
+        _yMean = NumOps.Zero;
+        _yStd = NumOps.Zero;
         _options = options ?? new GAMLSSOptions();
         _locationIntercept = NumOps.Zero;
         _scaleIntercept = NumOps.One;
@@ -143,12 +145,12 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
 
     /// <inheritdoc/>
     /// <summary>Y standardization for scale-invariant training.</summary>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _yMean = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _yStd = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _yMean;
+
+
+    private T _yStd;
+
 
     public override async Task TrainAsync(Matrix<T> x, Vector<T> y)
     {

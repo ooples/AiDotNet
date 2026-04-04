@@ -98,12 +98,12 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// <summary>
     /// Y standardization parameters for scale-invariant training.
     /// </summary>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _yMean = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _yStd = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _yMean;
+
+
+    private T _yStd;
+
 
     /// <inheritdoc/>
     public override int NumberOfTrees => _trees.Count * _numParams;
@@ -121,6 +121,8 @@ public class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public NGBoostRegression(NGBoostRegressionOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options, regularization)
     {
+        _yMean = NumOps.Zero;
+        _yStd = NumOps.Zero;
         _options = options ?? new NGBoostRegressionOptions();
         _trees = [];
         _initialParameters = new Vector<T>(0);

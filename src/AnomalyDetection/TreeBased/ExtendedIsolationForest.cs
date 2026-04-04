@@ -53,6 +53,7 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
     private readonly int _extensionLevel;
     private List<ExtendedIsolationTree>? _trees;
     private int _nFeatures;
+    private int _trainingSampleSize;
 
     /// <summary>
     /// Gets the number of trees in the forest.
@@ -116,6 +117,7 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
         int effectiveExtension = _extensionLevel == -1 ? _nFeatures - 1 : Math.Min(_extensionLevel, _nFeatures - 1);
 
         int nSamples = Math.Min(_maxSamples, X.Rows);
+        _trainingSampleSize = nSamples;
         int maxDepth = (int)Math.Ceiling(Math.Log(nSamples, 2));
 
         _trees = new List<ExtendedIsolationTree>();
@@ -174,9 +176,9 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
         }
 
         var scores = new Vector<T>(X.Rows);
-        int nSamples = Math.Min(_maxSamples, X.Rows);
+        int nSamples = _trainingSampleSize;
 
-        // Expected path length for BST
+        // Expected path length for BST (must use training subsample size, not test size)
         T c = NumOps.FromDouble(nSamples > 2
             ? 2 * (Math.Log(nSamples - 1) + 0.5772156649) - (2.0 * (nSamples - 1) / nSamples)
             : nSamples == 2 ? 1 : 0);
@@ -227,9 +229,9 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
         private readonly Random _random;
         private readonly INumericOperations<T> _numOps;
         private Vector<T>? _normal;
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-        private T _intercept = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+        private T _intercept;
+
         private ExtendedIsolationTree? _left;
         private ExtendedIsolationTree? _right;
         private int _size;
@@ -240,6 +242,7 @@ public class ExtendedIsolationForest<T> : AnomalyDetectorBase<T>
             _extensionLevel = extensionLevel;
             _random = random;
             _numOps = numOps;
+            _intercept = numOps.Zero;
             _isLeaf = true;
         }
 

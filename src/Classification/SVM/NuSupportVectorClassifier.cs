@@ -9,7 +9,7 @@ using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.Classification.SVM;
 
-#pragma warning disable CS8601, CS8618 // Generic T defaults use default(T) - always used with value types
+
 
 /// <summary>
 /// Nu-Support Vector Classifier using the nu-SVM formulation.
@@ -97,9 +97,9 @@ public class NuSupportVectorClassifier<T> : SVMBase<T>
     /// <summary>
     /// Rho parameter (offset in the decision function).
     /// </summary>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _rho = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _rho;
+
 
     /// <summary>
     /// The nu parameter value.
@@ -138,6 +138,7 @@ public class NuSupportVectorClassifier<T> : SVMBase<T>
         double nu = 0.5)
         : base(options, regularization)
     {
+        _rho = NumOps.Zero;
         if (nu <= 0 || nu > 1)
         {
             throw new ArgumentException("Nu must be in (0, 1].", nameof(nu));

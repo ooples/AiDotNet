@@ -81,9 +81,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// making it sensitive to patterns that stretch over longer time periods.
     /// </para>
     /// </remarks>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _tau = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _tau;
+
 
     /// <summary>
     /// Refractory period in time steps during which the neuron cannot fire again after spiking.
@@ -104,17 +104,17 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// a maximum firing rate similar to biological neurons.
     /// </para>
     /// </remarks>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _refractoryPeriod = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _refractoryPeriod;
+
 
     /// <summary>
     /// Firing threshold for spike generation. Default 0.5 (calibrated for
     /// typical [0,1] input magnitudes through Dense-like weight transforms).
     /// </summary>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _threshold = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _threshold;
+
 
     // Cached tensors for hot-loop operations (avoid per-call allocation)
     private Tensor<T>? _cachedOnes;
@@ -343,9 +343,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// helps determine what type of firing pattern the neuron exhibits.
     /// </para>
     /// </remarks>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _a = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _a;
+
 
     /// <summary>
     /// Sensitivity of recovery variable to membrane potential in Izhikevich model.
@@ -362,9 +362,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// excitability and responsiveness to input.
     /// </para>
     /// </remarks>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _b = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _b;
+
 
     /// <summary>
     /// After-spike reset value of membrane potential in Izhikevich model.
@@ -381,9 +381,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// to reach threshold again.
     /// </para>
     /// </remarks>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _c = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _c;
+
 
     /// <summary>
     /// After-spike reset of recovery variable in Izhikevich model.
@@ -400,9 +400,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// creating different patterns of activity like bursting or chattering.
     /// </para>
     /// </remarks>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _d = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _d;
+
 
     /// <summary>
     /// Adaptation variable for Adaptive Exponential neuron model.
@@ -440,9 +440,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// membrane potential just before a real neuron fires.
     /// </para>
     /// </remarks>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _deltaT = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _deltaT;
+
 
     /// <summary>
     /// Threshold potential in Adaptive Exponential model.
@@ -459,9 +459,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// membrane potential that typically leads to a spike.
     /// </para>
     /// </remarks>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _vT = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _vT;
+
 
     /// <summary>
     /// Adaptation time constant in Adaptive Exponential model.
@@ -478,9 +478,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// take time to recover their full responsiveness after periods of high activity.
     /// </para>
     /// </remarks>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _tauw = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _tauw;
+
 
     /// <summary>
     /// Subthreshold adaptation in Adaptive Exponential model.
@@ -498,9 +498,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// that don't cause firing.
     /// </para>
     /// </remarks>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _a_adex = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _a_adex;
+
 
     /// <summary>
     /// Spike-triggered adaptation in Adaptive Exponential model.
@@ -517,9 +517,9 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// that real neurons experience after firing.
     /// </para>
     /// </remarks>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _b_adex = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _b_adex;
+
 
     /// <summary>
     /// Potassium activation gating variable for Hodgkin-Huxley model.

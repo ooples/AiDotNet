@@ -63,9 +63,9 @@ namespace AiDotNet.Clustering.Density;
 public class DBSCAN<T> : ClusteringBase<T>
 {
     private readonly DBSCANOptions<T> _options;
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _fittedEpsilon = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _fittedEpsilon;
+
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -95,6 +95,7 @@ public class DBSCAN<T> : ClusteringBase<T>
     public DBSCAN(DBSCANOptions<T>? options = null)
         : base(options ?? new DBSCANOptions<T>())
     {
+        _fittedEpsilon = NumOps.Zero;
         _options = options ?? new DBSCANOptions<T>();
 
         if (_options.DistanceMetric is null)

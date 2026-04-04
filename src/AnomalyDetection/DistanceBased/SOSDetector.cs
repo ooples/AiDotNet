@@ -242,6 +242,11 @@ public class SOSDetector<T> : AnomalyDetectorBase<T>
         int nTotal = nTrain + nTest;
         int d = X.Columns;
 
+        if (trainingData.Columns != d)
+        {
+            throw new ArgumentException($"Training data has {trainingData.Columns} features but test data has {d}.", nameof(X));
+        }
+
         // Combine training and test data into a single Matrix<T>
         var allData = new Matrix<T>(nTotal, d);
         for (int i = 0; i < nTrain; i++)

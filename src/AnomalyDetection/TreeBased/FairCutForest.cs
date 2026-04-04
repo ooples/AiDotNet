@@ -389,9 +389,7 @@ public class FairCutForest<T> : AnomalyDetectorBase<T>
         public bool IsLeaf { get; set; }
         public int Size { get; set; }
         public int SplitFeature { get; set; }
-#pragma warning disable CS8601, CS8618
-        public T SplitValue { get; set; } = default;
-#pragma warning restore CS8601, CS8618
+        public T SplitValue { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
         public FCFTree? Left { get; set; }
         public FCFTree? Right { get; set; }
     }

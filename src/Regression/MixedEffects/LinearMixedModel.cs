@@ -98,18 +98,15 @@ public class LinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Residual variance estimate.
     /// </summary>
-#pragma warning disable CS8601, CS8618 // T defaults to default(T) - used with value types
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _residualVariance = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
-#pragma warning restore CS8601, CS8618
+
+
+    private T _residualVariance;
 
     /// <summary>
     /// Log-likelihood of the fitted model.
     /// </summary>
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _logLikelihood = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+    private T _logLikelihood;
+
 
     /// <summary>
     /// Number of observations.
@@ -155,14 +152,13 @@ public class LinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Marginal R-squared (fixed effects only).
     /// </summary>
-#pragma warning disable CS8601, CS8618 // T defaults to default(T) - used with value types
-    public T MarginalRSquared { get; private set; } = default;
+
+    public T MarginalRSquared { get; private set; }
 
     /// <summary>
     /// Conditional R-squared (fixed + random effects).
     /// </summary>
-    public T ConditionalRSquared { get; private set; } = default;
-#pragma warning restore CS8601, CS8618
+    public T ConditionalRSquared { get; private set; }
 
     /// <summary>
     /// Initializes a new Linear Mixed-Effects Model.
@@ -174,6 +170,10 @@ public class LinearMixedModel<T> : RegressionBase<T>
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(options ?? new LinearMixedModelOptions<T>(), regularization)
     {
+        ConditionalRSquared = NumOps.Zero;
+        MarginalRSquared = NumOps.Zero;
+        _logLikelihood = NumOps.Zero;
+        _residualVariance = NumOps.Zero;
         _options = options ?? new LinearMixedModelOptions<T>();
         _randomEffects = [];
     }

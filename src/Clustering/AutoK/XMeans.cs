@@ -61,9 +61,9 @@ public class XMeans<T> : ClusteringBase<T>
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _bic = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _bic;
+
 
     /// <summary>
     /// Initializes a new XMeans instance.
@@ -72,6 +72,7 @@ public class XMeans<T> : ClusteringBase<T>
     public XMeans(XMeansOptions<T>? options = null)
         : base(options ?? new XMeansOptions<T>())
     {
+        _bic = NumOps.Zero;
         _options = options ?? new XMeansOptions<T>();
     }
 

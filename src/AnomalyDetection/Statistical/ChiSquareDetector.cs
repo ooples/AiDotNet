@@ -43,9 +43,9 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
     private readonly double _alpha;
     private Vector<T>? _mean;
     private Matrix<T>? _covarianceInverse;
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _chiSquareCritical = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _chiSquareCritical;
+
     private int _nFeatures;
 
     /// <summary>
@@ -74,6 +74,7 @@ public class ChiSquareDetector<T> : AnomalyDetectorBase<T>
     public ChiSquareDetector(double alpha = 0.05, double contamination = 0.1, int randomSeed = 42)
         : base(contamination, randomSeed)
     {
+        _chiSquareCritical = NumOps.Zero;
         if (alpha <= 0 || alpha >= 1)
         {
             throw new ArgumentOutOfRangeException(nameof(alpha),

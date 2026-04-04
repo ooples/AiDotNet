@@ -102,18 +102,18 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private int _numFeatures;
     private bool _useOLS;
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _yMean = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _yStd = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
+
+    private T _yMean;
+
+
+    private T _yStd;
+
     private Vector<T>? _olsCoefficients;
-#pragma warning disable CS8601
-#pragma warning disable CS8601 // T is always a numeric value type, default is 0
-    private T _olsIntercept = default; // CS8601 suppressed: T is always numeric value type
-#pragma warning restore CS8601
-#pragma warning restore CS8601
+
+
+    private T _olsIntercept;
+
+
 
     /// <summary>
     /// Time bin edges (discretization of time axis).
@@ -141,6 +141,9 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
     public DeepHit(DeepHitOptions? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
         : base(null, regularization)
     {
+        _olsIntercept = NumOps.Zero;
+        _yMean = NumOps.Zero;
+        _yStd = NumOps.Zero;
         _options = options ?? new DeepHitOptions();
         _sharedWeights = [];
         _sharedBiases = [];
