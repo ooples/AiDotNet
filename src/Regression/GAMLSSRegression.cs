@@ -157,19 +157,16 @@ public class GAMLSSRegression<T> : AsyncDecisionTreeRegressionBase<T>
         _numFeatures = x.Columns;
         int n = x.Rows;
 
-        // Standardize y for scale-invariant training
-        double yMean = 0;
-        for (int i = 0; i < n; i++) yMean += NumOps.ToDouble(y[i]);
-        yMean /= n;
-        double yVar = 0;
-        for (int i = 0; i < n; i++) { double d = NumOps.ToDouble(y[i]) - yMean; yVar += d * d; }
-        double yStd = Math.Sqrt(yVar / n);
-        if (yStd < 1e-10) yStd = 1.0;
-        _yMean = NumOps.FromDouble(yMean);
-        _yStd = NumOps.FromDouble(yStd);
-        var yStandardized = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-            yStandardized[i] = NumOps.FromDouble((NumOps.ToDouble(y[i]) - yMean) / yStd);
+        // Standardize y for scale-invariant training (SIMD-accelerated via Engine)
+        T yMeanT = Engine.Mean(y);
+        var centered = (Vector<T>)Engine.Subtract(y, Vector<T>.CreateDefault(n, yMeanT));
+        T yVarT = Engine.DotProduct(centered, centered);
+        T yStdT = NumOps.Sqrt(NumOps.Divide(yVarT, NumOps.FromDouble(n)));
+        T epsT = NumOps.FromDouble(1e-10);
+        if (NumOps.LessThan(yStdT, epsT)) yStdT = NumOps.One;
+        _yMean = yMeanT;
+        _yStd = yStdT;
+        var yStandardized = (Vector<T>)Engine.Divide(centered, Vector<T>.CreateDefault(n, yStdT));
         y = yStandardized;
 
         // Initialize parameters

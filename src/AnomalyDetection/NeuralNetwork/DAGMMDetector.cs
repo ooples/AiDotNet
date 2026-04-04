@@ -742,12 +742,13 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         T normXSq = Engine.DotProduct(x, x);
         T normReconSq = Engine.DotProduct(xRecon, xRecon);
 
-        double eucDist = Math.Sqrt(NumOps.ToDouble(eucDistSq));
-        double normX = Math.Sqrt(NumOps.ToDouble(normXSq));
-        double normRecon = Math.Sqrt(NumOps.ToDouble(normReconSq));
-        double cosSim = (normX > 1e-10 && normRecon > 1e-10)
-            ? NumOps.ToDouble(dotProduct) / (normX * normRecon)
-            : 0;
+        T eucDist = NumOps.Sqrt(eucDistSq);
+        T normX = NumOps.Sqrt(normXSq);
+        T normRecon = NumOps.Sqrt(normReconSq);
+        T epsNorm = NumOps.FromDouble(1e-10);
+        T cosSim = (NumOps.GreaterThan(normX, epsNorm) && NumOps.GreaterThan(normRecon, epsNorm))
+            ? NumOps.Divide(dotProduct, NumOps.Multiply(normX, normRecon))
+            : NumOps.Zero;
 
         // Concatenate z with reconstruction features
         var zc = new Vector<T>(_zDim);
@@ -755,8 +756,8 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         {
             zc[i] = z[i];
         }
-        zc[_latentDim] = NumOps.FromDouble(eucDist);
-        zc[_latentDim + 1] = NumOps.FromDouble(cosSim);
+        zc[_latentDim] = eucDist;
+        zc[_latentDim + 1] = cosSim;
 
         // Estimation network layer 1: estH = tanh(zc @ estW1 + estB1)
         var zcTensor = Tensor<T>.FromVector(zc).Reshape(1, _zDim);
@@ -813,12 +814,13 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         T normXSq = Engine.DotProduct(x, x);
         T normReconSq = Engine.DotProduct(xRecon, xRecon);
 
-        double eucDist = Math.Sqrt(NumOps.ToDouble(eucDistSq));
-        double normX = Math.Sqrt(NumOps.ToDouble(normXSq));
-        double normRecon = Math.Sqrt(NumOps.ToDouble(normReconSq));
-        double cosSim = (normX > 1e-10 && normRecon > 1e-10)
-            ? NumOps.ToDouble(dotProduct) / (normX * normRecon)
-            : 0;
+        T eucDist = NumOps.Sqrt(eucDistSq);
+        T normX = NumOps.Sqrt(normXSq);
+        T normRecon = NumOps.Sqrt(normReconSq);
+        T epsNorm = NumOps.FromDouble(1e-10);
+        T cosSim = (NumOps.GreaterThan(normX, epsNorm) && NumOps.GreaterThan(normRecon, epsNorm))
+            ? NumOps.Divide(dotProduct, NumOps.Multiply(normX, normRecon))
+            : NumOps.Zero;
 
         // Concatenate z with reconstruction features
         var zc = new Vector<T>(_zDim);
@@ -826,8 +828,8 @@ public class DAGMMDetector<T> : AnomalyDetectorBase<T>
         {
             zc[j] = z[j];
         }
-        zc[_latentDim] = NumOps.FromDouble(eucDist);
-        zc[_latentDim + 1] = NumOps.FromDouble(cosSim);
+        zc[_latentDim] = eucDist;
+        zc[_latentDim + 1] = cosSim;
 
         // Estimate GMM membership
         var gamma = EstimateGamma(zc);

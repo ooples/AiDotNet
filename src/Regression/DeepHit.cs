@@ -167,16 +167,15 @@ public class DeepHit<T> : AsyncDecisionTreeRegressionBase<T>
         InitializeNetwork();
         int n = x.Rows;
 
-        // Standardize y
-        double yMean = 0;
-        for (int i = 0; i < n; i++) yMean += NumOps.ToDouble(y[i]);
-        yMean /= n;
-        double yVar = 0;
-        for (int i = 0; i < n; i++) { double d = NumOps.ToDouble(y[i]) - yMean; yVar += d * d; }
-        double yStd = Math.Sqrt(yVar / n);
-        if (yStd < 1e-10) yStd = 1.0;
-        _yMean = NumOps.FromDouble(yMean);
-        _yStd = NumOps.FromDouble(yStd);
+        // Standardize y (SIMD-accelerated via Engine)
+        T yMeanT = Engine.Mean(y);
+        var centered = (Vector<T>)Engine.Subtract(y, Vector<T>.CreateDefault(n, yMeanT));
+        T yVarT = Engine.DotProduct(centered, centered);
+        T yStdT = NumOps.Sqrt(NumOps.Divide(yVarT, NumOps.FromDouble(n)));
+        T epsT = NumOps.FromDouble(1e-10);
+        if (NumOps.LessThan(yStdT, epsT)) yStdT = NumOps.One;
+        _yMean = yMeanT;
+        _yStd = yStdT;
 
         // OLS: solve (X'X + ridge)^-1 X'y
         var xWithInt = x.AddColumn(Vector<T>.CreateDefault(n, NumOps.One));
