@@ -668,6 +668,10 @@ internal class DGPLayer<T>
         }
 
         // Compute posterior variance per point: σ²(x) = K(x,x) - Kxu * Kuu^{-1} * Kux
+        // NOTE: This uses the prior conditional p(f|u), not the full variational q(f).
+        // For exact DSVI (Salimbeni & Deisenroth 2017), should incorporate the variational
+        // covariance S: σ²_q = σ²_p + Kxu Kuu^{-1} (S - Kuu) Kuu^{-1} Kux.
+        // Current implementation is a valid approximation when S ≈ Kuu.
         var posteriorVar = new double[n];
         for (int i = 0; i < n; i++)
         {

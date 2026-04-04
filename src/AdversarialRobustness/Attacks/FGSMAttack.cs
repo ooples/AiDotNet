@@ -160,23 +160,29 @@ public class FGSMAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, T
 
         for (int i = 0; i < vectorInput.Length; i++)
         {
-            // Forward: x + delta * e_i
+            // Forward: x + delta * e_i (clamped to [0,1] valid input domain)
             var plusInput = Engine.Add<T>(vectorInput, Engine.FillZero<T>(vectorInput.Length));
             plusInput[i] = NumOps.Add(plusInput[i], NumOps.FromDouble(delta));
+            double plusVal = Math.Min(1.0, Math.Max(0.0, NumOps.ToDouble(plusInput[i])));
+            plusInput[i] = NumOps.FromDouble(plusVal);
             var plusModelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(plusInput, referenceInput);
             var plusOutput = ConversionsHelper.ConvertToVector<T, TOutput>(targetModel.Predict(plusModelInput));
             var plusLoss = ComputeMseLoss(plusOutput, vectorLabel);
 
-            // Backward: x - delta * e_i
+            // Backward: x - delta * e_i (clamped to [0,1])
             var minusInput = Engine.Add<T>(vectorInput, Engine.FillZero<T>(vectorInput.Length));
             minusInput[i] = NumOps.Subtract(minusInput[i], NumOps.FromDouble(delta));
+            double minusVal = Math.Min(1.0, Math.Max(0.0, NumOps.ToDouble(minusInput[i])));
+            minusInput[i] = NumOps.FromDouble(minusVal);
             var minusModelInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(minusInput, referenceInput);
             var minusOutput = ConversionsHelper.ConvertToVector<T, TOutput>(targetModel.Predict(minusModelInput));
             var minusLoss = ComputeMseLoss(minusOutput, vectorLabel);
 
-            // Central difference: (loss+ - loss-) / (2 * delta)
-            gradient[i] = NumOps.FromDouble(
-                (NumOps.ToDouble(plusLoss) - NumOps.ToDouble(minusLoss)) / (2.0 * delta));
+            // Central difference using actual clamped step width
+            double actualDelta = plusVal - minusVal;
+            gradient[i] = actualDelta > 1e-10
+                ? NumOps.FromDouble((NumOps.ToDouble(plusLoss) - NumOps.ToDouble(minusLoss)) / actualDelta)
+                : NumOps.Zero;
         }
 
         return gradient;
