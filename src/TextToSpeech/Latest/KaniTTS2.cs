@@ -32,6 +32,7 @@ namespace AiDotNet.TextToSpeech.Latest;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Kani TTS 2", "https://github.com/KaniTTS/KaniTTS")]
 public class KaniTTS2<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly KaniTTS2Options _options; public override ModelOptions GetOptions() => _options;

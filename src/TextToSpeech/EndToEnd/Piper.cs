@@ -33,6 +33,7 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Piper: A Fast Local Neural Text-to-Speech System", "https://github.com/rhasspy/piper")]
 public class Piper<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly PiperOptions _options; public override ModelOptions GetOptions() => _options;

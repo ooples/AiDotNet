@@ -43,6 +43,7 @@ namespace AiDotNet.Finance.Trading.Environments;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Deep Reinforcement Learning for Automated Stock Trading", "https://arxiv.org/abs/2011.09607")]
 public abstract class TradingEnvironment<T> : IEnvironment<T>
 {
     protected readonly INumericOperations<T> NumOps;

@@ -33,6 +33,7 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Microsoft Azure Neural Text-to-Speech", "https://azure.microsoft.com/en-us/products/ai-services/text-to-speech")]
 public class AzureNeuralTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly AzureNeuralTTSOptions _options; public override ModelOptions GetOptions() => _options;

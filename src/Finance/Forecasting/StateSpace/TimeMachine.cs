@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -80,6 +80,7 @@ namespace AiDotNet.Finance.Forecasting.StateSpace;
 [ModelTask(ModelTask.Forecasting)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Time Machine GPT", "https://arxiv.org/abs/2402.09543")]
 public class TimeMachine<T> : ForecastingModelBase<T>
 {
     #region Execution Mode

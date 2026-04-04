@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -280,6 +280,7 @@ public class TransferRandomForest<T> : TransferLearningBase<T, Matrix<T>, Vector
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Matrix<>), typeof(Vector<>))]
+[ModelPaper("Random Forests", "https://doi.org/10.1023/A:1010933404324")]
 public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<T>>
 {
     private const int WrapperMagic = 0x4D52464D; // 'MRFM'

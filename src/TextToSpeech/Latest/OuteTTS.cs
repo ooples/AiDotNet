@@ -33,6 +33,7 @@ namespace AiDotNet.TextToSpeech.Latest;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("OuteTTS: Outperforming ElevenLabs", "https://github.com/edwko/OuteTTS")]
 public class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly OuteTTSOptions _options; public override ModelOptions GetOptions() => _options;

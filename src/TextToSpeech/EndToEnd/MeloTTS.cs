@@ -49,6 +49,7 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("MeloTTS: High-quality Multi-lingual TTS", "https://github.com/myshell-ai/MeloTTS")]
 public class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly MeloTTSOptions _options;

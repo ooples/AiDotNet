@@ -54,6 +54,7 @@ namespace AiDotNet.Finance.Risk;
 [ModelTask(ModelTask.Regression)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Deep Learning for Value-at-Risk", "https://doi.org/10.1016/j.jbankfin.2020.105889")]
 public class NeuralVaR<T> : RiskModelBase<T>
 {
     #region Shared Fields

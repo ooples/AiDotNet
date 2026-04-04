@@ -33,6 +33,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("GPT-SoVITS: Zero-Shot Text-to-Speech", "https://github.com/RVC-Boss/GPT-SoVITS")]
 public class GPTSoVITS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly GPTSoVITSOptions _options; public override ModelOptions GetOptions() => _options;

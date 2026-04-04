@@ -61,6 +61,7 @@ namespace AiDotNet.Finance.Trading.Factors;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Attention Is All You Need", "https://arxiv.org/abs/1706.03762")]
 public class FactorTransformer<T> : FinancialModelBase<T>, IFactorModel<T>
 {
     #region Execution Mode

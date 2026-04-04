@@ -40,6 +40,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ModelPaper("Sarvam AI ASR", "https://sarvam.ai")]
 public class SarvamASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly SarvamASROptions _options; public override ModelOptions GetOptions() => _options;
