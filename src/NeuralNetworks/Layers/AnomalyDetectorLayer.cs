@@ -470,7 +470,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// </remarks>
     public bool IsAnomaly()
     {
-        return _smoothedAnomalyScore > _anomalyThreshold;
+        return NumOps.GreaterThan(_smoothedAnomalyScore, NumOps.FromDouble(_anomalyThreshold));
     }
 
     /// <summary>
@@ -493,7 +493,7 @@ public class AnomalyDetectorLayer<T> : LayerBase<T>
     /// detection logic beyond simple thresholding.
     /// </para>
     /// </remarks>
-    public double GetAnomalyScore()
+    public T GetAnomalyScore()
     {
         return _smoothedAnomalyScore;
     }

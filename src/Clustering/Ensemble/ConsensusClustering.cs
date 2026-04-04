@@ -81,7 +81,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
     /// <summary>
     /// Gets the co-association matrix.
     /// </summary>
-    public double[,]? CoAssociationMatrix => _coAssociationMatrix;
+    public Matrix<T>? CoAssociationMatrix => _coAssociationMatrix;
 
     /// <inheritdoc />
 
@@ -238,7 +238,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
         return Math.Max(2, numClusters);
     }
 
-    private int[] ApplyFinalClustering(double[,] coAssoc, int n, int numClusters)
+    private int[] ApplyFinalClustering(Matrix<T> coAssoc, int n, int numClusters)
     {
         // Convert co-association to distance (1 - similarity)
         var distMatrix = new double[n, n];
@@ -246,7 +246,7 @@ public class ConsensusClustering<T> : ClusteringBase<T>
         {
             for (int j = 0; j < n; j++)
             {
-                distMatrix[i, j] = 1 - coAssoc[i, j];
+                distMatrix[i, j] = 1 - _numOps.ToDouble(coAssoc[i, j]);
             }
         }
 

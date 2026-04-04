@@ -78,7 +78,7 @@ public class XMeans<T> : ClusteringBase<T>
     /// <summary>
     /// Gets the final BIC value.
     /// </summary>
-    public double BIC => _bic;
+    public T BIC => _bic;
 
     /// <inheritdoc />
 
@@ -172,7 +172,7 @@ public class XMeans<T> : ClusteringBase<T>
                 }
 
                 // Compute BIC for parent cluster
-                double parentBIC = ComputeClusterBIC(subMatrix, d);
+                T parentBIC = ComputeClusterBIC(subMatrix, d);
 
                 // Try splitting with K=2
                 var subKMeans = new KMeans<T>(new KMeansOptions<T>
@@ -188,9 +188,9 @@ public class XMeans<T> : ClusteringBase<T>
                 var subCenters = subKMeans.ClusterCenters ?? new Matrix<T>(2, d);
 
                 // Compute BIC for children
-                double childBIC = ComputeSplitBIC(subMatrix, subLabels, subCenters, d);
+                T childBIC = ComputeSplitBIC(subMatrix, subLabels, subCenters, d);
 
-                if (childBIC < parentBIC && newCenters.Count + 1 < _options.MaxClusters)
+                if (NumOps.LessThan(childBIC, parentBIC) && newCenters.Count + 1 < _options.MaxClusters)
                 {
                     // Accept split
                     for (int sc = 0; sc < 2; sc++)
