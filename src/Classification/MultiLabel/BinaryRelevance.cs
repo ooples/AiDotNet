@@ -324,7 +324,7 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
         var allParams = new List<T>();
         foreach (var classifier in _labelClassifiers)
         {
-            var classifierParams = classifier.GetParameters();
+            var classifierParams = ((IParameterizable<T, Matrix<T>, Vector<T>>)classifier).GetParameters();
             for (int i = 0; i < classifierParams.Length; i++)
             {
                 allParams.Add(classifierParams[i]);
@@ -374,7 +374,7 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
         int paramIndex = 0;
         foreach (var classifier in _labelClassifiers)
         {
-            var classifierParams = classifier.GetParameters();
+            var classifierParams = ((IParameterizable<T, Matrix<T>, Vector<T>>)classifier).GetParameters();
             var newParams = new Vector<T>(classifierParams.Length);
 
             for (int i = 0; i < classifierParams.Length && paramIndex < parameters.Length; i++)
@@ -382,7 +382,7 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
                 newParams[i] = parameters[paramIndex++];
             }
 
-            classifier.SetParameters(newParams);
+            ((IParameterizable<T, Matrix<T>, Vector<T>>)classifier).SetParameters(newParams);
         }
     }
 
@@ -418,7 +418,7 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
                 binaryTarget[i] = target[i, labelIndex];
             }
 
-            var gradients = classifier.ComputeGradients(input, binaryTarget, lossFunction);
+            var gradients = ((IGradientComputable<T, Matrix<T>, Vector<T>>)classifier).ComputeGradients(input, binaryTarget, lossFunction);
             for (int i = 0; i < gradients.Length; i++)
             {
                 allGradients.Add(gradients[i]);
@@ -448,7 +448,7 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
         int gradIndex = 0;
         foreach (var classifier in _labelClassifiers)
         {
-            var classifierParams = classifier.GetParameters();
+            var classifierParams = ((IParameterizable<T, Matrix<T>, Vector<T>>)classifier).GetParameters();
             var classifierGradients = new Vector<T>(classifierParams.Length);
 
             for (int i = 0; i < classifierParams.Length && gradIndex < gradients.Length; i++)
@@ -456,7 +456,7 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
                 classifierGradients[i] = gradients[gradIndex++];
             }
 
-            classifier.ApplyGradients(classifierGradients, learningRate);
+            ((IGradientComputable<T, Matrix<T>, Vector<T>>)classifier).ApplyGradients(classifierGradients, learningRate);
         }
     }
 

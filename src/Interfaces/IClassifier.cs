@@ -25,8 +25,7 @@ namespace AiDotNet.Interfaces;
 /// </para>
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("Classifier")]
-public interface IClassifier<T> : IFullModel<T, Matrix<T>, Vector<T>>,
-    IParameterizable<T, Matrix<T>, Vector<T>>, IFeatureAware, IGradientComputable<T, Matrix<T>, Vector<T>>, IJitCompilable<T>
+public interface IClassifier<T> : IFullModel<T, Matrix<T>, Vector<T>>
 {
     /// <summary>
     /// Gets the number of classes that this classifier can predict.

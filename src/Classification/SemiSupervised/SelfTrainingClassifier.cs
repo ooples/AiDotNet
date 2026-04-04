@@ -465,7 +465,7 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
     /// </summary>
     public override Vector<T> GetParameters()
     {
-        return _baseClassifier.GetParameters();
+        return ((IParameterizable<T, Matrix<T>, Vector<T>>)_baseClassifier).GetParameters();
     }
 
     /// <summary>
@@ -474,7 +474,7 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         var newClassifier = new SelfTrainingClassifier<T>(
-            (IClassifier<T>)_baseClassifier.WithParameters(parameters),
+            (IClassifier<T>)((IParameterizable<T, Matrix<T>, Vector<T>>)_baseClassifier).WithParameters(parameters),
             _confidenceThreshold,
             _maxIterations,
             _maxSamplesPerIteration,
@@ -495,7 +495,7 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
     /// </summary>
     public override void SetParameters(Vector<T> parameters)
     {
-        _baseClassifier.SetParameters(parameters);
+        ((IParameterizable<T, Matrix<T>, Vector<T>>)_baseClassifier).SetParameters(parameters);
     }
 
     /// <summary>
@@ -503,7 +503,7 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
     /// </summary>
     public override Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
-        return _baseClassifier.ComputeGradients(input, target, lossFunction ?? DefaultLossFunction);
+        return ((IGradientComputable<T, Matrix<T>, Vector<T>>)_baseClassifier).ComputeGradients(input, target, lossFunction ?? DefaultLossFunction);
     }
 
     /// <summary>
@@ -511,7 +511,7 @@ public class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
     /// </summary>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)
     {
-        _baseClassifier.ApplyGradients(gradients, learningRate);
+        ((IGradientComputable<T, Matrix<T>, Vector<T>>)_baseClassifier).ApplyGradients(gradients, learningRate);
     }
 
     /// <summary>
